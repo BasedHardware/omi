@@ -89,6 +89,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
 > Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 > Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
+> Looking for localized guides? See the [🇮🇹 Cuminzari cu omi-cli (Sicilian Quickstart)](examples/quickstart.scn.md), the [Kregiñ gant omi-cli (Breton Quickstart)](examples/quickstart.br.md), the [🇳🇱 Begjinne mei omi-cli (Frisian Quickstart)](examples/quickstart.fy.md), the [Començar amb omi-cli (Occitan Quickstart)](examples/quickstart.oc.md), the [🇵🇾 Eñepyrũ omi-cli ndive (Guarani Quickstart)](examples/quickstart.gn.md), the [omi-cli بىلەن باشلاش (Uyghur Quickstart)](examples/quickstart.ug.md), the [🇬🇭 Mfitiaseɛ wɔ omi-cli ho (Twi Quickstart)](examples/quickstart.tw.md), or the [🇮🇩 Ngawit nganggen omi-cli (Balinese Quickstart)](examples/quickstart.ban.md).
 
 ## Auth
 
