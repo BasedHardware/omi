@@ -362,6 +362,18 @@ def test_today_usage_without_timezone_still_falls_back_to_utc_day(mock_db):
     assert result['today']['transcription_seconds'] == 300, result['today']
 
 
+def test_today_history_uses_the_same_local_day_window_as_total(mock_db):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+
+    result = user_usage.get_current_user_usage('uid', 'today', tz_name='America/Los_Angeles', now=_LA_EVENING_NOW)
+
+    assert [point['transcription_seconds'] for point in result['history']] == [600, 300]
+    assert [point['date'] for point in result['history']] == [
+        '2026-06-23T14:00:00Z',
+        '2026-06-24T01:00:00Z',
+    ]
+
+
 def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monkeypatch):
     """Behavioural proof through the route the app actually calls.
 
