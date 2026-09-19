@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -87,6 +89,12 @@ def create_goal(
     unit: Optional[str] = typer.Option(
         None, "--unit", help="Unit label (e.g. 'users', 'points'). Requires a metric option such as --target."
     ),
+    desired_outcome: Optional[str] = typer.Option(None, "--desired-outcome", help="Desired outcome."),
+    why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters", help="Why this goal matters."),
+    success_criterion: list[str] = typer.Option([], "--success-criterion", help="Success criterion (repeatable)."),
+    horizon_at: Optional[datetime] = typer.Option(
+        None, "--horizon-at", formats=ISO_DATETIME_FORMATS, help="Target horizon datetime (ISO format)."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
     has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
@@ -105,6 +113,14 @@ def create_goal(
             detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
         )
     body: dict[str, object] = {"title": title}
+    if desired_outcome is not None:
+        body["desired_outcome"] = desired_outcome
+    if why_it_matters is not None:
+        body["why_it_matters"] = why_it_matters
+    if success_criterion:
+        body["success_criteria"] = list(success_criterion)
+    if horizon_at is not None:
+        body["horizon_at"] = horizon_at.isoformat()
     if unit is not None:
         body["unit"] = unit
     if has_metrics:
