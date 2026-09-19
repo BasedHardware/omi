@@ -123,6 +123,21 @@ def test_dev_probe_impersonates_a_named_firebase_project_signer() -> None:
     assert "GCP_SERVICE_ACCOUNT" not in AUTO
 
 
+def test_dev_fails_fast_when_the_deploy_identity_cannot_sign_as_the_named_signer() -> None:
+    """Since the named-signer cutover, every run discovered the missing
+    TokenCreator grant only after a full image build and Helm rollout, then
+    failed at the semantic probe. The pre-publish signer validation must test
+    the signing permission itself and name the exact one-time grant."""
+    preflight = AUTO.index("Validate Firebase probe signer configuration before publishing")
+    build = AUTO.index("- name: Build and Push Docker image")
+    block = AUTO[preflight:build]
+
+    assert "test-iam-permissions" in block
+    assert "iam.serviceAccounts.signJwt" in block
+    assert "roles/iam.serviceAccountTokenCreator" in block
+    assert "add-iam-policy-binding" in block
+
+
 def test_dev_rechecks_pusher_attributed_telemetry_after_rollout_before_semantic_probe() -> None:
     record = AUTO.index("Record exact live development Pusher deployment receipt")
     telemetry = AUTO.index("Verify deployed development finalization telemetry and alert route")

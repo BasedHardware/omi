@@ -96,6 +96,26 @@ jobs:
               exit 1
               ;;
           esac
+          # The deploy identity must be able to sign as the Firebase project's
+          # signer. Discovering a missing TokenCreator grant only after the
+          # build and rollout wastes the whole lane on a run that cannot pass;
+          # fail fast and name the exact grant instead.
+          caller="$(gcloud auth list --filter=status:ACTIVE --format=value(account))"
+          signing_permissions="$(gcloud iam service-accounts test-iam-permissions \
+            --project=based-hardware \
+            --permissions=iam.serviceAccounts.signJwt \
+            "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT")"
+          case "$signing_permissions" in
+            *iam.serviceAccounts.signJwt*) ;;
+            *)
+              echo "Deploy identity '$caller' cannot sign a Firebase custom token as $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+              echo "One-time operator action (project owner) to unblock this lane:" >&2
+              echo "  gcloud iam service-accounts add-iam-policy-binding $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT \\" >&2
+              echo "    --member='serviceAccount:$caller' \\" >&2
+              echo "    --role='roles/iam.serviceAccountTokenCreator' --project=based-hardware" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Verify live finalization alert route before publishing
         env:

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-gate-hides-its-operator-prerequisite",
+  "violated_contract": "A fail-closed gate whose pass condition depends on an operator-owned prerequisite outside the repository must (a) discover that prerequisite before it spends the pipeline's expensive irreversible work, and (b) name the prerequisite and its remediation in the failure itself. A gate that instead discovers the missing prerequisite only after the build and rollout it was supposed to guard, and then reports a bare error class with no remediation, converts a known one-time operator action into an undiagnosed red lane: every run repeats the full cost, and the operator reading the log cannot tell what to grant, on which resource, or to whom. The development Pusher lane held this shape from the named-signer cutover (67697b2fe7, #13667) onward: IAM signJwt as firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com was denied (custom_token_signing/permission_denied) on every run, minutes after a needless image build and Helm rollout, with no command to run. The same lane's scrape-target gate failed for ~26 hours (2026-09-16 -> 09-17) without saying which required job was dark, so the crash-looping dev Pusher behind da58f3e94b had to be found by log archaeology across unrelated runs.",
+  "canonical_prevention": "The gate's preflight tests the external permission itself before any expensive step (gcloud iam service-accounts test-iam-permissions for iam.serviceAccounts.signJwt against the named signer) and fails fast with the exact add-iam-policy-binding command naming the resolved caller; the token minter prints the same remediation to stderr on a 403 so the machine-readable FAIL report on stdout stays parsable; and the alert-route gate's scrape-target failure carries each required job's observed min(up) value (0/1/absent) so the first red run names the culprit instead of a blame-free sentence.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+    "backend/scripts/firebase_release_probe_token.py",
+    "backend/scripts/verify_pusher_live_alert_route.py",
+    "backend/tests/unit/test_pusher_deployment_control_workflow.py",
+    "backend/tests/unit/test_firebase_release_probe_token.py",
+    "backend/tests/unit/test_verify_pusher_live_alert_route.py"
+  ],
+  "evidence_prs": [
+    13667
+  ],
+  "scope_hints": [
+    ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+    "backend/scripts/**",
+    "backend/tests/unit/**"
+  ],
+  "status": "open"
+}

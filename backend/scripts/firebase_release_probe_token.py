@@ -444,6 +444,37 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _print_signing_permission_remediation(signer: str, firebase_project: str) -> None:
+    """Name the missing IAM grant for a permission-denied signJwt (stderr only).
+
+    The machine-readable FAIL report on stdout stays exactly as it was; this
+    guidance goes to stderr and never includes a credential or upstream body.
+    """
+    if not signer:
+        print(
+            'IAM denied custom-token signing for the active deploy identity.',
+            file=sys.stderr,
+        )
+        return
+    try:
+        caller = _active_service_account()
+    except (ProbeTokenError, OSError):
+        caller = ''
+    print(
+        'IAM denied custom-token signing: the active deploy identity does not hold'
+        f' roles/iam.serviceAccountTokenCreator on the Firebase signer {signer}.',
+        file=sys.stderr,
+    )
+    print('One-time operator action (project owner) to unblock the lane:', file=sys.stderr)
+    member = f'serviceAccount:{caller}' if caller else 'serviceAccount:<this deploy identity>'
+    print(
+        '  gcloud iam service-accounts add-iam-policy-binding '
+        f'{signer} --member=\'{member}\' '
+        f'--role=\'roles/iam.serviceAccountTokenCreator\' --project={firebase_project}',
+        file=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     token = ''
@@ -460,6 +491,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         write_token(args.token_output, token)
     except ProbeTokenError as error:
+        if error.stage == 'custom_token_signing' and error.error_class == 'permission_denied':
+            _print_signing_permission_remediation(args.signer_service_account or '', args.firebase_project)
         print(
             json.dumps(
                 {
