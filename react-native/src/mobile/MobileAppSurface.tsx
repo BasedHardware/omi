@@ -40,7 +40,13 @@ import {
 } from './mobileTokens';
 
 export type MobileProjectionStatus = TimelineProjectionStatus;
-export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps' | 'settings';
+export type MobileRoute =
+  | 'home'
+  | 'chat'
+  | 'memories'
+  | 'tasks'
+  | 'apps'
+  | 'settings';
 export type MobileTask = TimelineTask;
 
 export type MobileDeviceState = {
@@ -63,12 +69,16 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   devicePanel?: React.ReactNode;
   settingsContent?: React.ReactNode;
   conversationContent?: React.ReactNode;
+  memoryContent?: React.ReactNode;
   appsContent?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   conversations?: readonly TimelineConversation[];
   memories?: readonly TimelineMemory[];
   recall?: readonly TimelineRecall[];
+  recallHasMore?: boolean;
+  recallLoadingMore?: boolean;
+  onLoadMoreRecall?: () => void;
   timelineStatus?: MobileProjectionStatus;
   timelineNotice?: string | null;
   onOpenTimelineItem?: (item: MixedTimelineItem) => void;
@@ -100,10 +110,12 @@ export function MobileAppSurface({
   devicePanel,
   settingsContent,
   conversationContent,
+  memoryContent,
   appsContent,
 
   onOpenDevice,
   onOpenSettings,
+  onViewTasks,
   onRouteChange,
   onTaskToggle,
   onTaskEdit,
@@ -115,6 +127,9 @@ export function MobileAppSurface({
   conversations = [],
   memories = [],
   recall = [],
+  recallHasMore = false,
+  recallLoadingMore = false,
+  onLoadMoreRecall,
   timelineStatus = 'ready',
   timelineNotice = null,
   onOpenTimelineItem,
@@ -167,6 +182,12 @@ export function MobileAppSurface({
       }),
     [conversations, memories, recall, searchQuery],
   );
+  const filteredTasks = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return query === ''
+      ? tasks
+      : tasks.filter(task => task.title.toLocaleLowerCase().includes(query));
+  }, [searchQuery, tasks]);
 
   const rows = useMemo<HomeRow[]>(() => {
     const next: HomeRow[] = [];
@@ -203,7 +224,7 @@ export function MobileAppSurface({
   const renderRow = useCallback(
     ({item}: {item: HomeRow}) => {
       if (item.kind === 'tasks') {
-        const openTasks = tasks.filter(task => !task.completed);
+        const openTasks = filteredTasks.filter(task => !task.completed);
         return (
           <View style={styles.section}>
             {taskFeedback}
@@ -231,6 +252,15 @@ export function MobileAppSurface({
             ) : (
               <TimelineStatePanel noun="action items" status={taskStatus} />
             )}
+            {onViewTasks ? (
+              <Pressable
+                accessibilityLabel="View all tasks"
+                accessibilityRole="button"
+                onPress={onViewTasks}
+                style={styles.viewAllTasks}>
+                <Text style={styles.viewAllTasksCopy}>View all tasks</Text>
+              </Pressable>
+            ) : null}
           </View>
         );
       }
@@ -247,23 +277,36 @@ export function MobileAppSurface({
             <>
               {taskFeedback}
               {taskStatus === 'ready' ? (
-                tasks
-                  .filter(task => !task.completed)
-                  .slice(0, 5)
-                  .map(task => (
-                    <TimelineTaskRow
-                      key={task.id}
-                      onToggle={writesAvailable ? onTaskToggle : undefined}
-                      onEdit={
-                        writesAvailable && onTaskEdit
-                          ? setSelectedTaskId
-                          : undefined
-                      }
-                      busy={busyTaskId !== null}
-                      last={false}
-                      task={task}
-                    />
-                  ))
+                <>
+                  {filteredTasks
+                    .filter(task => !task.completed)
+                    .slice(0, 5)
+                    .map(task => (
+                      <TimelineTaskRow
+                        key={task.id}
+                        onToggle={writesAvailable ? onTaskToggle : undefined}
+                        onEdit={
+                          writesAvailable && onTaskEdit
+                            ? setSelectedTaskId
+                            : undefined
+                        }
+                        busy={busyTaskId !== null}
+                        last={false}
+                        task={task}
+                      />
+                    ))}
+                  {onViewTasks ? (
+                    <Pressable
+                      accessibilityLabel="View all tasks"
+                      accessibilityRole="button"
+                      onPress={onViewTasks}
+                      style={styles.viewAllTasks}>
+                      <Text style={styles.viewAllTasksCopy}>
+                        View all tasks
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
               ) : (
                 <TimelineStatePanel noun="action items" status={taskStatus} />
               )}
@@ -274,20 +317,21 @@ export function MobileAppSurface({
               key={`${event.kind}:${event.id}`}
               item={event}
               last={index === item.items.length - 1}
-              onPress={onOpenTimelineItem}
+              onPress={event.kind === 'recall' ? undefined : onOpenTimelineItem}
             />
           ))}
         </View>
       );
     },
     [
-      tasks,
+      filteredTasks,
       taskStatus,
       taskFeedback,
       writesAvailable,
       onTaskToggle,
       onTaskEdit,
       busyTaskId,
+      onViewTasks,
       timelineStatus,
       onOpenTimelineItem,
     ],
@@ -296,6 +340,7 @@ export function MobileAppSurface({
   const overlay =
     (chatContent && chatOverlay) ||
     activeRoute === 'settings' ||
+    (activeRoute === 'memories' && memoryContent) ||
     (activeRoute === 'apps' && appsContent) ||
     activeRoute === 'tasks' ||
     activeRoute === 'chat';
@@ -317,11 +362,13 @@ export function MobileAppSurface({
     <View accessibilityLabel="Connectors stage" style={styles.flex}>
       {appsContent}
     </View>
+  ) : activeRoute === 'memories' ? (
+    memoryContent ?? <TimelineStatePanel noun="memories" status="error" />
   ) : activeRoute === 'tasks' ? (
     taskStatus === 'ready' ? (
       <FlatList
         contentContainerStyle={styles.secondaryList}
-        data={tasks}
+        data={filteredTasks}
         keyExtractor={task => task.id}
         ListFooterComponent={<>{taskPagination}</>}
         ListHeaderComponent={taskFeedback}
@@ -357,9 +404,13 @@ export function MobileAppSurface({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}>
         <View style={styles.topBar}>
-          <View accessibilityLabel="Omi">
+          <Pressable
+            accessibilityLabel="Back to timeline"
+            accessibilityRole="button"
+            onPress={() => onRouteChange('home')}
+            style={styles.roundButton}>
             <OmiAvatar tone="ink" size={36} reduceMotion />
-          </View>
+          </Pressable>
           <View style={styles.topBarActions}>
             <Pressable
               accessibilityLabel="Open Omi device"
@@ -438,6 +489,20 @@ export function MobileAppSurface({
                     </Text>
                   ) : null}
                 </View>
+              }
+              ListFooterComponent={
+                recallHasMore && onLoadMoreRecall ? (
+                  <Pressable
+                    accessibilityLabel="Load more Recall"
+                    accessibilityRole="button"
+                    disabled={recallLoadingMore}
+                    onPress={onLoadMoreRecall}
+                    style={styles.loadMoreRecall}>
+                    <Text style={styles.viewAllTasksCopy}>
+                      {recallLoadingMore ? 'Loading…' : 'Load more Recall'}
+                    </Text>
+                  </Pressable>
+                ) : null
               }
               keyExtractor={item => item.key}
               renderItem={renderRow}
@@ -596,6 +661,19 @@ const styles = StyleSheet.create({
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
   section: {gap: 2},
+  viewAllTasks: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: mobileSpace.sm,
+  },
+  viewAllTasksCopy: {...mobileType.caption, color: mobileColor.text},
+  loadMoreRecall: {
+    alignSelf: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: mobileSpace.md,
+  },
   dayLabel: {
     ...mobileType.caption,
     color: mobileColor.textMuted,

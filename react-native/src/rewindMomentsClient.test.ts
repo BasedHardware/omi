@@ -2,7 +2,11 @@ import {loadRewindMoments, upsertRewindMoment} from './rewindMomentsClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 function backend(
-  handler: (path: string, method: string, body?: string) => {
+  handler: (
+    path: string,
+    method: string,
+    body?: string,
+  ) => {
     status: number;
     body: string | null;
   },
@@ -88,4 +92,36 @@ test('failed writes stay failed instead of looking saved', async () => {
       ocrPreview: '',
     }),
   ).rejects.toMatchObject({status: 503, backendCode: 'service_unavailable'});
+});
+
+test('a successful HTTP response must acknowledge the exact metadata', async () => {
+  const moment = {
+    frameId: 'captured:owner:1',
+    capturedAtMs: 10,
+    appName: 'Notes',
+    windowTitle: 'Private',
+    source: 'captured' as const,
+    ocrPreview: '',
+  };
+  const adapter = backend(() => ({
+    status: 201,
+    body: JSON.stringify({moment: {...moment, frameId: 'captured:owner:2'}}),
+  }));
+  await expect(upsertRewindMoment(adapter, moment)).rejects.toThrow(
+    /acknowledgement/,
+  );
+});
+
+test.each([
+  {hasMore: true, nextCursor: null},
+  {hasMore: true, nextCursor: 'same-cursor'},
+  {hasMore: false, nextCursor: 'unexpected'},
+])('rejects invalid or non-advancing Recall pagination %j', async window => {
+  const adapter = backend(() => ({
+    status: 200,
+    body: JSON.stringify({items: [], window}),
+  }));
+  await expect(loadRewindMoments(adapter, 'same-cursor')).rejects.toThrow(
+    /pagination/,
+  );
 });

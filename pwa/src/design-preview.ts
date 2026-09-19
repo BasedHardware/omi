@@ -7,6 +7,7 @@ import { DesktopOnboarding } from "../../react-native/src/desktop/DesktopOnboard
 import { DesktopApp } from "../../react-native/src/desktop/DesktopApp";
 import { Onboarding } from "../../react-native/src/ui/Onboarding";
 import { ConversationsPage } from "../../react-native/src/pages/Conversations";
+import { MemoriesPage } from "../../react-native/src/pages/Memories";
 import { SettingsPage } from "../../react-native/src/pages/Settings";
 import { ConnectorsPage } from "../../react-native/src/pages/Connectors";
 import { MobileChat } from "../../react-native/src/mobile/MobileChat";
@@ -253,6 +254,10 @@ function Preview() {
         ]
       : []
   );
+  const latestAssistant = [...chatMessages]
+    .reverse()
+    .find((message) => message.sender === "ai");
+  const chatOverlay = (latestAssistant?.text.length ?? 0) > 420;
   const previewSend = () => {
     if (!chatOpen) beforeChat.current = route;
     setRoute("home");
@@ -362,12 +367,7 @@ function Preview() {
                       setChatOpen(false);
                       setRoute(beforeChat.current);
                     },
-                    presentation: chatMessages.some(
-                      (message) =>
-                        message.sender === "ai" && message.text.length > 420
-                    )
-                      ? "overlay"
-                      : "compact",
+                    presentation: chatOverlay ? "overlay" : "compact",
                     onRemember: () =>
                       setChatError(
                         "Preview only — authenticated memory saving is not available here."
@@ -385,10 +385,7 @@ function Preview() {
                     onScroll: noop,
                   })
                 : undefined,
-              chatOverlay: chatMessages.some(
-                (message) =>
-                  message.sender === "ai" && message.text.length > 420
-              ),
+              chatOverlay,
               omnibar: h(MobileOmnibar, {
                 key: "mobile-omnibar",
                 mode,
@@ -541,10 +538,23 @@ function Preview() {
                         error: "Conversations unavailable in this preview.",
                       },
               }),
+              memoryContent: h(MemoriesPage, {
+                outcome: outcomes?.memories ?? null,
+                loading: false,
+              }),
               settingsContent: h(SettingsPage),
               appsContent: h(ConnectorsPage),
               onOpenDevice: () => setDeviceOpen((open) => !open),
               onOpenSettings: () => setRoute("settings"),
+              onOpenTimelineItem: (item) =>
+                setRoute(
+                  item.kind === "conversation"
+                    ? "chat"
+                    : item.kind === "memory"
+                    ? "memories"
+                    : "home"
+                ),
+              onViewTasks: () => setRoute("tasks"),
             })
           : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
               onSignIn: () => setSignedIn(true),

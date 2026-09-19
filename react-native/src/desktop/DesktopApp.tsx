@@ -30,10 +30,10 @@ import type {DesktopPreferences} from '../desktopSettingsClient';
 import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
-import {useRewindMoments} from '../app/useRewindMoments';
 import {ShippingStage} from './ShippingStage';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {desktopTokens as token} from './tokens';
+import type {TimelineRecall} from '../timeline/mixedTimeline';
 
 export type {DesktopSession};
 
@@ -71,6 +71,12 @@ type Props = TaskMutationProps & {
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
   postSetupHomeCue?: PostSetupHomeCue;
+  recall?: readonly TimelineRecall[];
+  recallStatus?: 'ready' | 'loading' | 'error' | 'unavailable';
+  recallNotice?: string | null;
+  recallHasMore?: boolean;
+  recallLoadingMore?: boolean;
+  onLoadMoreRecall?: () => void;
   session: DesktopSession;
   signingIn: boolean;
   draft: string;
@@ -119,6 +125,12 @@ export function DesktopApp({
   onPreferencesChange,
   outcomes,
   postSetupHomeCue = null,
+  recall = [],
+  recallStatus = 'ready',
+  recallNotice = null,
+  recallHasMore = false,
+  recallLoadingMore = false,
+  onLoadMoreRecall,
   reads,
   readsPhase,
   session,
@@ -129,7 +141,6 @@ export function DesktopApp({
   const capture = useRewindCapture(session === 'ready', () =>
     setCaptureRevision(value => value + 1),
   );
-  const rewindMoments = useRewindMoments(session === 'ready');
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
@@ -269,19 +280,12 @@ export function DesktopApp({
             postSetupHomeCue={postSetupHomeCue}
             reads={reads}
             readsPhase={readsPhase}
-            recall={rewindMoments.items}
-            recallStatus={
-              rewindMoments.status === 'idle'
-                ? 'ready'
-                : rewindMoments.status
-            }
-            recallNotice={
-              rewindMoments.sync === 'unavailable'
-                ? null
-                : [rewindMoments.error, rewindMoments.syncError]
-                    .filter(Boolean)
-                    .join(' ') || null
-            }
+            recall={recall}
+            recallStatus={recallStatus}
+            recallNotice={recallNotice}
+            recallHasMore={recallHasMore}
+            recallLoadingMore={recallLoadingMore}
+            onLoadMoreRecall={onLoadMoreRecall}
           />
         ) : route === 'Chat' ? (
           <DesktopChat

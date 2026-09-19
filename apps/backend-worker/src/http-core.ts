@@ -47,7 +47,11 @@ import {
 import { type RetrievalEnv } from "./retrieval";
 import { type CanonicalService } from "./canonical-service";
 import { readCanonicalMemoryPage } from "./memory-service";
-import { requestCanonicalTasks } from "./canonical-tasks";
+import {
+  requestCanonicalTasks,
+  requestCanonicalWrite,
+  type CanonicalWritePath,
+} from "./canonical-tasks";
 import {
   readDeviceTranscription,
   processDeviceTranscriptions,
@@ -975,19 +979,33 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
 }
 
 export async function handleTaskWrite(context: CoreContext): Promise<Response> {
+  return handleCanonicalWrite(context, "/v1/tasks/ops");
+}
+
+export async function handleStmNoteWrite(
+  context: CoreContext
+): Promise<Response> {
+  return handleCanonicalWrite(context, "/v1/stm-notes/ops");
+}
+
+async function handleCanonicalWrite(
+  context: CoreContext,
+  path: CanonicalWritePath
+): Promise<Response> {
   const parsed = await readBoundedJson(context.req.raw, 1_000_000);
   if (parsed.kind !== "ok")
     return backendError("bad_request", "edit_request", 400);
   const contractVersion = context.req.header("x-omi-contract-version");
-  return requestCanonicalTasks({
+  return requestCanonicalWrite({
     service: context.env.CANONICAL_SERVICE,
     caller: {
       accountId: context.get("accountId"),
       authorization: context.req.header("authorization"),
       stagingApiToken: context.env.API_TOKEN,
     },
-    method: "POST",
+    path,
     body: parsed.raw,
+    requireAcknowledgedRecordMatch: path === "/v1/stm-notes/ops",
     ...(contractVersion === undefined ? {} : { contractVersion }),
   });
 }
@@ -1065,6 +1083,7 @@ export const v1Routes: readonly CoreRoute[] = [
     handle: handleTranscribe,
   },
   { method: "POST", path: "/v1/tasks/ops", handle: handleTaskWrite },
+  { method: "POST", path: "/v1/stm-notes/ops", handle: handleStmNoteWrite },
   {
     method: "GET",
     path: "/v1/device-sessions/:id/transcript",

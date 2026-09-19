@@ -35,6 +35,9 @@ type Props = {
   recall?: readonly TimelineRecall[];
   recallStatus?: 'ready' | 'loading' | 'error' | 'unavailable';
   recallNotice?: string | null;
+  recallHasMore?: boolean;
+  recallLoadingMore?: boolean;
+  onLoadMoreRecall?: () => void;
 };
 
 export function DesktopReadBanner({
@@ -98,6 +101,9 @@ export function DesktopHome({
   recall = [],
   recallStatus = 'ready',
   recallNotice = null,
+  recallHasMore = false,
+  recallLoadingMore = false,
+  onLoadMoreRecall,
 }: Props) {
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
@@ -188,7 +194,9 @@ export function DesktopHome({
               items={buildTimelineItems({
                 conversations: currents
                   .filter(
-                    (item): item is Extract<typeof item, {kind: 'conversation'}> =>
+                    (
+                      item,
+                    ): item is Extract<typeof item, {kind: 'conversation'}> =>
                       item.kind === 'conversation',
                   )
                   .map(item => ({
@@ -202,6 +210,21 @@ export function DesktopHome({
                     )
                       ? Date.parse(item.startedAt ?? item.createdAt)
                       : null,
+                  })),
+                memories: currents
+                  .filter(
+                    (item): item is Extract<typeof item, {kind: 'memory'}> =>
+                      item.kind === 'memory',
+                  )
+                  .map(item => ({
+                    kind: 'memory' as const,
+                    id: item.id,
+                    title: item.title,
+                    summary: item.summary,
+                    searchableText: item.searchableText,
+                    atMs:
+                      item.timestamp === null ? null : item.timestamp * 1000,
+                    source: 'backend' as const,
                   })),
                 recall,
                 query,
@@ -217,13 +240,24 @@ export function DesktopHome({
                   : 'ready'
               }
               onOpenItem={item => {
-                if (item.kind === 'conversation') {
+                if (item.kind === 'conversation' || item.kind === 'memory') {
                   onOpenConversations?.();
                 } else {
                   onOpenRewind?.();
                 }
               }}
             />
+            {recallHasMore && onLoadMoreRecall ? (
+              <FocusPressable
+                accessibilityLabel="Load more Recall"
+                accessibilityRole="button"
+                disabled={recallLoadingMore}
+                onPress={onLoadMoreRecall}>
+                <Text style={styles.bannerAction}>
+                  {recallLoadingMore ? 'Loading…' : 'Load more Recall'}
+                </Text>
+              </FocusPressable>
+            ) : null}
           </View>
         </ScrollView>
       </ScrollFade>

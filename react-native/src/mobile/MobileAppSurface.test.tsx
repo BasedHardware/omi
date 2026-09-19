@@ -184,6 +184,68 @@ describe('MobileAppSurface', () => {
     expect(text).not.toContain('Product standup');
   });
 
+  test.each([
+    {tasks: []},
+    {tasks: [{id: 'done', title: 'Already done', completed: true}]},
+  ])(
+    'task library stays reachable when no open tasks are shown (%j)',
+    ({tasks}) => {
+      const onViewTasks = jest.fn();
+      const renderer = render({tasks, onViewTasks});
+      act(() =>
+        renderer.root
+          .find(node => node.props.accessibilityLabel === 'View all tasks')
+          .props.onPress(),
+      );
+      expect(onViewTasks).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test('the Omi mark returns from a secondary screen to the timeline', () => {
+    const onRouteChange = jest.fn();
+    const renderer = render({activeRoute: 'tasks', onRouteChange});
+    act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Back to timeline')
+        .props.onPress(),
+    );
+    expect(onRouteChange).toHaveBeenCalledWith('home');
+  });
+
+  test('search filters loaded tasks too and timeline rows keep real destinations', () => {
+    const onOpenTimelineItem = jest.fn();
+    const onViewTasks = jest.fn();
+    const renderer = render({
+      onOpenTimelineItem,
+      onViewTasks,
+      searchQuery: 'release',
+      tasks: [
+        {id: 'task-release', title: 'Prepare release notes', completed: false},
+        {id: 'task-demo', title: 'Prepare product demo', completed: false},
+      ],
+    });
+    expect(renderedText(renderer)).toContain('Prepare release notes');
+    expect(renderedText(renderer)).not.toContain('Prepare product demo');
+    const events = render({onOpenTimelineItem});
+    act(() =>
+      events.root
+        .find(
+          node =>
+            node.props.accessibilityLabel ===
+            'Open Conversation Product standup',
+        )
+        .props.onPress(),
+    );
+    expect(onOpenTimelineItem).toHaveBeenCalledWith(
+      expect.objectContaining({kind: 'conversation', id: 'talk-1'}),
+    );
+    expect(
+      events.root.find(
+        node => node.props.accessibilityLabel === 'Open Recall Figma',
+      ).props.disabled,
+    ).toBe(true);
+  });
+
   test.each(['loading', 'empty', 'offline', 'error'] as const)(
     'renders a named %s action-item state',
     status => {
@@ -285,6 +347,35 @@ test('pagination remains available on the tasks overlay', () => {
     ),
   });
   expect(renderedText(renderer)).toContain('Prepare product demo');
+});
+
+test('one-page timeline reaches the full task list and Recall pagination without tabs', () => {
+  const onViewTasks = jest.fn();
+  const onLoadMoreRecall = jest.fn();
+  const renderer = render({
+    onViewTasks,
+    onLoadMoreRecall,
+    recallHasMore: true,
+    tasks: Array.from({length: 6}, (_, index) => ({
+      id: `task-${index}`,
+      title: `Task ${index}`,
+      completed: false,
+    })),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'View all tasks')
+      .props.onPress(),
+  );
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more Recall')
+      .props.onPress(),
+  );
+  expect(onViewTasks).toHaveBeenCalledTimes(1);
+  expect(onLoadMoreRecall).toHaveBeenCalledTimes(1);
+  expect(renderedText(renderer)).not.toContain('Live');
+  expect(renderedText(renderer)).not.toContain('Phone');
 });
 
 test('the bottom dock stays mounted while chat is open', () => {

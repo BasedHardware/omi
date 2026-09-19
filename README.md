@@ -1,5 +1,19 @@
 # Omi v5
 
+> **Alternate timeline experiment — not the published v5 UI.** This checkout is
+> isolated at `/home/user/workspace/v5-timeline` on `feat/v5-timeline`.
+> The published design is maintained separately in `/home/user/workspace/v5-polish`
+> and `BasedHardware/omi:v5`. Local review repairs cover Recall account fencing,
+> pagination, navigation, and idempotent memory-save retries. Apple transport/device
+> verification and a disposable authenticated remote persistence round-trip remain
+> outstanding. Do not merge, push over `v5`, or deploy this as verified production code.
+
+The alternate's Omi mark returns to the timeline from secondary screens; View all
+tasks includes completed tasks even when Home has no open action items. Phone Recall
+rows are metadata-only; local screen previews remain in macOS Recall. Automatic
+refresh pauses after loading older pages until an explicit full refresh or session
+reset. Remember retries retain their original write identity after uncertain replies.
+
 This repository is the rewrite-only Omi monorepo. It contains the React Native product client, the native codec boundary, and the typed platform contracts required by the rewritten backend.
 
 The standalone `main` branch is mirrored commit-for-commit to `BasedHardware/omi:v5`. Run `bun run setup` once, `bun run check` before committing, and `bun run push:v5` to publish the verified commit to the mirror branch.

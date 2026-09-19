@@ -20,7 +20,18 @@ export type SavedTimelineMemory = {
   idempotent: boolean;
 };
 
-function parseAccepted(body: string | null): SavedTimelineMemory {
+export type PreparedTimelineMemory = {
+  accountEpoch: number;
+  clientWriteRef: string;
+  recordId: string;
+  text: string;
+  writeId: string;
+};
+
+function parseAccepted(
+  body: string | null,
+  expectedRecordId: string,
+): SavedTimelineMemory {
   if (body === null) {
     throw new TimelineMemorySaveError(
       200,
@@ -42,19 +53,29 @@ function parseAccepted(body: string | null): SavedTimelineMemory {
       'Memory save acknowledgement was unverified',
     );
   }
+  if (value.applied.record_id !== expectedRecordId) {
+    throw new TimelineMemorySaveError(
+      200,
+      'Memory save acknowledgement did not match the requested memory',
+    );
+  }
   return {
     id: value.applied.record_id,
     idempotent: value.idempotent,
   };
 }
 
-/** Save an explicit user assertion through native authenticated transport. */
-export async function saveTimelineMemory(
+/**
+ * Allocate one native write identity before the first transport attempt. Keep
+ * the returned value to retry an uncertain request: regenerating it could
+ * create a second memory after the first request actually reached the server.
+ */
+export async function prepareTimelineMemory(
   backend: OmiBackend,
   text: string,
   accountEpoch: number,
   clientWriteRef: string,
-): Promise<SavedTimelineMemory> {
+): Promise<PreparedTimelineMemory> {
   if ((await backend.getApiContract?.()) !== 'canonical') {
     throw new TimelineMemorySaveError(
       0,
@@ -81,25 +102,38 @@ export async function saveTimelineMemory(
       'Native write identity is unavailable',
     );
   }
-  const recordId = `timeline-${writeId.slice(0, 48)}`;
+  return {
+    accountEpoch,
+    clientWriteRef,
+    recordId: `timeline-${writeId.slice(0, 48)}`,
+    text: text.trim(),
+    writeId,
+  };
+}
+
+/** Send a previously prepared memory through native authenticated transport. */
+export async function sendTimelineMemory(
+  backend: OmiBackend,
+  prepared: PreparedTimelineMemory,
+): Promise<SavedTimelineMemory> {
   let response;
   try {
     response = await backend.request({
-      id: `memory-note-${writeId}`,
+      id: `memory-note-${prepared.writeId}`,
       method: 'POST',
       expectedApiContract: 'canonical',
       path: STM_NOTES_OPS_PATH,
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({
-        write_id: writeId,
-        account_epoch: accountEpoch,
+        write_id: prepared.writeId,
+        account_epoch: prepared.accountEpoch,
         domain: 'stm-notes',
         op: {
           op: 'create',
-          record_id: recordId,
+          record_id: prepared.recordId,
           content: {
-            text: text.trim(),
-            client_write_ref: clientWriteRef,
+            text: prepared.text,
+            client_write_ref: prepared.clientWriteRef,
           },
         },
       }),
@@ -120,5 +154,18 @@ export async function saveTimelineMemory(
         : 'Memory could not be saved',
     );
   }
-  return parseAccepted(response.body);
+  return parseAccepted(response.body, prepared.recordId);
+}
+
+/** Save an explicit user assertion through native authenticated transport. */
+export async function saveTimelineMemory(
+  backend: OmiBackend,
+  text: string,
+  accountEpoch: number,
+  clientWriteRef: string,
+): Promise<SavedTimelineMemory> {
+  return sendTimelineMemory(
+    backend,
+    await prepareTimelineMemory(backend, text, accountEpoch, clientWriteRef),
+  );
 }

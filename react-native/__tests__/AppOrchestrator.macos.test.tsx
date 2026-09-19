@@ -269,7 +269,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   labels = labelsOf(renderer);
   expect(labels).not.toContain('First-run onboarding');
   expect(labels).toContain('Omi desktop chrome');
-  expect(labels).toContain('Home currents');
+  expect(labels).toContain('Home tasks');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).toContain('Ask about your day…');
@@ -582,7 +582,7 @@ test('the previous session transcript never survives a sign-out', async () => {
     await Promise.resolve();
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
-  expect(labelsOf(renderer)).toContain('Home currents');
+  expect(labelsOf(renderer)).toContain('Home tasks');
   await openChat(renderer);
   expect(textOf(renderer)).not.toContain('PRIVATE PRIOR SESSION');
 });

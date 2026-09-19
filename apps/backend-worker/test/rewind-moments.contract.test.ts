@@ -33,6 +33,27 @@ test("rewind upserts require a sourced native frame id", () => {
     source: "captured",
     ocrPreview: "hello",
   });
+  expect(
+    parseRewindMomentUpsert({
+      frameId: "shipping:owner:1",
+      capturedAtMs: 1,
+      appName: "Notes",
+      windowTitle: "Untitled",
+      source: "captured",
+      ocrPreview: "hello",
+    })
+  ).toBeNull();
+  expect(
+    parseRewindMomentUpsert({
+      frameId: "captured:owner:1",
+      capturedAtMs: 1,
+      appName: "Notes",
+      windowTitle: "Untitled",
+      source: "captured",
+      ocrPreview: "hello",
+      pixels: "not metadata",
+    })
+  ).toBeNull();
 });
 
 beforeAll(async () => {
@@ -126,7 +147,9 @@ describe("rewind moment account isolation", () => {
       items: Array<{ frameId: string }>;
       window: { complete: boolean };
     };
-    expect(page.items.map((item) => item.frameId)).toEqual(["captured:owner:9"]);
+    expect(page.items.map((item) => item.frameId)).toEqual([
+      "captured:owner:9",
+    ]);
     expect(page.window.complete).toBe(true);
 
     const foreign = await handler.fetch(
@@ -143,7 +166,7 @@ describe("rewind moment account isolation", () => {
     expect(foreignPage.items).toEqual([]);
   });
 
-  test("pixels are not accepted on the metadata write", async () => {
+  test("metadata writes reject pixel and PII fields", async () => {
     const rejected = await fetchPath("/v1/rewind-moments", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -155,11 +178,9 @@ describe("rewind moment account isolation", () => {
         source: "captured",
         ocrPreview: "",
         jpegBase64: "aaaa",
+        pii: "sensitive text",
       }),
     });
-    expect(rejected.status).toBe(201);
-    const body = (await rejected.json()) as { moment: Record<string, unknown> };
-    expect(body.moment).not.toHaveProperty("jpegBase64");
-    expect(body.moment).not.toHaveProperty("base64");
+    expect(rejected.status).toBe(422);
   });
 });

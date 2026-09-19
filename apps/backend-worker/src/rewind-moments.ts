@@ -3,6 +3,14 @@ export const REWIND_MOMENTS_FRONTIER = "frontier-v1:rewind-moments-declared";
 
 const FRAME_ID = /^[a-z]+:[A-Za-z0-9._:-]{1,200}$/;
 const SOURCE = new Set(["captured", "shipping"] as const);
+const REWIND_MOMENT_UPSERT_KEYS = [
+  "frameId",
+  "capturedAtMs",
+  "appName",
+  "windowTitle",
+  "source",
+  "ocrPreview",
+] as const;
 
 export type RewindMomentRecord = {
   frameId: string;
@@ -33,36 +41,54 @@ type StoredMoment = {
   ocr_preview: string;
 };
 
-export function parseRewindMomentUpsert(value: unknown): RewindMomentRecord | null {
+export function parseRewindMomentUpsert(
+  value: unknown
+): RewindMomentRecord | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   const item = value as Record<string, unknown>;
   if (
-    typeof item.frameId !== "string" ||
-    !FRAME_ID.test(item.frameId) ||
-    !Number.isSafeInteger(item.capturedAtMs) ||
-    (item.capturedAtMs as number) < 0 ||
-    (item.capturedAtMs as number) > 8_640_000_000_000_000 ||
-    typeof item.appName !== "string" ||
-    item.appName.length === 0 ||
-    item.appName.length > 256 ||
-    typeof item.windowTitle !== "string" ||
-    item.windowTitle.length > 1024 ||
-    typeof item.source !== "string" ||
-    !SOURCE.has(item.source as "captured" | "shipping") ||
-    typeof item.ocrPreview !== "string" ||
-    item.ocrPreview.length > 240
+    Object.keys(item).length !== REWIND_MOMENT_UPSERT_KEYS.length ||
+    Object.keys(item).some(
+      (key) => !REWIND_MOMENT_UPSERT_KEYS.includes(key as never)
+    )
+  ) {
+    return null;
+  }
+  const frameId = item["frameId"];
+  const capturedAtMs = item["capturedAtMs"];
+  const appName = item["appName"];
+  const windowTitle = item["windowTitle"];
+  const source = item["source"];
+  const ocrPreview = item["ocrPreview"];
+  if (
+    typeof frameId !== "string" ||
+    !FRAME_ID.test(frameId) ||
+    typeof capturedAtMs !== "number" ||
+    !Number.isSafeInteger(capturedAtMs) ||
+    capturedAtMs < 0 ||
+    capturedAtMs > 8_640_000_000_000_000 ||
+    typeof appName !== "string" ||
+    appName.length === 0 ||
+    appName.length > 256 ||
+    typeof windowTitle !== "string" ||
+    windowTitle.length > 1024 ||
+    typeof source !== "string" ||
+    !SOURCE.has(source as "captured" | "shipping") ||
+    !frameId.startsWith(`${source}:`) ||
+    typeof ocrPreview !== "string" ||
+    ocrPreview.length > 240
   ) {
     return null;
   }
   return {
-    frameId: item.frameId,
-    capturedAtMs: item.capturedAtMs as number,
-    appName: item.appName,
-    windowTitle: item.windowTitle,
-    source: item.source as "captured" | "shipping",
-    ocrPreview: item.ocrPreview,
+    frameId,
+    capturedAtMs,
+    appName,
+    windowTitle,
+    source: source as "captured" | "shipping",
+    ocrPreview,
   };
 }
 
@@ -138,13 +164,16 @@ export async function readRewindMoments(
       parsed === null ||
       typeof parsed !== "object" ||
       Array.isArray(parsed) ||
-      !Number.isSafeInteger((parsed as {capturedAtMs?: unknown}).capturedAtMs) ||
-      typeof (parsed as {frameId?: unknown}).frameId !== "string"
+      !Number.isSafeInteger(
+        (parsed as { capturedAtMs?: unknown }).capturedAtMs
+      ) ||
+      typeof (parsed as { frameId?: unknown }).frameId !== "string"
     ) {
       return "invalid_cursor";
     }
-    beforeMs = (parsed as {capturedAtMs: number}).capturedAtMs;
-    beforeId = (parsed as {frameId: string}).frameId;
+    const parsedCursor = parsed as Record<string, unknown>;
+    beforeMs = parsedCursor["capturedAtMs"] as number;
+    beforeId = parsedCursor["frameId"] as string;
   }
   const result = await db
     .prepare(
@@ -163,7 +192,12 @@ export async function readRewindMoments(
   const last = pageRows[pageRows.length - 1];
   const nextCursor =
     hasMore && last !== undefined
-      ? btoa(JSON.stringify({capturedAtMs: last.capturedAtMs, frameId: last.frameId}))
+      ? btoa(
+          JSON.stringify({
+            capturedAtMs: last.capturedAtMs,
+            frameId: last.frameId,
+          })
+        )
       : null;
   return {
     contractVersion: REWIND_MOMENTS_READ_CONTRACT_VERSION,

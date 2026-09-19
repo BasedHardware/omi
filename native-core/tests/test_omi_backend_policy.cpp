@@ -55,6 +55,16 @@ static void test_capture_paths() {
   expect(omi_backend_is_capture_path("/v1/tasks/ops") == 1, "tasks/ops");
   expect(omi_backend_is_capture_path("/v1/tasks/ops?op=complete") == 1,
          "tasks/ops query");
+  expect(omi_backend_is_capture_path("/v1/stm-notes/ops") == 1,
+         "stm-notes/ops");
+  expect(omi_backend_is_capture_path("/v1/stm-notes/ops?write=1") == 1,
+         "stm-notes/ops query");
+  expect(omi_backend_is_capture_path("/v1/rewind-moments") == 1,
+         "rewind-moments");
+  expect(omi_backend_is_capture_path("/v1/rewind-moments?limit=50") == 1,
+         "rewind-moments query");
+  expect(omi_backend_is_capture_path("/v1/rewind-moments/one") == 0,
+         "rewind-moments child");
   expect(omi_backend_is_capture_path("/v1/tasks/one") == 0, "tasks/one");
   expect(omi_backend_is_capture_path("/v1/users/me") == 0, "users/me");
   expect(omi_backend_is_capture_path("/v1/conversations#keep") == 1,
@@ -95,6 +105,12 @@ static void test_example_platform() {
          "GET memories");
   expect(omi_backend_example_platform_supported("POST", "/v1/tasks/ops") == 1,
          "POST tasks/ops");
+  expect(omi_backend_example_platform_supported("POST", "/v1/stm-notes/ops") == 1,
+         "POST stm-notes/ops");
+  expect(omi_backend_example_platform_supported("GET", "/v1/rewind-moments") == 0,
+         "GET rewind-moments unsupported");
+  expect(omi_backend_example_platform_supported("POST", "/v1/rewind-moments") == 0,
+         "POST rewind-moments unsupported");
   expect(omi_backend_example_platform_supported("DELETE", "/v1/tasks/ops") == 0,
          "DELETE tasks/ops");
   expect(omi_backend_example_platform_supported("POST", "/v1/tasks") == 0,

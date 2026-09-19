@@ -15,6 +15,8 @@ id OmiAuthKeychainLock(void) { return @"disposal-test-lock"; }
 NSString *OmiAuthKeychainService(void) { return @"omi-disposal-test-unconfigured"; }
 BOOL OmiAuthUsesDataProtectionKeychain(void) { return NO; }
 NSString *OmiAuthResolvedFirebaseApiKey(void) { return @""; }
+static NSDictionary *recallIdentity;
+NSDictionary *OmiAuthLocalHistoryIdentity(void) { return recallIdentity; }
 
 @interface DisposalTask : NSObject
 @property(nonatomic) NSUInteger resumes;
@@ -27,11 +29,12 @@ NSString *OmiAuthResolvedFirebaseApiKey(void) { return @""; }
 @property(nonatomic, copy) void (^completion)(NSData *, NSURLResponse *, NSError *);
 @property(nonatomic) NSUInteger invalidations;
 @property(nonatomic, strong) DisposalTask *task;
+@property(nonatomic, strong) NSURLRequest *request;
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completion;
 - (void)invalidateAndCancel;
 @end
 @implementation DisposalSession
-- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completion { self.completion = completion; self.task = [DisposalTask new]; return (NSURLSessionDataTask *)self.task; }
+- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completion { self.request = request; self.completion = completion; self.task = [DisposalTask new]; return (NSURLSessionDataTask *)self.task; }
 - (void)invalidateAndCancel { self.invalidations++; }
 @end
 
@@ -53,6 +56,101 @@ NSString *OmiAuthResolvedFirebaseApiKey(void) { return @""; }
 @implementation DeferredChatBackend
 - (void)resolveBackendPolicyWithCompletion:(void (^)(OmiBackendPolicy *, NSError *))completion { self.pendingPolicy = completion; }
 @end
+
+@interface DeferredRecallBackend : OmiBackendModule
+@property(nonatomic, copy) void (^pendingPolicy)(OmiBackendPolicy *, NSError *);
+@end
+@implementation DeferredRecallBackend
+- (void)resolveBackendPolicyWithCompletion:(void (^)(OmiBackendPolicy *, NSError *))completion { self.pendingPolicy = completion; }
+@end
+
+static OmiBackendPolicy *syntheticRecallPolicy(void) {
+  OmiBackendPolicy *policy = [OmiBackendPolicy new];
+  policy.url = [NSURL URLWithString:@"http://127.0.0.1:1"];
+  policy.token = @"synthetic-recall-token";
+  policy.clientId = @"synthetic-recall-client";
+  policy.kind = OmiBackendCredentialKindLocal;
+  return policy;
+}
+
+static NSDictionary *syntheticRecallRequest(NSString *method, NSDictionary *identity, NSString *frameSource, NSString *source) {
+  NSMutableDictionary *request = [@{
+    @"id": @"synthetic-recall",
+    @"method": method,
+    @"path": @"/v1/rewind-moments",
+  } mutableCopy];
+  if ([method isEqualToString:@"POST"]) {
+    NSData *body = [NSJSONSerialization dataWithJSONObject:@{
+      @"frameId": [NSString stringWithFormat:@"%@:%@:1", frameSource, OmiRewindOwner(identity)],
+      @"capturedAtMs": @1,
+      @"appName": @"Notes",
+      @"windowTitle": @"",
+      @"source": source,
+      @"ocrPreview": @"",
+    } options:0 error:nil];
+    request[@"body"] = [[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding];
+  }
+  return request;
+}
+
+static void testRecallAccountFence(void) {
+  NSDictionary *ownerA = @{@"uid": @"owner-a", @"login": @"login-a"};
+  NSDictionary *ownerB = @{@"uid": @"owner-b", @"login": @"login-b"};
+  recallIdentity = ownerA;
+
+  {
+    DeferredRecallBackend *module = [DeferredRecallBackend new];
+    DisposalSession *network = [DisposalSession new]; module.session = (NSURLSession *)network;
+    __block NSUInteger resolved = 0, rejected = 0;
+    [module requestWithValue:syntheticRecallRequest(@"POST", ownerA, @"captured", @"captured") resolver:^(id value) { resolved++; } rejecter:^(NSString *code, NSString *message, NSError *error) { rejected++; }];
+    assert(module.pendingPolicy != nil && network.task == nil);
+    module.pendingPolicy(syntheticRecallPolicy(), nil);
+    assert(network.task.resumes == 1 && [network.request.HTTPMethod isEqual:@"POST"]);
+    network.completion([@"{}" dataUsingEncoding:NSUTF8StringEncoding], [[NSHTTPURLResponse alloc] initWithURL:network.request.URL statusCode:201 HTTPVersion:@"HTTP/1.1" headerFields:@{}], nil);
+    assert(resolved == 1 && rejected == 0);
+    [module invalidate];
+  }
+
+  {
+    DeferredRecallBackend *module = [DeferredRecallBackend new];
+    DisposalSession *network = [DisposalSession new]; module.session = (NSURLSession *)network;
+    __block NSUInteger rejected = 0;
+    recallIdentity = ownerA;
+    [module requestWithValue:syntheticRecallRequest(@"POST", ownerA, @"captured", @"captured") resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_REWIND_OWNER_CHANGED"]); rejected++; }];
+    recallIdentity = ownerB;
+    module.pendingPolicy(syntheticRecallPolicy(), nil);
+    assert(rejected == 1 && network.task == nil);
+    [module invalidate];
+  }
+
+  {
+    DeferredRecallBackend *module = [DeferredRecallBackend new];
+    DisposalSession *network = [DisposalSession new]; module.session = (NSURLSession *)network;
+    __block NSUInteger rejected = 0;
+    recallIdentity = ownerB;
+    [module requestWithValue:syntheticRecallRequest(@"POST", ownerA, @"captured", @"captured") resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_REWIND_OWNER_CHANGED"]); rejected++; }];
+    [module performNativeRequest:syntheticRecallRequest(@"POST", ownerB, @"shipping", @"captured") receipt:nil expectedOrigin:nil expectedLogin:nil resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_REWIND_OWNER_CHANGED"]); rejected++; }];
+    recallIdentity = nil;
+    [module performNativeRequest:syntheticRecallRequest(@"POST", ownerB, @"captured", @"captured") receipt:nil expectedOrigin:nil expectedLogin:nil resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_REWIND_AUTH"]); rejected++; }];
+    assert(rejected == 3 && module.pendingPolicy == nil && network.task == nil);
+    [module invalidate];
+  }
+
+  {
+    DeferredRecallBackend *module = [DeferredRecallBackend new];
+    DisposalSession *network = [DisposalSession new]; module.session = (NSURLSession *)network;
+    __block NSUInteger resolved = 0, rejected = 0;
+    recallIdentity = ownerA;
+    [module requestWithValue:syntheticRecallRequest(@"GET", ownerA, @"captured", @"captured") resolver:^(id value) { resolved++; } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_REWIND_OWNER_CHANGED"]); rejected++; }];
+    module.pendingPolicy(syntheticRecallPolicy(), nil);
+    assert(network.task.resumes == 1);
+    recallIdentity = ownerB;
+    network.completion([@"{}" dataUsingEncoding:NSUTF8StringEncoding], [[NSHTTPURLResponse alloc] initWithURL:network.request.URL statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:@{}], nil);
+    assert(resolved == 0 && rejected == 1);
+    [module invalidate];
+  }
+  recallIdentity = nil;
+}
 
 static void testSelectedContract(void) {
   NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
@@ -167,6 +265,7 @@ int main() {
     testCaptureQueryRoutes();
     testOmiFrames();
     testPendingOmiCancellation();
+    testRecallAccountFence();
     NSString *identifier = NSUUID.UUID.UUIDString;
     NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:identifier];
     NSString *tag = [@"omi-disposal-test-" stringByAppendingString:identifier];

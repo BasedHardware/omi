@@ -55,6 +55,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   );
   const conversationPagePendingRef = useRef(false);
   const taskPagePendingRef = useRef(false);
+  // Polling replaces the first page. Once a user enters either paginated
+  // surface, only an explicit refresh may intentionally replace its rows.
+  const automaticRefreshPausedRef = useRef(false);
   const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const refreshPendingRef = useRef(false);
@@ -75,6 +78,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     refreshPendingRef.current = false;
     conversationPagePendingRef.current = false;
     taskPagePendingRef.current = false;
+    automaticRefreshPausedRef.current = false;
     setTasksLoadingMore(false);
     setTaskNotice(null);
     setConversationsLoadingMore(false);
@@ -96,10 +100,16 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         // still sees enabled===false until the next render. Allow one explicit
         // load so await refreshReads() is truthful instead of a no-op.
         ignoreEnabled?: boolean;
+        // The interval and foreground listener must not unpause after
+        // pagination; callers invoking refreshReads directly are explicit.
+        automatic?: boolean;
       },
     ) => {
       if (!enabled && options?.ignoreEnabled !== true) {
         return;
+      }
+      if (!options?.automatic) {
+        automaticRefreshPausedRef.current = false;
       }
       if (options?.ignoreEnabled === true && !enabled) {
         suppressEnableEffectLoadRef.current = true;
@@ -232,6 +242,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     }
     const cursor = previous.conversations.value.page.nextCursor;
     const sequence = refreshSeqRef.current;
+    automaticRefreshPausedRef.current = true;
     conversationPagePendingRef.current = true;
     setConversationsLoadingMore(true);
     setConversationNotice(null);
@@ -309,6 +320,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     }
     const cursor = previous.tasks.value.page.nextCursor;
     const sequence = refreshSeqRef.current;
+    automaticRefreshPausedRef.current = true;
     taskPagePendingRef.current = true;
     setTasksLoadingMore(true);
     setTaskNotice(null);
@@ -376,6 +388,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     const sequence = ++refreshSeqRef.current;
     conversationPagePendingRef.current = false;
     taskPagePendingRef.current = false;
+    // A task mutation refresh must not unpause polling over older conversations.
     setTasksLoadingMore(false);
     setTaskNotice(null);
     refreshPendingRef.current = true;
@@ -413,8 +426,12 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     }
     const appState = {current: AppState.currentState};
     const tick = () => {
-      if (appState.current === 'active' && !refreshPendingRef.current) {
-        refreshReads(false).catch(() => undefined);
+      if (
+        appState.current === 'active' &&
+        !refreshPendingRef.current &&
+        !automaticRefreshPausedRef.current
+      ) {
+        refreshReads(false, {automatic: true}).catch(() => undefined);
       }
     };
     const listener = AppState.addEventListener('change', state => {

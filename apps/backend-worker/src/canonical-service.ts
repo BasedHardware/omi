@@ -11,7 +11,7 @@ export type CanonicalCaller = {
 export type CanonicalServiceRequest = {
   service: CanonicalService | undefined;
   caller: CanonicalCaller;
-  path: "/v1/memories" | "/v1/tasks" | "/v1/tasks/ops";
+  path: "/v1/memories" | "/v1/tasks" | "/v1/tasks/ops" | "/v1/stm-notes/ops";
   method: "GET" | "POST";
   query?: URLSearchParams;
   body?: string;
@@ -23,6 +23,13 @@ export type CanonicalServiceResult =
   | { kind: "unavailable" };
 
 export const MAX_CANONICAL_RESPONSE_BYTES = 6_000_000;
+
+const CANONICAL_SERVICE_ROUTES = new Set([
+  "GET /v1/memories",
+  "GET /v1/tasks",
+  "POST /v1/tasks/ops",
+  "POST /v1/stm-notes/ops",
+]);
 
 export async function requestCanonicalService(
   input: CanonicalServiceRequest
@@ -37,10 +44,9 @@ export async function requestCanonicalService(
     input.caller.accountId.length <= "firebase:".length ||
     token.length === 0 ||
     token.length > 32_768 ||
-    !["/v1/memories", "/v1/tasks", "/v1/tasks/ops"].includes(input.path) ||
+    !CANONICAL_SERVICE_ROUTES.has(`${input.method} ${input.path}`) ||
     /[\s\x00-\x1f\x7f]/.test(token) ||
     token === input.caller.stagingApiToken ||
-    (input.path === "/v1/tasks/ops") !== (input.method === "POST") ||
     (input.method === "GET" && input.body !== undefined) ||
     (input.body !== undefined && input.body.length > 1_000_000)
   ) {

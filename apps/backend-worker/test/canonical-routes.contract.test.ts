@@ -25,6 +25,18 @@ const rawWrite = `{
 }\n`;
 const accepted =
   '{"applied":{"record_id":"task-1","revision":null},"idempotent":false}';
+const rawStmWrite = JSON.stringify({
+  write_id: "b".repeat(64),
+  account_epoch: 7,
+  domain: "stm-notes",
+  op: {
+    op: "create",
+    record_id: "timeline-note-1",
+    content: { text: "Remember the launch review", client_write_ref: "note-1" },
+  },
+});
+const acceptedStmWrite =
+  '{"applied":{"record_id":"timeline-note-1","revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"idempotent":false}';
 const executionContext = {
   waitUntil: (_promise: Promise<unknown>) => undefined,
   passThroughOnException: () => undefined,
@@ -191,8 +203,101 @@ describe("registered canonical routes", () => {
     expect(d1Reads).toBe(0);
   });
 
-  test.each(["/v1/tasks", "/v1/tasks/ops", "/v1/memories"])(
-    "staging bearer never reaches canonical authority: %s",
+  test("authenticated STM writes delegate original Firebase credentials and bytes", async () => {
+    let forwarded: Request | undefined;
+    const response = await request(
+      "/v1/stm-notes/ops",
+      {
+        async fetch(input) {
+          expect(verifierCalls).toBe(1);
+          forwarded = input;
+          return new Response(acceptedStmWrite, {
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+      false,
+      "POST",
+      rawStmWrite
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(acceptedStmWrite);
+    expect(forwarded?.url).toBe(
+      "https://canonical.omi.internal/v1/stm-notes/ops"
+    );
+    expect(forwarded?.method).toBe("POST");
+    expect(await forwarded!.text()).toBe(rawStmWrite);
+    expect(forwarded?.headers.get("authorization")).toBe(
+      "Bearer route-test-firebase-token"
+    );
+    expect(forwarded?.headers.has("x-omi-client-id")).toBe(false);
+    expect(d1Reads).toBe(0);
+  });
+
+  test("STM refusals pass through but mismatched acknowledgements fail closed", async () => {
+    const refusal = await request(
+      "/v1/stm-notes/ops",
+      {
+        async fetch() {
+          return new Response('{"error":"invalid_envelope"}', {
+            status: 422,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+      false,
+      "POST",
+      rawStmWrite
+    );
+    expect(refusal.status).toBe(422);
+    expect(await refusal.text()).toBe('{"error":"invalid_envelope"}');
+
+    const mismatched = await request(
+      "/v1/stm-notes/ops",
+      {
+        async fetch() {
+          return new Response(
+            '{"applied":{"record_id":"another-note","revision":null},"idempotent":false}',
+            { headers: { "content-type": "application/json" } }
+          );
+        },
+      },
+      false,
+      "POST",
+      rawStmWrite
+    );
+    expect(mismatched.status).toBe(503);
+    expect(await mismatched.text()).toBe(
+      '{"error":"maintenance","refusal_outcome":"control_unavailable"}'
+    );
+    expect(d1Reads).toBe(0);
+  });
+
+  test.each(["/v1/tasks/ops", "/v1/stm-notes/ops"])(
+    "absent canonical service refuses authenticated writes without D1 fallback: %s",
+    async (path) => {
+      const response = await request(
+        path,
+        undefined,
+        false,
+        "POST",
+        path.endsWith("stm-notes/ops") ? rawStmWrite : rawWrite
+      );
+      expect(response.status).toBe(503);
+      expect(await response.text()).toBe(
+        '{"error":"maintenance","refusal_outcome":"control_unavailable"}'
+      );
+      expect(d1Reads).toBe(0);
+    }
+  );
+
+  test.each([
+    "/v1/tasks",
+    "/v1/tasks/ops",
+    "/v1/stm-notes/ops",
+    "/v1/memories",
+  ])(
+    "legacy staging bearer never reaches canonical authority: %s",
     async (path) => {
       let calls = 0;
       const response = await request(
@@ -205,7 +310,11 @@ describe("registered canonical routes", () => {
         },
         true,
         path.endsWith("/ops") ? "POST" : "GET",
-        path.endsWith("/ops") ? rawWrite : undefined
+        path === "/v1/stm-notes/ops"
+          ? rawStmWrite
+          : path.endsWith("/ops")
+          ? rawWrite
+          : undefined
       );
       expect(response.status).toBe(503);
       expect(calls).toBe(0);
@@ -214,18 +323,7 @@ describe("registered canonical routes", () => {
     }
   );
 
-  test("absent binding refuses writes, configured unavailable tasks never fall back to D1", async () => {
-    const write = await request(
-      "/v1/tasks/ops",
-      undefined,
-      false,
-      "POST",
-      rawWrite
-    );
-    expect(write.status).toBe(503);
-    expect(await write.text()).toBe(
-      '{"error":"maintenance","refusal_outcome":"control_unavailable"}'
-    );
+  test("configured unavailable tasks never fall back to D1", async () => {
     const read = await request("/v1/tasks", {
       async fetch() {
         throw new Error("Authority unavailable");

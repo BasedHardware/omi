@@ -33,7 +33,7 @@ import {
   sendChatMessage,
   type ChatMessage,
 } from '../chatClient';
-import {omiBackend} from '../omiNative';
+import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -76,7 +76,11 @@ import {
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {MobileChat} from '../mobile/MobileChat';
 import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
-import {saveTimelineMemory} from '../memoryNoteClient';
+import {
+  prepareTimelineMemory,
+  sendTimelineMemory,
+  type PreparedTimelineMemory,
+} from '../memoryNoteClient';
 import {
   MobileAppSurface,
   type MobileProjectionStatus,
@@ -150,6 +154,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [memorySavingId, setMemorySavingId] = useState<string | null>(null);
   const [savedMemoryIds, setSavedMemoryIds] = useState<string[]>([]);
   const [memorySaveError, setMemorySaveError] = useState<string | null>(null);
+  const memorySaveInFlightRef = useRef<string | null>(null);
+  const pendingMemorySavesRef = useRef(
+    new Map<string, PreparedTimelineMemory>(),
+  );
+  const memorySaveEpochRef = useRef(0);
   const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
     route: 'Home',
     mode: 'Search',
@@ -282,6 +291,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setChatHistorySettled(false);
       setActiveGenerationId(null);
       sendInFlightRef.current = null;
+      memorySaveEpochRef.current += 1;
+      memorySaveInFlightRef.current = null;
+      pendingMemorySavesRef.current.clear();
+      setMemorySavingId(null);
+      setSavedMemoryIds([]);
+      setMemorySaveError(null);
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
       return () => {
@@ -345,6 +360,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     revalidateSession,
     stableChatMessageIds,
   ]);
+
+  useEffect(
+    () =>
+      subscribeOmiBackendSessionInvalidated(() => {
+        memorySaveEpochRef.current += 1;
+        memorySaveInFlightRef.current = null;
+        pendingMemorySavesRef.current.clear();
+        setMemorySavingId(null);
+        setSavedMemoryIds([]);
+        setMemorySaveError(null);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (route === 'Home') {
@@ -674,7 +702,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   };
 
   const rememberMessage = async (message: ChatMessage) => {
-    if (memorySavingId !== null) return;
+    if (memorySaveInFlightRef.current !== null) return;
     const backend = omiBackend;
     const accountEpoch =
       readOutcomes?.tasks.status === 'success'
@@ -686,15 +714,29 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       );
       return;
     }
+    const epoch = memorySaveEpochRef.current;
+    memorySaveInFlightRef.current = message.id;
     setMemorySavingId(message.id);
     setMemorySaveError(null);
     try {
-      await saveTimelineMemory(
-        backend,
-        message.text,
-        accountEpoch,
-        `remember:${message.id}`,
-      );
+      let prepared = pendingMemorySavesRef.current.get(message.id);
+      if (prepared !== undefined && prepared.accountEpoch !== accountEpoch) {
+        pendingMemorySavesRef.current.delete(message.id);
+        prepared = undefined;
+      }
+      if (prepared === undefined) {
+        prepared = await prepareTimelineMemory(
+          backend,
+          message.text,
+          accountEpoch,
+          `remember:${message.id}`,
+        );
+        if (memorySaveEpochRef.current !== epoch) return;
+        pendingMemorySavesRef.current.set(message.id, prepared);
+      }
+      await sendTimelineMemory(backend, prepared);
+      if (memorySaveEpochRef.current !== epoch) return;
+      pendingMemorySavesRef.current.delete(message.id);
       setSavedMemoryIds(current =>
         current.includes(message.id) ? current : [...current, message.id],
       );
@@ -706,11 +748,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         );
       }
     } catch (error) {
-      setMemorySaveError(
-        error instanceof Error ? error.message : 'Memory could not be saved.',
-      );
+      if (memorySaveEpochRef.current === epoch) {
+        setMemorySaveError(
+          error instanceof Error
+            ? `${error.message} Retry to check the same memory.`
+            : 'Memory could not be saved. Retry to check the same memory.',
+        );
+      }
     } finally {
-      setMemorySavingId(null);
+      if (memorySaveInFlightRef.current === message.id) {
+        memorySaveInFlightRef.current = null;
+      }
+      if (memorySaveEpochRef.current === epoch) {
+        setMemorySavingId(null);
+      }
     }
   };
 
@@ -1112,6 +1163,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           outcomes={readOutcomes}
           reads={reads}
           postSetupHomeCue={postSetupHomeCue}
+          recall={rewindMoments.items}
+          recallStatus={
+            rewindMoments.status === 'idle' ? 'ready' : rewindMoments.status
+          }
+          recallNotice={
+            rewindMoments.sync === 'unavailable'
+              ? null
+              : [rewindMoments.error, rewindMoments.syncError]
+                  .filter(Boolean)
+                  .join(' ') || null
+          }
+          recallHasMore={rewindMoments.hasMore}
+          recallLoadingMore={rewindMoments.loadingMore}
+          onLoadMoreRecall={rewindMoments.loadMore}
           readsPhase={readsPhase}
           session={
             onboardingRequired === null
@@ -1126,9 +1191,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }
 
-  const mobileChatHasLongResponse = messages.some(
-    message => message.sender === 'ai' && message.text.length > 420,
-  );
+  const latestMobileAssistantResponse = [...messages]
+    .reverse()
+    .find(message => message.sender === 'ai');
+  const mobileChatHasLongResponse =
+    (latestMobileAssistantResponse?.text.length ?? 0) > 420;
   const mobileChatOverlay = mobileChatHasLongResponse;
   const mobileChat = homeChatOpen ? (
     <MobileChat
@@ -1174,6 +1241,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     onboardingRequired === false &&
     (route === 'Home' ||
       route === 'Conversations' ||
+      route === 'Memories' ||
       route === 'Tasks' ||
       route === 'Settings' ||
       route === 'Connectors')
@@ -1223,6 +1291,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ? 'tasks'
         : route === 'Conversations'
         ? 'chat'
+        : route === 'Memories'
+        ? 'memories'
         : route === 'Settings'
         ? 'settings'
         : route === 'Connectors'
@@ -1272,6 +1342,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         conversations={timelineConversations}
         memories={timelineMemories}
         recall={rewindMoments.items}
+        recallHasMore={rewindMoments.hasMore}
+        recallLoadingMore={rewindMoments.loadingMore}
+        onLoadMoreRecall={rewindMoments.loadMore}
         timelineStatus={
           rewindMoments.status === 'error' &&
           readOutcomes?.conversations.status === 'error'
@@ -1315,6 +1388,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             embedded
           />
         }
+        memoryContent={
+          <MemoriesPage
+            outcome={readOutcomes?.memories ?? null}
+            loading={
+              readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+            }
+          />
+        }
         settingsContent={
           <SettingsPage
             onSignIn={signInAndRefresh}
@@ -1353,6 +1434,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           setHomeChatOpen(false);
           setRoute('Settings');
         }}
+        onOpenTimelineItem={item => {
+          setHomeChatOpen(false);
+          if (item.kind === 'conversation') {
+            setRoute('Conversations');
+          } else if (item.kind === 'memory') {
+            setRoute('Memories');
+          }
+        }}
+        onViewTasks={() => {
+          setHomeChatOpen(false);
+          setRoute('Tasks');
+        }}
         onRouteChange={destination => {
           setHomeChatOpen(false);
           setRoute(
@@ -1360,6 +1453,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               ? 'Settings'
               : destination === 'tasks'
               ? 'Tasks'
+              : destination === 'memories'
+              ? 'Memories'
               : destination === 'apps'
               ? 'Connectors'
               : destination === 'chat'

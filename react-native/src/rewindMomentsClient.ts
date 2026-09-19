@@ -89,6 +89,7 @@ export async function upsertRewindMoment(
   const response = await backend.request({
     id: 'rewind-moment-upsert',
     method: 'POST',
+    expectedApiContract: 'canonical',
     path: '/v1/rewind-moments',
     headers: {'content-type': 'application/json'},
     body: JSON.stringify(moment),
@@ -96,7 +97,13 @@ export async function upsertRewindMoment(
   if (response.status < 200 || response.status >= 300) {
     rejectHttp(response);
   }
-  return parseMoment(parseObject(response.body).moment);
+  const accepted = parseMoment(parseObject(response.body).moment);
+  if (JSON.stringify(accepted) !== JSON.stringify(parseMoment(moment))) {
+    throw new Error(
+      'Rewind save acknowledgement did not match the requested moment',
+    );
+  }
+  return accepted;
 }
 
 export async function loadRewindMoments(
@@ -110,6 +117,7 @@ export async function loadRewindMoments(
   const response = await backend.request({
     id: 'rewind-moments-read',
     method: 'GET',
+    expectedApiContract: 'canonical',
     path: path as `/${string}`,
   });
   if (response.status < 200 || response.status >= 300) {
@@ -120,22 +128,24 @@ export async function loadRewindMoments(
     throw new Error('Rewind moment page is incomplete');
   }
   const window = body.window;
-  const hasMore =
-    window !== null &&
-    typeof window === 'object' &&
-    !Array.isArray(window) &&
-    (window as {hasMore?: unknown}).hasMore === true;
-  const nextCursor =
-    window !== null &&
-    typeof window === 'object' &&
-    !Array.isArray(window) &&
-    typeof (window as {nextCursor?: unknown}).nextCursor === 'string'
-      ? ((window as {nextCursor: string}).nextCursor)
-      : null;
+  if (window === null || typeof window !== 'object' || Array.isArray(window)) {
+    throw new Error('Rewind moment pagination is incomplete');
+  }
+  const {hasMore, nextCursor} = window as Record<string, unknown>;
+  if (
+    typeof hasMore !== 'boolean' ||
+    (hasMore
+      ? typeof nextCursor !== 'string' ||
+        nextCursor.length === 0 ||
+        nextCursor === cursor
+      : nextCursor !== null)
+  ) {
+    throw new Error('Rewind moment pagination is invalid');
+  }
   return {
     items: body.items.map(parseMoment),
     hasMore,
-    nextCursor,
+    nextCursor: nextCursor as string | null,
   };
 }
 

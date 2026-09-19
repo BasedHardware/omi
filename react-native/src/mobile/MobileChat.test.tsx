@@ -121,6 +121,7 @@ test('compact responses show only the latest result with one close control', () 
   const onRemember = jest.fn();
   const {tree, control} = setup({
     presentation: 'compact',
+    hasOlder: true,
     onRemember,
     messages: [
       {
@@ -140,6 +141,7 @@ test('compact responses show only the latest result with one close control', () 
     ],
   });
   expect(control('Expand response')).toBeUndefined();
+  expect(control('Load older messages')).toBeUndefined();
   expect(control('Close chat')).toBeDefined();
   expect(
     tree.root.findAll(
@@ -152,5 +154,41 @@ test('compact responses show only the latest result with one close control', () 
   expect(onRemember).toHaveBeenCalledWith(
     expect.objectContaining({id: 'assistant-1'}),
   );
+  act(() => tree.unmount());
+});
+
+test('long overlay keeps loaded history visible and exposes older-page loading', () => {
+  const {tree, control, props} = setup({
+    presentation: 'overlay',
+    hasOlder: true,
+    messages: [
+      {
+        id: 'human-old',
+        sender: 'human',
+        text: 'Earlier question',
+        createdAt: 1,
+        generationOutcome: null,
+      },
+      {
+        id: 'assistant-old',
+        sender: 'ai',
+        text: 'Earlier answer',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      },
+      {
+        id: 'assistant-latest',
+        sender: 'ai',
+        text: 'Latest answer that is deliberately long enough to use the full overlay.',
+        createdAt: 3,
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  const text = JSON.stringify(tree.toJSON());
+  expect(text).toContain('Earlier question');
+  expect(text).toContain('Earlier answer');
+  act(() => control('Load older messages').props.onPress());
+  expect(props.onLoadOlder).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
 });

@@ -63,7 +63,10 @@ export function MobileChat({
     !busy &&
     !loadingHistory &&
     error === null;
-  const responseMessages = messages.filter(message => message.sender === 'ai');
+  const shownMessages =
+    presentation === 'compact'
+      ? messages.filter(message => message.sender === 'ai').slice(-1)
+      : messages;
   return (
     <View style={[local.root, presentation === 'compact' && local.compactRoot]}>
       <View
@@ -101,7 +104,7 @@ export function MobileChat({
             <Text style={local.copy}>Loading your conversation…</Text>
           </View>
         )}
-        {hasOlder && (
+        {hasOlder && presentation !== 'compact' && (
           <FocusPressable
             accessibilityRole="button"
             accessibilityLabel="Load older messages"
@@ -139,11 +142,11 @@ export function MobileChat({
             </View>
           </View>
         )}
-        {responseMessages.slice(-1).map(message => (
+        {shownMessages.map(message => (
           <React.Fragment key={message.id}>
             <ChatMessageRow
               message={message}
-              compact
+              compact={presentation === 'compact'}
               animate={shouldAnimate(message.id)}
               reduceMotion={reduceMotion}
             />

@@ -386,6 +386,7 @@ describe("D1 migration manifest", () => {
       "0007_device_audio_chunks.sql",
       "0008_device_capture_id.sql",
       "0009_device_capture_time.sql",
+      "0010_rewind_moments.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 

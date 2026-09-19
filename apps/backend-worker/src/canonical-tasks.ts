@@ -20,6 +20,17 @@ export type CanonicalTasksRequest = {
   | { method: "POST"; body: string }
 );
 
+export type CanonicalWritePath = "/v1/tasks/ops" | "/v1/stm-notes/ops";
+
+export type CanonicalWriteRequest = {
+  service: CanonicalService | undefined;
+  caller: CanonicalCaller;
+  path: CanonicalWritePath;
+  body: string;
+  requireAcknowledgedRecordMatch?: boolean;
+  contractVersion?: string;
+};
+
 export function canonicalTasksUnavailable(method: "GET" | "POST"): Response {
   const unavailable = WRITE_AVAILABILITY.control_unavailable;
   return new Response(
@@ -38,37 +49,69 @@ export function canonicalTasksUnavailable(method: "GET" | "POST"): Response {
 export async function requestCanonicalTasks(
   request: CanonicalTasksRequest
 ): Promise<Response> {
+  if (request.method === "POST") {
+    return requestCanonicalWrite({
+      service: request.service,
+      caller: request.caller,
+      path: "/v1/tasks/ops",
+      body: request.body,
+      ...(request.contractVersion === undefined
+        ? {}
+        : { contractVersion: request.contractVersion }),
+    });
+  }
   const result = await requestCanonicalService({
     service: request.service,
     caller: request.caller,
-    path: request.method === "GET" ? "/v1/tasks" : "/v1/tasks/ops",
-    method: request.method,
-    ...(request.method === "GET"
-      ? { query: request.query }
-      : { body: request.body }),
+    path: "/v1/tasks",
+    method: "GET",
+    query: request.query,
     ...(request.contractVersion === undefined
       ? {}
       : { contractVersion: request.contractVersion }),
   });
-  if (result.kind === "unavailable")
-    return canonicalTasksUnavailable(request.method);
+  if (result.kind === "unavailable") return canonicalTasksUnavailable("GET");
+  const response = result.response;
+  const body = await response.text();
+  const valid =
+    response.status === 200
+      ? parseTaskPageJson(body) !== null
+      : [
+          [400, '{"error":"bad_request"}'],
+          [401, '{"error":"unauthorized"}'],
+          [403, '{"error":"forbidden"}'],
+        ].some(
+          ([status, value]) => response.status === status && body === value
+        );
+  return valid
+    ? new Response(body, { status: response.status, headers: response.headers })
+    : canonicalTasksUnavailable("GET");
+}
+
+export async function requestCanonicalWrite(
+  request: CanonicalWriteRequest
+): Promise<Response> {
+  const result = await requestCanonicalService({
+    service: request.service,
+    caller: request.caller,
+    path: request.path,
+    method: "POST",
+    body: request.body,
+    ...(request.contractVersion === undefined
+      ? {}
+      : { contractVersion: request.contractVersion }),
+  });
+  if (result.kind === "unavailable") return canonicalTasksUnavailable("POST");
   const response = result.response;
   const body = await response.text();
   let valid = false;
-  if (request.method === "GET") {
-    valid =
-      response.status === 200
-        ? parseTaskPageJson(body) !== null
-        : [
-            [400, '{"error":"bad_request"}'],
-            [401, '{"error":"unauthorized"}'],
-            [403, '{"error":"forbidden"}'],
-          ].some(
-            ([status, value]) => response.status === status && body === value
-          );
-  } else if (response.status === 200) {
+  if (response.status === 200) {
     try {
-      valid = isTrustedWriteAccepted(JSON.parse(body));
+      const accepted: unknown = JSON.parse(body);
+      valid =
+        isTrustedWriteAccepted(accepted) &&
+        (!request.requireAcknowledgedRecordMatch ||
+          accepted.applied.record_id === requestedRecordId(request.body));
     } catch {
       valid = false;
     }
@@ -81,5 +124,26 @@ export async function requestCanonicalTasks(
   }
   return valid
     ? new Response(body, { status: response.status, headers: response.headers })
-    : canonicalTasksUnavailable(request.method);
+    : canonicalTasksUnavailable("POST");
+}
+
+function requestedRecordId(body: string): string | null {
+  try {
+    const envelope: unknown = JSON.parse(body);
+    if (
+      envelope === null ||
+      typeof envelope !== "object" ||
+      Array.isArray(envelope)
+    ) {
+      return null;
+    }
+    const op = (envelope as Record<string, unknown>)["op"];
+    if (op === null || typeof op !== "object" || Array.isArray(op)) {
+      return null;
+    }
+    const recordId = (op as Record<string, unknown>)["record_id"];
+    return typeof recordId === "string" ? recordId : null;
+  } catch {
+    return null;
+  }
 }

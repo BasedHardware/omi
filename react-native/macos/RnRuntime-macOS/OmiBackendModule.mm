@@ -2,6 +2,7 @@
 #import "../../apple/OmiRecordingPolicy.h"
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
+#import "OmiRewindOwner.h"
 
 #include "omi_backend_http.h"
 #include "omi_backend_policy.h"
@@ -73,6 +74,27 @@ static NSString *OmiBackendRoute(NSString *path) {
 
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
   return path.length > 0 && omi_backend_is_capture_path(path.UTF8String) == 1;
+}
+
+static BOOL OmiIsRecallRequest(NSString *method, NSString *path) {
+  return ([method isEqualToString:@"GET"] || [method isEqualToString:@"POST"]) &&
+      [OmiBackendRoute(path) isEqualToString:@"/v1/rewind-moments"];
+}
+
+static BOOL OmiRecallFrameMatchesIdentity(NSDictionary *value, NSDictionary *identity) {
+  NSString *owner = OmiRewindOwner(identity);
+  NSString *body = [value[@"body"] isKindOfClass:NSString.class] ? value[@"body"] : nil;
+  id parsed = body == nil ? nil : [NSJSONSerialization JSONObjectWithData:[body dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+  NSDictionary *moment = [parsed isKindOfClass:NSDictionary.class] ? parsed : nil;
+  NSString *source = [moment[@"source"] isKindOfClass:NSString.class] ? moment[@"source"] : nil;
+  NSString *frameId = [moment[@"frameId"] isKindOfClass:NSString.class] ? moment[@"frameId"] : nil;
+  if (owner.length == 0 || ![@[@"captured", @"shipping"] containsObject:source]) return NO;
+  NSString *prefix = [NSString stringWithFormat:@"%@:%@:", source, owner];
+  if (![frameId hasPrefix:prefix]) return NO;
+  NSString *row = [frameId substringFromIndex:prefix.length];
+  return row.length > 0 && row.length <= 19 &&
+      [row rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location == NSNotFound &&
+      row.longLongValue > 0 && [[NSString stringWithFormat:@"%lld", row.longLongValue] isEqual:row];
 }
 
 static NSURL *OmiValidatedV5URL(NSString *value) {
@@ -265,6 +287,22 @@ static NSString *OmiOwnKeychainCloudToken(NSDictionary *session) {
   NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
   if (expiryTime == nil || expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60) return nil;
   return token.length > 0 ? token : nil;
+}
+
+static BOOL OmiRecallIdentityIsCurrent(NSDictionary *identity) {
+  if (identity == nil) return NO;
+  @synchronized (OmiAuthKeychainLock()) {
+    return [identity isEqual:OmiAuthLocalHistoryIdentity()];
+  }
+}
+
+static BOOL OmiRecallIdentityMatchesPolicy(NSDictionary *identity, OmiBackendPolicy *policy) {
+  if (identity == nil || policy == nil) return NO;
+  @synchronized (OmiAuthKeychainLock()) {
+    if (![identity isEqual:OmiAuthLocalHistoryIdentity()]) return NO;
+    if (policy.kind != OmiBackendCredentialKindCloud) return YES;
+    return [policy.token isEqualToString:OmiOwnKeychainCloudToken(OmiOwnKeychainCloudSession())];
+  }
 }
 
 static BOOL OmiCloudSessionNeedsRefresh(NSDictionary *session) {
@@ -995,10 +1033,22 @@ RCT_REMAP_METHOD(request,
 }
 
 - (void)performNativeRequest:(NSDictionary *)value receipt:(NSString *)receipt expectedOrigin:(NSString *)origin expectedLogin:(NSString *)login resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  NSString *initialMethod = [value[@"method"] isKindOfClass:NSString.class] ? value[@"method"] : nil;
+  NSString *initialPath = [value[@"path"] isKindOfClass:NSString.class] ? value[@"path"] : nil;
+  BOOL recall = OmiIsRecallRequest(initialMethod, initialPath);
+  NSDictionary *rewindIdentity = recall ? OmiAuthLocalHistoryIdentity() : nil;
+  if (recall && rewindIdentity == nil) { reject(@"OMI_REWIND_AUTH", @"Sign in to use Recall", nil); return; }
+  if (recall && [initialMethod isEqualToString:@"POST"] && !OmiRecallFrameMatchesIdentity(value, rewindIdentity)) {
+    reject(@"OMI_REWIND_OWNER_CHANGED", @"Recall account changed", nil); return;
+  }
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
   if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
   if (resolutionError != nil) {
     reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP session refresh failed", resolutionError);
+    return;
+  }
+  if (recall && !OmiRecallIdentityMatchesPolicy(rewindIdentity, policy)) {
+    reject(@"OMI_REWIND_OWNER_CHANGED", @"Recall account changed", nil);
     return;
   }
   NSString *requestId = [value[@"id"] isKindOfClass:NSString.class] ? value[@"id"] : nil;
@@ -1068,6 +1118,10 @@ RCT_REMAP_METHOD(request,
     request.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
     [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
   }
+  if (recall && !OmiRecallIdentityMatchesPolicy(rewindIdentity, policy)) {
+    reject(@"OMI_REWIND_OWNER_CHANGED", @"Recall account changed", nil);
+    return;
+  }
   if (!OmiApplyAuthorization(request, policy)) {
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
     return;
@@ -1076,9 +1130,17 @@ RCT_REMAP_METHOD(request,
   if (receipt != nil) [request setValue:receipt forHTTPHeaderField:@"x-omi-capture-ownership"];
   @synchronized(self) {
   if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  if (recall && !OmiRecallIdentityMatchesPolicy(rewindIdentity, policy)) {
+    reject(@"OMI_REWIND_OWNER_CHANGED", @"Recall account changed", nil);
+    return;
+  }
   NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
                                               completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if (recall && !OmiRecallIdentityIsCurrent(rewindIdentity)) {
+      reject(@"OMI_REWIND_OWNER_CHANGED", @"Recall account changed", nil);
+      return;
+    }
     if (error != nil) {
       reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP transport failed", error);
       return;

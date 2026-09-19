@@ -270,7 +270,6 @@ export function ConversationsPage({
               embedded && mobileStyles.list,
             ]}
             style={styles.conversationListPane}>
-
             {notice && (
               <Text
                 accessibilityRole="alert"

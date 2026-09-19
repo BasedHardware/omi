@@ -1,4 +1,9 @@
-import {saveTimelineMemory, STM_NOTES_OPS_PATH} from './memoryNoteClient';
+import {
+  prepareTimelineMemory,
+  saveTimelineMemory,
+  sendTimelineMemory,
+  STM_NOTES_OPS_PATH,
+} from './memoryNoteClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 function backend(response: {status: number; body: string | null}): OmiBackend {
@@ -72,4 +77,63 @@ test('refuses legacy or browser backends before making a write request', async (
     saveTimelineMemory(legacy, 'A note', 7, 'remember:assistant-1'),
   ).rejects.toThrow('unavailable');
   expect(request).not.toHaveBeenCalled();
+});
+
+test('retries an uncertain reply with the same native write and record identities', async () => {
+  const request = jest
+    .fn()
+    .mockRejectedValueOnce(new Error('reply lost after delivery'))
+    .mockResolvedValueOnce({
+      id: 'retry',
+      status: 200,
+      body: JSON.stringify({
+        applied: {
+          record_id: `timeline-${'a'.repeat(48)}`,
+          revision: 'b'.repeat(64),
+        },
+        idempotent: true,
+      }),
+    });
+  const prepared = await prepareTimelineMemory(
+    {...backend({status: 200, body: null}), request},
+    'A note that may have reached the server.',
+    7,
+    'remember:assistant-retry',
+  );
+  await expect(
+    sendTimelineMemory(
+      {...backend({status: 200, body: null}), request},
+      prepared,
+    ),
+  ).rejects.toThrow('could not be confirmed');
+  await expect(
+    sendTimelineMemory(
+      {...backend({status: 200, body: null}), request},
+      prepared,
+    ),
+  ).resolves.toEqual({id: prepared.recordId, idempotent: true});
+  const payloads = request.mock.calls.map(([input]) => JSON.parse(input.body));
+  expect(payloads).toHaveLength(2);
+  expect(payloads[0].write_id).toBe(payloads[1].write_id);
+  expect(payloads[0].op.record_id).toBe(payloads[1].op.record_id);
+});
+
+test('rejects a successful-looking acknowledgement for a different memory', async () => {
+  await expect(
+    saveTimelineMemory(
+      backend({
+        status: 200,
+        body: JSON.stringify({
+          applied: {
+            record_id: `timeline-${'b'.repeat(48)}`,
+            revision: 'c'.repeat(64),
+          },
+          idempotent: false,
+        }),
+      }),
+      'A note',
+      7,
+      'remember:assistant-mismatch',
+    ),
+  ).rejects.toThrow('did not match');
 });

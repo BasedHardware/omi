@@ -248,7 +248,6 @@ export function DesktopRewind({
   };
   return (
     <View style={styles.root} accessibilityLabel="Recall screen history">
-
       {error !== null && frames.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.text}>
           {error}

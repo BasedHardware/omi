@@ -398,6 +398,50 @@ test('Home shows action items then the mixed timeline and opens the full task li
   }
 });
 
+test('Home includes memory projections in the searchable mixed timeline', () => {
+  const memory = {
+    kind: 'memory' as const,
+    id: 'memory-launch',
+    title: 'Launch review is Friday',
+    summary: 'Keep Friday afternoon open for the launch review.',
+    searchableText: 'launch review Friday afternoon',
+    citations: [],
+    timestamp: 1_788_000_000,
+    provenance: {
+      label: 'conversation',
+      synthesisVersion: 'test',
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  const renderer = renderDesktop({
+    reads: [...outcomes.conversations.value.items, memory],
+    outcomes: {
+      ...outcomes,
+      memories: {
+        ...outcomes.memories,
+        value: {...outcomes.memories.value, items: [memory]},
+      },
+    },
+  });
+  expect(renderedText(renderer)).toContain('Launch review is Friday');
+  act(() =>
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel ===
+          'Open Memory Launch review is Friday',
+      )
+      .props.onPress(),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Conversations',
+    ).props.accessibilityState.selected,
+  ).toBe(true);
+  expect(renderedText(renderer)).toContain('Launch review is Friday');
+});
+
 test('persistent capture toggle uses the existing owner across Home, Recall and Chat', async () => {
   const capture = {
     available: true,

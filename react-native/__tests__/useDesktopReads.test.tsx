@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import {AppState} from 'react-native';
 
 jest.mock('../src/desktopReadClient', () => {
   const actual = jest.requireActual('../src/desktopReadClient');
@@ -547,6 +548,87 @@ test('conversation pagination appends one page and ignores duplicate presses', a
   expect(reads.latest().conversationsLoadingMore).toBe(false);
   reads.unmount();
 });
+
+test('automatic refresh preserves pending and loaded conversation and task pages', async () => {
+  jest.useFakeTimers();
+  const originalAppState = AppState.currentState;
+  AppState.currentState = 'active';
+  try {
+    const initial = pagedOutcomes();
+    if (initial.conversations.status !== 'success') throw Error('fixture');
+    initial.conversations.value.items = [
+      conversationItem('new-conversation', 'New conversation'),
+    ];
+    const initialTasks = taskValue(taskOutcomes(0, 1));
+    initialTasks.items[0] = {
+      ...initialTasks.items[0],
+      id: 'new-task',
+      title: 'New task',
+    };
+    initial.tasks = {status: 'success', value: initialTasks};
+    readsMock.mockResolvedValueOnce(initial);
+
+    const reads = await renderReads({enabled: true});
+    let releaseConversation!: (value: unknown) => void;
+    let releaseTask!: (value: unknown) => void;
+    (loadConversations as jest.Mock).mockReturnValueOnce(
+      new Promise(resolve => {
+        releaseConversation = resolve;
+      }),
+    );
+    (loadTasks as jest.Mock).mockReturnValueOnce(
+      new Promise(resolve => {
+        releaseTask = resolve;
+      }),
+    );
+    let pendingConversation!: Promise<void>;
+    let pendingTask!: Promise<void>;
+    await ReactTestRenderer.act(async () => {
+      pendingConversation = reads.latest().loadMoreConversations();
+      pendingTask = reads.latest().loadMoreTasks();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(15000);
+    });
+    expect(readsMock).toHaveBeenCalledTimes(1);
+    expect(reads.latest().conversationsLoadingMore).toBe(true);
+    expect(reads.latest().tasksLoadingMore).toBe(true);
+
+    const olderConversation = successOutcomes([
+      'Older conversation',
+    ]).conversations;
+    if (olderConversation.status !== 'success') throw Error('fixture');
+    await ReactTestRenderer.act(async () => {
+      releaseConversation(olderConversation.value);
+      releaseTask(taskValue(taskOutcomes(1, 1, false)));
+      await Promise.all([pendingConversation, pendingTask]);
+    });
+    expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+      value: {items: [{id: 'new-conversation'}, {id: 'Older conversation'}]},
+    });
+    expect(
+      taskValue(reads.latest().readOutcomes!).items.map(item => item.id),
+    ).toEqual(['new-task', 'task-1']);
+
+    (loadTasks as jest.Mock).mockResolvedValueOnce(initialTasks);
+    await ReactTestRenderer.act(async () => {
+      await reads.latest().refreshTasks();
+    });
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(15000);
+    });
+    expect(readsMock).toHaveBeenCalledTimes(1);
+    expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+      value: {items: [{id: 'new-conversation'}, {id: 'Older conversation'}]},
+    });
+    reads.unmount();
+  } finally {
+    AppState.currentState = originalAppState;
+    jest.useRealTimers();
+  }
+});
+
 test('an expired conversation cursor replaces the old page once and does not loop', async () => {
   readsMock.mockResolvedValue(pagedOutcomes());
   const reads = await renderReads({enabled: true});

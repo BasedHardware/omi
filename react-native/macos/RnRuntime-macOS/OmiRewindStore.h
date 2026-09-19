@@ -2,7 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
-#import <CommonCrypto/CommonDigest.h>
+#import "OmiRewindOwner.h"
 #import <sqlite3.h>
 #import <sys/stat.h>
 #import <fcntl.h>
@@ -10,12 +10,6 @@
 #import <errno.h>
 
 static NSError *OmiRewindError(NSString *code) { return [NSError errorWithDomain:code code:1 userInfo:nil]; }
-static NSString *OmiRewindOwner(NSDictionary *identity) {
-  NSData *bytes = [[NSString stringWithFormat:@"%@:%@", identity[@"uid"], identity[@"login"]] dataUsingEncoding:NSUTF8StringEncoding];
-  unsigned char digest[CC_SHA256_DIGEST_LENGTH]; CC_SHA256(bytes.bytes, (CC_LONG)bytes.length, digest);
-  NSMutableString *value = [NSMutableString string]; for (NSUInteger i = 0; i < sizeof(digest); i++) [value appendFormat:@"%02x", digest[i]];
-  return value;
-}
 static NSString *OmiRewindText(sqlite3_stmt *statement, int index) {
   const unsigned char *value = sqlite3_column_text(statement, index);
   return value == NULL ? @"" : [[NSString alloc] initWithBytes:value length:sqlite3_column_bytes(statement, index) encoding:NSUTF8StringEncoding];

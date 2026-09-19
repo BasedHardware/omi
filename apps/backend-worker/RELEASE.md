@@ -14,7 +14,7 @@ Migration `0007_device_audio_chunks.sql` adds the per-packet hash and acknowledg
 
 Migration `0008_device_capture_id.sql` adds a nullable capture ID and account-scoped unique index. Existing rows retain NULL capture IDs; no historical identity is fabricated. Updated clients require `createRecordingId` on the native backend bridge (or browser cryptographic UUID support). Creation requires the capture ID; coordinate the client and Worker release. Replays return the same server session, and changed device metadata returns 409.
 
-Migration `0010_rewind_moments.sql` stores per-account Recall *metadata* only (`frame_id`, capture time, app, window, source, 240-character OCR preview). It never stores JPEG or video bytes. Do not apply it to a shared database from an unverified checkout.
+Migration `0010_rewind_moments.sql` stores per-account Recall _metadata_ only (`frame_id`, capture time, app, window, source, 240-character OCR preview). It never stores JPEG or video bytes. Do not apply it to a shared database from an unverified checkout.
 
 Migration `0009_device_capture_time.sql` adds nullable `captured_at_ms`. Creation accepts optional `capturedAtMs`, a safe integer from 0 through 8,640,000,000,000,000 Unix milliseconds representing native receipt of the first packet. Invalid values, including null, are rejected. Exact replay preserves presence and value; changing either returns 409. Historical values remain unknown and are omitted from session and conversation responses. This display provenance never changes server `startedAt`/`endedAt` (also Unix milliseconds), conversation ordering, audio duration, or billing.
 
@@ -26,7 +26,7 @@ The processor accepts firmware PCM8 (codec 1) and Opus (20/21), validates packet
 
 `GET /v1/device-sessions/:id/transcript` returns account-scoped processing state, text, segments and any discarded-leading-packet count. Conversations project these recordings as private records and the app reads full text through native authenticated transport.
 
-Optional `CANONICAL_SERVICE` is a Worker service binding exposing the ratified `/v1/memories`, `/v1/tasks`, and `/v1/tasks/ops` routes. Configure its actual deployed target only after provisioning the canonical service with production Firebase verification, durable storage, account/control authority, grant authority and persistent codec keys. The target must independently validate the forwarded Firebase bearer. Shared staging credentials never cross this boundary. Both task reads and writes use this binding when present; an upstream outage does not fall back to a different task authority. Without it, memory reads and task writes fail closed, while existing D1 task reads remain available. No target is invented in `wrangler.jsonc`.
+Optional `CANONICAL_SERVICE` is a Worker service binding exposing the ratified `/v1/memories`, `/v1/tasks`, `/v1/tasks/ops`, and `/v1/stm-notes/ops` routes. Configure its actual deployed target only after provisioning the canonical service with production Firebase verification, durable storage, account/control authority, grant authority and persistent codec keys. The target must independently validate the forwarded Firebase bearer. Shared staging credentials never cross this boundary. Both task and STM-note writes use this binding when present; an upstream outage does not fall back to a different write authority. Without it, memory reads and canonical writes fail closed, while existing D1 task reads remain available. No target is invented in `wrangler.jsonc`.
 
 ## Required operator inputs
 

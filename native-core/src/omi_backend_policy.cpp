@@ -44,7 +44,8 @@ bool is_capture_route(std::string_view route) {
          route == "/v1/device-sessions" ||
          starts_with(route, "/v1/device-sessions/") ||
          route == "/v1/conversations" || route == "/v1/memories" ||
-         route == "/v1/tasks" || route == "/v1/tasks/ops";
+         route == "/v1/tasks" || route == "/v1/tasks/ops" ||
+         route == "/v1/stm-notes/ops" || route == "/v1/rewind-moments";
 }
 
 // Match Apple OmiRequestTimeout: URL path split on '/', leading empty segment.
@@ -113,7 +114,8 @@ int32_t omi_backend_example_platform_supported(const char* method,
                ? 1
                : 0;
   }
-  if (std::strcmp(method, "POST") == 0 && route == "/v1/tasks/ops") {
+  if (std::strcmp(method, "POST") == 0 &&
+      (route == "/v1/tasks/ops" || route == "/v1/stm-notes/ops")) {
     return 1;
   }
   return 0;

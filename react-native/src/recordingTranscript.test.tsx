@@ -371,10 +371,9 @@ test('opens a recording row into the full transcript detail and retires it on ba
   }
 });
 
-test('conversation list exposes refresh and load more with truthful pending actions', async () => {
+test('conversation list exposes load more with a truthful pending action', async () => {
   const {ConversationsPage} = require('./pages/Conversations');
-  const onRefresh = jest.fn(),
-    onLoadMore = jest.fn();
+  const onLoadMore = jest.fn();
   const outcome = {
     status: 'success',
     value: {
@@ -395,7 +394,6 @@ test('conversation list exposes refresh and load more with truthful pending acti
       <ConversationsPage
         outcome={outcome}
         loading={false}
-        onRefresh={onRefresh}
         onLoadMore={onLoadMore}
       />,
     );
@@ -404,10 +402,8 @@ test('conversation list exposes refresh and load more with truthful pending acti
   const button = (name: string) =>
     renderer.root.findAll(node => node.props.accessibilityLabel === name)[0]!;
   act(() => {
-    button('Refresh conversations').props.onPress();
     button('Load more conversations').props.onPress();
   });
-  expect(onRefresh).toHaveBeenCalledTimes(1);
   expect(onLoadMore).toHaveBeenCalledTimes(1);
   await act(async () => {
     renderer.update(
@@ -415,13 +411,11 @@ test('conversation list exposes refresh and load more with truthful pending acti
         outcome={outcome}
         loading={false}
         loadingMore
-        onRefresh={onRefresh}
         onLoadMore={onLoadMore}
         notice="Conversations changed. The list has been refreshed."
       />,
     );
   });
-  expect(button('Refresh conversations').props.disabled).toBe(true);
   expect(button('Load more conversations').props.disabled).toBe(true);
   expect(textOf(renderer)).toContain('The list has been refreshed');
 });
