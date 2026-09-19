@@ -1,4 +1,4 @@
-# Tsumbandila ya u Țavhanya ya omi-cli
+# Tsumbandila ya u Ṱavhanya ya omi-cli
 
 Tsumbandila iyi i ṱalutshedza ndaela dza u thoma nga Tshivenḓa (Venda) dza `omi-cli`. Madzina a ndaela na milaedza ya mbekanyamushumo zwi dzula zwi nga Luisimane. Tsumbo dza u lavhelesa dzo sumbedzwaho hafha a dzi shandukisi mihumbulo yavho (memories), nyambedzano (conversations), mishumo i re khagala (action items), kana zwipikwa zwavho (goals).
 
