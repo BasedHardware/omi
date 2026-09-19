@@ -177,25 +177,31 @@ final class AFMLocalInferenceAdapterTests: XCTestCase {
     XCTAssertEqual(schemaProperty(properties, "emoji")?.node, .string)
     XCTAssertEqual(schemaProperty(properties, "category")?.node, .string)
 
-    guard case .array(let sectionItems) = schemaProperty(properties, "sections")?.node,
+    guard case .array(let sectionItems, let sectionMax) = schemaProperty(properties, "sections")?.node,
       case .object(_, let sectionProperties, _) = sectionItems
     else {
       return XCTFail("sections must be an array of objects")
     }
+    // Bounded on purpose: a LanguageModelSession's transcript is prompt plus
+    // completion against one window, so an unbounded array lets the model spend
+    // the window on its own output. Measured on live AFM as
+    // "The session's transcript exceeded the model's context size."
+    XCTAssertEqual(sectionMax, 8, "sections must stay bounded or long conversations overflow the context")
     XCTAssertEqual(schemaProperty(sectionProperties, "heading")?.isOptional, false)
     XCTAssertEqual(schemaProperty(sectionProperties, "body_markdown")?.isOptional, false)
 
-    guard case .array(let eventItems) = schemaProperty(properties, "events")?.node,
+    guard case .array(let eventItems, let eventMax) = schemaProperty(properties, "events")?.node,
       case .object(_, let eventProperties, _) = eventItems
     else {
       return XCTFail("events must be an array of objects")
     }
+    XCTAssertEqual(eventMax, 6, "events must stay bounded for the same reason as sections")
     XCTAssertEqual(schemaProperty(eventProperties, "duration")?.node, .integer)
     XCTAssertEqual(schemaProperty(eventProperties, "title")?.isOptional, false)
     XCTAssertEqual(schemaProperty(eventProperties, "start")?.isOptional, false)
     XCTAssertEqual(schemaProperty(eventProperties, "description")?.isOptional, true)
 
-    guard case .array(let actionItems) = schemaProperty(properties, "action_items")?.node,
+    guard case .array(let actionItems, _) = schemaProperty(properties, "action_items")?.node,
       case .object(_, let actionProperties, _) = actionItems
     else {
       return XCTFail("action_items must be an array of objects")
