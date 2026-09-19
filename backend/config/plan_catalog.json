@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 2,
+  "catalog_revision": 3,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -601,6 +601,18 @@
     },
     {
       "price_id": "price_1TNIHd1F8wnoWYvwlKywJ8TO",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1RrFym1F8wnoWYvwQgIFhRWD",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1RrG6k1F8wnoWYvwORsU26Mr",
       "plan_id": "unlimited",
       "interval": "year",
       "environment": "prod"
