@@ -92,12 +92,13 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
 
-#define MAX_DEVICE_NAME_LEN 32
+#define MAX_DEVICE_NAME_PAYLOAD_LEN 25
+#define MAX_DEVICE_NAME_LEN (MAX_DEVICE_NAME_PAYLOAD_LEN + 1) /* 26 bytes including null-terminator */
 
 /**
  * @brief Save the device name setting to onboard persistent storage.
  *
- * @param name The new device name (null-terminated string, up to 31 chars).
+ * @param name The new device name (null-terminated string, up to 25 chars payload).
  * @return 0 on success, negative error code otherwise.
  */
 int app_settings_save_device_name(const char *name);

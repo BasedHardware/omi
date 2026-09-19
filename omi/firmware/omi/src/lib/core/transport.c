@@ -315,12 +315,11 @@ static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_serv
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
 static char adv_device_name[MAX_DEVICE_NAME_LEN] = CONFIG_BT_DEVICE_NAME;
 
-// Scan response data (contains full custom name up to 31 bytes)
+// Scan response data (contains DIS UUID16 and device name up to MAX_DEVICE_NAME_PAYLOAD_LEN bytes)
 static struct bt_data bt_sd[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
     BT_DATA(BT_DATA_NAME_COMPLETE, adv_device_name, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
@@ -516,8 +515,8 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
 
-    if (len >= MAX_DEVICE_NAME_LEN) {
-        LOG_WRN("Invalid length for device name write: %u (max %u)", len, MAX_DEVICE_NAME_LEN - 1);
+    if (len > MAX_DEVICE_NAME_PAYLOAD_LEN) {
+        LOG_WRN("Invalid length for device name write: %u (max %u)", len, MAX_DEVICE_NAME_PAYLOAD_LEN);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
 

@@ -133,7 +133,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
     }
 
     if (settings_name_steq(name, "device_name", &next) && !next) {
-        if (len >= sizeof(device_name)) {
+        if (len > MAX_DEVICE_NAME_PAYLOAD_LEN) {
             return -EINVAL;
         }
         memset(device_name, 0, sizeof(device_name));
@@ -278,6 +278,10 @@ int app_settings_save_device_name(const char *name)
     if (name == NULL) {
         device_name[0] = '\0';
     } else {
+        if (strlen(name) > MAX_DEVICE_NAME_PAYLOAD_LEN) {
+            LOG_WRN("Device name exceeds max length: %zu (max %u)", strlen(name), MAX_DEVICE_NAME_PAYLOAD_LEN);
+            return -EINVAL;
+        }
         strncpy(device_name, name, sizeof(device_name) - 1);
         device_name[sizeof(device_name) - 1] = '\0';
     }

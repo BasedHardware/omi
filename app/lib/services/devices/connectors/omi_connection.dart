@@ -880,12 +880,25 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  static const int maxDeviceNameBytes = 25;
+
+  static List<int> truncateUtf8ToBytes(String text, int maxBytes) {
+    final runes = text.runes;
+    final buffer = <int>[];
+    for (final rune in runes) {
+      final charBytes = utf8.encode(String.fromCharCode(rune));
+      if (buffer.length + charBytes.length > maxBytes) {
+        break;
+      }
+      buffer.addAll(charBytes);
+    }
+    return buffer;
+  }
+
   @override
   Future<void> performSetDeviceName(String name) async {
     try {
-      final bytes = utf8.encode(name.trim());
-      // Maximum name length stored on device is 31 bytes
-      final clampedBytes = bytes.length > 31 ? bytes.sublist(0, 31) : bytes;
+      final clampedBytes = truncateUtf8ToBytes(name.trim(), maxDeviceNameBytes);
       await transport.writeCharacteristic(
         settingsServiceUuid,
         settingsDeviceNameCharacteristicUuid,

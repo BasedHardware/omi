@@ -261,7 +261,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   TextField(
                     controller: textController,
                     autofocus: true,
-                    maxLength: 31,
+                    maxLength: 25,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: device.name,
@@ -302,17 +302,24 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                           setDialogState(() => isSaving = true);
                           try {
                             final connection = await ServiceManager.instance().device.ensureConnection(device.id);
-                            if (connection != null) {
-                              await connection.setDeviceName(newName);
-                              provider.pairedDevice = provider.pairedDevice?.copyWith(name: newName);
-                              if (provider.connectedDevice?.id == device.id) {
-                                provider.connectedDevice = provider.connectedDevice?.copyWith(name: newName);
+                            if (connection == null) {
+                              if (dialogContext.mounted) {
+                                setDialogState(() => isSaving = false);
                               }
-                              if (provider.pairedDevice != null) {
-                                SharedPreferencesUtil().btDevice = provider.pairedDevice!;
-                              }
-                              await provider.refreshDeviceInfo();
+                              scaffoldMessenger.showSnackBar(
+                                const SnackBar(content: Text('Failed to connect to device')),
+                              );
+                              return;
                             }
+                            await connection.setDeviceName(newName);
+                            provider.pairedDevice = provider.pairedDevice?.copyWith(name: newName);
+                            if (provider.connectedDevice?.id == device.id) {
+                              provider.connectedDevice = provider.connectedDevice?.copyWith(name: newName);
+                            }
+                            if (provider.pairedDevice != null) {
+                              SharedPreferencesUtil().btDevice = provider.pairedDevice!;
+                            }
+                            await provider.refreshDeviceInfo();
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
                             }

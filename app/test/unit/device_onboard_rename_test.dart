@@ -55,6 +55,19 @@ class _MockTransport implements DeviceTransport {
   Future<void> dispose() async {}
 }
 
+class _ThrowingMockTransport extends _MockTransport {
+  _ThrowingMockTransport(super.deviceId);
+
+  @override
+  Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
+    if (serviceUuid == OmiDeviceConnection.settingsServiceUuid &&
+        characteristicUuid == OmiDeviceConnection.settingsDeviceNameCharacteristicUuid) {
+      throw Exception('GATT read characteristic failed');
+    }
+    return super.readCharacteristic(serviceUuid, characteristicUuid);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -88,15 +101,27 @@ void main() {
       expect(call['data'], utf8.encode(newName));
     });
 
-    test('performSetDeviceName clamps string exceeding 31 bytes', () async {
+    test('performSetDeviceName clamps string exceeding 25 bytes', () async {
       const veryLongName = "1234567890123456789012345678901234567890";
       await connection.performSetDeviceName(veryLongName);
 
       expect(transport.writeCalls.length, 1);
       final call = transport.writeCalls.first;
       final writtenBytes = call['data'] as List<int>;
-      expect(writtenBytes.length, 31);
-      expect(utf8.decode(writtenBytes), veryLongName.substring(0, 31));
+      expect(writtenBytes.length, 25);
+      expect(utf8.decode(writtenBytes), veryLongName.substring(0, 25));
+    });
+
+    test('performSetDeviceName clamps multi-byte UTF-8 string on codepoint boundary', () async {
+      // 10 Chinese characters = 30 bytes (3 bytes each). Max 25 bytes budget fits exactly 8 characters (24 bytes).
+      const multiByteName = "一二三四五六七八九十";
+      await connection.performSetDeviceName(multiByteName);
+
+      expect(transport.writeCalls.length, 1);
+      final call = transport.writeCalls.first;
+      final writtenBytes = call['data'] as List<int>;
+      expect(writtenBytes.length, 24);
+      expect(utf8.decode(writtenBytes), "一二三四五六七八");
     });
 
     test('performGetDeviceName decodes string from characteristic', () async {
@@ -163,7 +188,7 @@ void main() {
     });
 
     test('getDeviceInfo keeps original name when getDeviceName throws', () async {
-      final transport = _MockTransport(testDeviceId);
+      final transport = _ThrowingMockTransport(testDeviceId);
       final baseDevice = BtDevice(
         id: testDeviceId,
         name: 'Omi DevKit',
