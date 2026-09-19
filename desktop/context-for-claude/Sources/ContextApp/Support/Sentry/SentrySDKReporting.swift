@@ -73,22 +73,18 @@ final class SentrySDKReporting: ContextSentryReporting {
         configure.beforeSend = Self.beforeSend
     }
 
-    /// One handled failure, expressed through the closed vocabulary and captured on a fresh empty
-    /// scope: `capture(event:)` applies no ambient context, so the event carries only what
-    /// `ContextSentryHandledReport` built — the slug message, the `app` tag, the vocabulary
-    /// fingerprint. No device/os/user contexts, no breadcrumbs.
+    /// An empty scope avoids ambient user/breadcrumb state. The SDK still enriches events before
+    /// beforeSend, where our policy removes machine contexts and stacks from handled reports.
     func send(_ report: ContextSentryHandledReport) {
-        SentrySDK.capture(event: Self.makeEvent(report))
+        SentrySDK.capture(event: Self.makeEvent(report), scope: Scope())
     }
 
-    /// The `SentryEvent` a handled report becomes — extracted so the real-SDK traffic test can
-    /// drive exactly what production drives. A fresh empty scope at capture time means the event
-    /// carries no ambient device/os/user context: only what this builds.
+    /// Shared with the real-SDK traffic test.
     static func makeEvent(_ report: ContextSentryHandledReport) -> Event {
         let event = Event(level: SentryLevel.warning)
         event.message = SentryMessage(formatted: report.message)
-        event.tags = report.tags
         event.fingerprint = report.fingerprint
+        event.tags = report.tags
         return event
     }
 
@@ -110,8 +106,7 @@ final class SentrySDKReporting: ContextSentryReporting {
     /// report and runs the result through `beforeSend` (`SentryCrashReportSink` → `captureFatalEvent`),
     /// so the frame lists, image lists, exception values and thread names a crash report carries
     /// are all reduced here, before serialization.
-    static func beforeSend(_ event: Event?) -> Event? {
-        guard let event else { return nil }
+    static func beforeSend(_ event: Event) -> Event? {
         guard !ContextSentryPolicy.shouldDrop(
             isShippingBundle: ContextSentryPolicy.liveIsShippingBundle())
         else { return nil }
@@ -141,9 +136,11 @@ final class SentrySDKReporting: ContextSentryReporting {
         event.exceptions = scrubbed.exceptions.isEmpty
             ? nil
             : scrubbed.exceptions.map { exception in
-                let sdkException = SentryException(value: "", type: exception.type)
+                // `Exception.value` is non-optional in the SDK, so a dropped value is the empty
+                // string — serialized as absent-or-empty, never as text.
+                let sdkException = Exception(value: "", type: exception.type)
                 if let mechanismType = exception.mechanismType {
-                    let mechanism = SentryMechanism(type: mechanismType)
+                    let mechanism = Mechanism(type: mechanismType)
                     mechanism.handled = exception.mechanismHandled as NSNumber?
                     sdkException.mechanism = mechanism
                 }
@@ -153,13 +150,15 @@ final class SentrySDKReporting: ContextSentryReporting {
         event.threads = scrubbed.threads.isEmpty
             ? nil
             : scrubbed.threads.map { thread in
-                let sdkThread = SentryThread(threadId: thread.id.map(NSNumber.init(value:)))
+                let sdkThread = SentryThread(threadId: NSNumber(value: thread.id))
                 sdkThread.crashed = thread.crashed.map(NSNumber.init(value:))
                 sdkThread.current = thread.current.map(NSNumber.init(value:))
                 sdkThread.isMain = thread.isMain.map(NSNumber.init(value:))
                 sdkThread.stacktrace = SentryStacktrace(
                     frames: thread.frames.map { frame in
-                        let sdkFrame = SentryFrame()
+                        // `Frame` is Sentry's Swift name for `SentryFrame`; qualified because
+                        // ContextCore also declares a `Frame`.
+                        let sdkFrame = Sentry.Frame()
                         sdkFrame.instructionAddress = frame.instructionAddress
                         sdkFrame.imageAddress = frame.imageAddress
                         sdkFrame.symbolAddress = frame.symbolAddress
@@ -174,7 +173,7 @@ final class SentrySDKReporting: ContextSentryReporting {
         event.debugMeta = scrubbed.debugMeta.isEmpty
             ? nil
             : scrubbed.debugMeta.map { image in
-                let sdkImage = SentryDebugMeta()
+                let sdkImage = DebugMeta()
                 sdkImage.uuid = image.uuid
                 sdkImage.type = image.type
                 sdkImage.imageAddress = image.imageAddress
@@ -214,7 +213,7 @@ final class SentrySDKReporting: ContextSentryReporting {
             },
             threads: event.threads?.map { thread in
                 ContextSentryEventSnapshot.Thread(
-                    id: thread.threadId?.int64Value,
+                    id: thread.threadId.int64Value,
                     crashed: thread.crashed?.boolValue,
                     current: thread.current?.boolValue,
                     isMain: thread.isMain?.boolValue,

@@ -72,13 +72,9 @@ enum NetworkEgress {
         /// Crash and handled-error reporting to the dedicated `omi-nk3/context-for-claude` Sentry
         /// project. See `ContextSentry`.
         ///
-        /// Like `analytics`, this client's whole purpose is to describe the app's own behavior off
-        /// this Mac, so it is a **drop** client, never a spooling one: `ContextSentry` reports are
-        /// refused while suppressed and cached SDK state is deleted at every Airgap transition and
-        /// every permitted launch. A crash report that waited out Airgap Mode would be the
-        /// disclosure postponed, not prevented. Its `area` lands in `.settings` for the same
-        /// reason analytics' does — it is not one subsystem's degradation, and the row a user
-        /// meets is the Airgap toggle.
+        /// Suppressed reports are dropped. Airgap retires the SDK cache generation; it is not
+        /// replayed after the switch turns off. Healthy crash reports survive normal relaunches.
+        /// The area is `.settings` because the control the user meets is the Airgap toggle.
         case crashReporting = "crash-reporting"
 
         /// The subsystem a suppression is reported under, so the fallback record lands in the same

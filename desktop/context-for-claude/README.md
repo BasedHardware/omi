@@ -105,14 +105,14 @@ nothing at all.
 
 ## Crash diagnostics
 
-Crashes and handled fail-open paths report to the app's **own Sentry project** — never the Omi
-desktop app's, never PostHog. The payload is a whitelist, not a scrub: frame addresses and image
-UUIDs for symbolication, exception types, build identity, and nothing else — no exception text, no
-thread names, no paths, no device name, no captured locals. The SDK runs its traffic through an
-in-process admission gate, so flipping Airgap Mode on stops every queued, retried, or redirected
-send instantly and deletes cached crash reports; nothing waits for the switch to go off. Reporting
-arms only in the shipping bundle with a project DSN configured, and an unconfigured project means
-reporting that is simply off.
+The Sentry integration targets a **dedicated CFC project**, with no PostHog identity linkage.
+It filters exception text, thread names, paths, device names, and captured locals from reports.
+Airgap closes admission for new sends and retires the cache; requests already admitted may finish.
+Normal crash reports survive a restart, but retired cache generations are not replayed.
+
+Reporting is disabled until the dedicated project's DSN is supplied in the shipping bundle.
+Project provisioning, native compilation/tests, and end-to-end symbolication are still pending;
+this is not yet verified crash coverage.
 
 Details, including the release/dist convention and the dSYM plan:
 [`docs/sentry.md`](docs/sentry.md).

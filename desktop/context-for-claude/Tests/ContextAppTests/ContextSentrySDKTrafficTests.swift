@@ -14,15 +14,20 @@ import XCTest
 final class ContextSentrySDKTrafficTests: XCTestCase {
 
     private var cacheRoot: URL!
+    private var sdkSession: URLSession?
+    private var backingSession: URLSession?
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        ContextSentryGate.entryOverride = false
+        ContextSentryGate.resetTestSeams()
         ContextSentryGate.liveSuppression = { false }
-        ContextSentryGate.forwarderOverride = { configuration in
-            configuration.protocolClasses = [CannedForwarder.self]
-            return URLSession(configuration: configuration)
-        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CannedForwarder.self]
+        let session = URLSession(
+            configuration: configuration,
+            delegate: ContextSentryGate.RedirectFollowerStopper(), delegateQueue: nil)
+        backingSession = session
+        ContextSentryGate.forwarderOverride = { _ in session }
         ContextSentryPolicy.isShippingBundleForTests = true
         CannedForwarder.reset()
         CannedForwarder.handler = { _ in (200, [:], Data()) }
@@ -32,7 +37,12 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
     }
 
     override func tearDown() {
+        ContextSentryGate.enterAirgap()
+        sdkSession?.invalidateAndCancel()
         SentrySDK.close()
+        sdkSession = nil
+        backingSession?.invalidateAndCancel()
+        backingSession = nil
         ContextSentryPolicy.isShippingBundleForTests = nil
         ContextSentryGate.resetTestSeams()
         CannedForwarder.reset()
@@ -53,6 +63,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
                 cacheRoot: cacheRoot.path),
             to: options)
         options.enableCrashHandler = false
+        sdkSession = options.urlSession
         SentrySDK.start(options: options)
     }
 
@@ -69,11 +80,28 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
         var payloads: [[String: Any]] = []
         for request in requests {
             let body = try XCTUnwrap(request.bodyData, "envelope request carried no body")
-            let item = try XCTUnwrap(Self.envelopeEventItem(body))
-            let json = try XCTUnwrap(
-                JSONSerialization.jsonObject(with: item) as? [String: Any])
-            payloads.append(json)
+            // 8.58.0 SentryURLRequestFactory always gzip-compresses envelope requests.
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Encoding"), "gzip")
+            let gzip = Process()
+            gzip.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            gzip.arguments = ["-dc"]
+            let input = Pipe()
+            let output = Pipe()
+            gzip.standardInput = input
+            gzip.standardOutput = output
+            try gzip.run()
+            input.fileHandleForWriting.write(body)
+            try input.fileHandleForWriting.close()
+            let envelope = output.fileHandleForReading.readDataToEndOfFile()
+            gzip.waitUntilExit()
+            XCTAssertEqual(gzip.terminationStatus, 0)
+            for item in try Self.envelopeEventItems(envelope) {
+                let json = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: item) as? [String: Any])
+                payloads.append(json)
+            }
         }
+        XCTAssertFalse(payloads.isEmpty, "a request without an event is not reporting coverage")
         return payloads
     }
 
@@ -82,8 +110,9 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
     // An envelope is: a header line (JSON), then per item a header line (JSON with `length`) and
     // that many payload bytes.
 
-    private static func envelopeEventItem(_ data: Data) -> Data? {
+    private static func envelopeEventItems(_ data: Data) throws -> [Data] {
         var bytes = [UInt8](data)
+        var items: [Data] = []
 
         func readLine() -> [UInt8]? {
             guard let newline = bytes.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
@@ -92,19 +121,22 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
             return line
         }
 
-        guard readLine() != nil else { return nil }  // envelope header: event_id
+        _ = try XCTUnwrap(readLine()) // envelope header
         while !bytes.isEmpty {
-            guard let itemHeaderLine = readLine(),
-                let itemHeader = try? JSONSerialization.jsonObject(with: Data(itemHeaderLine))
-                    as? [String: Any],
-                let length = itemHeader["length"] as? Int,
-                bytes.count >= length
-            else { return nil }
-            let payload = Array(bytes[0..<length])
-            bytes.removeSubrange(0..<length)
-            if itemHeader["type"] as? String == "event" { return Data(payload) }
+            let line = try XCTUnwrap(readLine())
+            let header = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(line)) as? [String: Any])
+            let length = try XCTUnwrap(header["length"] as? Int)
+            XCTAssertEqual(header["type"] as? String, "event", "unexpected envelope producer")
+            guard length >= 0, bytes.count >= length else {
+                XCTFail("invalid envelope item length")
+                return []
+            }
+            items.append(Data(bytes.prefix(length)))
+            bytes.removeFirst(length)
+            if bytes.first == UInt8(ascii: "\n") { bytes.removeFirst() }
         }
-        return nil
+        return items
     }
 
     private static func valuesArray(
@@ -118,9 +150,11 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
     func testHandledEventSerializedPayloadCarriesOnlyWhitelistedFields() throws {
         startSDK()
 
+        // Drives exactly what production's `send(_:)` drives: `makeEvent` plus an explicit empty
+        // scope (the ambient scope would merge device/os/user context into the event).
         let report = ContextSentryHandledReport(
             area: .upload, outcome: .degraded, reason: .unavailable)
-        SentrySDK.capture(event: SentrySDKReporting.makeEvent(report))
+        SentrySDK.capture(event: SentrySDKReporting.makeEvent(report), scope: Scope())
 
         for payload in try capturedEventPayloads() {
             // The bounded diagnostic identity: the slug message, the vocabulary fingerprint, the
@@ -130,7 +164,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
                 message?["formatted"],
                 "cfc-fallback area=upload reason=unavailable outcome=degraded")
             XCTAssertEqual(payload["fingerprint"] as? [String], ["cfc-fallback", "upload", "unavailable"])
-            XCTAssertEqual(payload["tags"] as? [String: String], ["context-for-claude": "context-for-claude"])
+            XCTAssertEqual(payload["tags"] as? [String: String], ["app": "context-for-claude"])
             XCTAssertEqual(payload["level"] as? String, "warning")
 
             // Nothing else — no identity, no ambient context, no extras of any spelling.
@@ -138,20 +172,9 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
                 XCTAssertNil(payload[forbidden], "\(forbidden) must not be serialized")
             }
 
-            // A fresh empty scope means no contexts at all; if an SDK release starts attaching
-            // defaults, the whitelist still bounds them — so assert the bound, not the absence,
-            // and let this test catch whichever world breaks the contract.
-            if let contexts = payload["contexts"] as? [String: [String: Any]] {
-                for (name, entries) in contexts {
-                    XCTAssertNotNil(
-                        ContextSentryPolicy.keptContexts[name],
-                        "context \(name) is not on the whitelist")
-                    for field in entries.keys {
-                        XCTAssertTrue(
-                            ContextSentryPolicy.keptContexts[name]?.contains(field) ?? false,
-                            "context field \(name).\(field) is not on the whitelist")
-                    }
-                }
+            // Scope() alone does not suppress client enrichment; beforeSend must remove it.
+            for forbidden in ["contexts", "threads", "exception", "debug_meta", "stacktrace"] {
+                XCTAssertNil(payload[forbidden], "handled event retained \(forbidden)")
             }
         }
     }
@@ -180,7 +203,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
                 thread.crashed = true
                 thread.current = true
                 thread.isMain = true
-                let frame = Frame()
+                let frame = Sentry.Frame()
                 frame.instructionAddress = "0x104abc000"
                 frame.imageAddress = "0x104a00000"
                 frame.symbolAddress = "0x104abc123"
@@ -189,7 +212,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
                 frame.package = "/Users/alice/src/context"
                 frame.vars = ["transcript": "the user's words", "home": "/Users/alice"]
                 frame.inApp = true
-                thread.stacktrace = Stacktrace(frames: [frame], registers: [:])
+                thread.stacktrace = SentryStacktrace(frames: [frame], registers: [:])
                 return thread
             }()
         ]
@@ -211,7 +234,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
         event.modules = ["ContextApp": "1.2.3"]
         event.fingerprint = ["arbitrary", "fingerprint"]
         event.message = SentryMessage(formatted: "free text with /Users/alice in it")
-        event.tags = ["context-for-claude": "context-for-claude", "smuggled": "/Users/alice"]
+        event.tags = ["app": "context-for-claude", "smuggled": "/Users/alice"]
         event.context = [
             "device": ["name": "Alice's MacBook Pro", "model": "Mac16,1", "arch": "arm64e"],
             "trace": ["trace_id": "0123abcd"],
@@ -251,7 +274,7 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
 
             // Debug images: the UUID symbolication keys on survives; paths on the reporting Mac
             // do not.
-            let image = try XCTUnwrap((payload["debugmeta"] as? [String: Any])?["images"] as? [[String: Any]])
+            let image = try XCTUnwrap((payload["debug_meta"] as? [String: Any])?["images"] as? [[String: Any]])
                 .first
             XCTAssertEqual(image?["uuid"] as? String, "AB12CD34-0000-0000-0000-000000000000")
             XCTAssertEqual(image?["type"] as? String, "macho")
@@ -263,11 +286,12 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
             // Context subfields: device.name (the user's own name for their Mac) is the leak this
             // whitelist exists to drop; an unknown context is gone entirely.
             let contexts = try XCTUnwrap(payload["contexts"] as? [String: [String: Any]])
-            XCTAssertEqual(contexts["device"], ["model": "Mac16,1", "arch": "arm64e"])
+            XCTAssertEqual(contexts["device"] as? [String: String], ["model": "Mac16,1", "arch": "arm64e"])
             XCTAssertNil(contexts["trace"])
 
-            // Tags, fingerprint, message: out-of-vocabulary values do not reach the wire.
-            XCTAssertEqual(payload["tags"] as? [String: String], ["context-for-claude": "context-for-claude"])
+            // Tags, fingerprint, message: the exact pairing survives; out-of-vocabulary values do
+            // not reach the wire.
+            XCTAssertEqual(payload["tags"] as? [String: String], ["app": "context-for-claude"])
             XCTAssertNil(payload["fingerprint"], "arbitrary fingerprints are dropped, not forwarded")
             XCTAssertNil(payload["message"], "a free-text message is dropped, not forwarded")
 
@@ -316,9 +340,11 @@ final class ContextSentrySDKTrafficTests: XCTestCase {
         XCTAssertEqual(options.environment, "production")
         XCTAssertEqual(options.cacheDirectoryPath, "/tmp/cfc-sentry-options")
         let session = try XCTUnwrap(options.urlSession)
+        defer { session.invalidateAndCancel() }
+        let protocolClass = try XCTUnwrap(session.configuration.protocolClasses?.first)
         XCTAssertEqual(
-            session.configuration.protocolClasses?.first,
-            ContextSentryGate.self,
+            ObjectIdentifier(protocolClass),
+            ObjectIdentifier(ContextSentryGate.self),
             "every SDK request must cross the admission gate")
     }
 }

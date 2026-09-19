@@ -24,7 +24,7 @@ final class ContextSentryPolicyTests: XCTestCase {
             sdkVersion: "8.58.0",
             message: "uncaught exception 'NSRangeException', reason: 'index 9 beyond bounds'",
             fingerprint: ["some", "arbitrary", "fingerprint"],
-            tags: ["context-for-claude": "context-for-claude", "freeform": "/Users/alice/secret"],
+            tags: ["app": "context-for-claude", "freeform": "/Users/alice/secret"],
             context: [
                 "device": ["name": "Alice's MacBook Pro", "model": "Mac16,1", "arch": "arm64e"],
                 "os": ["name": "macOS", "version": "15.3", "build": "24D60"],
@@ -104,8 +104,9 @@ final class ContextSentryPolicyTests: XCTestCase {
             ["app_identifier": "com.omi.context-for-claude", "app_version": "1.2.3"])
         XCTAssertNil(scrubbed.context["trace"])
 
-        // Tags reduced to the one this app vouches for.
-        XCTAssertEqual(scrubbed.tags, ["context-for-claude": "context-for-claude"])
+        // Tags reduced to exactly the one pairing this app vouches for — the freeform tag that
+        // rode along is gone.
+        XCTAssertEqual(scrubbed.tags, ["app": "context-for-claude"])
 
         // The arbitrary fingerprint and the free-text message are gone: crash grouping is
         // derived from the scrubbed exception types, and the message carried a raw NSException
@@ -130,42 +131,97 @@ final class ContextSentryPolicyTests: XCTestCase {
         // level: the scrubbed form cannot carry a user, breadcrumbs, extras, a request, a server
         // name, or modules at all.
         XCTAssertFalse(
-            Mirror(reflecting: scrubbed).children.contains { label in
+            Mirror(reflecting: scrubbed).children.contains { child in
                 ["user", "breadcrumbs", "extra", "request", "serverName", "modules"]
-                    .contains(label ?? "")
+                    .contains(child.label ?? "")
             })
     }
 
-    func testHandledVocabularySurvivesWhitelist() {
-        // A handled report's message and fingerprint — the bounded area/outcome/reason pair the
-        // whole integration reports through — are in-vocabulary and survive.
-        var snapshot = hostileSnapshot()
-        snapshot.message = "cfc-fallback area=upload reason=provider-5xx outcome=degraded"
-        snapshot.fingerprint = ["cfc-fallback", "upload", "provider-5xx"]
+    /// The tag rule, per pairing: exactly `app=context-for-claude` survives, nothing else does.
+    func testTagWhitelistEmitsExactlyAppContextForClaude() {
+        func applied(tags: [String: String]?) -> [String: String] {
+            var snapshot = hostileSnapshot()
+            snapshot.tags = tags
+            return ContextSentryPolicy.apply(snapshot).tags
+        }
 
-        let scrubbed = ContextSentryPolicy.apply(snapshot)
-        XCTAssertEqual(
-            scrubbed.message, "cfc-fallback area=upload reason=provider-5xx outcome=degraded")
-        XCTAssertEqual(scrubbed.fingerprint, ["cfc-fallback", "upload", "provider-5xx"])
+        XCTAssertEqual(applied(tags: ["app": "context-for-claude"]), ["app": "context-for-claude"])
+        // Right key, wrong value: dropped — no call site can re-brand the wire tag.
+        XCTAssertEqual(applied(tags: ["app": "omi-desktop"]), [:])
+        // Right value, wrong key: dropped — the appTag is not a key.
+        XCTAssertEqual(applied(tags: ["context-for-claude": "context-for-claude"]), [:])
+        XCTAssertEqual(applied(tags: ["app": "/Users/alice/secret"]), [:])
+        XCTAssertEqual(applied(tags: nil), [:])
     }
 
-    func testOutOfVocabularyMessageAndFingerprintAreDropped() {
+    func testHandledVocabularySurvivesWhitelist() {
+        // A handled report's message and fingerprint — the bounded area/reason/outcome the whole
+        // integration reports through — are in-vocabulary and survive verbatim.
         var snapshot = hostileSnapshot()
+        snapshot.message = "cfc-fallback area=auth reason=timeout outcome=retried"
+        snapshot.fingerprint = ["cfc-fallback", "auth", "timeout"]
 
-        // Near-misses are still out of vocabulary: wrong prefix, wrong arity, empty components.
-        snapshot.message = "Provider failed: 5xx (see transcript below)"
-        snapshot.fingerprint = ["provider-5xx"]
-        var scrubbed = ContextSentryPolicy.apply(snapshot)
-        XCTAssertNil(scrubbed.message)
-        XCTAssertNil(scrubbed.fingerprint)
+        let scrubbed = ContextSentryPolicy.apply(snapshot)
+        XCTAssertEqual(scrubbed.message, "cfc-fallback area=auth reason=timeout outcome=retried")
+        XCTAssertEqual(scrubbed.fingerprint, ["cfc-fallback", "auth", "timeout"])
+        XCTAssertTrue(scrubbed.context.isEmpty)
+        XCTAssertTrue(scrubbed.exceptions.isEmpty)
+        XCTAssertTrue(scrubbed.threads.isEmpty)
+        XCTAssertTrue(scrubbed.debugMeta.isEmpty)
+    }
 
-        snapshot.fingerprint = ["cfc-fallback", "upload", "", "extra"]
-        scrubbed = ContextSentryPolicy.apply(snapshot)
-        XCTAssertNil(scrubbed.fingerprint)
+    /// Adversarial: structurally valid, carrying secrets. A message with the right prefix but
+    /// payload text in a value position — or an unknown enum value in any position — is out of
+    /// vocabulary, as is a fingerprint of the right shape built from unknown strings.
+    func testInVocabularyStructureWithUnknownValuesIsDropped() {
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload reason=unavailable outcome=degraded sk-live-9f8e7d6c"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=transcripts reason=unavailable outcome=degraded"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload reason=not-a-reason outcome=degraded"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload reason=unavailable outcome=sent-everything"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedFingerprint(["cfc-fallback", "upload", "not-a-reason"]))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedFingerprint(["cfc-fallback", "nonsense-area", "timeout"]))
+    }
 
-        snapshot.fingerprint = ["cfc-fallback", "upload", ""]
-        scrubbed = ContextSentryPolicy.apply(snapshot)
-        XCTAssertNil(scrubbed.fingerprint)
+    func testMalformedMessagesAndFingerprintsAreDropped() {
+        // Not the app's prefix at all.
+        XCTAssertNil(ContextSentryPolicy.sanitizedMessage(nil))
+        XCTAssertNil(ContextSentryPolicy.sanitizedMessage("Provider failed: 5xx"))
+        XCTAssertNil(ContextSentryPolicy.sanitizedMessage("cfc-fallbackish area=upload"))
+
+        // Wrong token count, order, or separators.
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage("cfc-fallback area=upload reason=unavailable"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage("cfc-fallback area=upload outcome=retried"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload reason=unavailable outcome=retried extra=tail"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload  reason=unavailable outcome=retried"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback area=upload reason=unavailable"))
+        XCTAssertNil(
+            ContextSentryPolicy.sanitizedMessage(
+                "cfc-fallback reason=unavailable area=upload outcome=retried"))
+
+        // Wrong arity or empty components.
+        XCTAssertNil(ContextSentryPolicy.sanitizedFingerprint(nil))
+        XCTAssertNil(ContextSentryPolicy.sanitizedFingerprint(["provider-5xx"]))
+        XCTAssertNil(ContextSentryPolicy.sanitizedFingerprint(["cfc-fallback", "upload"]))
+        XCTAssertNil(ContextSentryPolicy.sanitizedFingerprint(["cfc-fallback", "upload", "", "x"]))
+        XCTAssertNil(ContextSentryPolicy.sanitizedFingerprint(["cfc-fallback", "", "timeout"]))
     }
 
     func testNonShippingBundleIsDroppedEntirely() {
@@ -184,5 +240,27 @@ final class ContextSentryPolicyTests: XCTestCase {
         XCTAssertTrue(scrubbed.exceptions.isEmpty)
         XCTAssertTrue(scrubbed.threads.isEmpty)
         XCTAssertTrue(scrubbed.debugMeta.isEmpty)
+    }
+
+    func testTelemetryFanoutMapsKnownReasonsAndExcludesSuppression() {
+        var reports: [ContextSentryHandledReport] = []
+        let capture: (ContextSentryHandledReport) -> Void = { reports.append($0) }
+
+        // Unmapped slug: the fan-out stops at the vocabulary mapping.
+        ContextTelemetry.recordFallback(
+            area: .upload, from: "primary", to: "fallback", reason: "provider-5xx",
+            outcome: .degraded, reportDiagnostic: capture)
+
+        // A wire status maps to the bounded diagnostic reason, rather than being forwarded raw.
+        ContextTelemetry.recordFallback(
+            area: .auth, from: "session", to: "login", reason: "401", outcome: .dropped,
+            reportDiagnostic: capture)
+
+        // Also the airgap-cycle breaker itself: mapping to `.airgapMode` never forwards.
+        ContextTelemetry.recordFallback(
+            area: .mcp, from: "server", to: "degraded", reason: "airgap-mode", outcome: .dropped,
+            reportDiagnostic: capture)
+
+        XCTAssertEqual(reports, [.init(area: .auth, outcome: .dropped, reason: .unauthorized)])
     }
 }

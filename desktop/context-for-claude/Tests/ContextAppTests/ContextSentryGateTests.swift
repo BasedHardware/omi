@@ -4,16 +4,17 @@ import XCTest
 
 /// The canned backing protocol the gate forwards into during tests: records every request it is
 /// handed and answers from a per-test closure. Real `URLSession` machinery drives everything
-/// around it — the gated session issues requests, `urlProtocol(wasRedirectedTo:)` re-issues
-/// redirects through `ContextSentryGate.startLoading` — so no test here calls the admission
-/// function by hand.
+/// around it. The cancellation test additionally drives a protocol instance directly to place
+/// stopLoading at a deterministic point during task preparation.
 final class CannedForwarder: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, [String: String], Data))?
-    nonisolated(unsafe) static var receivedRequests: [URLRequest] = []
+    private static let requestLock = NSLock()
+    private static var requests: [URLRequest] = []
+    static var receivedRequests: [URLRequest] { requestLock.withLock { requests } }
 
     static func reset() {
         handler = nil
-        receivedRequests = []
+        requestLock.withLock { requests = [] }
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -21,7 +22,7 @@ final class CannedForwarder: URLProtocol {
 
     override func startLoading() {
         let request = Self.requestWithoutStream(self.request)
-        Self.receivedRequests.append(request)
+        Self.requestLock.withLock { Self.requests.append(request) }
         guard let handler = Self.handler, let client else {
             client?.urlProtocol(
                 self,
@@ -32,13 +33,15 @@ final class CannedForwarder: URLProtocol {
         let (status, headers, body) = handler(request)
         let response = HTTPURLResponse(
             url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: body)
-        client?.urlProtocolDidFinishLoading(self)
+        client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client.urlProtocol(self, didLoad: body)
+        client.urlProtocolDidFinishLoading(self)
     }
 
-    /// `URLProtocol` request copies expose bodies as streams; normalize so assertions see URLs
-    /// and headers uniformly.
+    override func stopLoading() {}
+
+    /// `URLProtocol` request copies expose bodies as streams; normalize so assertions see URLs,
+    /// headers, and bodies uniformly.
     private static func requestWithoutStream(_ request: URLRequest) -> URLRequest {
         var normalized = request
         if normalized.httpBody == nil, let stream = normalized.httpBodyStream {
@@ -53,33 +56,41 @@ final class CannedForwarder: URLProtocol {
                 if read <= 0 { break }
                 data.append(buffer, count: read)
             }
-            normalized.httpBody = data
             normalized.httpBodyStream = nil
+            normalized.httpBody = data
         }
         return normalized
     }
 }
 
-/// Admission-gate behavior, proven through the real gated `URLSession`.
+/// Admission-gate behavior exercised through the real gated `URLSession`.
 ///
-/// The one-way entry flag is process-global by design; every test here pins
-/// `ContextSentryGate.entryOverride` in `setUp` and clears it in `tearDown`, so no test can leave
-/// the gate open or closed for another suite. The single test of the *real* flag is named to sort
-/// last in this class, because once it runs, `enterAirgap()` has done what it says.
+/// The one-way entry flag is process-global by design, so every test here models a **fresh
+/// process**: `setUp` resets the real flag and every seam via
+/// `ContextSentryGate.resetTestSeams()`, injects what the test needs, and `tearDown` resets
+/// again — the same discipline the lifecycle suites use between modeled processes. Tests drive
+/// the production entry point (`enterAirgap()`) and the production flag (`isClosed`); there is no
+/// override for the entry state.
 final class ContextSentryGateTests: XCTestCase {
+    private var backingSession: URLSession?
 
     override func setUp() {
         super.setUp()
-        ContextSentryGate.entryOverride = false
+        ContextSentryGate.resetTestSeams()
         ContextSentryGate.liveSuppression = { false }
-        ContextSentryGate.forwarderOverride = { configuration in
-            configuration.protocolClasses = [CannedForwarder.self]
-            return URLSession(configuration: configuration)
-        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CannedForwarder.self]
+        let session = URLSession(
+            configuration: configuration,
+            delegate: ContextSentryGate.RedirectFollowerStopper(), delegateQueue: nil)
+        backingSession = session
+        ContextSentryGate.forwarderOverride = { _ in session }
         CannedForwarder.reset()
     }
 
     override func tearDown() {
+        backingSession?.invalidateAndCancel()
+        backingSession = nil
         ContextSentryGate.resetTestSeams()
         CannedForwarder.reset()
         super.tearDown()
@@ -87,6 +98,7 @@ final class ContextSentryGateTests: XCTestCase {
 
     private func get(_ url: URL) throws -> (data: Data, response: HTTPURLResponse) {
         let session = ContextSentryGate.makeSentrySession()
+        defer { session.invalidateAndCancel() }
         let expectation = expectation(description: "request finished")
         var result: Result<(Data, URLResponse), Error>?
         let task = session.dataTask(with: url) { data, response, error in
@@ -105,6 +117,20 @@ final class ContextSentryGateTests: XCTestCase {
         }
     }
 
+    private func awaitFailure(_ request: URLRequest) throws -> NSError {
+        let session = ContextSentryGate.makeSentrySession()
+        defer { session.invalidateAndCancel() }
+        let expectation = expectation(description: "request failed")
+        var error: Error?
+        let task = session.dataTask(with: request) { _, _, taskError in
+            error = taskError
+            expectation.fulfill()
+        }
+        task.resume()
+        wait(for: [expectation], timeout: 5)
+        return try XCTUnwrap(error as NSError?, "the request was expected to fail")
+    }
+
     func testAdmissionBeforeEntrySendsAndDelivers() throws {
         CannedForwarder.handler = { _ in (200, [:], Data("ok".utf8)) }
 
@@ -121,142 +147,96 @@ final class ContextSentryGateTests: XCTestCase {
         ContextSentryGate.liveSuppression = { true }
         CannedForwarder.handler = { _ in (200, [:], Data()) }
 
-        do {
-            _ = try get(URL(string: "https://sentry.invalid/api/42/envelope/")!)
-            XCTFail("suppressed request must not be delivered")
-        } catch {
-            // Expected: the gate refuses with a connectivity-style error.
-        }
+        _ = try awaitFailure(
+            URLRequest(url: URL(string: "https://sentry.invalid/api/42/envelope/")!))
 
         XCTAssertEqual(
             ContextSentryGate.recordedAdmissionDecisions().first?.decision,
             .refusedByLiveSuppression)
-        // The refusal is *not* an Airgap entry: the sticky flag is untouched, so a subsequent
-        // policy change re-opens reporting without a relaunch.
+        // The refusal is *not* an Airgap entry: the flag is untouched, so a subsequent policy
+        // change re-opens reporting without a relaunch.
         XCTAssertFalse(ContextSentryGate.isClosed)
         // And nothing reached the backing session.
         XCTAssertTrue(CannedForwarder.receivedRequests.isEmpty)
     }
 
-    func testQueuedRedirectCrossingEntryIsRefused() throws {
-        // The Airgap switch lands *between* the original send and its redirect hop: the canned
-        // handler closes the gate exactly when the first request is forwarded. The redirected
-        // request is then a queued request arriving after entry.
-        CannedForwarder.handler = { request in
-            if request.url?.host == "sentry.invalid" {
-                ContextSentryGate.entryOverride = true  // entry, mid-flight
-                return (302, ["Location": "https://sentry.invalid/moved"], Data())
-            }
-            XCTFail("the redirect hop must never reach the backing session after entry")
-            return (200, [:], Data())
+    /// Entry during task preparation must precede the final locked admission check.
+    func testEntryDuringAdmissionRefusesAndNeverForwards() throws {
+        let factory = try XCTUnwrap(ContextSentryGate.forwarderOverride)
+        ContextSentryGate.forwarderOverride = { configuration in
+            ContextSentryGate.enterAirgap()
+            return factory(configuration)
+        }
+        CannedForwarder.handler = { _ in
+            XCTFail("the backing session must never see a request admitted across entry")
+            return (200, [:], Data("ok".utf8))
         }
 
-        do {
-            _ = try get(URL(string: "https://sentry.invalid/api/42/envelope/")!)
-            XCTFail("a queued redirect must not complete after entry")
-        } catch {
-            // Expected.
-        }
+        let failure = try awaitFailure(
+            URLRequest(url: URL(string: "https://sentry.invalid/api/42/envelope/")!))
 
-        let decisions = ContextSentryGate.recordedAdmissionDecisions()
-        XCTAssertEqual(decisions.count, 2, "original admitted, redirect evaluated and refused")
-        XCTAssertEqual(decisions[0].decision, .admittedBeforeEntry)
-        XCTAssertEqual(decisions[0].url.host, "sentry.invalid")
-        XCTAssertEqual(decisions[1].decision, .refusedAfterEntry)
-        XCTAssertEqual(decisions[1].url.path, "/moved")
-        // Only the original reached the backing session.
-        XCTAssertEqual(CannedForwarder.receivedRequests.count, 1)
+        XCTAssertEqual(
+            ContextSentryGate.recordedAdmissionDecisions().first?.decision,
+            .refusedAfterEntry,
+            "the entry check runs after task preparation, under the admission lock")
+        XCTAssertEqual(
+            failure.domain, NSURLErrorDomain, "the refusal is an error to the sender, not silence")
+        XCTAssertTrue(CannedForwarder.receivedRequests.isEmpty)
+        XCTAssertTrue(ContextSentryGate.isClosed)
     }
 
-    func testRedirectIsReAdmittedThroughTheGateWithSanitizedHeaders() throws {
-        // Cross-host redirect: the hop must re-cross admission (second recorded decision) and
-        // arrive at the backing session stripped of everything — the URL survives, no header does.
+    func testStopDuringTaskPreparationPreventsResume() throws {
+        let gate = ContextSentryGate(
+            request: URLRequest(url: URL(string: "https://sentry.invalid/api/42/envelope/")!),
+            cachedResponse: nil, client: nil)
+        let factory = try XCTUnwrap(ContextSentryGate.forwarderOverride)
+        ContextSentryGate.forwarderOverride = { configuration in
+            gate.stopLoading()
+            return factory(configuration)
+        }
+        gate.startLoading()
+        XCTAssertEqual(ContextSentryGate.recordedAdmissionDecisions().last?.decision,
+                       .cancelledBeforeAdmission)
+        XCTAssertTrue(CannedForwarder.receivedRequests.isEmpty)
+    }
+
+    /// Redirects are refused outright: the send fails with the 3xx, and the redirect target is
+    /// never contacted — by the gate, and not by the backing session either, whose delegate veto
+    /// is what turns the 3xx into the final response here.
+    func testRedirectIsRefusedAndTargetNeverContacted() throws {
         CannedForwarder.handler = { request in
             if request.url?.host == "sentry.invalid" {
                 return (302, ["Location": "https://other.invalid/collect"], Data())
             }
+            XCTFail("the redirect target must never be contacted")
             return (200, [:], Data("landed".utf8))
         }
 
         var request = URLRequest(url: URL(string: "https://sentry.invalid/api/42/envelope/")!)
         request.httpMethod = "POST"
         request.setValue("https://sentry.invalid", forHTTPHeaderField: "X-Sentry-Auth")
-        request.setValue("Bearer dsn-key", forHTTPHeaderField: "Authorization")
         request.setValue("application/x-sentry-envelope", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("envelope-bytes".utf8)
 
-        let session = ContextSentryGate.makeSentrySession()
-        let expectation = expectation(description: "redirect finished")
-        var finalData: Data?
-        var finalResponse: HTTPURLResponse?
-        let task = session.dataTask(with: request) { data, response, _ in
-            finalData = data
-            finalResponse = response as? HTTPURLResponse
-            expectation.fulfill()
-        }
-        task.resume()
-        wait(for: [expectation], timeout: 5)
+        let failure = try awaitFailure(request)
 
-        XCTAssertEqual(finalResponse?.statusCode, 200)
-        XCTAssertEqual(finalData, Data("landed".utf8))
+        XCTAssertEqual(
+            failure.code, NSURLErrorBadServerResponse, "a 3xx is a failed send, not a follow")
 
-        // Two admissions: the original and the redirected hop — through URLSession's real
-        // redirect machinery, not a second hand call.
-        let decisions = ContextSentryGate.recordedAdmissionDecisions()
-        XCTAssertEqual(decisions.count, 2)
-        XCTAssertEqual(decisions[0].decision, .admittedBeforeEntry)
-        XCTAssertEqual(decisions[1].decision, .admittedBeforeEntry)
-        XCTAssertEqual(decisions[1].url.absoluteString, "https://other.invalid/collect")
-
-        // The hop reached the backing session downgraded to GET, bodyless, and headerless:
-        // cross-host strips everything, auth-ish headers never cross a redirect.
-        let hop = try XCTUnwrap(CannedForwarder.receivedRequests.last)
-        XCTAssertEqual(hop.url?.host, "other.invalid")
-        XCTAssertEqual(hop.httpMethod, "GET")
-        XCTAssertNil(hop.httpBody)
-        XCTAssertEqual(hop.allHTTPHeaderFields ?? [:], [:])
-    }
-
-    func testSameHostRedirectKeepsHeadersButNotAuth() throws {
-        CannedForwarder.handler = { request in
-            if request.url?.path == "/api/42/envelope/" {
-                return (307, ["Location": "https://sentry.invalid/api/42/envelope/retry"], Data())
-            }
-            return (200, [:], Data("ok".utf8))
-        }
-
-        var request = URLRequest(url: URL(string: "https://sentry.invalid/api/42/envelope/")!)
-        request.httpMethod = "POST"
-        request.setValue("application/x-sentry-envelope", forHTTPHeaderField: "Content-Type")
-        request.setValue("https://sentry.invalid", forHTTPHeaderField: "X-Sentry-Auth")
-        request.httpBody = Data("envelope-bytes".utf8)
-
-        _ = try get(from: request)
-
-        let hop = try XCTUnwrap(CannedForwarder.receivedRequests.last)
-        XCTAssertEqual(hop.url?.path, "/api/42/envelope/retry")
-        XCTAssertEqual(hop.httpMethod, "POST", "307 same-host keeps method")
-        XCTAssertEqual(hop.httpBody, Data("envelope-bytes".utf8), "307 same-host keeps body")
-        XCTAssertEqual(hop.value(forHTTPHeaderField: "Content-Type"), "application/x-sentry-envelope")
-        XCTAssertNil(hop.value(forHTTPHeaderField: "X-Sentry-Auth"), "DSN auth never crosses a redirect")
-    }
-
-    private func get(from request: URLRequest) throws -> HTTPURLResponse {
-        let session = ContextSentryGate.makeSentrySession()
-        let expectation = expectation(description: "request finished")
-        var response: HTTPURLResponse?
-        let task = session.dataTask(with: request) { _, urlResponse, _ in
-            response = urlResponse as? HTTPURLResponse
-            expectation.fulfill()
-        }
-        task.resume()
-        wait(for: [expectation], timeout: 5)
-        return try XCTUnwrap(response)
+        // Exactly one request reached the backing session — the original, with its envelope body
+        // intact through the real URLProtocol stream plumbing. No redirected request was issued
+        // anywhere.
+        XCTAssertEqual(CannedForwarder.receivedRequests.count, 1)
+        let forwarded = try XCTUnwrap(CannedForwarder.receivedRequests.first)
+        XCTAssertEqual(forwarded.url?.host, "sentry.invalid")
+        XCTAssertEqual(forwarded.httpMethod, "POST")
+        XCTAssertEqual(forwarded.httpBody, Data("envelope-bytes".utf8))
     }
 
     func testRedirectFollowerStopperRefusesEveryRedirect() {
         // The forwarder session's delegate is what stops a bare URLSession from following a
-        // redirect behind the gate's back. Its veto is the documented `completionHandler(nil)`.
+        // redirect behind the gate's back. Its veto is the documented `completionHandler(nil)`;
+        // the 3xx then reaches the gate's completion handler, which fails the send.
         let stopper = ContextSentryGate.RedirectFollowerStopper()
         let expectation = expectation(description: "redirect decision made")
         var vetoed: URLRequest? = URLRequest(url: URL(string: "https://other.invalid/x")!)
@@ -275,21 +255,20 @@ final class ContextSentryGateTests: XCTestCase {
         wait(for: [expectation], timeout: 5)
         task.cancel()
         session.finishTasksAndInvalidate()
-        XCTAssertNil(vetoed, "nil means 'do not follow'; the gate re-admits the hop instead")
+        XCTAssertNil(vetoed, "nil means 'do not follow'; the 3xx becomes a refused send")
     }
 
-    /// Sorts last on purpose: it arms the *real* process-global flag, which cannot be un-set.
-    func ztestRealEntryFlagIsOneWayAndPermanent() {
-        ContextSentryGate.entryOverride = nil
+    func testEntryFlagIsOneWayUntilAResetModelsAFreshProcess() {
         XCTAssertFalse(ContextSentryGate.isClosed)
 
         ContextSentryGate.enterAirgap()
         XCTAssertTrue(ContextSentryGate.isClosed)
-
-        // Idempotent, and permanently closed: a later permitted launch re-arms reporting by being
-        // a fresh process, never by reopening this gate.
-        ContextSentryGate.enterAirgap()
+        ContextSentryGate.enterAirgap()  // idempotent
         XCTAssertTrue(ContextSentryGate.isClosed)
-        XCTAssertTrue(ContextSentryGate.hasProcessEnteredAirgapForTests())
+
+        // `resetTestSeams` is the modeled fresh process — the only thing that returns the flag to
+        // open, and how the suites bound one modeled process from the next.
+        ContextSentryGate.resetTestSeams()
+        XCTAssertFalse(ContextSentryGate.isClosed)
     }
 }

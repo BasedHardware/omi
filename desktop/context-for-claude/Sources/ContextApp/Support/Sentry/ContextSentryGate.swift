@@ -11,14 +11,17 @@ import Foundation
 ///
 /// Contract:
 /// - Once ``enterAirgap()`` runs, **no new HTTP request may start for the rest of the process** —
-///   queued SDK sends, retries, and every redirect hop included. Requests admitted *before*
-///   entry may still complete or be cancelled; ``Decision`` keeps that distinction explicit.
-/// - Admission re-reads live `NetworkEgress` suppression at decision time instead of trusting an
+///   queued SDK sends, retries, and redirects included. The entry check and the backing task's
+///   resume run under the same lock `enterAirgap()` takes, so a request arriving concurrently
+///   with the Airgap switch is ordered entirely before it (admitted) or entirely after it
+///   (refused); nothing straddles entry. Requests admitted *before* entry may still complete or
+///   be cancelled; ``Decision`` keeps that distinction explicit.
+/// - Admission reads live `NetworkEgress` suppression at decision time instead of trusting an
 ///   asynchronously delivered observer flag.
-/// - The backing forwarder session never follows a redirect itself (``RedirectFollowerStopper``
-///   vetoes it): the gate resolves the `Location` and hands the redirected request back through
-///   the gated session (`urlProtocol(wasRedirectedTo:)`), so **every hop crosses admission
-///   again**. Auth-ish headers never survive a redirect; a cross-host redirect strips all headers.
+/// - Redirects are refused, never followed: Sentry's DSN endpoint does not redirect, and a
+///   redirect is a destination the sender did not choose. The backing session's delegate vetoes
+///   redirect following (`RedirectFollowerStopper`), and a 3xx that arrives anyway fails the
+///   send without contacting the redirect target.
 /// - No telemetry callback runs while a gate lock is held — nothing can re-enter telemetry from
 ///   inside a critical section here.
 final class ContextSentryGate: URLProtocol {
@@ -30,32 +33,20 @@ final class ContextSentryGate: URLProtocol {
         case refusedAfterEntry
         /// Arrived before entry but live ExclusionEngine state suppresses reporting.
         case refusedByLiveSuppression
+        case cancelledBeforeAdmission
     }
 
     // MARK: The one-way entry flag
 
-    private static let entryLock = NSLock()
+    /// Serializes ``enterAirgap`` against the whole admission region — entry check *and* backing
+    /// resume — so a request arriving concurrently with the Airgap switch is strictly ordered
+    /// against it. Lock order: `admissionLock` → a protocol instance's `stateLock`. Never held
+    /// across a client or telemetry callback.
+    private static let admissionLock = NSLock()
     private static var hasEnteredAirgap = false
 
-    #if DEBUG
-    /// Test seam for the entry flag, following the same shape as `NetworkEgress.observer`:
-    /// `nil` (production) means the real one-way flag decides. Tests set `false` to model an
-    /// open gate without mutating process-global state, and must clear it again.
-    nonisolated(unsafe) static var entryOverride: Bool?
-
-    /// Reads the real, one-way flag for tests. `enterAirgap()` cannot be un-done, so this is the
-    /// accessor the permanence test asserts against.
-    static func hasProcessEnteredAirgapForTests() -> Bool {
-        entryLock.lock(); defer { entryLock.unlock() }
-        return hasEnteredAirgap
-    }
-    #endif
-
     static var isClosed: Bool {
-        entryLock.lock(); defer { entryLock.unlock() }
-        #if DEBUG
-        if let entryOverride { return entryOverride }
-        #endif
+        admissionLock.lock(); defer { admissionLock.unlock() }
         return hasEnteredAirgap
     }
 
@@ -63,9 +54,9 @@ final class ContextSentryGate: URLProtocol {
     /// never depends on any I/O succeeding. Resume happens only on a fresh launch, which is the
     /// only place `ContextSentry.start` re-arms reporting.
     static func enterAirgap() {
-        entryLock.lock()
+        admissionLock.lock()
         hasEnteredAirgap = true
-        entryLock.unlock()
+        admissionLock.unlock()
     }
 
     /// Live suppression source; injectable for tests. Defaults to the real ExclusionEngine-backed
@@ -76,14 +67,20 @@ final class ContextSentryGate: URLProtocol {
 
     #if DEBUG
     /// Test seam for the backing forwarder: lets the real gate code forward into a canned
-    /// protocol instead of the network. `nil` (production) builds the real session. Tests must
-    /// clear it again.
+    /// protocol instead of the network. `nil` (production) builds the real session. The session
+    /// it returns must carry ``RedirectFollowerStopper`` as its delegate, exactly as production's
+    /// does.
     nonisolated(unsafe) static var forwarderOverride:
         ((URLSessionConfiguration) -> URLSession)?
 
-    /// Clears every test seam this type owns. Called from test `setUp`/`tearDown`.
+    /// Clears every test seam this type owns, **modeled as a fresh process**: the one-way entry
+    /// flag returns to `false` (under the admission lock), injected seams are removed, and the
+    /// decision record is emptied. Test suites call this in `setUp`/`tearDown` and between
+    /// modeled processes; it is the only way a closed gate re-opens.
     static func resetTestSeams() {
-        entryOverride = nil
+        admissionLock.lock()
+        hasEnteredAirgap = false
+        admissionLock.unlock()
         forwarderOverride = nil
         liveSuppression = { NetworkEgress.isSuppressed(.crashReporting) }
         recorderLock.lock()
@@ -123,11 +120,11 @@ final class ContextSentryGate: URLProtocol {
 
     /// Vetoes redirect following in the backing forwarder session.
     ///
-    /// A completion-handler `URLSession` with no protocol classes follows redirects itself and
-    /// delivers only the final response — the outer protocol stack never sees the hop, which
-    /// would let a redirect bypass admission entirely. Completing with `nil` is the documented
-    /// way to refuse: the task then finishes with the 3xx response itself, which is exactly what
-    /// the gate's completion handler needs in order to re-admit the hop.
+    /// A `URLSession` follows redirects itself and delivers only the final response — the outer
+    /// protocol stack never sees the hop, which would let a redirect leave the audited path
+    /// entirely. Completing with `nil` is the documented way to refuse: the task then finishes
+    /// with the 3xx response, and ``deliverForwarded`` fails the send without contacting the
+    /// redirect target.
     final class RedirectFollowerStopper: NSObject, URLSessionTaskDelegate {
         func urlSession(
             _ session: URLSession,
@@ -140,32 +137,52 @@ final class ContextSentryGate: URLProtocol {
         }
     }
 
-    init(
-        request: URLRequest,
-        cachedResponse: CachedURLResponse?,
-        client: URLProtocolClient?
-    ) {
-        super.init(request: request, cachedResponse: cachedResponse, client: client)
-    }
-
     // MARK: Admission
 
-    private func admit() -> Decision {
-        // The decision reads the same lock-protected flag ``enterAirgap`` writes, so a request
-        // arriving concurrently with entry is strictly ordered: it is either admitted-before or
-        // refused-after, never both or in-between. No telemetry runs inside the critical section.
-        if Self.isClosed { return .refusedAfterEntry }
-        if Self.liveSuppression() { return .refusedByLiveSuppression }
-        return .admittedBeforeEntry
-    }
+    /// Serializes ``stopLoading`` against the resume below: once `stopped` is set, no task this
+    /// protocol instance created can be resumed afterwards.
+    private let stateLock = NSLock()
+    private var forwarderTask: URLSessionDataTask?
+    private var stopped = false
 
     override func startLoading() {
-        let decision = admit()
+        // Prepare a suspended task outside the locks. Session construction and test factories
+        // must not run inside admission. The production suppression source is a plain read;
+        // ExclusionEngine releases its lock before calling observers that close this gate.
+        let task = Self.forwarderSession().dataTask(with: request) {
+            [weak self] data, response, error in
+            self?.deliverForwarded(data: data, response: response, error: error)
+        }
+        let decision: Decision
+        Self.admissionLock.lock()
+        stateLock.lock()
+        if stopped {
+            decision = .cancelledBeforeAdmission
+        } else if Self.hasEnteredAirgap {
+            decision = .refusedAfterEntry
+        } else if Self.liveSuppression() {
+            decision = .refusedByLiveSuppression
+        } else {
+            decision = .admittedBeforeEntry
+            forwarderTask = task
+        }
+        // This only appends to a DEBUG array; it invokes no telemetry or client callbacks.
         record(decision)
+        if decision == .admittedBeforeEntry {
+            task.resume()
+        } else {
+            stopped = true // suppress the cancelled backing task's completion
+        }
+        stateLock.unlock()
+        Self.admissionLock.unlock()
+
         switch decision {
         case .admittedBeforeEntry:
-            forwardAdmitted(request)
+            break
+        case .cancelledBeforeAdmission:
+            task.cancel()
         case .refusedAfterEntry, .refusedByLiveSuppression:
+            task.cancel()
             client?.urlProtocol(
                 self,
                 didFailWithError: NSError(
@@ -178,13 +195,19 @@ final class ContextSentryGate: URLProtocol {
     }
 
     override func stopLoading() {
-        forwarderTask?.cancel()
+        stateLock.lock()
+        stopped = true
+        let task = forwarderTask
+        forwarderTask = nil
+        stateLock.unlock()
+        task?.cancel()
     }
 
     #if DEBUG
     private func record(_ decision: Decision) {
-        recorderLock.lock(); defer { recorderLock.unlock() }
-        recordedDecisions.append((request.url ?? URL(string: "https://unknown.invalid")!, decision))
+        Self.recorderLock.lock(); defer { Self.recorderLock.unlock() }
+        Self.recordedDecisions.append(
+            (request.url ?? URL(string: "https://unknown.invalid")!, decision))
     }
     #else
     private func record(_ decision: Decision) {}
@@ -192,66 +215,53 @@ final class ContextSentryGate: URLProtocol {
 
     // MARK: Forwarding
 
-    private var forwarderTask: URLSessionDataTask?
-
     /// One backing session for the process: `URLSession` retains its delegate until invalidated,
     /// so a per-request session would leak on every send. The session is thread-safe; its only
     /// behavior is `RedirectFollowerStopper`'s redirect veto.
     private static let backingForwarderSession: URLSession = makeBackingForwarderSession()
 
-    /// Completion-handler forwarding. The backing session's stack is empty (or, in tests, a
-    /// canned protocol): nothing here can follow a redirect, because `RedirectFollowerStopper`
-    /// refuses, so a 3xx response arrives *here* and the hop is handed back to the gated session.
-    private func forwardAdmitted(_ original: URLRequest) {
-        let session: URLSession
+    private static func forwarderSession() -> URLSession {
         #if DEBUG
-        if let forwarderOverride {
-            session = forwarderOverride(URLSessionConfiguration.ephemeral)
-        } else {
-            session = Self.backingForwarderSession
+        if let override = Self.forwarderOverride {
+            return override(URLSessionConfiguration.ephemeral)
         }
-        #else
-        session = Self.backingForwarderSession
         #endif
-        let task = session.dataTask(with: original) { [weak self] data, response, error in
-            guard let self else { return }
-            if let error {
-                self.client?.urlProtocol(self, didFailWithError: error)
-                return
-            }
-            guard let http = response as? HTTPURLResponse else {
-                self.client?.urlProtocol(
-                    self,
-                    didFailWithError: NSError(
-                        domain: NSURLErrorDomain, code: NSURLErrorBadServerResponse))
-                return
-            }
-            if let location = http.value(forHTTPHeaderField: "Location"),
-                (300..<400).contains(http.statusCode),
-                let redirectURL = URL(string: location, relativeTo: original.url)
-            {
-                let redirected = Self.sanitizedRedirectRequest(
-                    for: original, redirectTo: redirectURL.absoluteURL,
-                    statusCode: http.statusCode)
-                // The redirected request goes back through the OUTER gated session: URLSession
-                // re-issues it via this protocol stack, so `startLoading` — and therefore
-                // admission — runs for the hop as if it were a fresh request.
-                self.client?.urlProtocol(self, wasRedirectedTo: redirected, redirectResponse: http)
-                return
-            }
-            if let data { self.client?.urlProtocol(self, didLoad: data) }
-            if let url = http.url,
-                let stored = HTTPURLResponse(
-                    url: url, statusCode: http.statusCode, httpVersion: "HTTP/1.1",
-                    headerFields: http.allHeaderFields as? [String: String])
-            {
-                self.client?.urlProtocol(
-                    self, didReceive: stored, cacheStoragePolicy: .notAllowed)
-            }
-            self.client?.urlProtocolDidFinishLoading(self)
+        return backingForwarderSession
+    }
+
+    private func deliverForwarded(data: Data?, response: URLResponse?, error: Error?) {
+        stateLock.lock()
+        let shouldDeliver = !stopped
+        stateLock.unlock()
+        guard shouldDeliver else { return }
+        if let error {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
         }
-        forwarderTask = task
-        task.resume()
+        guard let http = response as? HTTPURLResponse else {
+            client?.urlProtocol(
+                self,
+                didFailWithError: NSError(
+                    domain: NSURLErrorDomain, code: NSURLErrorBadServerResponse))
+            return
+        }
+        if (300..<400).contains(http.statusCode) {
+            // Refused, never followed (see the type docs): the send fails here, and the redirect
+            // target — wherever it points — is never contacted.
+            client?.urlProtocol(
+                self,
+                didFailWithError: NSError(
+                    domain: NSURLErrorDomain, code: NSURLErrorBadServerResponse,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Context Sentry forwarder refused redirect \(http.statusCode)"
+                    ]))
+            return
+        }
+        // Order matters: the client requires the response before any body bytes.
+        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+        if let data { client?.urlProtocol(self, didLoad: data) }
+        client?.urlProtocolDidFinishLoading(self)
     }
 
     private static func makeBackingForwarderSession() -> URLSession {
@@ -261,66 +271,5 @@ final class ContextSentryGate: URLProtocol {
         // delegate exists to refuse redirects (see `RedirectFollowerStopper`), nothing else.
         return URLSession(
             configuration: configuration, delegate: RedirectFollowerStopper(), delegateQueue: nil)
-    }
-
-    /// Builds the request for a redirect hop:
-    /// - 301/302/303 after a body-carrying request are re-issued as `GET` without a body
-    ///   (historical client behavior the DSN endpoint itself is never expected to exercise);
-    ///   307/308 keep method and body — same host only.
-    /// - `Authorization`, `X-Sentry-Auth` (the DSN auth header), and `Cookie` never cross a
-    ///   redirect, to any host.
-    /// - A cross-host redirect strips **every** header: only the URL and method survive.
-    static func sanitizedRedirectRequest(
-        for original: URLRequest,
-        redirectTo: URL,
-        statusCode: Int
-    ) -> URLRequest {
-        var redirected = URLRequest(url: redirectTo)
-        let sameHost = original.url?.host == redirectTo.host
-        let keepsMethodAndBody = (statusCode == 307 || statusCode == 308) && sameHost
-
-        if keepsMethodAndBody {
-            redirected.httpMethod = original.httpMethod
-            redirected.httpBody = Self.bodyData(of: original)
-        } else {
-            // 301/302/303 re-issue as GET (dropping the body); 307/308 to a different host are
-            // also downgraded to GET — carrying a body to a host the redirect chose is exactly
-            // the disclosure this sanitizer exists to prevent.
-            redirected.httpMethod = "GET"
-        }
-
-        // Same-host hops keep their other headers; auth-ish headers never cross a redirect, and
-        // hop-specific fields are recomputed by the session.
-        guard sameHost, let headers = original.allHTTPHeaderFields else { return redirected }
-        for (field, value) in headers {
-            let lowered = field.lowercased()
-            if lowered == "authorization" || lowered == "x-sentry-auth" || lowered == "cookie"
-                || lowered == "host" || lowered == "content-length"
-            {
-                continue
-            }
-            redirected.setValue(value, forHTTPHeaderField: field)
-        }
-        return redirected
-    }
-
-    /// Reads a request's body whether it arrived inline or as a stream. `URLSession` hands
-    /// `URLProtocol` bodies as `httpBodyStream`, so a 307/308 body that is copied without this
-    /// reads as nil and the hop goes out bodyless — a corruption, not a privacy choice.
-    private static func bodyData(of request: URLRequest) -> Data? {
-        if let body = request.httpBody { return body }
-        guard let stream = request.httpBodyStream else { return nil }
-        stream.open()
-        defer { stream.close() }
-        var data = Data()
-        let bufferSize = 4096
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
-        while stream.hasBytesAvailable {
-            let read = stream.read(buffer, maxLength: bufferSize)
-            if read <= 0 { break }
-            data.append(buffer, count: read)
-        }
-        return data
     }
 }

@@ -276,8 +276,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // `start()` decides first-launch from a `UserDefaults` key that onboarding also writes:
             // reaching it second would report every install as a returning one.
             //
-            // Sentry first: its start verifies the SDK cache is gone (Airgap drop semantics) before
-            // arming, and handled reports only begin when `ContextAnalytics`' snapshot lands.
+            // Sentry validates its cache generation and Airgap gate before accepting diagnostics.
             ContextSentry.shared.start()
             ContextAnalytics.start()
             ContextAnalytics.recordPermissionSnapshot()

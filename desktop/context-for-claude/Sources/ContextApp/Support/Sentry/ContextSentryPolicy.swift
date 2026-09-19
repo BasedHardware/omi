@@ -43,7 +43,7 @@ struct ContextSentryEventSnapshot: Sendable, Equatable {
     /// One thread. `name` is dropped by `apply`: thread names are arbitrary strings set by
     /// whatever created the thread, and nothing in triage needs them.
     struct Thread: Sendable, Equatable {
-        var id: Int64?
+        var id: Int64
         var crashed: Bool?
         var current: Bool?
         var isMain: Bool?
@@ -104,7 +104,7 @@ struct ContextSentryEventSnapshot: Sendable, Equatable {
     var extraKeys: [String]?
     var hasRequest: Bool?
     var serverName: String?
-    var modules: [String]?
+    var modules: [String: String]?
 }
 
 /// The scrubbed form `ContextSentryPolicy.apply` returns: exactly what may be sent.
@@ -136,8 +136,10 @@ struct ContextSentryScrubbedEvent: Sendable, Equatable {
 /// objects, and a rule that lives next to the SDK import tends to grow SDK-shaped exceptions.
 enum ContextSentryPolicy {
 
-    /// The only tag this app vouches for. It is the same discriminator the analytics carry, and
-    /// it is what keeps this project's issues attributable to this product and not another's.
+    /// The one tag on the wire, as key and value: emitted events carry exactly
+    /// `app=context-for-claude`. A tag under the right key with any other value — or under any
+    /// other key — is dropped, so no call site can re-brand or smuggle a tag through.
+    static let tagName = "app"
     static let appTag = "context-for-claude"
 
     /// The only contexts kept, by key, and the only subfields within them.
@@ -183,23 +185,42 @@ enum ContextSentryPolicy {
     /// `area` and `reason` enum raw values (see `ContextSentryHandledReport`).
     static let fingerprintVocabularyPrefix = "cfc-fallback"
 
-    /// A message is kept only when it is one of this app's slugs: `cfc-fallback area=… reason=…
-    /// outcome=…`, built from closed enums. Anything else — an SDK-synthesized message, a
-    /// `logger.error("…")` string that reached an event — is dropped, because it is arbitrary text
-    /// and this integration's contract is a closed diagnostic vocabulary.
+    /// A message is kept only when it is **exactly** one of this app's slugs:
+    /// `cfc-fallback area=<area> reason=<reason> outcome=<outcome>` — three `key=value` tokens,
+    /// in that order, each value a member of the same closed enum the report was built from
+    /// (`ContextFallbackArea`, `AnalyticsEvent.FallbackReason`, `ContextFallbackOutcome`).
+    /// Anything else — a valid prefix carrying secret text, an unknown enum value, a reordered or
+    /// malformed shape, an SDK-synthesized message — is dropped: this integration's contract is a
+    /// closed diagnostic vocabulary, and free text has no path to the wire.
     static func sanitizedMessage(_ raw: String?) -> String? {
         guard let raw, raw.hasPrefix(handledMessagePrefix) else { return nil }
+        let tokens = raw.dropFirst(handledMessagePrefix.count)
+            .split(separator: " ", omittingEmptySubsequences: false)
+        guard tokens.count == 3,
+            tokens[0].hasPrefix("area="),
+            tokens[1].hasPrefix("reason="),
+            tokens[2].hasPrefix("outcome=")
+        else { return nil }
+        guard
+            ContextFallbackArea(rawValue: String(tokens[0].dropFirst("area=".count))) != nil,
+            AnalyticsEvent.FallbackReason(rawValue: String(tokens[1].dropFirst("reason=".count)))
+                != nil,
+            ContextFallbackOutcome(rawValue: String(tokens[2].dropFirst("outcome=".count))) != nil
+        else { return nil }
         return raw
     }
 
-    /// A fingerprint is kept only when it is exactly this app's triple — `["cfc-fallback", area,
-    /// reason]`, three elements, the last two non-empty (enum raw values). Any other fingerprint,
-    /// from any source, is dropped rather than forwarded: grouping for crash events is derived by
-    /// Sentry from the scrubbed exception `type`s, and an arbitrary fingerprint would both leak
-    /// whatever built it and pin unrelated crashes into one issue.
+    /// A fingerprint is kept only when it is **exactly** this app's triple —
+    /// `["cfc-fallback", <area>, <reason>]`, three elements, the last two members of the same
+    /// closed enums as the message. Any other fingerprint, from any source — unknown strings,
+    /// wrong arity, a valid prefix carrying arbitrary values — is dropped rather than forwarded:
+    /// grouping for crash events is derived by Sentry from the scrubbed exception `type`s, and an
+    /// arbitrary fingerprint would both leak whatever built it and pin unrelated crashes into one
+    /// issue.
     static func sanitizedFingerprint(_ raw: [String]?) -> [String]? {
         guard let raw = raw, raw.count == 3, raw[0] == fingerprintVocabularyPrefix,
-            !raw[1].isEmpty, !raw[2].isEmpty
+            ContextFallbackArea(rawValue: raw[1]) != nil,
+            AnalyticsEvent.FallbackReason(rawValue: raw[2]) != nil
         else { return nil }
         return raw
     }
@@ -214,8 +235,13 @@ enum ContextSentryPolicy {
     /// `user`, `breadcrumbs`, `extra`, `request`, `modules`, `serverName`, exception `value`s,
     /// thread `name`s, frame paths/snippets/locals, image `name`/`codeFile`.
     static func apply(_ event: ContextSentryEventSnapshot) -> ContextSentryScrubbedEvent {
+        let message = Self.sanitizedMessage(event.message)
         var tags: [String: String] = [:]
-        if let app = event.tags?[Self.appTag] { tags[Self.appTag] = app }
+        // Exactly `app=context-for-claude`, or nothing: the key alone, the value alone, or any
+        // other pairing is dropped (see ``tagName``).
+        if event.tags?[Self.tagName] == Self.appTag {
+            tags[Self.tagName] = Self.appTag
+        }
 
         var context: [String: [String: String]] = [:]
         for (name, allowedKeys) in Self.keptContexts {
@@ -269,12 +295,13 @@ enum ContextSentryPolicy {
             environment: event.environment,
             sdkName: event.sdkName,
             sdkVersion: event.sdkVersion,
-            message: Self.sanitizedMessage(event.message),
+            message: message,
             fingerprint: Self.sanitizedFingerprint(event.fingerprint),
             tags: tags,
-            context: context,
-            exceptions: exceptions,
-            threads: threads,
-            debugMeta: debugMeta)
+            // Our handled messages need no machine context or automatically attached stacks.
+            context: message == nil ? context : [:],
+            exceptions: message == nil ? exceptions : [],
+            threads: message == nil ? threads : [],
+            debugMeta: message == nil ? debugMeta : [])
     }
 }

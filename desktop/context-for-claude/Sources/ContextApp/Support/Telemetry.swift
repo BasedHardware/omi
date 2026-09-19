@@ -15,8 +15,8 @@ import Foundation
 /// this function, so a sink that forwarded one would phone home on exactly the machines whose
 /// users asked for silence — and it would fire on exactly the machines whose users asked for
 /// silence. Each sink owns its refusal (`ContextAnalytics.recordFallback` maps and drops;
-/// `ContextSentry.report` re-checks suppression and the admission gate live); this function is the
-/// fan-out, not the state authority.
+/// `ContextSentry.shared.report` re-checks suppression and the admission gate live); this function
+/// is the fan-out, not the state authority.
 enum ContextFallbackArea: String, Sendable, CaseIterable {
     case capture
     case upload
@@ -48,7 +48,8 @@ enum ContextTelemetry {
         from: String,
         to: String,
         reason: String,
-        outcome: ContextFallbackOutcome
+        outcome: ContextFallbackOutcome,
+        reportDiagnostic: (ContextSentryHandledReport) -> Void = { ContextSentry.shared.report($0) }
     ) {
         ContextLog.info("[fallback] area=\(area.rawValue) from=\(from) to=\(to) reason=\(reason) outcome=\(outcome.rawValue)", "telemetry")
 
@@ -65,10 +66,10 @@ enum ContextTelemetry {
         if let mapped = AnalyticsEvent.FallbackReason(slug: reason), mapped != .airgapMode {
             ContextAnalytics.recordFallback(area: area, outcome: outcome, reason: mapped)
             // Crash/error diagnostics, behind the same vocabulary mapping and the same
-            // airgap-mode exclusion. `ContextSentry.report` re-checks suppression and the
+            // airgap-mode exclusion. `ContextSentry.shared.report` re-checks suppression and the
             // admission gate at send time; the SDK-side whitelist (`ContextSentryPolicy`) is what
             // bounds the payload, and it passes only these closed values through.
-            ContextSentry.report(
+            reportDiagnostic(
                 ContextSentryHandledReport(area: area, outcome: outcome, reason: mapped))
         }
     }
