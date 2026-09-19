@@ -53,7 +53,7 @@ stubs = {
     "fastapi": module(
         "fastapi",
         **{
-            name: Framework for name in ("FastAPI", "HTTPException", "Request", "Query")
+            name: Framework for name in ("FastAPI", "HTTPException", "Request", "Query", "Depends")
         },
     ),
     "fastapi.responses": module(

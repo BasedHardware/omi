@@ -540,7 +540,15 @@ class TestCancelWroRegression13183(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
 
+        # The chat-tool routes now require the shared-secret guard
+        # (require_shipbob_tools_auth). These regression tests exercise the
+        # cancel_wro handler directly, so bypass the guard with a dependency
+        # override, the same approach used by the whoop guard PR (#14454).
+        main.app.dependency_overrides[main.require_shipbob_tools_auth] = lambda: "test-token"
         self.client = TestClient(main.app)
+
+    def tearDown(self):
+        main.app.dependency_overrides.pop(main.require_shipbob_tools_auth, None)
 
     @patch("main.get_shipbob_headers", return_value=_headers_ok())
     @patch("main.refresh_token_if_needed")
