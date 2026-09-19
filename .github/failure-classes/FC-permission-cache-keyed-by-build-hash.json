@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-permission-cache-keyed-by-build-hash",
+  "violated_contract": "Persisted permission bookkeeping must follow the application's signing identity across signed updates, not the hash of one binary. Context for Claude cleared its system-audio grant, probe and spent-prompt records whenever the cdhash changed, including ordinary updates under the same designated requirement.",
+  "canonical_prevention": "Use the designated requirement for certificate-signed code and retain the cdhash boundary for ad-hoc builds. Migrate legacy stamps only when they match the current binary, preserve records when identity is unavailable, and keep actual OS refusal authoritative. Exercise retained granted and denied answers, changed identities, ad-hoc rebuilds and legacy migration through the production reconciliation seam.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Sources/ContextApp/Permissions.swift",
+    "desktop/context-for-claude/Tests/ContextAppTests/SystemAudioGrantRecordTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["desktop/context-for-claude/Sources/ContextApp/Permissions.swift"],
+  "status": "open"
+}
