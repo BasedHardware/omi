@@ -2091,7 +2091,8 @@ def search_conversations_endpoint(
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
+    has_more = len(conversations) >= effective_per_page or len(typesense_ids) >= effective_per_page
+    search_results['total_pages'] = effective_page + 1 if has_more else effective_page
     return search_results
 
 
