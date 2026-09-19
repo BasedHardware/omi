@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -132,10 +134,31 @@ def update_goal(
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
+    why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters"),
+    clear_why_it_matters: bool = typer.Option(False, "--clear-why-it-matters"),
+    success_criterion: Optional[list[str]] = typer.Option(None, "--success-criterion", help="Repeatable."),
+    clear_success_criteria: bool = typer.Option(False, "--clear-success-criteria"),
+    horizon_at: Optional[datetime] = typer.Option(None, "--horizon-at", formats=ISO_DATETIME_FORMATS),
+    clear_horizon: bool = typer.Option(False, "--clear-horizon", help="Remove the existing horizon."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    if clear_why_it_matters and why_it_matters is not None:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--why-it-matters and --clear-why-it-matters are mutually exclusive.",
+        )
+    if clear_success_criteria and success_criterion:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--success-criterion and --clear-success-criteria are mutually exclusive.",
+        )
+    if clear_horizon and horizon_at is not None:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--horizon-at and --clear-horizon are mutually exclusive.",
+        )
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -151,10 +174,29 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
+    if clear_why_it_matters:
+        body["why_it_matters"] = None
+    elif why_it_matters is not None:
+        body["why_it_matters"] = why_it_matters
+    if clear_success_criteria:
+        # API rejects null; empty list is the supported clear.
+        body["success_criteria"] = []
+    elif success_criterion:
+        criteria = [c for c in success_criterion if c and str(c).strip()]
+        if criteria:
+            body["success_criteria"] = criteria
+    if clear_horizon:
+        body["horizon_at"] = None
+    elif horizon_at is not None:
+        body["horizon_at"] = horizon_at.isoformat()
     if not body:
         raise UsageError(
             message="No fields to update",
-            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
+            detail=(
+                "Provide one of --title/--target/--current/--min/--max/--unit/"
+                "--why-it-matters/--success-criterion/--horizon-at "
+                "or a matching --clear-* flag."
+            ),
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
