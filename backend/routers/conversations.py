@@ -1341,14 +1341,16 @@ def set_action_item_status(
 
     # Mirror status updates to the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Map descriptions to item IDs for quick lookup
-        description_to_ids = {}
+        # Map descriptions to items for quick lookup
+        description_to_items = {}
         for ai in existing_items:
             desc = ai.get('description')
             if not desc:
                 continue
-            description_to_ids.setdefault(desc, []).append(ai['id'])
+            description_to_items.setdefault(desc, []).append(ai)
 
         for i, action_item_idx in enumerate(data.items_idx):
             if not (0 <= action_item_idx < len(action_items)):
@@ -1356,9 +1358,15 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            ids = description_to_ids.get(action_item.description, [])
-            for action_item_id in ids:
-                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+            for ai in description_to_items.get(action_item.description, []):
+                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=ai['id'],
+                    description=ai.get('description', ''),
+                    completed=bool(new_completed_status),
+                    due_at=ai.get('due_at'),
+                )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
         logger.error(f'Failed to mirror action item status update: {e}')
