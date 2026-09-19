@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: plugin-hume-ai-omi-memory-route-tests
+    command: ["python3", "plugins/test_hume_omi_memory_route.py"]
+    triggers: ["plugins/hume-ai/**", "plugins/test_hume_omi_memory_route.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14340: create_omi_memory posted to /v1/integrations/{app_id}/memories, a route the backend does not serve, so every emotion-memory creation 404ed; the route must be the served v2 user-import route"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
