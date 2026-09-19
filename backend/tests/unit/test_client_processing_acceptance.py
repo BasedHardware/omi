@@ -169,6 +169,7 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
 

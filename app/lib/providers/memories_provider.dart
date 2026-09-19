@@ -438,6 +438,13 @@ class MemoriesProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    // Break the load-coalescing join: a caller that arrives after the clear
+    // must start a fresh load, not await the retired session's in-flight one
+    // (whose result the generation guard would then discard).
+    _inFlightLoad = null;
+    _inFlightLoadLimit = 100;
+    _inFlightLoadDeviceScoped = false;
+    _inFlightLoadView = MemoryCollectionView.usefulNow;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
@@ -1308,6 +1315,9 @@ class MemoriesProvider extends ChangeNotifier {
 
   void deleteMemory(Memory memory) {
     _cancelDeletionTimer();
+    if (_pendingDeletionId != null) {
+      unawaited(_finalizeDeletion());
+    }
 
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
@@ -1356,7 +1366,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
     }
 
-    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+    if (!deleteSucceeded && deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
         _memories.add(deletedMemory!);
       }

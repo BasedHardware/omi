@@ -91,6 +91,13 @@ Good PRs are easy to review and come with evidence that the change works.
   CI uses this mode for title, body, and label edits; code updates still run the full preflight.
   Metadata success validates the PR description and does not replace the source-code verdict.
 
+Backend compatibility checks cover adopted released-client shapes in
+`contracts/client-compat/`. Preserve fields and request forms those clients use;
+new unused endpoints stay unrestricted. A failure identifies the release and
+field: restore compatibility or version the endpoint, rather than editing a
+historical fixture. Replay uses synthetic records in the existing backend E2E
+suite; a successful build tag alone is not proof of store distribution.
+
 For typed mobile analytics, add events and executable consumer references to
 `contracts/analytics/events.json`, then run
 `python3 scripts/check_event_registry.py --write` and commit the generated Dart

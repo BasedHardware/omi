@@ -865,9 +865,21 @@ class TestBuildPersonEmbeddingsCache:
 
         mock_users_db.get_user_speaker_embedding.return_value = None
         mock_users_db.get_people.return_value = [
-            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': [0.2] * 512, 'speech_samples': ['sample-1']},
+            {
+                'id': 'p1',
+                'name': 'Alice',
+                'speaker_embedding': [0.2] * 512,
+                'speech_samples': ['sample-1'],
+                'speech_samples_version': 3,
+            },
             {'id': 'p2', 'name': 'Bob'},  # no embedding
-            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': [0.3] * 512, 'speech_samples': ['sample-3']},
+            {
+                'id': 'p3',
+                'name': 'Carol',
+                'speaker_embedding': [0.3] * 512,
+                'speech_samples': ['sample-3'],
+                'speech_samples_version': 3,
+            },
         ]
 
         cache = build_person_embeddings_cache('uid1')

@@ -29,7 +29,7 @@ Evidence: recovery `edc8683e80`, `97ec3d9cea`; FGS `9495f70852`; stale callbacks
    are Android-only, with iOS cleanup composition-owned.
 3. **Exemplar.** Real CaptureProvider AND CaptureController; explicit composition
    forwards every seam intact, never a test-only subclass. Both production
-   construction arms must eventually use the same composition function.
+   construction arms use composeProductionCaptureProvider.
 4. **Seams/defaults.** Reuse capture_seams.dart and CaptureReplayWorld. Required:
    socket, FGS effects, BLE listener boundary, preferences, connectivity, auth,
    WAL/mic, clock/scheduling, location, codec/permissions, segment store, telemetry,
@@ -96,18 +96,27 @@ Do not call the complete migration six hours-PRs. Accept 3–5 days for composit
 and test conversion, 1.5–2 days for socket/generation; split reviewable commits:
 (1) lifetime primitive; (2) explicit forwarding path alongside existing defaults;
 (3+) migrate existing test groups in small batches, every group passing the owner
-suite; (4) atomic default-removal and production cutover after all ~90 call sites
-are ready; (5+) socket then persistence fences, each with its production tests;
-(6) capture recovery request and FGS intent extraction. Retire only satisfied
+suite; (4) production cutover: both main.dart arms call
+composeProductionCaptureProvider, which injects CaptureSessionOwner wrapping
+RecordingTransferCoordinator.instance and Android-only FGS start / both-platform
+stop. Do not default sessionOwner on CaptureProvider() — that constructor remains
+a test/fixture seam until final adoption refuses it; putting the owner there
+would pull ForegroundUtil and the coordinator singleton into the remaining
+test CaptureProvider() sites and violate the exemplar walk. Implicit-constructor
+default-removal is still later;
+(5+) socket then persistence fences, each with its production tests;
+(6) capture recovery request and FGS intent extraction — landed on
+CaptureSessionOwner: concurrent wakes join one drain, FGS latest-hold wins,
+stale finalize cannot wake a later session. Home's static FGS and C2's five
+wake sites stay out; the default constructor still falls back to the singleton
+coordinator. Retire only satisfied
 markers; whole-C1 adoption waits until the last cut. No long-lived hot-file rewrite.
 
-The coordinator reserves main.dart for cut (4): replace BOTH
-ChangeNotifierProxyProvider4 `create` and `update`'s null-construction fallback
-with composeProductionCaptureProvider, preserving update and existing store/action
-wiring. Its signature takes those existing dependencies; do not recreate them.
-DeviceProvider()/SyncProvider() stay until C2. App UI owns the separate Home FGS
-handoff. The all-lib wake cut is C2; AnalyticsManager and duplicate helper tests
-are removed. No current hot-file edit is needed for these skeleton revisions.
+Cut (4) production wiring landed: both ChangeNotifierProxyProvider4 `create`
+and `update`'s null-construction fallback call composeProductionCaptureProvider,
+preserving update and existing store/action wiring. DeviceProvider()/SyncProvider()
+stay until C2. App UI owns the separate Home FGS handoff. The all-lib wake cut
+is C2; AnalyticsManager and duplicate helper tests are removed.
 
 C2 order: sync_provider → device_provider → local_wal_sync → memories_provider.
 Per-file done: production construction with explicit fakes, each awaited boundary
@@ -116,3 +125,5 @@ concurrent intents coalesce, all resources cancel, failed init is observable and
 retry recovers; declare adoption for each migrated pattern and retain journeys.
 Settings/plans/payments can reuse generation checks for stale rollback and explicit
 loading/error state. Their context-after-await cases are linted; no C1 scope there.
+
+Capture admission and mute use the shared [capture policy contract](CAPTURE_POLICY.md). It defines durable intent, native admission acknowledgement, and the cross-platform regression fixtures.

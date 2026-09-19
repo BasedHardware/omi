@@ -11,7 +11,9 @@ import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/audio/foreground.dart';
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -27,6 +29,7 @@ class CaptureDependencies {
     required this.preferences,
     required this.ble,
     required this.openSocket,
+    this.openConversationSocket,
     required this.owner,
     required this.location,
     required this.localSegments,
@@ -48,6 +51,7 @@ class CaptureDependencies {
   final SharedPreferencesUtil preferences;
   final CaptureBleListeners ble;
   final CaptureSocketOpen openSocket;
+  final CaptureConversationSocketOpen? openConversationSocket;
   final CaptureSessionOwner owner;
   final ConversationLocationCapture location;
   final LocalSegmentStore localSegments;
@@ -58,7 +62,8 @@ class CaptureDependencies {
 
 /// Production must use this exact constructor path too. No test-only subclass.
 /// Owner/device-lookup stay on [CaptureDependencies] for later cuts; this step
-/// forwards every seam CaptureController already accepts.
+/// forwards every seam CaptureController already accepts. The app tree
+/// constructs capture only through [composeProductionCaptureProvider].
 CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => CaptureProvider(
       walService: dependencies.wal,
       phoneMicRecorder: dependencies.phoneMic,
@@ -69,7 +74,27 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       scheduling: dependencies.scheduling,
       preferences: dependencies.preferences,
       bleListeners: dependencies.ble,
-      openSocket: dependencies.openSocket,
+      openSocket: dependencies.openConversationSocket ??
+          ({
+            required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation,
+          }) =>
+              dependencies.openSocket(
+                codec: codec,
+                sampleRate: sampleRate,
+                language: language,
+                force: force,
+                source: source,
+                clientConversationId: clientConversationId,
+                customSttConfig: customSttConfig,
+              ),
+      sessionOwner: dependencies.owner,
       conversationLocationCapture: dependencies.location,
       inProgressConversationLoader: dependencies.refreshConversation,
       audioCodecLoader: dependencies.codec,
@@ -87,5 +112,19 @@ CaptureProvider composeProductionCaptureProvider({
   if (Platform.environment.containsKey('FLUTTER_TEST') || const bool.fromEnvironment('FLUTTER_TEST')) {
     throw UnsupportedError('composeProductionCaptureProvider refuses FLUTTER_TEST');
   }
-  throw UnimplementedError('C1 production composition root');
+  return CaptureProvider(
+    sessionOwner: CaptureSessionOwner(
+      coordinator: RecordingTransferCoordinator.instance,
+      startForeground: () async {
+        if (!Platform.isAndroid) {
+          return;
+        }
+        await ForegroundUtil.initializeForegroundService();
+        await ForegroundUtil.startForegroundTask();
+      },
+      stopForeground: ForegroundUtil.stopForegroundTask,
+    ),
+    localSegmentStore: localSegmentStore ?? LocalSegmentStore.appSupport(),
+    externalActions: externalActions,
+  );
 }

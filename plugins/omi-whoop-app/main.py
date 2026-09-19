@@ -5,6 +5,7 @@ This app provides Whoop fitness tracker integration through OAuth2 authenticatio
 and chat tools for accessing strain, recovery, sleep, and workout data.
 """
 import os
+import html
 import sys
 import secrets
 from datetime import datetime, timedelta
@@ -916,7 +917,7 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
@@ -1130,7 +1131,7 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>

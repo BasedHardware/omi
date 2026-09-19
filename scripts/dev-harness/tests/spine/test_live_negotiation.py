@@ -7,7 +7,6 @@ from .test_live_session import rig
 from dev_harness import live_session as live
 
 
-@pending("V1")
 @pytest.mark.parametrize(
     'capabilities',
     [
@@ -56,7 +55,6 @@ def test_start_cannot_ignore_capability_negotiation(rig, capabilities):
         engine.close()
 
 
-@pending("V1")
 def test_failed_reap_keeps_ownership_and_close_can_retry(rig):
     factory = rig.factory
 
