@@ -4,7 +4,7 @@ Supports Redis (production) with file fallback (local development).
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 # Try to import redis, but make it optional
@@ -90,7 +90,7 @@ def store_dropbox_tokens(
         "account_id": account_id,
         "display_name": display_name,
         "email": email,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
     r = _get_redis()
@@ -126,7 +126,7 @@ def update_dropbox_tokens(uid: str, access_token: str, expires_at: str):
 
     tokens["access_token"] = access_token
     tokens["expires_at"] = expires_at
-    tokens["updated_at"] = datetime.utcnow().isoformat()
+    tokens["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     r = _get_redis()
     if r:
@@ -165,7 +165,7 @@ def store_oauth_state(uid: str, state: str):
         states = _load_json(OAUTH_STATE_FILE)
         states[uid] = {
             "state": state,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         _save_json(OAUTH_STATE_FILE, states)
 
