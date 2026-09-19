@@ -103,7 +103,7 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
-- Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes. Capture admission and mute: [policy contract](lib/services/capture/CAPTURE_POLICY.md); live and native batch sinks share one versioned policy, with cross-platform fixtures.
+- Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
