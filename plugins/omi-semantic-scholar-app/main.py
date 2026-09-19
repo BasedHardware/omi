@@ -6,7 +6,9 @@ from typing import Any, Dict
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from models import (
     ChatToolResponse,
@@ -23,6 +25,17 @@ app = FastAPI(
     description="No-auth Semantic Scholar chat tools for Omi",
     version="1.0.0",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
+
 
 
 _BARE_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")

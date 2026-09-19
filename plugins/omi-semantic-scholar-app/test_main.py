@@ -21,7 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-_STUBBED_MODULES = ("httpx", "fastapi", "pydantic")
+_STUBBED_MODULES = ("httpx", "fastapi", "fastapi.exceptions", "fastapi.responses", "pydantic")
 
 
 def _install_module_stubs():
@@ -73,10 +73,45 @@ def _install_module_stubs():
         def post(self, *args, **kwargs):
             return lambda f: f
 
+        def exception_handler(self, *args, **kwargs):
+            return lambda f: f
+
     fastapi.FastAPI = FastAPI
+    fastapi.Request = type("Request", (), {})
     sys.modules["fastapi"] = fastapi
 
+    fastapi_exceptions = types.ModuleType("fastapi.exceptions")
+
+    class RequestValidationError(Exception):
+        def errors(self):
+            return []
+
+    fastapi_exceptions.RequestValidationError = RequestValidationError
+    sys.modules["fastapi.exceptions"] = fastapi_exceptions
+    fastapi.exceptions = fastapi_exceptions
+
+    fastapi_responses = types.ModuleType("fastapi.responses")
+
+    class JSONResponse:
+        def __init__(self, status_code, content):
+            self.status_code = status_code
+            self.content = content
+
+    fastapi_responses.JSONResponse = JSONResponse
+    sys.modules["fastapi.responses"] = fastapi_responses
+    fastapi.responses = fastapi_responses
+
     pydantic = types.ModuleType("pydantic")
+
+    class _FieldInfo:
+        def __init__(self, default, metadata):
+            self.default = default
+            self.metadata = metadata
+
+    def Field(default=..., **metadata):
+        if "default_factory" in metadata:
+            return _FieldInfo(metadata["default_factory"](), metadata)
+        return _FieldInfo(default, metadata)
 
     def model_validator(*args, **kwargs):
         def decorator(fn):
@@ -85,24 +120,50 @@ def _install_module_stubs():
 
         return decorator
 
+    def field_validator(*fields, **options):
+        def decorator(fn):
+            raw = fn.__func__ if isinstance(fn, classmethod) else fn
+            raw.__field_validator__ = (fields, options)
+            return fn
+
+        return decorator
+
     class BaseModel:
         def __init__(self, **data):
-            for key, value in data.items():
+            for name in dir(type(self)):
+                val = getattr(type(self), name, None)
+                if isinstance(val, _FieldInfo) and val.default is not ...:
+                    setattr(self, name, val.default)
+
+            resolved = dict(data)
+            for name in dir(type(self)):
+                member = getattr(type(self), name, None)
+                raw = getattr(member, "__func__", member)
+                metadata = getattr(raw, "__field_validator__", None)
+                if metadata:
+                    fields, options = metadata
+                    if options.get("mode") == "before":
+                        for field in fields:
+                            if field in resolved:
+                                resolved[field] = getattr(type(self), name)(resolved[field])
+
+            for key, value in resolved.items():
                 setattr(self, key, value)
+
             for name in dir(type(self)):
                 member = getattr(type(self), name, None)
                 if getattr(member, "__model_validator__", False):
                     member(self)
 
-    def Field(*args, **kwargs):
-        if "default_factory" in kwargs:
-            return kwargs["default_factory"]()
-        return kwargs.get("default")
+        def model_dump(self):
+            return self.__dict__.copy()
 
     pydantic.BaseModel = BaseModel
     pydantic.Field = Field
     pydantic.model_validator = model_validator
+    pydantic.field_validator = field_validator
     sys.modules["pydantic"] = pydantic
+
 
 
 _saved_modules = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
@@ -398,6 +459,23 @@ class GetAuthorPapersHandlerTests(unittest.TestCase):
         with mock.patch.object(main, "api_get", new=mock.AsyncMock(side_effect=_status_error(404))):
             resp = _run(main.get_author_papers(req))
         self.assertEqual(resp.error, "Author not found.")
+
+
+class NullOptionalsAndValidationHandlerTests(unittest.TestCase):
+    def test_search_papers_null_max_results_and_min_year(self):
+        req = main.SearchPapersRequest(query="  machine learning  ", max_results=None, min_year=None)
+        self.assertEqual(req.query, "machine learning")
+        self.assertEqual(req.max_results, 5)
+        self.assertIsNone(req.min_year)
+
+    def test_author_papers_null_max_results(self):
+        req = main.GetAuthorPapersRequest(author_id="  1741101  ", max_results=None)
+        self.assertEqual(req.author_id, "1741101")
+        self.assertEqual(req.max_results, 5)
+
+    def test_get_paper_request_strips_whitespace(self):
+        req = main.GetPaperRequest(paper_id_or_doi="  10.1038/nature12345  ")
+        self.assertEqual(req.paper_id_or_doi, "10.1038/nature12345")
 
 
 class ResponseContractTests(unittest.TestCase):
