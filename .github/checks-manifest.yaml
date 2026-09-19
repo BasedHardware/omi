@@ -48,7 +48,7 @@ checks:
     command: ["python3", "plugins/omi-whoop-app/test_oauth_reflection_encoding.py"]
     triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#14890: the Whoop plugin builds its HTML with f-strings, so an attacker-supplied uid in /?uid= or /auth/whoop?uid= broke out of the href attribute, the unauthenticated /auth/whoop/callback error parameter was reflected into the error box, and upstream exception text was echoed verbatim into the 500 page; every uid must be percent-encoded with quote(uid, safe='') and every reflected value HTML-escaped for its context"
+    reason: "#14890: the Whoop plugin interpolates an attacker-supplied uid into hrefs with raw f-strings, so /?uid= and /auth/whoop?uid= broke out of the href attribute, the /disconnect redirect echoed uid unencoded into its Location target, and upstream exception text was reflected verbatim into the 500 page; uid must be percent-encoded with quote(uid, safe='') and reflected values HTML-escaped for their context (the callback error box was already escaped at this PR's merge-base, so the error-parameter wording is out of scope for this delta)"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
