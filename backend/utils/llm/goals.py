@@ -192,9 +192,8 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
     """
     try:
         # Get the goal
-        goals = goals_db.get_user_goals(uid)
-        goal = next((g for g in goals if g.get('id') == goal_id), None)
-        if not goal:
+        goal = goals_db.get_goal_by_id(uid, goal_id)
+        if not goal or not goal.get('is_active'):
             raise ValueError("Goal not found")
 
         goal_title = goal.get('title', 'Unknown')
