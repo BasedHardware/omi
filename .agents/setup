@@ -176,11 +176,12 @@ mkdir -p "$(dirname "$AMP_AGENTS")"
 if [ ! -f "$AMP_AGENTS" ]; then
   touch "$AMP_AGENTS"
 fi
-MARKER="<!-- omi orb env notes -->"
-if ! grep -Fqx "$MARKER" "$AMP_AGENTS"; then
-  cat >>"$AMP_AGENTS" <<EOF
-
-$MARKER
+# Content-addressed guidance block: the marker embeds a hash of the block body,
+# so editing the content below (e.g. a new Flutter pin) refreshes the notes on
+# the next setup run instead of leaving stale guidance behind (review of
+# #14692). The end marker bounds removal so content appended to AGENTS.md by
+# anything else is never touched.
+NOTES_BODY="$(cat <<EOF
 - Backend: no GCP credentials in the orb. Use \`PROVIDER_MODE=offline make dev-up\`
   (repo root) for the hermetic harness; \`OMI_ENV_STAGE=offline\` is seeded via
   \`backend/.env -> .env.offline\`. Authenticate endpoint self-tests with
@@ -191,6 +192,22 @@ $MARKER
 - Emulator tests need Java (installed) + firebase-tools (root node_modules); run
   the \`test:*:emulator\` scripts from the root package.json.
 EOF
+)"
+NOTES_START="<!-- omi orb env notes v:$(printf '%s' "$NOTES_BODY" | sha256sum | cut -c1-12) -->"
+NOTES_END="<!-- /omi orb env notes -->"
+if ! grep -Fqx "$NOTES_START" "$AMP_AGENTS"; then
+  tmp="$(mktemp)"
+  # Drop every previous version of the block (start line through its end
+  # marker; the pre-versioning format had no end marker, so its block ends at
+  # EOF — it was always the last thing this script appended).
+  awk '
+    /^<!-- omi orb env notes/ { inblock = 1; next }
+    inblock && /^<!-- \/omi orb env notes/ { inblock = 0; next }
+    inblock { next }
+    { print }
+  ' "$AMP_AGENTS" >"$tmp"
+  printf '%s\n%s\n%s\n' "$NOTES_START" "$NOTES_BODY" "$NOTES_END" >>"$tmp"
+  mv "$tmp" "$AMP_AGENTS"
 fi
 step "orb agent notes written"
 
