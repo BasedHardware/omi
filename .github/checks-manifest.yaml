@@ -1235,13 +1235,12 @@ checks:
     command: ["python3", "scripts/test_resolve_registry_conflict.py"]
     triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: slack-app-settings-page-encoding-tests
-    command: ["python3", "-m", "pytest", "plugins/omi-slack-app/test_settings_page.py"]
+    command: ["python3", "plugins/omi-slack-app/test_settings_page.py"]
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14876: Prevent XSS and URL attribute breakout vulnerabilities in omi-slack-app settings page"
-
-    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: mobile-event-registry
     command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
     triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
@@ -1252,11 +1251,6 @@ checks:
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
-  - id: slack-app-settings-page-encoding-tests
-    command: ["python3", "-m", "pytest", "plugins/omi-slack-app/test_settings_page.py"]
-    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#14876: Prevent XSS and URL attribute breakout vulnerabilities in omi-slack-app settings page"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

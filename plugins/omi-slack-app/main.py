@@ -263,6 +263,7 @@ async def root(uid: str = Query(None)):
         </head>
         <body>
             <div class="container">
+                <input type="hidden" id="uid" value="{html.escape(uid)}">
                 <div class="card" style="margin-top: 20px;">
                     <h2>💬 Slack Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
