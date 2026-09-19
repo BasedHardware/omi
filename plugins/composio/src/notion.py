@@ -1,6 +1,8 @@
 import os
 import json
 import base64
+import hashlib
+import hmac
 import requests
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, status, Form, BackgroundTasks
@@ -37,6 +39,59 @@ def init_notion_credentials(client_id: str, client_secret: str, redirect_uri: st
     logger.info(f"Redirect URI: {redirect_uri}")
 
 
+def _get_notion_state_secret() -> bytes:
+    if not NOTION_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="NOTION_CLIENT_SECRET not configured",
+        )
+    return NOTION_CLIENT_SECRET.encode("utf-8")
+
+
+def sign_notion_state(uid: str) -> str:
+    """Bind the OAuth state to the uid with an HMAC signature."""
+    if not isinstance(uid, str) or not uid.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing uid parameter",
+        )
+
+    signature = hmac.new(
+        _get_notion_state_secret(),
+        uid.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{uid}:{signature}"
+
+
+def verify_notion_state(state: str) -> str:
+    """Verify a signed Notion OAuth state and return the trusted uid."""
+    if not isinstance(state, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OAuth state",
+        )
+
+    uid, separator, signature = state.rpartition(":")
+    if not separator or not uid or not signature:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OAuth state",
+        )
+
+    expected = hmac.new(
+        _get_notion_state_secret(),
+        uid.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OAuth state",
+        )
+    return uid
+
+
 # Models
 class NotionSearchRequest(BaseModel):
     uid: str
@@ -62,7 +117,7 @@ async def auth_notion(request: Request, uid: str):
 
     # URL encode both the redirect_uri and state
     encoded_redirect_uri = requests.utils.quote(NOTION_REDIRECT_URI, safe='')
-    encoded_state = requests.utils.quote(uid)
+    encoded_state = requests.utils.quote(sign_notion_state(uid), safe="")
 
     oauth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={NOTION_CLIENT_ID}&response_type=code&owner=user&redirect_uri={encoded_redirect_uri}&state={encoded_state}"
 
@@ -223,6 +278,8 @@ async def extract_all_pages(access_token: str, uid: str):
 @router.get("/callback")
 async def notion_callback(request: Request, background_tasks: BackgroundTasks, code: str, state: str):
     """Handle Notion OAuth callback"""
+    uid = verify_notion_state(state)
+
     try:
         # Exchange code for access token
         response = requests.post(
@@ -239,10 +296,10 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         access_token = token_data.get("access_token")
         workspace_id = token_data.get("workspace_id")
         workspace_name = token_data.get("workspace_name", "Notion Workspace")  # Get workspace name from response
-        store_notion_credentials(state, access_token, workspace_id, workspace_name)
+        store_notion_credentials(uid, access_token, workspace_id, workspace_name)
 
         # Start page extraction in background
-        background_tasks.add_task(extract_all_pages, access_token, state)
+        background_tasks.add_task(extract_all_pages, access_token, uid)
 
         # Redirect to success page immediately
         return templates.TemplateResponse("notion_success.html", {"request": request})
