@@ -47,7 +47,7 @@ static struct hid_dictation_limits dictation_limits = {
 static struct hid_dictation_ctx dictation_ctx;
 
 // Opt-in state. RAM-only by design: a power cycle returns the pendant to
-// stock behavior, which is also the documented recovery path.
+// runtime HID-off behavior if the firmware boots; this is not firmware rollback.
 static bool hid_wanted;     // requested by the app
 static bool hid_registered; // HIDS currently in the GATT table
 

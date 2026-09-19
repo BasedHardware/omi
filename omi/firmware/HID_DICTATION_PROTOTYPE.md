@@ -6,8 +6,11 @@ recording device; when the prototype is explicitly enabled it additionally
 acts as a standard BLE HID keyboard that types the transcript of what you just
 said.
 
-**Status: draft prototype for David's device testing. Not merged, not
-released. Default off — production firmware behavior is unchanged.**
+**Status: draft, software testing only. Not merged or released. Do not OTA
+this prototype onto an only/daily-use pendant.** Hardware testing waits for a
+spare CV1 and a verified wired recovery setup. A cable alone is not proof of
+recovery: establish the correct debug/programming connection and successfully
+restore stock firmware on the spare before testing this image.
 
 ## How it works
 
@@ -44,8 +47,9 @@ required.
   typing engine. `src/lib/core/hid_dictation_core.c` — pure protocol/mapping
   logic, host-tested (`test/host`, `scripts/test-host-hid-dictation.sh`).
 - Opt-in state is **RAM-only**: enable via the app, effective after one
-  reconnect; reboot/power-cycle removes keyboard mode (also the recovery
-  path). The opt-in is not persisted; Bluetooth bonds may be persisted.
+  reconnect; a successful reboot removes keyboard mode. This is **not firmware
+  rollback** and cannot help if the image cannot boot. The opt-in is not
+  persisted; Bluetooth bonds may be persisted.
 - With the prototype compiled in, the GATT table is NOT identical to stock:
   the small dictation control service (19B10040 family, encrypted perms) is
   always present, and the build enables bond storage / service-changed /
@@ -53,7 +57,7 @@ required.
   HID service itself is absent, advertising matches stock, and disconnect
   behavior is stock-equivalent — but "byte-for-byte" only holds for builds
   that do not compile the feature in at all (production config).
-- Safety invariants (all enforced in code and tested):
+- Intended safety invariants (software checks below; device behavior unverified):
   - printable US ASCII only; anything else is rejected **whole**, before any
     keypress — no transliteration, no truncation, no Enter;
   - one key held at a time; every press is followed by a release report;
@@ -85,7 +89,51 @@ required.
 - Transcription uses the existing one-shot `/v2/voice-message/transcribe`
   path (network required).
 
-## Build / flash / pair / enable / test / disable / recover
+## Safe testing now (no pendant needed)
+
+Run from the repository root:
+
+```bash
+bash omi/firmware/scripts/test-host-hid-dictation.sh
+HID_SANITIZE=1 bash omi/firmware/scripts/test-host-hid-dictation.sh
+```
+
+The normal runner requires a C compiler. The optional sanitizer run requires
+AddressSanitizer and UndefinedBehaviorSanitizer support. Both run entirely on
+the host; neither connects to a device, transcribes audio, nor flashes anything.
+
+- Pure protocol suite: 540 checks for framing, ASCII mapping and session rules.
+- Runtime fault harness: 26 scenarios executing production `hid_dictation.c`
+  with test replacements for Zephyr work scheduling, connection management and
+  NCS HIDS/GATT calls. Tests inject send/registration failures, missing
+  subscriptions, frame and typing timeouts, cancellation at every report
+  boundary, disconnect/reconnect without queued replay, and enable/disable.
+- The harness records reports **accepted by a fake stack**, not reports delivered
+  to an iPhone. Timers are deterministic and locks track nesting; it does not
+  exercise thread races, actual Zephyr/NCS APIs, pairing, flash writes or power loss.
+  The existing manifest runs this harness in both local and CI check lanes.
+- NCS 2.9.0 includes nRF5340 BabbleSim board support, but no full CV1 radio/OTA
+  simulation is configured or validated here. That would require the simulator
+  components and a dedicated board/peripheral test application. Even a passing
+  radio simulation would not establish physical recovery or iOS interoperability.
+
+## Why OTA is deferred
+
+The current source configures MCUboot **overwrite-only**, with updates for both
+application and network cores (`omi/sysbuild.conf`). The generated prototype
+bootloader has `CONFIG_BOOT_UPGRADE_ONLY=y`, no swap-based revert, and neither
+serial recovery nor a firmware loader enabled. The installed bootloader on the
+user's pendant has **not** been identified. An OTA transfer succeeding therefore
+does not establish that an unbootable image can be recovered wirelessly.
+
+Do not change the bootloader or flash layout through this experiment to try to
+add rollback. Before a future hardware run, use the spare to establish its exact
+board/bootloader, the matching stock image, and a demonstrated wired restore.
+Then test prototype boot, BLE reconnection, ordinary recording and disabling
+HID before the typing matrix. OTA and interrupted-update testing remain a later
+step on that recoverable spare. Never intentionally interrupt the only pendant.
+
+## Future hardware procedure (blocked until recovery is demonstrated)
 
 ### Build (prototype firmware)
 
@@ -116,21 +164,14 @@ Use the setup wrapper's validated backend/profile configuration and ensure the
 phone can reach that backend for one-shot transcription. This task does not
 install the app or publish a TestFlight build.
 
-### Flash
+### Flash (spare fixture only)
 
-- **J-Link / nrfjprog (dev fixtures):** flash `merged.hex` (and
-  `merged_CPUNET.hex` for a blank network core) per
-  [`BUILD_AND_OTA_FLASH.md`](BUILD_AND_OTA_FLASH.md).
-- **OTA over BLE (no J-Link):** the shipped Omi app has **no local-ZIP
-  selection** — its update flow only downloads released firmware from the
-  backend. To push a locally built `dfu_application.zip`, use Nordic's
-  supported iOS MCUboot/SMP path, [nRF Connect Device Manager]
-  (https://github.com/nordicsemi/ios-nrf-connect-device-manager): connect to
-  the pendant (disable the HID prototype or power-cycle first if iOS claims
-  it) → Add file `dfu_application.zip` → Upload. Note the prototype embeds
-  the SAME firmware version as the current release line (3.0.21 unless
-  changed in `omi.conf`) — do not rely on version ordering; return to stock
-  by flashing the release `merged.hex`/OTA image explicitly.
+After a successful stock restore on the spare, use its verified J-Link/SWD
+procedure and the matching images described in
+[`BUILD_AND_OTA_FLASH.md`](BUILD_AND_OTA_FLASH.md). Do not assume a charging cable
+provides programming access. `dfu_application.zip` is a build output, **not an
+approved OTA candidate**. No OTA installation instructions are provided until
+the spare's recovery and installed bootloader have been verified.
 
 ### Pair
 
@@ -179,13 +220,13 @@ the link, and verifies the HID service is gone (status line confirms). If
 verification fails, the toggle remains on and pendant taps remain reserved
 for dictation; retry or power-cycle the pendant before disabling again.
 
-### Recover (if anything wedges)
+### Recover
 
-- **Power-cycle the pendant** using the normal CV1 reset/power procedure. The
-  opt-in is RAM-only, so a reboot removes keyboard mode. Prototype control
-  characteristics and bond storage remain until stock firmware is restored.
-- Worst case (device unreachable): reflash stock release firmware from
-  `BUILD_AND_OTA_FLASH.md` or the OTA archive.
+- If the firmware still boots, a normal CV1 power-cycle clears runtime HID
+  opt-in. Prototype control characteristics and bond storage remain.
+- If boot or BLE fails, power-cycling is not rollback and OTA may be unavailable.
+  Use the spare fixture's previously demonstrated wired stock restore.
+- Do not test on an only/daily-use pendant without that recovery path.
 
 ## Known limits (explicit)
 
@@ -212,6 +253,8 @@ for dictation; retry or power-cycle the pendant before disabling again.
 - `test/host/test_hid_dictation_core.c` — 540 assertions on the pure core:
   mapping completeness/rejections, all-or-nothing validation, session
   duplicate/busy/cancel rules, frame bounds, abort semantics.
+- `test/host/test_hid_dictation_runtime.c` — 26 deterministic fault scenarios
+  around production GATT/workqueue glue with mocked OS/stack boundaries.
 - `app/test/unit/hid_dictation_protocol_test.dart`,
   `app/test/unit/pendant_dictation_controller_test.dart` — wire-format
   parity and the tap→transcribe→validate→send→status loop, including the

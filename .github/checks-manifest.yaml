@@ -102,7 +102,7 @@ checks:
     reason: "PR #12993 found that firmware formatting can fail only after a hosted run because pre-push silently skipped clang-format when it was absent; selected firmware sources now require the same formatter locally"
   - id: firmware-hid-dictation-core-tests
     command: ["bash", "omi/firmware/scripts/test-host-hid-dictation.sh"]
-    triggers: ["omi/firmware/omi/src/lib/core/hid_dictation.h", "omi/firmware/omi/src/lib/core/hid_dictation_core.c", "omi/firmware/test/host/**", "omi/firmware/scripts/test-host-hid-dictation.sh", ".github/checks-manifest.yaml"]
+    triggers: ["omi/firmware/omi/src/lib/core/hid_dictation.h", "omi/firmware/omi/src/lib/core/hid_dictation.c", "omi/firmware/omi/src/lib/core/hid_dictation_core.c", "omi/firmware/test/host/**", "omi/firmware/scripts/test-host-hid-dictation.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "HID dictation protocol core: every printable ASCII byte must map to a HID usage while controls/non-ASCII are rejected before typing, frames must enforce session/budget/duplicate rules, and every abort path must release keys — the contract the phone app mirrors in hid_dictation_protocol.dart"
   - id: pre-commit-pinned-toolchains
