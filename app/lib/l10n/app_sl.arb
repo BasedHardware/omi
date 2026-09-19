@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "Ponovno obdelaj prepis",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Ponovno prepisovanje pogovora...\nTo lahko traja nekaj sekund",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Napaka pri ponovni obdelavi prepisa. Poskusite znova pozneje.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Za ta pogovor ni shranjenega zvoka.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "Izbriši pogovor",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

@@ -78,6 +78,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reprocessConversation => '会話を再処理';
 
   @override
+  String get reprocessTranscription => '文字起こしを再処理';
+
+  @override
+  String get retranscribingConversation => '会話を再文字起こししています...\n数秒かかる場合があります';
+
+  @override
+  String get errorReprocessingTranscription => '文字起こしの再処理中にエラーが発生しました。後でもう一度お試しください。';
+
+  @override
+  String get errorNoStoredAudio => 'この会話には保存された音声がありません。';
+
+  @override
   String get deleteConversation => '会話を削除';
 
   @override

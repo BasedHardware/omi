@@ -79,6 +79,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reprocessConversation => 'Znovu spracovať konverzáciu';
 
   @override
+  String get reprocessTranscription => 'Znovu spracovať prepis';
+
+  @override
+  String get retranscribingConversation => 'Prepisovanie konverzácie...\nMôže to trvať niekoľko sekúnd';
+
+  @override
+  String get errorReprocessingTranscription => 'Chyba pri opätovnom spracovaní prepisu. Skúste to neskôr.';
+
+  @override
+  String get errorNoStoredAudio => 'Pre túto konverzáciu nie je k dispozícii uložený zvuk.';
+
+  @override
   String get deleteConversation => 'Odstrániť konverzáciu';
 
   @override

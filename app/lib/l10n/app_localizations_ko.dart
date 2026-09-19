@@ -78,6 +78,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reprocessConversation => '대화 재처리';
 
   @override
+  String get reprocessTranscription => '전사 다시 처리';
+
+  @override
+  String get retranscribingConversation => '대화를 다시 전사하는 중...\n몇 초가 걸릴 수 있습니다';
+
+  @override
+  String get errorReprocessingTranscription => '전사를 다시 처리하는 중 오류가 발생했습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get errorNoStoredAudio => '이 대화에 저장된 오디오가 없습니다.';
+
+  @override
   String get deleteConversation => '대화 삭제';
 
   @override

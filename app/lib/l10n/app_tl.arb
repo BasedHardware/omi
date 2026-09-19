@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "Muling Proseso ang Transkripsyon",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Muling tinatranscribe ang pag-uusap...\nMaaaring tumagal ito ng ilang segundo",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Error sa muling pagproseso ng transkripsyon. Subukan ulit mamaya.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Walang naka-store na audio para sa pag-uusap na ito.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "Tanggalin ang Pag-uusap",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

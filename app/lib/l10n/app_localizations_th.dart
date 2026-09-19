@@ -79,6 +79,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reprocessConversation => 'ประมวลผลบทสนทนาใหม่';
 
   @override
+  String get reprocessTranscription => 'ประมวลผลการถอดเสียงใหม่';
+
+  @override
+  String get retranscribingConversation => 'กำลังถอดเสียงบทสนทนาใหม่...\nอาจใช้เวลาสักครู่';
+
+  @override
+  String get errorReprocessingTranscription => 'เกิดข้อผิดพลาดขณะประมวลผลการถอดเสียงใหม่ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get errorNoStoredAudio => 'ไม่มีเสียงที่จัดเก็บไว้สำหรับบทสนทนานี้';
+
+  @override
   String get deleteConversation => 'ลบการสนทนา';
 
   @override

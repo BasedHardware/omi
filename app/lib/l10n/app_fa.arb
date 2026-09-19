@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "پردازش مجدد رونویسی",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "در حال رونویسی مجدد گفتگو...\nممکن است چند ثانیه طول بکشد",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "خطا در پردازش مجدد رونویسی. لطفاً بعداً دوباره تلاش کنید.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "برای این گفتگو صوت ذخیره‌شده‌ای وجود ندارد.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "حذف گفتگو",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

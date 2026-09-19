@@ -129,6 +129,10 @@ def conv():
         "utils.conversations.calendar_utils": AutoMockModule("utils.conversations.calendar_utils"),
         "utils.conversations.location": AutoMockModule("utils.conversations.location"),
         "utils.conversations.analytics": AutoMockModule("utils.conversations.analytics"),
+        # The reprocess-transcription helper pulls utils.stt.pre_recorded, which
+        # imports timeit from utils.other.endpoints. This suite stubs endpoints
+        # without that symbol, so the helper must stay faked at import time.
+        "utils.conversations.reprocess_transcription": AutoMockModule("utils.conversations.reprocess_transcription"),
         # utils.llm / speaker / integrations / retrieval
         "utils.llm.conversation_processing": AutoMockModule("utils.llm.conversation_processing"),
         "utils.speaker_identification": AutoMockModule("utils.speaker_identification"),
