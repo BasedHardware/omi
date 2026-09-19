@@ -6,27 +6,37 @@ import SwiftUI
 @MainActor
 extension AppState {
   func toggleConversationListening(source: String = "ui") {
-    setConversationListening(!isConversationListening, source: source)
+    setTranscriptionPaused(!isTranscriptionPaused, source: source)
   }
 
   func setConversationListening(_ on: Bool, source: String = "ui") {
-    let previous = isConversationListening
-    guard previous != on else { return }
+    setTranscriptionPaused(!on, source: source)
+  }
 
-    if !on && isTranscribing {
-      stopTranscription()
-    }
+  /// Pause/resume transcription forwarding without touching `audioRecordingMode` or tearing
+  /// down mic/BLE capture. Off is the mode that stops capture; this overlay only gates STT.
+  func setTranscriptionPaused(_ paused: Bool, source: String = "ui") {
+    let previous = isTranscriptionPaused
+    guard previous != paused else { return }
 
-    isConversationListening = on
-    persistedConversationListening = on
-    setConversationListeningSnapshot(on)
+    isTranscriptionPaused = paused
+    UserDefaults.standard.set(paused, forKey: .transcriptionPaused)
+    refreshTranscriptionForwardingSnapshot()
 
-    if on && !isTranscribing {
-      startTranscription()
-    }
+    AnalyticsManager.shared.listeningToggled(isListening: !paused, source: source)
+    log(
+      "listening overlay: \(previous ? "paused" : "live") -> \(paused ? "paused" : "live") "
+        + "(source=\(source), mode=\(audioRecordingMode.rawValue))"
+    )
+  }
 
-    AnalyticsManager.shared.listeningToggled(isListening: on, source: source)
-    log("listening: \(previous ? "on" : "off") -> \(on ? "on" : "off") (source=\(source))")
+  func refreshTranscriptionForwardingSnapshot() {
+    setConversationListeningSnapshot(
+      CaptureListeningLogic.shouldForwardTranscriptionAudio(
+        mode: audioRecordingMode,
+        isPaused: isTranscriptionPaused
+      )
+    )
   }
 
   nonisolated private func snapshotIsConversationListening() -> Bool {
@@ -67,10 +77,6 @@ extension AppState {
     conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
     userInitiated: Bool = true
   ) {
-    guard isConversationListening else {
-      log("Transcription: Start ignored while conversation listening is paused")
-      return
-    }
     guard !isTranscribing else { return }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
       log("Transcription: start ignored because Audio Recording is Off")
@@ -593,7 +599,7 @@ extension AppState {
           }
           let audioData = dictationGate.gated(rawAudioData)
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            self?.forwardConversationAudio(audioData) { localService?.appendAudio($0) }
           } else {
             mixer?.setMicAudio(audioData)
           }
@@ -647,7 +653,7 @@ extension AppState {
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            self?.forwardConversationAudio(audioData) { localSystem?.appendAudio($0) }
           } else {
             mixer?.setSystemAudio(audioData)
           }

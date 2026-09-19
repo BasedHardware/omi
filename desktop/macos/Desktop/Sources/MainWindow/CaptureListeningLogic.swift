@@ -25,9 +25,22 @@ enum CaptureListeningLogic {
   /// call yet) counts as on: the user switched listening on and the next call will be recorded,
   /// so the control wears the green dot and no off-slash. Whether audio is reaching STT right now
   /// is `isLiveCapturing`, which the live-transcript surfaces read instead.
+  ///
+  /// Pause is a separate overlay (`isTranscriptionPaused`) and must not be read as Off: the
+  /// mode control still shows Always On / Only Meetings while transcription is gated.
   static func listeningStatus(appState: AppState) -> HomeStatusState {
     if appState.transcriptionServiceError != nil { return .blocked }
     return appState.isLiveCapturing || appState.isAwaitingMeeting ? .active : .inactive
+  }
+
+  /// Pause is an explicit overlay on `audioRecordingMode`, not a second recording policy.
+  /// Off tears down capture; pause keeps mic/BLE up and gates only transcription forwarding.
+  /// The overlay never writes `audioRecordingMode`.
+  static func shouldForwardTranscriptionAudio(
+    mode: AssistantSettings.AudioRecordingMode,
+    isPaused: Bool
+  ) -> Bool {
+    mode != .off && !isPaused
   }
 
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {

@@ -206,4 +206,24 @@ final class ShellListeningCycleTests: XCTestCase {
       ShellStatusIcons.meetingsHint,
       CaptureListeningLogic.audioRecordingModeTitle(.onlyMeetings))
   }
+
+  // MARK: Transcription pause overlay
+
+  /// Pause gates STT forwarding on top of the mode. It is not Off: Off never forwards,
+  /// and a live Always/Only Meetings session keeps forwarding until the overlay is set.
+  func testPauseOverlayGatesTranscriptionWithoutBeingModeOff() {
+    for mode in AssistantSettings.AudioRecordingMode.allCases {
+      XCTAssertFalse(
+        CaptureListeningLogic.shouldForwardTranscriptionAudio(mode: mode, isPaused: true),
+        "pause must gate transcription in \(mode)")
+    }
+
+    XCTAssertFalse(
+      CaptureListeningLogic.shouldForwardTranscriptionAudio(mode: .off, isPaused: false),
+      "Off must not forward, even with the pause overlay clear — pause is not how capture stops")
+    XCTAssertTrue(
+      CaptureListeningLogic.shouldForwardTranscriptionAudio(mode: .always, isPaused: false))
+    XCTAssertTrue(
+      CaptureListeningLogic.shouldForwardTranscriptionAudio(mode: .onlyMeetings, isPaused: false))
+  }
 }
