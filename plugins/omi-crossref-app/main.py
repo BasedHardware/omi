@@ -126,6 +126,11 @@ def clean_doi(value: Any) -> str:
 
 
 _JATS_TAG = re.compile(r"</?jats:[^>]+>")
+# 剥离成对的 Crossref 字形/排版标签并保留内部文本 (#14307)
+_FACE_TAG_PAIR = re.compile(
+    r"<(?P<tag>b|i|u|sub|sup|scp|tt|font|sc|strike)(?:\s+[^>]*)?>(.*?)</(?P=tag)>",
+    re.IGNORECASE | re.DOTALL,
+)
 # 闭合标签绝不是不等号，直接剥离
 _CLOSE_TAG = re.compile(r"</[a-zA-Z][^>]*>")
 # 开启标签必须紧随完整合法标签名，避免误删学术不等式如 p < 0.05
@@ -133,7 +138,7 @@ _OPEN_TAG = re.compile(r"(?<![A-Za-z0-9_])<[a-zA-Z][a-zA-Z0-9:-]*(?:\s+[^>]*)?>"
 
 
 def clean(text: Any) -> str:
-    """清理字符串、剥离 JATS/HTML 标签并解码 HTML 实体。"""
+    """清理字符串、剥离 JATS/HTML 标签、保留字形标签内部文本并解码 HTML 实体。"""
     if text is None:
         return ""
     if isinstance(text, (list, tuple)):
@@ -141,6 +146,10 @@ def clean(text: Any) -> str:
     value = html.unescape(str(text)).strip()
     # Crossref 摘要常包含 JATS 标签，转换为纯文本
     value = _JATS_TAG.sub("", value)
+    prev = None
+    while prev != value:
+        prev = value
+        value = _FACE_TAG_PAIR.sub(r"\2", value)
     value = _CLOSE_TAG.sub("", value)
     value = _OPEN_TAG.sub("", value)
     return value.strip()

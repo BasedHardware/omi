@@ -4,12 +4,13 @@ Google Calendar Integration App for Omi
 This app provides Google Calendar integration through OAuth2 authentication
 and chat tools for managing calendar events.
 """
+import html
 import os
 import sys
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -941,7 +942,9 @@ async def root(uid: str = Query(None)):
     tokens = get_google_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/google?uid={uid}"
+        # uid is client-controlled and lands in href/action attributes below;
+        # percent-encode once so a quote cannot break out of the attribute.
+        auth_url = f"/auth/google?uid={quote(uid, safe='')}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1018,7 +1021,7 @@ async def root(uid: str = Query(None)):
                     <h3>Default Calendar</h3>
                     <p style="text-align: left; margin-bottom: 12px;">Choose which calendar to use when creating events:</p>
                     <form action="/update-calendar" method="POST" id="calendarForm">
-                        <input type="hidden" name="uid" value="{uid}">
+                        <input type="hidden" name="uid" value="{html.escape(uid)}">
                         <select name="calendar_id" class="select-input" onchange="this.form.submit()">
                             {calendar_options}
                         </select>
@@ -1032,7 +1035,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"What do I have scheduled for Friday?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={quote(uid, safe='')}" class="btn btn-secondary btn-block">
                     Disconnect Google Calendar
                 </a>
 
@@ -1081,7 +1084,7 @@ async def google_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error)}</p>
                     </div>
                 </div>
             </body>
@@ -1160,7 +1163,7 @@ async def google_callback(
                         <p>Your Google Calendar is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={quote(uid, safe='')}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1194,7 +1197,7 @@ async def check_setup(uid: str = Query(...)):
 async def disconnect(uid: str = Query(...)):
     """Disconnect Google Calendar."""
     delete_google_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.post("/update-calendar")
@@ -1211,7 +1214,7 @@ async def update_calendar(request: Request):
         store_user_setting(uid, "default_calendar", calendar_id)
         log(f"Updated default calendar for {uid} to {calendar_id}")
 
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 @app.get("/health")

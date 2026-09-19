@@ -3,7 +3,6 @@
 No third-party runtime dependencies required. Runs deterministically under
 both standard library `python3 -S` and `pytest`.
 """
-
 import asyncio
 from decimal import Decimal
 import importlib.util
@@ -209,7 +208,14 @@ class HelperFunctionTests(unittest.TestCase):
 
     def test_format_decimal(self):
         self.assertEqual(main._format_decimal(Decimal("10.5000")), "10.5")
-        self.assertEqual(main._format_decimal(Decimal("1.23456")), "1.2346")
+        self.assertEqual(main._format_decimal(Decimal("1.23456")), "1.23456")
+        self.assertEqual(main._format_decimal(Decimal("0.000042")), "0.000042")
+        self.assertEqual(main._format_decimal(Decimal("0")), "0")
+
+    def test_format_decimal_rejects_non_finite_rates(self):
+        for value in (Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")):
+            with self.assertRaisesRegex(ValueError, "rate must be a finite number"):
+                main._format_decimal(value)
 
 
 class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
@@ -294,6 +300,27 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             resp = await main.list_supported_currencies()
             self.assertEqual(resp.error, "currency list request returned no currencies")
 
+    async def test_list_supported_currencies_handles_non_object_payload_error(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.side_effect = ValueError("Frankfurter returned a non-object response")
+            resp = await main.list_supported_currencies()
+            self.assertIsNone(resp.result)
+            self.assertIn("currency list request failed", resp.error)
+
+    async def test_latest_rates_keeps_small_positive_rate_visible(self):
+        mock_data = {
+            "base": "IDR",
+            "date": "2026-09-15",
+            "rates": {"GBP": 0.000042},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.LatestRatesRequest(base_currency="IDR", to_currencies=["GBP"])
+            resp = await main.get_latest_rates(req)
+            self.assertIsNone(resp.error)
+            self.assertIn("1 IDR = 0.000042 GBP", resp.result)
+            self.assertNotIn("= 0 GBP", resp.result)
+
 
 class LifespanAndFallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_lifespan_manages_state_http_client(self):
@@ -301,6 +328,57 @@ class LifespanAndFallbackTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(main.app.state.http_client)
             self.assertFalse(main.app.state.http_client.is_closed)
         self.assertTrue(main.app.state.http_client.is_closed)
+
+    async def test_request_json_uses_canonical_v1_endpoint(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"rates": {"EUR": 1.0}}
+
+        class FakeClient:
+            def __init__(self):
+                self.url = None
+                self.params = None
+
+            async def get(self, url, params=None):
+                self.url = url
+                self.params = params
+                return FakeResponse()
+
+        previous_client = getattr(main.app.state, "http_client", None)
+        client = FakeClient()
+        main.app.state.http_client = client
+        try:
+            payload = await main._request_json("/latest", {"from": "USD"})
+        finally:
+            main.app.state.http_client = previous_client
+
+        self.assertEqual(payload, {"rates": {"EUR": 1.0}})
+        self.assertEqual(client.url, f"{main.FRANKFURTER_BASE_URL}/latest")
+        self.assertEqual(client.url, "https://api.frankfurter.dev/v1/latest")
+        self.assertEqual(client.params, {"from": "USD"})
+
+    async def test_request_json_rejects_non_object_payload(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return ["not", "an", "object"]
+
+        class FakeClient:
+            async def get(self, _url, params=None):
+                return FakeResponse()
+
+        previous_client = getattr(main.app.state, "http_client", None)
+        main.app.state.http_client = FakeClient()
+        try:
+            with self.assertRaisesRegex(ValueError, "non-object response"):
+                await main._request_json("/latest")
+        finally:
+            main.app.state.http_client = previous_client
 
     async def test_request_json_fallback_when_unmanaged(self):
         main.app.state.http_client = None

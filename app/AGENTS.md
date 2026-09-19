@@ -77,7 +77,7 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
 Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
-Dev contracts: [B0 registration](lib/services/dev_controls/REGISTRATION.md), [B1 addressability](lib/services/dev_controls/ADDRESSABILITY.md).
+
 ## Test Strategy
 
 ### Test Structure
@@ -99,11 +99,13 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
 
-CI runs `test.sh`, `analyze_ratchet.sh` (no new info/warnings), and `journeys-hermetic`.
+CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
+- Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
-- Typed analytics: [C7 registry contract](lib/utils/analytics/registry/REGISTRY.md); state machines use production seams.
+- HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
+- Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.
@@ -155,5 +157,5 @@ Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
 - Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
 - `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
-- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Use catalog `omi.*` keys on new controls.
+- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
 - Full command reference: `agent-flutter schema`.

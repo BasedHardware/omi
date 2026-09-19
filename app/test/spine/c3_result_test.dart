@@ -26,7 +26,6 @@ void main() {
   };
   for (final entry in statuses.entries) {
     contractTest('C3 HTTP ${entry.key} retains its distinct cause and never decodes/retries', () async {
-      pendingContract('C3');
       var sends = 0;
       var decodes = 0;
       final result = await executeApi(
@@ -56,7 +55,6 @@ void main() {
     http.ClientException('synthetic')
   ]) {
     contractTest('C3 ${error.runtimeType} is transport, never null/success', () async {
-      pendingContract('C3');
       final result = await executeApi<String>(request: request, send: (_) async => throw error, decode: (s) => s);
       expect(result, isA<ApiFailure<String>>());
       final problem = (result as ApiFailure<String>).problem;
@@ -72,7 +70,6 @@ void main() {
     const AuthTokenTransientFailure(failureClass: 'network')
   ]) {
     contractTest('C3 preserves ${auth.runtimeType} without a second auth interpretation', () async {
-      pendingContract('C3');
       final result = await executeApi<String>(
           request: request, send: (_) async => throw AuthTokenUnavailableException(auth), decode: (s) => s);
       final p = (result as ApiFailure<String>).problem;
@@ -81,7 +78,6 @@ void main() {
     });
   }
   contractTest('C3 success decodes once and programmer failures do not become transport', () async {
-    pendingContract('C3');
     var decodes = 0;
     final ok = await executeApi(
         request: request,
@@ -110,7 +106,6 @@ void main() {
   });
   for (final header in ['30', 'Thu, 17 Sep 2026 00:00:45 GMT', 'invalid', '-1']) {
     contractTest('C3 Retry-After $header is bounded metadata, not a timer', () async {
-      pendingContract('C3');
       final r = await executeApi<String>(
           request: request,
           decode: (s) => s,

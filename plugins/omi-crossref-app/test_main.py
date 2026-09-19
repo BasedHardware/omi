@@ -497,5 +497,42 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(len(manifest_res["tools"]), 3)
 
 
+class FaceMarkupTests(unittest.TestCase):
+    """验证 Crossref 字形排版标签（sub, sup, i, b, scp, font 等）剥离与不等号保护 (#14307, #14318)。"""
+
+    def test_clean_strips_jats_paragraph_tags(self):
+        raw = "<jats:p>Sleep quality improved <jats:italic>slightly</jats:italic>.</jats:p>"
+        self.assertEqual(main.clean(raw), "Sleep quality improved slightly.")
+
+    def test_clean_unescapes_entities_and_strips_generic_tags(self):
+        self.assertEqual(main.clean("A &amp; B <b>bold</b>"), "A & B bold")
+
+    def test_clean_preserves_inequality_operators(self):
+        self.assertEqual(main.clean("If a<b, then c>d."), "If a<b, then c>d.")
+
+    def test_clean_strips_closing_tags_after_word_chars(self):
+        self.assertEqual(main.clean("text</p> tail"), "text tail")
+        self.assertEqual(main.clean("A &amp; B <b>bold</b>"), "A & B bold")
+
+    def test_clean_strips_word_adjacent_face_markup_tags(self):
+        self.assertEqual(main.clean("H<sub>2</sub>O"), "H2O")
+        self.assertEqual(main.clean("x<sup>y<sup>z</sup></sup>"), "xyz")
+        self.assertEqual(main.clean("CO<sub>2</sub> emissions in 2020"), "CO2 emissions in 2020")
+        self.assertEqual(main.clean("E=mc<sup>2</sup>"), "E=mc2")
+        self.assertEqual(main.clean("Drug-A<sub>1</sub> and Drug-B<sup>2</sup>"), "Drug-A1 and Drug-B2")
+
+    def test_clean_strips_face_markup_with_attributes(self):
+        self.assertEqual(main.clean('<font color="red">Sample Title</font>'), "Sample Title")
+        self.assertEqual(
+            main.clean("<i>Italicized</i> species: <b>Escherichia coli</b>"),
+            "Italicized species: Escherichia coli",
+        )
+
+    def test_clean_preserves_encoded_and_raw_inequalities(self):
+        # 编码链式不等式必须保留 <b> 符号而非作为标签被吃掉 (#14307 review)
+        self.assertEqual(main.clean("If a&lt;b&gt;c, continue."), "If a<b>c, continue.")
+        self.assertEqual(main.clean("When x &lt; y and y &gt; z."), "When x < y and y > z.")
+
+
 if __name__ == "__main__":
     unittest.main()

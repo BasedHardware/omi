@@ -36,7 +36,6 @@ class FakeApiAuth implements AuthService {
 void main() {
   for (final mode in ['recovered', 'transient', 'terminal', 'rejected-again']) {
     contractTest('C3 production request execution preserves 401 refresh/replay: $mode', () async {
-      pendingContract('C3');
       final events = <String>[];
       final auth = FakeApiAuth(
           mode == 'transient'

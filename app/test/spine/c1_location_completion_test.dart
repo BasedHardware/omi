@@ -105,7 +105,6 @@ void main() {
     }
   });
   contractTest('C1 capture finalization completion cannot wake recovery for a later session', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-finalize-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
