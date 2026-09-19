@@ -215,42 +215,63 @@ class DropboxClient:
         except Exception as e:
             return None, f"Error searching: {str(e)}"
 
+    # Patched pagination
+
+    def _parse_folder_entries(self, entries: list) -> list:
+        results = []
+        for entry in entries:
+            results.append({
+                "name": entry.get("name", "Unknown"),
+                "path": entry.get("path_display", ""),
+                "type": entry.get(".tag", "file"),
+                "size": entry.get("size", 0),
+                "modified": entry.get("server_modified", ""),
+            })
+        return results
+
     def list_folder(
         self,
         path: str = "",
         limit: int = 20,
     ) -> Tuple[Optional[list], Optional[str]]:
         """
-        List files in a folder.
-        Returns (files_list, error_message).
+        List files in a folder, following pagination cursor until limit is satisfied.
         """
         try:
+            page_limit = min(limit, 2000)
             response = requests.post(
                 f"{self.API_BASE}/files/list_folder",
                 headers=self._headers(),
                 json={
                     "path": path if path else "",
-                    "limit": limit,
+                    "limit": page_limit,
                     "recursive": False,
                 },
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                entries = data.get("entries", [])
-                results = []
-                for entry in entries:
-                    results.append({
-                        "name": entry.get("name", "Unknown"),
-                        "path": entry.get("path_display", ""),
-                        "type": entry.get(".tag", "file"),
-                        "size": entry.get("size", 0),
-                        "modified": entry.get("server_modified", ""),
-                    })
-                return results, None
-            else:
+            if response.status_code != 200:
                 return None, f"List failed: {response.text}"
 
+            data = response.json()
+            results = self._parse_folder_entries(data.get("entries", []))
+
+            cursor = data.get("cursor")
+            has_more = data.get("has_more", False)
+
+            while has_more and cursor and len(results) < limit:
+                continue_response = requests.post(
+                    f"{self.API_BASE}/files/list_folder/continue",
+                    headers=self._headers(),
+                    json={"cursor": cursor},
+                )
+                if continue_response.status_code != 200:
+                    return None, f"List failed during pagination: {continue_response.text}"
+                continue_data = continue_response.json()
+                results.extend(self._parse_folder_entries(continue_data.get("entries", [])))
+                cursor = continue_data.get("cursor")
+                has_more = continue_data.get("has_more", False)
+
+            return results[:limit], None
         except Exception as e:
             return None, f"Error listing: {str(e)}"
 
