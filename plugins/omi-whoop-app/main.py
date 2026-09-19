@@ -9,6 +9,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
+import html
 from urllib.parse import urlencode
 
 import requests
@@ -150,7 +151,9 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return response.json()
         else:
             log(f"Whoop API error: {response.status_code}")
-            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
+            detail = (response.text or "").strip()
+            error = f"HTTP {response.status_code}: {detail}" if detail else f"HTTP {response.status_code}"
+            return {"error": error, "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
@@ -916,29 +919,36 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        # WHOOP serves body measurements at /user/measurement/body;
+        # /body_measurement has never existed (404 before auth).
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
+
+        # WHOOP returns 404 when the user has not yet recorded body measurements.
+        # Map 404 to the empty state so users get a friendly message instead of a failure.
+        if isinstance(result, dict) and (result.get("status_code") == 404 or str(result.get("error", "")).startswith("HTTP 404")):
+            return ChatToolResponse(result="No body measurements available.")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
 
-        height_m = result.get("height_meter")
-        weight_kg = result.get("weight_kilogram")
-        max_hr = result.get("max_heart_rate")
+        height_m = result.get("height_meter") if isinstance(result, dict) else None
+        weight_kg = result.get("weight_kilogram") if isinstance(result, dict) else None
+        max_hr = result.get("max_heart_rate") if isinstance(result, dict) else None
 
         result_parts = ["**Body Measurements**", ""]
 
-        if height_m:
+        if isinstance(height_m, (int, float)):
             height_cm = height_m * 100
             height_ft = height_m * 3.28084
             feet = int(height_ft)
             inches = (height_ft - feet) * 12
             result_parts.append(f"**Height:** {height_cm:.0f} cm ({feet}'{inches:.0f}\")")
 
-        if weight_kg:
+        if isinstance(weight_kg, (int, float)):
             weight_lb = weight_kg * 2.20462
             result_parts.append(f"**Weight:** {weight_kg:.1f} kg ({weight_lb:.1f} lb)")
 
-        if max_hr:
+        if isinstance(max_hr, (int, float)):
             result_parts.append(f"**Max Heart Rate:** {max_hr:.0f} bpm")
 
         if len(result_parts) == 2:
@@ -1130,7 +1140,7 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>
