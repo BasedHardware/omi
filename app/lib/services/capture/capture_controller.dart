@@ -242,10 +242,6 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
-    // Restore a persisted device mute so it survives an app kill/restart. When
-    // the device reconnects, streamDeviceRecording() reads _isPaused as
-    // `wasPaused` and re-applies the mute instead of silently resuming.
-    _isPaused = _preferences.deviceMuted;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
     ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
@@ -309,11 +305,14 @@ class CaptureController extends ChangeNotifier
 
   // Restarts mic only — preserves existing socket and conversation segments.
   Future<void> _resumeMicRecording() async {
+    final revision = _preferences.capturePolicy.revision;
+    if (!_admitsCapture(revision)) return;
     updateRecordingState(RecordingState.initialising);
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await _phoneMic.start(
       onByteReceived: (bytes) {
+        if (!_admitsCapture(revision)) return;
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
           _wal.getSyncs().phone.onFrameCaptured(frame);
@@ -324,6 +323,7 @@ class CaptureController extends ChangeNotifier
         }
       },
       onRecording: () {
+        if (!_admitsCapture(revision)) return;
         updateRecordingState(RecordingState.record);
       },
       onStop: () {
@@ -431,34 +431,60 @@ class CaptureController extends ChangeNotifier
 
   /// Mute/unmute Transcribe Later capture. The native writer drops packets while
   /// muted and resumes into the same recording; the card timer freezes meanwhile.
-  void toggleOfflineMute() {
-    if (_preferences.batchMuted) {
-      if (_offlineMuteStartedAt != null) {
+  Future<void> toggleOfflineMute() async {
+    if (isPaused) {
+      if (_recordingDevice != null) {
+        await resumeDeviceRecording();
+      } else {
+        await _setCaptureMuted(false);
+      }
+    } else {
+      await pauseDeviceRecording();
+    }
+  }
+
+  /// The shared policy is the admission authority for Dart and native sinks.
+  /// Persistence completion acknowledges the durable intent, not OS teardown.
+  Future<int> _setCaptureMuted(bool muted) async {
+    final pending = _preferences.setCaptureMuted(muted);
+    if (muted) {
+      if (_offlineSessionStartSeconds != 0) _offlineMuteStartedAt ??= _nowSeconds;
+      updateRecordingState(RecordingState.pause);
+    }
+    notifyListeners();
+    try {
+      final committed = await pending;
+      if (committed.revision != _preferences.capturePolicy.revision) return committed.revision;
+      if (!committed.muted && _offlineSessionStartSeconds != 0 && _offlineMuteStartedAt != null) {
         _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
         _offlineMuteStartedAt = null;
       }
-      _preferences.batchMuted = false;
-    } else {
-      _offlineMuteStartedAt = _nowSeconds;
-      _preferences.batchMuted = true;
+      notifyListeners();
+      return committed.revision;
+    } catch (_) {
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
+  }
+
+  bool _admitsCapture(int revision) {
+    final policy = _preferences.capturePolicy;
+    return !policy.muted && policy.revision == revision;
   }
 
   /// Manually finalize the current recording and start a fresh one. The native
   /// writer cuts on the next packet; the timer resets immediately for feedback.
   void startNewOfflineRecording() {
     _preferences.batchCutRequested = true;
-    if (_preferences.batchMuted) _preferences.batchMuted = false;
     _offlineSessionStartSeconds = _nowSeconds;
-    _offlineMuteStartedAt = null;
+    _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
     notifyListeners();
   }
 
   void _onOfflineRecordingFinalized(String _) {
     if (_offlineSessionStartSeconds == 0) return;
     _offlineSessionStartSeconds = _nowSeconds;
-    _offlineMuteStartedAt = _preferences.batchMuted ? _nowSeconds : null;
+    _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
     notifyListeners();
   }
 
@@ -540,8 +566,7 @@ class CaptureController extends ChangeNotifier
 
   RecordingState recordingState = RecordingState.stop;
 
-  bool _isPaused = false;
-  bool get isPaused => _isPaused;
+  bool get isPaused => _preferences.deviceMuted;
   bool get isCallActive => _micInterrupted;
 
   // Flag to star the conversation when it ends
@@ -635,7 +660,6 @@ class CaptureController extends ChangeNotifier
   void _endOfflineSession() {
     _offlineSessionStartSeconds = 0;
     _offlineMuteStartedAt = null;
-    if (_preferences.batchMuted) _preferences.batchMuted = false;
     if (_preferences.batchCutRequested) _preferences.batchCutRequested = false;
   }
 
@@ -687,7 +711,7 @@ class CaptureController extends ChangeNotifier
     if (phoneMicSessionActive) {
       try {
         await stopStreamRecording(reason: 'mode_changed');
-        await streamRecording();
+        await streamRecording(resumeCapture: false);
       } catch (e, st) {
         Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
       }
@@ -1134,7 +1158,7 @@ class CaptureController extends ChangeNotifier
               // Pause/resume recording
               Logger.debug("Double tap: toggling pause/mute");
               _isProcessingButtonEvent = true;
-              if (_isPaused) {
+              if (isPaused) {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
                 resumeDeviceRecording().then((_) {
                   _isProcessingButtonEvent = false;
@@ -1219,11 +1243,14 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
+    final revision = _preferences.capturePolicy.revision;
+    if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
     _startMetricsTracking();
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
+        if (!_admitsCapture(revision)) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
 
@@ -1274,6 +1301,10 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
+    if (!_admitsCapture(revision)) {
+      await subscription?.cancel();
+      return false;
+    }
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
     return subscription != null;
@@ -1414,10 +1445,9 @@ class CaptureController extends ChangeNotifier
         _recordingDevice?.type != DeviceType.limitless &&
         _offlineSessionStartSeconds == 0) {
       _offlineSessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-      _offlineMuteStartedAt = null;
-      if (_preferences.batchMuted) _preferences.batchMuted = false;
+      _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
     }
-    updateRecordingState(RecordingState.deviceRecord);
+    updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
     notifyListeners();
   }
 
@@ -1510,6 +1540,7 @@ class CaptureController extends ChangeNotifier
   }
 
   bool get _shouldEnableNativeBackgroundStreaming =>
+      !isPaused &&
       !_preferences.batchModeEnabled &&
       hasNativeBackgroundStreamRoute &&
       _preferences.backgroundModeEnabled &&
@@ -1773,7 +1804,9 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  streamRecording() async {
+  streamRecording({bool resumeCapture = true}) async {
+    final revision = resumeCapture ? await _setCaptureMuted(false) : _preferences.capturePolicy.revision;
+    if (!_admitsCapture(revision)) return;
     await _setCaptureForegroundRequired(true);
     if (_sessionOwner != null && !_sessionOwner!.foregroundRunning) return;
     _sessionRecordingDevice = null;
@@ -1827,6 +1860,7 @@ class CaptureController extends ChangeNotifier
     try {
       await _phoneMic.start(
         onByteReceived: (bytes) {
+          if (!_admitsCapture(revision)) return;
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
@@ -1840,6 +1874,7 @@ class CaptureController extends ChangeNotifier
           }
         },
         onRecording: () {
+          if (!_admitsCapture(revision)) return;
           updateRecordingState(RecordingState.record);
           _recordingTelemetry.markStarted();
         },
@@ -1875,6 +1910,10 @@ class CaptureController extends ChangeNotifier
   }
 
   stopStreamRecording({String reason = 'user_stopped'}) async {
+    if (reason == 'user_stopped') {
+      final revision = await _setCaptureMuted(true);
+      if (_preferences.capturePolicy.revision != revision) return;
+    }
     await _setCaptureForegroundRequired(false);
     // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
     // close. Native stop() finalizes the current .bin before it resolves; the
@@ -1945,7 +1984,6 @@ class CaptureController extends ChangeNotifier
     final docs = await getApplicationDocumentsDirectory();
     await _preferences.saveString('batchAudioDir', docs.path);
     await _preferences.saveBool('phoneBatchAuto', auto);
-    if (_preferences.batchMuted) _preferences.batchMuted = false;
     if (_preferences.batchCutRequested) _preferences.batchCutRequested = false;
 
     _phoneMicBatchActive = true;
@@ -1953,7 +1991,7 @@ class CaptureController extends ChangeNotifier
     // _initiateDeviceAudioStreaming); _onOfflineRecordingFinalized resets it on
     // each native file rotation.
     _offlineSessionStartSeconds = _nowSeconds;
-    _offlineMuteStartedAt = null;
+    _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
 
     try {
       await (_phoneMicBatchRecorder ?? _phoneMic).startBatch(
@@ -2030,8 +2068,6 @@ class CaptureController extends ChangeNotifier
       _recordingTelemetry.prepare(source: _preferences.batchModeEnabled ? 'pendant_batch' : 'pendant_live');
     }
 
-    bool wasPaused = _isPaused;
-
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
     // when the grant/fix lands and stamps the recording-owned WAL snapshot.
@@ -2052,10 +2088,6 @@ class CaptureController extends ChangeNotifier
       _recordingTelemetry.markStarted();
     } else if (deviceRequested) {
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
-    }
-
-    if (wasPaused) {
-      await pauseDeviceRecording();
     }
   }
 
@@ -2112,7 +2144,7 @@ class CaptureController extends ChangeNotifier
   }
 
   bool get _shouldReconnectTranscriptionSocket {
-    final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
+    final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !isPaused;
     final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
@@ -2198,7 +2230,7 @@ class CaptureController extends ChangeNotifier
   Future<void> _reconnectActiveCapture() async {
     final token = _sessionOwner?.token;
     final device = _recordingDevice;
-    if (device != null && recordingState == RecordingState.deviceRecord && !_isPaused) {
+    if (device != null && recordingState == RecordingState.deviceRecord && !isPaused) {
       final codec = await _getAudioCodec(device.id);
       if (!_captureSessionIsCurrent(token)) return;
       if (!_shouldReconnectTranscriptionSocket || _recordingDevice?.id != device.id) return;
@@ -2824,18 +2856,16 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> pauseDeviceRecording() async {
-    if (_recordingDevice == null) return;
-
-    // Write mute state first — before BLE cancel which may fire other events
+    // Retire admission before any asynchronous listener/widget teardown. Native
+    // sinks read the same persisted policy even while Flutter is suspended.
+    final revision = await _setCaptureMuted(true);
+    if (_preferences.capturePolicy.revision != revision) return;
     await BatteryWidgetService().updateMuteState(true);
-    // Pause the BLE stream but keep the device connection
+    if (_preferences.capturePolicy.revision != revision) return;
     await _bleBytesStream?.cancel();
+    if (_preferences.capturePolicy.revision != revision) return;
     await _preferences.saveBool('nativeBleForegroundReady', false);
     await _preferences.saveBool('nativeBleStreamingEnabled', false);
-    _isPaused = true;
-    // Persist so the mute survives an app kill/restart, not just a reconnect.
-    _preferences.deviceMuted = true;
-    updateRecordingState(RecordingState.pause);
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     notifyListeners();
@@ -2843,14 +2873,12 @@ class CaptureController extends ChangeNotifier
 
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
-    _isPaused = false;
-    // Clear the persisted mute so we don't re-mute on the next restart.
-    _preferences.deviceMuted = false;
-    // Update widget immediately — don't wait for streaming setup
-    BatteryWidgetService().updateMuteState(false);
-    // Resume streaming from the device
+    final revision = await _setCaptureMuted(false);
+    if (!_admitsCapture(revision)) return;
+    await BatteryWidgetService().updateMuteState(false);
+    if (!_admitsCapture(revision)) return;
     await _initiateDeviceAudioStreaming();
-
+    if (!_admitsCapture(revision)) return;
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
