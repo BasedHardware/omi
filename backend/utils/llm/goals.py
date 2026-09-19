@@ -256,7 +256,7 @@ def extract_and_update_goal_progress(
     Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
     """
     try:
-        goals = goals_db.get_user_goals(uid)
+        goals = goals_db.get_user_goals(uid, limit=100)
         if not goals or not text or len(text) < 5:
             return None
 
