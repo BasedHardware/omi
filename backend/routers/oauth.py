@@ -219,8 +219,9 @@ async def oauth_token(
                     db_executor, safe_request_target, app.external_integration.setup_completed_url
                 )
                 client = get_auth_client()
+                separator = '&' if '?' in pinned_url else '?'
                 res = await client.get(
-                    pinned_url + f'?uid={uid}',
+                    f'{pinned_url}{separator}uid={uid}',
                     headers=pin_kwargs['headers'],
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
