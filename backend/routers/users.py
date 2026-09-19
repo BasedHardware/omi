@@ -123,8 +123,10 @@ from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from utils.other.daily_summary_budget import select_conversations_within_budget
 from utils.other.notifications import (
     DAILY_SUMMARY_DECLINE_LOCKED,
+    DAILY_SUMMARY_MAX_HISTORY_CHARS,
     generate_daily_summary_on_demand,
     local_day_bounds_utc,
 )
@@ -1677,6 +1679,7 @@ def test_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS).conversations
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(
@@ -2002,6 +2005,7 @@ def regenerate_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS).conversations
 
     summary_data = generate_comprehensive_daily_summary(
         uid,
