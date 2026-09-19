@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from html import escape
 import os
 from dotenv import load_dotenv
 from typing import List, Dict, Any
+from urllib.parse import quote
 
 # Fix for Railway/production: Allow OAuth over HTTP (Railway handles HTTPS at proxy)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -24,12 +26,17 @@ app = FastAPI(
 )
 
 
+def _safe_query_value(value: str) -> str:
+    """Encode a user-controlled query value for use in an HTML attribute."""
+    return escape(quote(value or "", safe=""), quote=True)
+
+
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint with setup instructions."""
     # If uid provided, show personalized setup page
     if uid:
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={_safe_query_value(uid)}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -523,7 +530,7 @@ async def auth_callback(
         )
     
     except Exception as e:
-        error_uid = state if state else "unknown"
+        error_uid = _safe_query_value(state or "unknown")
         return HTMLResponse(
             content=f"""
             <html>
