@@ -10,7 +10,11 @@ and background processing.
   request authentication and response shaping.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
-  named executor lanes.
+  named executor lanes. Custom-STT conversations skip managed-STT credits but
+  still consult `should_skip_omi_paid_postprocessing` before Omi-paid
+  structuring, summary, and memory work (#7690). That gate sits after the
+  unpaid desktop on-device / `store_projection` path (#14513) so it cannot
+  strip a local summary.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -32,11 +36,10 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
-- `duplicate_capture.py` is the pure cross-device duplicate policy (#3244): at
-  finalization, a conversation whose wall window and word bigrams are already
-  carried by another capture client's conversation takes the discard exit and
-  records its primary in `external_data.duplicate_capture_of`. Callers load the
-  candidate rows and persist the verdict; the module holds no I/O.
+- `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
+  After durable finalization, it links the shorter completed capture using
+  `external_data.duplicate_capture_of` plus structured overlap evidence. The
+  database transaction rechecks both captures; discard and content stay independent.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.

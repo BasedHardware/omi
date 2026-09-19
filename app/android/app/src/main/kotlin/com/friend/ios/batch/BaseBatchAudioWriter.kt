@@ -290,4 +290,8 @@ abstract class BaseBatchAudioWriter internal constructor(
 
     protected fun boolPref(key: String, defaultValue: Boolean): Boolean =
         preferenceValues.boolean(key, defaultValue)
+
+    /** Current native admission policy, resolved synchronously at a sink boundary. */
+    protected fun captureAdmissionPolicy(): CaptureAdmissionPolicy =
+        CaptureAdmissionPolicy.load(preferenceValues)
 }

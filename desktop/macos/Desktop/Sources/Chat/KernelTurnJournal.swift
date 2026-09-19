@@ -391,6 +391,7 @@ extension KernelJournalTurn {
         )
       }
     }
+    message.failureCode = (metadata["failureCode"] as? String).flatMap(AgentRuntimeFailureCode.init(rawValue:))
     return message
   }
 
@@ -415,6 +416,7 @@ extension ChatMessage {
     answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
+    if let failureCode { metadata["failureCode"] = failureCode.rawValue }
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
     if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
     if let providers = self.metadata?.providerTargets, !providers.isEmpty {

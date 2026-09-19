@@ -166,6 +166,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
+                  tooltip: context.l10n.filterByDate,
                   icon: FaIcon(
                     hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,

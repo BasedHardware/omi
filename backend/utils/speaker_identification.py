@@ -13,8 +13,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
-from utils.speaker_sample import verify_and_transcribe_sample
-from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.speaker_sample import verify_and_transcribe_sample, delete_sample_from_storage
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
@@ -677,16 +676,10 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
-        # Run lazy migration for samples before checking count
-        # (migration may drop invalid samples, freeing up space)
+        # Snapshot the person before slow audio work. Publishing compares this version
+        # so a correction, deletion or replacement cannot resurrect stale teaching.
         person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-        if person:
-            person = await maybe_migrate_person_samples(uid, person)
-
-        # Check sample count after migration
-        sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
-        if sample_count >= 1:
-            logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
+        if not person:
             return
 
         # Fetch conversation to get started_at and segment details
@@ -734,7 +727,7 @@ async def extract_speaker_samples(
         chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
-        max_samples_to_add = 1 - sample_count
+        max_samples_to_add = 1
 
         # Build ordered list with index lookup for expansion
         ordered_segments = [s for s in conv_segments if s.get('id')]
@@ -745,7 +738,7 @@ async def extract_speaker_samples(
                 break
 
             seg = segment_map.get(seg_id)
-            if not seg:
+            if not seg or seg.get('person_id') != person_id or seg.get('is_user'):
                 logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
                 continue
 
@@ -764,7 +757,11 @@ async def extract_speaker_samples(
                     i = seg_idx - 1
                     while i >= 0:
                         prev_seg = ordered_segments[i]
-                        if prev_seg.get('speaker_id') != speaker_id:
+                        if (
+                            prev_seg.get('speaker_id') != speaker_id
+                            or prev_seg.get('person_id') != person_id
+                            or prev_seg.get('is_user')
+                        ):
                             break
                         prev_start = prev_seg.get('start')
                         if prev_start is not None:
@@ -844,8 +841,18 @@ async def extract_speaker_samples(
                 )
                 continue
 
-            # Get expected text from segment for comparison
-            expected_text = seg.get('text', '')
+            # Verify the same window we actually extracted, including adjacent
+            # segments used to reach the duration floor. Comparing expanded audio
+            # to only the last segment rejects valid speech as text_mismatch.
+            contributing = [
+                s for s in ordered_segments if s.get('start', 0) < sample_end and s.get('end', 0) > sample_start
+            ]
+            if any(
+                s.get('person_id') != person_id or s.get('is_user') or s.get('speaker_id') != speaker_id
+                for s in contributing
+            ):
+                continue
+            expected_text = ' '.join(s.get('text', '') for s in contributing)
 
             # Convert PCM to WAV for Deepgram
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
@@ -854,41 +861,39 @@ async def extract_speaker_samples(
             transcript, is_valid, reason = await verify_and_transcribe_sample(
                 wav_bytes, sample_rate, expected_text, language=sample_language
             )
-            if not is_valid:
+            if not is_valid or transcript is None:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment
 
-            # Upload and store
+            # Complete embedding work before replacing anything. A failed provider
+            # call leaves the prior profile intact and allows a later retry.
+            embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+            embedding_list = embedding.flatten().tolist()
+            if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
+                continue
             path = await run_blocking(
                 storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
-
-            success = await run_blocking(
-                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+            old_samples = await run_blocking(
+                db_executor,
+                users_db.replace_person_speech_profile,
+                uid,
+                person_id,
+                person.get('updated_at'),
+                path,
+                transcript,
+                embedding_list,
+                conversation_id,
+                [s['id'] for s in contributing],
             )
-            if success:
-                samples_added += 1
-                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
-                logger.info(
-                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text} {uid} {conversation_id}"
-                )
-
-                # Extract and store speaker embedding (reuse wav_bytes from verification)
-                try:
-                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-                    # Convert numpy array to list for Firestore storage
-                    embedding_list = embedding.flatten().tolist()
-                    await run_blocking(
-                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
-                    )
-                    logger.info(
-                        f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
-                    )
-                except Exception as emb_err:
-                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
-            else:
-                logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
-                break  # Likely hit limit
+            if old_samples is None:
+                await run_blocking(storage_executor, delete_sample_from_storage, path)
+                return
+            samples_added += 1
+            for old_path in old_samples:
+                if old_path != path:
+                    await run_blocking(storage_executor, delete_sample_from_storage, old_path)
+            logger.info('Speaker profile stored sample_count=1 embedding_dim=%d', len(embedding_list))
 
     except Exception as e:
         logger.error(f"Error extracting speaker samples: {e} {uid} {conversation_id}")

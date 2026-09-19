@@ -1021,6 +1021,75 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
+def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile):
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    person = snapshot.to_dict()
+    if person.get('updated_at') != expected_updated_at:
+        return None  # Deleted, corrected or replaced while audio work was in flight.
+    old_samples = person.get('speech_samples', [])
+    transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})
+    return old_samples
+
+
+def replace_person_speech_profile(
+    uid: str,
+    person_id: str,
+    expected_updated_at,
+    sample_path: str,
+    transcript: str,
+    embedding: list,
+    conversation_id: str,
+    segment_ids: list[str],
+) -> Optional[list[str]]:
+    """Publish one verified sample, its embedding and teaching provenance atomically.
+
+    None means the result lost its ownership/version fence; [] is a first enrollment.
+    """
+    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    return _replace_speech_profile_transaction(
+        db.transaction(),
+        ref,
+        expected_updated_at,
+        {
+            'speech_samples': [sample_path],
+            'speech_sample_transcripts': [transcript],
+            'speech_samples_version': 3,
+            'speaker_embedding': embedding,
+            'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
+        },
+    )
+
+
+@transactional
+def _invalidate_speech_profile_transaction(transaction, person_ref, conversation_id, segment_ids):
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return []
+    person = snapshot.to_dict()
+    source = person.get('speech_sample_source') or {}
+    # Always fence in-flight teaching, even when it has not published provenance yet.
+    update = {'updated_at': datetime.now(timezone.utc)}
+    removed = []
+    if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
+        removed = person.get('speech_samples', [])
+        update.update(
+            speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
+        )
+    transaction.update(person_ref, update)
+    return removed
+
+
+def invalidate_person_speech_profile(
+    uid: str, person_id: str, conversation_id: str, segment_ids: list[str]
+) -> list[str]:
+    """A corrected teaching label must stop identifying that voice as the old person."""
+    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    return _invalidate_speech_profile_transaction(db.transaction(), ref, conversation_id, segment_ids)
+
+
+@transactional
 def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
     """Atomically remove a sample and its aligned transcript."""
     snapshot = person_ref.get(transaction=transaction)
@@ -1045,6 +1114,10 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
         {
             'speech_samples': samples,
             'speech_sample_transcripts': transcripts,
+            # A legacy profile can contain multiple samples. The remaining sample
+            # must be re-embedded; retaining the deleted voice's vector is unsafe.
+            'speaker_embedding': None,
+            'speech_sample_source': None,
             'updated_at': datetime.now(timezone.utc),
         },
     )
@@ -1090,31 +1163,15 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
     return user_doc.to_dict().get('speaker_embedding')
 
 
-def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
-    """
-    Store speaker embedding for a person.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        embedding: List of floats representing the speaker embedding
-
-    Returns:
-        True if stored successfully, False if person not found
-    """
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-
-    if not person_doc.exists:
-        return False
-
-    person_ref.update(
-        {
-            'speaker_embedding': embedding,
-            'updated_at': datetime.now(timezone.utc),
-        }
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
+    """Recover a vector only while the sample snapshot that produced it is current."""
+    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    return (
+        _replace_speech_profile_transaction(
+            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}
+        )
+        is not None
     )
-    return True
 
 
 def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:

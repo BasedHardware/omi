@@ -27,7 +27,7 @@ def _conversation(language):
     return {
         'started_at': 1700000000.0,
         'transcript_segments': [
-            {'id': 'seg1', 'start': 0.0, 'end': 12.0, 'speaker_id': 0, 'text': 'hello there friend'},
+            {'id': 'seg1', 'start': 0.0, 'end': 12.0, 'speaker_id': 0, 'person_id': 'p1', 'text': 'hello there friend'},
         ],
         'audio_files': [{'chunk_timestamps': [1700000000.0]}],
         'language': language,
@@ -35,7 +35,7 @@ def _conversation(language):
 
 
 def _wire_common_stubs(monkeypatch, conversation, captured):
-    monkeypatch.setattr(speaker_identification_mod.users_db, "get_person", lambda uid, pid: None)
+    monkeypatch.setattr(speaker_identification_mod.users_db, "get_person", lambda uid, pid: {"id": pid})
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person_speech_samples_count", lambda uid, pid: 0)
     monkeypatch.setattr(speaker_identification_mod.conversations_db, "get_conversation", lambda uid, cid: conversation)
     monkeypatch.setattr(
@@ -44,14 +44,13 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
     monkeypatch.setattr(
         speaker_identification_mod, "_trim_pcm_audio", lambda pcm, sr, s, e: b"\x00" * (SAMPLE_RATE * 10 * 2)
     )
-    monkeypatch.setattr(speaker_identification_mod.users_db, "add_person_speech_sample", lambda *a, **k: True)
+    monkeypatch.setattr(speaker_identification_mod.users_db, "replace_person_speech_profile", lambda *a, **k: [])
     monkeypatch.setattr(
         speaker_identification_mod, "upload_person_speech_sample_from_bytes", lambda *a, **k: "people/u1/p1/a.wav"
     )
     monkeypatch.setattr(
-        speaker_identification_mod, "extract_embedding_from_bytes", lambda *a, **k: np.zeros((1, 4), dtype=np.float32)
+        speaker_identification_mod, "extract_embedding_from_bytes", lambda *a, **k: np.ones((1, 4), dtype=np.float32)
     )
-    monkeypatch.setattr(speaker_identification_mod.users_db, "set_person_speaker_embedding", lambda *a, **k: True)
 
     async def fake_verify(wav_bytes, sample_rate, expected_text, language=None):
         captured['language'] = language

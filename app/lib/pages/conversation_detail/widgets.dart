@@ -17,11 +17,11 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
@@ -82,25 +82,6 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
   }
 
   return spans;
-}
-
-/// Renders the structured summary's sections as headed markdown blocks so they go
-/// through the same markdown renderer (and styling) as the overview above them.
-String sectionsToMarkdown(List<Section> sections) {
-  final blocks = <String>[];
-  for (final section in sections) {
-    final heading = section.heading.trim();
-    final body = section.bodyMarkdown.trim();
-    if (heading.isEmpty && body.isEmpty) continue;
-    if (heading.isEmpty) {
-      blocks.add(body);
-    } else if (body.isEmpty) {
-      blocks.add('## $heading');
-    } else {
-      blocks.add('## $heading\n\n$body');
-    }
-  }
-  return blocks.join('\n\n');
 }
 
 class GetSummaryWidgets extends StatelessWidget {
@@ -797,25 +778,25 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 }
 
 class AppResultDetailWidget extends StatefulWidget {
-  final AppResponse appResponse;
+  final ConversationSummarySelection summarySelection;
   final App? app;
   final ServerConversation conversation;
   final String searchQuery;
   final int currentResultIndex;
-  final Function(String newContent)? onSaveSummary;
-  final VoidCallback? onEditStarted;
-  final VoidCallback? onEditCancelled;
+  final void Function(ConversationSummarySelection selection, String newContent)? onSaveSummarySelection;
+  final void Function(ConversationSummarySelection selection)? onEditStarted;
+  final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
   final bool asSliver;
 
   const AppResultDetailWidget({
     super.key,
-    required this.appResponse,
+    required this.summarySelection,
     required this.app,
     required this.conversation,
     this.searchQuery = '',
     this.currentResultIndex = -1,
-    this.onSaveSummary,
+    this.onSaveSummarySelection,
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
@@ -830,6 +811,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   bool _isEditing = false;
   TextEditingController? _controller;
   FocusNode? _focusNode;
+  ConversationSummarySelection? _editingSelection;
+  String? _editingOriginalContent;
 
   @override
   void dispose() {
@@ -839,6 +822,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   }
 
   void _startEditing(String currentContent) {
+    final selection = widget.summarySelection;
+    if (!selection.canEdit(widget.conversation)) return;
     if (widget.canStartEditing != null && !widget.canStartEditing!()) return;
     HapticFeedback.mediumImpact();
     final controller = TextEditingController(text: currentContent);
@@ -847,8 +832,10 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
       _controller = controller;
       _focusNode = focusNode;
       _isEditing = true;
+      _editingSelection = selection;
+      _editingOriginalContent = currentContent;
     });
-    widget.onEditStarted?.call();
+    widget.onEditStarted?.call(selection);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       focusNode.requestFocus();
     });
@@ -857,42 +844,45 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   void _exitEditing({bool cancelled = false}) {
     final controller = _controller;
     final focusNode = _focusNode;
+    final selection = _editingSelection ?? widget.summarySelection;
     setState(() {
       _isEditing = false;
       _controller = null;
       _focusNode = null;
+      _editingSelection = null;
+      _editingOriginalContent = null;
     });
     controller?.dispose();
     focusNode?.dispose();
-    if (cancelled) widget.onEditCancelled?.call();
+    if (cancelled) widget.onEditCancelled?.call(selection);
   }
 
-  void _save(String original) {
+  void _save() {
     final newContent = _controller?.text.trim() ?? '';
+    final selection = _editingSelection ?? widget.summarySelection;
+    final original = _editingOriginalContent ?? selection.content;
     if (newContent.isNotEmpty && newContent != original.trim()) {
-      widget.onSaveSummary?.call(newContent);
+      widget.onSaveSummarySelection?.call(selection, newContent);
     }
     _exitEditing();
   }
 
-  /// Attribution label for the summary source. A first-party summary (notes v2
-  /// structured overview, `appId == null`) is Omi's own "Summary" — the same name
-  /// the bottom pill and desktop use; "Unknown App" is reserved for an app result
-  /// whose catalog lookup failed (SCA-359).
-  String _summarySourceLabel(BuildContext context) {
+  /// Attribution label for the summary source. The selected non-app summary is
+  /// Omi's own "Summary" — the same name the bottom pill and desktop use;
+  /// "Unknown App" is reserved for an app result whose catalog lookup failed
+  /// (SCA-359), including legacy results without an app id.
+  String _summarySourceLabel(BuildContext context, ConversationSummarySelection selection) {
     if (widget.app != null) return widget.app!.name.decodeString;
-    return widget.appResponse.appId == null ? context.l10n.summary : context.l10n.unknownApp;
+    return selection.isApp ? context.l10n.unknownApp : context.l10n.summary;
   }
 
   @override
   Widget build(BuildContext context) {
-    final String content = widget.appResponse.content.trim().decodeString;
-    // Sections belong to Omi's own structured summary; an app summary replaces them.
-    final String sectionsContent =
-        widget.appResponse.appId == null ? sectionsToMarkdown(widget.conversation.structured.sections) : '';
+    final selection = widget.summarySelection;
+    final String content = selection.content.decodeString;
 
     if (widget.asSliver) {
-      return _buildSliver(context, content, sectionsContent);
+      return _buildSliver(context, content, selection);
     }
 
     return Container(
@@ -903,7 +893,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty && sectionsContent.isEmpty
+            child: content.isEmpty
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -928,9 +918,11 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
+                    ? _buildEditor(context)
                     : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                            ? null
+                            : () => _startEditing(content),
                         child: ConversationMarkdownWidget(
                           content: content,
                           searchQuery: widget.searchQuery,
@@ -939,10 +931,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                       ),
           ),
 
-          if (sectionsContent.isNotEmpty && !_isEditing) ConversationMarkdownWidget(content: sectionsContent),
-
           // App info in a more subtle format below the content - only show if content is not empty
-          if ((content.isNotEmpty || sectionsContent.isNotEmpty) && !_isEditing)
+          if (content.isNotEmpty && !_isEditing)
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
@@ -1009,7 +999,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _summarySourceLabel(context),
+                                  _summarySourceLabel(context, selection),
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -1043,7 +1033,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     );
   }
 
-  Widget _buildEditor(BuildContext context, String original) {
+  Widget _buildEditor(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1075,7 +1065,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             ),
             const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: () => _save(original),
+              onPressed: _save,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black,
@@ -1094,15 +1084,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
 class GetAppsWidgets extends StatelessWidget {
   final String searchQuery;
   final int currentResultIndex;
-  final Function(String? appId, String newContent)? onSaveSummary;
-  final void Function(String? appId)? onEditStarted;
-  final void Function(String? appId)? onEditCancelled;
+  final void Function(ConversationSummarySelection selection, String newContent)? onSaveSummarySelection;
+  final void Function(ConversationSummarySelection selection)? onEditStarted;
+  final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
   const GetAppsWidgets({
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
-    this.onSaveSummary,
+    this.onSaveSummarySelection,
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
@@ -1112,8 +1102,8 @@ class GetAppsWidgets extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
-        final summarizedApp = provider.getSummarizedApp();
-        if (summarizedApp == null) {
+        final selection = provider.getSummarySelection();
+        if (selection.kind == ConversationSummaryKind.empty) {
           return SliverToBoxAdapter(child: child!);
         }
 
@@ -1121,16 +1111,15 @@ class GetAppsWidgets extends StatelessWidget {
           slivers: [
             if (!provider.conversation.discarded)
               AppResultDetailWidget(
-                appResponse: summarizedApp,
-                app: provider.findAppById(summarizedApp.appId),
+                summarySelection: selection,
+                app: selection.isApp ? provider.findAppById(selection.appId) : null,
                 conversation: provider.conversation,
                 searchQuery: searchQuery,
                 currentResultIndex: currentResultIndex,
                 canStartEditing: canStartEditing,
-                onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
-                onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                onSaveSummary:
-                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                onEditStarted: onEditStarted == null ? null : (_) => onEditStarted!(selection),
+                onEditCancelled: onEditCancelled == null ? null : (_) => onEditCancelled!(selection),
+                onSaveSummarySelection: onSaveSummarySelection,
                 asSliver: true,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -1246,9 +1235,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                             // or on failure it renders the pin-dot canvas.
                             OmiMapPreview(
                               key: const ValueKey('conversation_location_map'),
-                              pins: [
-                                OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!),
-                              ],
+                              pins: [OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!)],
                               backgroundColor: const Color(0xFF2A2A2A),
                             ),
                             // Gradient blur overlay from bottom
@@ -1298,8 +1285,8 @@ class GetGeolocationWidgets extends StatelessWidget {
 }
 
 extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
-  Widget _buildSliver(BuildContext context, String content, String sectionsContent) {
-    if ((content.isEmpty && sectionsContent.isEmpty) || _isEditing) {
+  Widget _buildSliver(BuildContext context, String content, ConversationSummarySelection selection) {
+    if (content.isEmpty || _isEditing) {
       return SliverMainAxisGroup(
         slivers: [
           SliverToBoxAdapter(
@@ -1329,7 +1316,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                         ),
                       ],
                     )
-                  : _buildEditor(context, content),
+                  : _buildEditor(context),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 20)),
@@ -1346,20 +1333,17 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
               content: content,
               searchQuery: widget.searchQuery,
               currentResultIndex: widget.currentResultIndex,
-              onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+              onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                  ? null
+                  : () => _startEditing(content),
             ),
           ),
-        if (sectionsContent.isNotEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.only(bottom: 20),
-            sliver: ConversationMarkdownSliver(content: sectionsContent),
-          ),
-        SliverToBoxAdapter(child: _buildAppAttribution(context)),
+        SliverToBoxAdapter(child: _buildAppAttribution(context, selection)),
       ],
     );
   }
 
-  Widget _buildAppAttribution(BuildContext context) {
+  Widget _buildAppAttribution(BuildContext context, ConversationSummarySelection selection) {
     return GestureDetector(
       onTap: () async {
         if (widget.app != null) {
@@ -1415,7 +1399,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _summarySourceLabel(context),
+                          _summarySourceLabel(context, selection),
                           maxLines: 1,
                           style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
                         ),

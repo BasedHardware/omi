@@ -145,9 +145,15 @@ class SpeakerMatcher:
             if not audio:
                 return None
             vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')
-            await self.host.persistence.call(
-                user_db.set_person_speaker_embedding, self.host.request.uid, person_id, vector.flatten().tolist()
+            saved = await self.host.persistence.call(
+                user_db.set_person_speaker_embedding,
+                self.host.request.uid,
+                person_id,
+                vector.flatten().tolist(),
+                expected_updated_at=person.get('updated_at'),
             )
+            if not saved:
+                return None
             logger.info('Speaker ID recovered missing person embedding person=%s', person_id)
             return vector
         except Exception as error:
