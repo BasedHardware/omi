@@ -104,7 +104,7 @@ class Event(BaseModel):
     created: bool = False
 
     def as_dict_cleaned_dates(self):
-        event_dict = self.dict()
+        event_dict = self.model_dump()
         event_dict["start"] = event_dict["start"].isoformat()
         return event_dict
 
@@ -340,8 +340,8 @@ class Conversation(BaseModel):
 
 class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     address: Optional[str] = None
     location_type: Optional[str] = None
 
