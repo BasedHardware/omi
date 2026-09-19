@@ -12,6 +12,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import MemoryExtractionError
 from utils import x_connector
+from utils.memory.promotion_flex import PromotionFlexDeferred
 
 
 async def _inline_run_blocking(_executor, func, *args, **kwargs):
@@ -128,8 +129,6 @@ def test_scheduled_flex_extraction_is_strict_and_fenced_before_acknowledgement(m
 
 
 def test_scheduled_x_flex_deferral_remains_pending_without_acknowledgement(monkeypatch):
-    from utils.memory.promotion_flex import PromotionFlexDeferred
-
     post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
     acknowledgements = []
     monkeypatch.setattr(
@@ -147,6 +146,50 @@ def test_scheduled_x_flex_deferral_remains_pending_without_acknowledgement(monke
         x_connector._extract_and_index('uid-1', [post], llm=object())
 
     assert acknowledgements == []
+
+
+@pytest.mark.anyio
+async def test_scheduled_x_job_routes_every_user_through_one_flex_run(monkeypatch):
+    class RegistryDocument:
+        def __init__(self, uid):
+            self.id = uid
+
+    class RegistryCollection:
+        def stream(self):
+            return [RegistryDocument('uid-1'), RegistryDocument('uid-2')]
+
+    class RegistryDatabase:
+        def collection(self, _name):
+            return RegistryCollection()
+
+    router = object()
+    router_construction = []
+    sync_calls = []
+
+    def build_router(*, db_client, started_at):
+        router_construction.append((db_client, started_at))
+        return router
+
+    async def sync_user(uid, *, background_flex):
+        sync_calls.append((uid, background_flex))
+        if uid == 'uid-2':
+            raise PromotionFlexDeferred('capacity')
+        return {'success': True, 'new_posts': 3}
+
+    async def no_sleep(_seconds):
+        return None
+
+    registry_db = RegistryDatabase()
+    monkeypatch.setattr(x_connector, 'db', registry_db)
+    monkeypatch.setattr(x_connector, 'PromotionFlexRunRouter', build_router)
+    monkeypatch.setattr(x_connector, 'sync_x_for_user', sync_user)
+    monkeypatch.setattr(x_connector.asyncio, 'sleep', no_sleep)
+
+    summary = await x_connector.run_x_sync_job(job_started_at=123.0)
+
+    assert router_construction == [(registry_db, 123.0)]
+    assert sync_calls == [('uid-1', router), ('uid-2', router)]
+    assert summary == {'users': 2, 'synced': 1, 'new_posts': 3, 'failed': 0, 'errors': []}
 
 
 def test_provider_5xx_skips_only_the_failed_chunk_and_leaves_it_pending(monkeypatch):
