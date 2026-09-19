@@ -1582,7 +1582,8 @@ class MemoriesProvider extends ChangeNotifier {
               await updateMemoryVisibilityServer(memory.id, visibility.name);
           if (!updatedOnServer) {
             failedCount++;
-            print('Server rejected visibility update for memory ${memory.id}');
+            Logger.debug(
+                'Server rejected visibility update for memory ${memory.id}');
             continue;
           }
           final idx = _memories.indexWhere((m) => m.id == memory.id);
