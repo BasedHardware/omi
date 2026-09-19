@@ -19,10 +19,7 @@ except (ImportError, AttributeError):
 try:
     from .github_tools_auth import require_github_tools_auth
 except (ImportError, AttributeError):
-    try:
-        from github_tools_auth import require_github_tools_auth
-    except (ImportError, AttributeError):
-        require_github_tools_auth = lambda request=None: None
+    from github_tools_auth import require_github_tools_auth
 from fastapi.responses import HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 

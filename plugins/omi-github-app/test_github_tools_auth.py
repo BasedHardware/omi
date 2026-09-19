@@ -195,6 +195,11 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
                     f"Browser route {path} must NOT carry require_github_tools_auth",
                 )
 
+    def test_import_fails_closed_without_noop_lambda_fallback(self):
+        """Assert main.py does not define a no-op lambda fallback for require_github_tools_auth."""
+        main_source = (APP_DIR / "main.py").read_text()
+        self.assertNotIn("require_github_tools_auth = lambda", main_source)
+
 
 if __name__ == "__main__":
     unittest.main()
