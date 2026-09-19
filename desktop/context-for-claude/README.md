@@ -103,6 +103,20 @@ nothing at all.
 
 [`docs/analytics.md`](docs/analytics.md).
 
+## Crash diagnostics
+
+Crashes and handled fail-open paths report to the app's **own Sentry project** — never the Omi
+desktop app's, never PostHog. The payload is a whitelist, not a scrub: frame addresses and image
+UUIDs for symbolication, exception types, build identity, and nothing else — no exception text, no
+thread names, no paths, no device name, no captured locals. The SDK runs its traffic through an
+in-process admission gate, so flipping Airgap Mode on stops every queued, retried, or redirected
+send instantly and deletes cached crash reports; nothing waits for the switch to go off. Reporting
+arms only in the shipping bundle with a project DSN configured, and an unconfigured project means
+reporting that is simply off.
+
+Details, including the release/dist convention and the dSYM plan:
+[`docs/sentry.md`](docs/sentry.md).
+
 ## What Claude gets
 
 Twelve tools. The descriptions are written for Claude, so it reaches for them unprompted. In

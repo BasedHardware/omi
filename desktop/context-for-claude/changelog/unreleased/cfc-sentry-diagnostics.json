@@ -1,0 +1,3 @@
+{
+  "change": "Crash and handled-error diagnostics now report to Context for Claude's own Sentry project, behind the shipping and Airgap gates: Airgap drops cached crash reports instead of holding them, payloads are whitelisted to symbolication's inputs, and nothing is sent without a project DSN configured"
+}
