@@ -67,6 +67,14 @@
 * [`quickstart.mt.md`](quickstart.mt.md) — Gwida għal Bidu Mgħaġġel ta' omi-cli (Maltese Quickstart).
 * [`quickstart.my.md`](quickstart.my.md) — omi-cli ဖြင့် စတင်အသုံးပြုခြင်း (Burmese Quickstart).
 * [`quickstart.ne.md`](quickstart.ne.md) — omi-cli सँग सुरुवात (Nepali Quickstart).
+* [`quickstart.mh.md`](quickstart.mh.md) — Jintok kōn omi-cli (Marshallese Quickstart).
+* [`quickstart.tet.md`](quickstart.tet.md) — Tutuhon Ha'u-nia omi-cli (Tetum Quickstart).
+* [`quickstart.tpi.md`](quickstart.tpi.md) — Namba Wan Stiat wantaim omi-cli (Tok Pisin Quickstart).
+* [`quickstart.ay.md`](quickstart.ay.md) — Nayrïr Jamuqanaka omi-cli ukampi (Aymara Quickstart).
+* [`quickstart.nah.md`](quickstart.nah.md) — Achtopa Ipan omi-cli (Nahuatl Quickstart).
+* [`quickstart.ch.md`](quickstart.ch.md) — Guaha gi Tutuhon omi-cli (Chamorro Quickstart).
+* [`quickstart.seh.md`](quickstart.seh.md) — Matangiriro ne omi-cli (Sena Quickstart).
+* [`quickstart.kg.md`](quickstart.kg.md) — Luyantiku ya omi-cli (Kikongo Quickstart).
 * [`quickstart.no.md`](quickstart.no.md) — Kom i gang med omi-cli (Norwegian Quickstart).
 * [`quickstart.ps.md`](quickstart.ps.md) — د omi-cli سره لومړي ګامونه (Pashto Quickstart).
 * [`quickstart.sa.md`](quickstart.sa.md) — omi-cli संस्कृत-मार्गदर्शिका (Sanskrit Quickstart).
