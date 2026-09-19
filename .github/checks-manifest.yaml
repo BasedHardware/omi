@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: whoop-app-body-measurement-tests
+    command: ["python3", "plugins/omi-whoop-app/test_body_measurements.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13927: get_body_measurements requested non-existent /body_measurement, and missing measurements on new users return 404 which must be gracefully surfaced as empty state rather than a chat tool crash"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]
