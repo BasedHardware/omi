@@ -1,12 +1,14 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import html
+import json
 import os
 import sys
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 import secrets
 import asyncio
+from urllib.parse import quote
 
 # Force unbuffered output for instant logs
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
@@ -33,6 +35,21 @@ oauth_states = {}
 
 # Background task for timeout monitoring
 background_task = None
+
+
+def script_json(value) -> str:
+    """Serialize a value for interpolation inside an inline <script> block.
+
+    ``json.dumps`` alone is not enough: a payload containing ``</script>`` would
+    still terminate the surrounding tag, so the HTML-significant characters are
+    unicode-escaped as well.
+    """
+    return (
+        json.dumps(str(value))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
 
 
 async def monitor_session_timeouts():
@@ -173,7 +190,7 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={quote(uid, safe='')}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -250,6 +267,12 @@ async def root(uid: str = Query(None)):
     team_name = user.get("team_name", "Unknown")
     user_timezone = user.get("timezone", "UTC")
 
+    # Workspace names/timezones come from ClickUp and user storage; escape them
+    # at the HTML boundary, and serialize the uid for the inline script block.
+    safe_team_name = html.escape(str(team_name))
+    safe_timezone = html.escape(str(user_timezone))
+    safe_current_uid = script_json(uid)
+
     list_options = '<option value="">Select a list...</option>'
     for lst in lists:
         selected_attr = 'selected' if lst['id'] == selected_list else ''
@@ -277,7 +300,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>✅ ClickUp Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{safe_team_name}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default list (optional - you can specify list in voice command):
@@ -301,7 +324,7 @@ async def root(uid: str = Query(None)):
                         Set your timezone for accurate due date/time parsing:
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Current: <span class="username">{user_timezone}</span>
+                        Current: <span class="username">{safe_timezone}</span>
                     </p>
 
                     <select id="timezoneSelect" class="repo-select">
@@ -390,12 +413,15 @@ async def root(uid: str = Query(None)):
             </div>
 
             <script>
+                const CURRENT_UID = {safe_current_uid};
+                const ENCODED_UID = encodeURIComponent(CURRENT_UID);
+
                 async function updateList() {{
                     const select = document.getElementById('listSelect');
                     const list = select.value;
 
                     try {{
-                        const response = await fetch('/update-list?uid={uid}&list=' + encodeURIComponent(list), {{
+                        const response = await fetch(`/update-list?uid=${{ENCODED_UID}}&list=` + encodeURIComponent(list), {{
                             method: 'POST'
                         }});
 
@@ -412,7 +438,7 @@ async def root(uid: str = Query(None)):
                 }}
 
                 function refreshLists() {{
-                    fetch('/refresh-lists?uid={uid}', {{
+                    fetch(`/refresh-lists?uid=${{ENCODED_UID}}`, {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -434,7 +460,7 @@ async def root(uid: str = Query(None)):
                     const timezone = select.value;
 
                     try {{
-                        const response = await fetch('/update-timezone?uid={uid}&timezone=' + encodeURIComponent(timezone), {{
+                        const response = await fetch(`/update-timezone?uid=${{ENCODED_UID}}&timezone=` + encodeURIComponent(timezone), {{
                             method: 'POST'
                         }});
 
@@ -453,14 +479,14 @@ async def root(uid: str = Query(None)):
 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch(`/logout?uid=${{ENCODED_UID}}`, {{
                             method: 'POST'
                         }});
 
                         const data = await response.json();
 
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid=' + ENCODED_UID;
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -544,6 +570,10 @@ async def auth_callback(
             status_code=400
         )
 
+    # uid comes from the OAuth state store but still needs encoding/escaping
+    # before it is interpolated into HTML and links.
+    safe_uid = quote(uid, safe="")
+
     try:
         # Exchange code for access token
         token_data = clickup_client.exchange_code_for_token(code)
@@ -566,6 +596,9 @@ async def auth_callback(
             team_name = workspaces[0]["name"]
             lists = clickup_client.get_all_lists(access_token, team_id)
             members = clickup_client.get_workspace_members(access_token, team_id)
+
+        # The workspace name is user-controlled; escape it at the HTML boundary.
+        safe_team_name = html.escape(str(team_name))
 
         # Save user data (default to America/Los_Angeles timezone)
         SimpleUserStorage.save_user(
@@ -600,14 +633,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px; animation: pulse 1.5s infinite;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your ClickUp workspace <strong>{team_name}</strong> is now linked
+                                Your ClickUp workspace <strong>{safe_team_name}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(lists)}</strong> {('list' if len(lists) == 1 else 'lists')} and <strong>{len(members)}</strong> {('member' if len(members) == 1 else 'members')}
                             </p>
                         </div>
 
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={safe_uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
 
@@ -640,7 +673,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication: {type(e).__name__}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={safe_uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -1090,7 +1123,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{html.escape(str(uid), quote=True)}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate ClickUp</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
@@ -1159,7 +1192,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
 
                         const authStatus = document.getElementById('authStatus');
@@ -1178,7 +1211,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening ClickUp authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
 
@@ -1204,7 +1237,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
 
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{encodeURIComponent(sessionId)}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1248,7 +1281,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
 
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
 
