@@ -359,3 +359,4 @@ tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
 # in the unit lane so a dropped --remove-env-vars entry fails before the deploy does.
 tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[dev]
 tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[prod]
+tests/unit/test_verify_backend_release_vector.py::test_legacy_binding_migration_rejects_multi_container_services_without_mutation
