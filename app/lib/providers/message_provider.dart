@@ -424,10 +424,17 @@ class MessageProvider extends ChangeNotifier {
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-    messages = List<ServerMessage>.from(mes);
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setClearingChat(false);
+    try {
+      var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+      messages = List<ServerMessage>.from(mes);
+      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    } catch (e) {
+      Logger.debug('Failed to clear chat: $e');
+      final l10n = globalNavigatorKey.currentContext?.l10n;
+      AppSnackbar.showSnackbarError(l10n?.somethingWentWrong ?? 'Something went wrong! Please try again later.');
+    } finally {
+      setClearingChat(false);
+    }
     notifyListeners();
   }
 
