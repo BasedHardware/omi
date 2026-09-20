@@ -32,18 +32,24 @@ def capture(i, *, silent=False):
 def signature(store):
     return sorted(
         (
-            row['id'],
             row.get('created_at'),
             row['started_at'],
             row['finished_at'],
-            [(row['started_at'].timestamp() + seg['start'], seg['text']) for seg in row['transcript_segments']],
+            [
+                (
+                    row['started_at'].timestamp() + seg['start'],
+                    row['started_at'].timestamp() + seg['end'],
+                    seg['text'],
+                )
+                for seg in row['transcript_segments']
+            ],
         )
         for row in conversations(store)
     )
 
 
 @pytest.mark.parametrize('seed', range(12))
-def test_capture_partition_and_identity_are_permutation_invariant(seed):
+def test_capture_partition_and_content_are_permutation_invariant(seed):
     expected = StrictFirestore()
     actual = StrictFirestore()
     rows = [capture(i, silent=i % 3 != 0) for i in range(45)]
@@ -184,9 +190,10 @@ def test_both_paths_consult_the_policy_function(monkeypatch):
 
 def test_retry_of_absorbed_chunk_cannot_resurrect_deleted_survivor():
     store = StrictFirestore()
+    intake(store, capture(0))
     intake(store, capture(4))
     intake(store, capture(2))
-    store.rows[('users', 'u', 'conversations', 'chunk-002')]['deleted'] = True
+    store.rows[('users', 'u', 'conversations', 'chunk-000')]['deleted'] = True
     with pytest.raises(ValueError, match='lineage was deleted'):
         intake(store, capture(4))
     assert not conversations(store)

@@ -72,7 +72,7 @@ def test_two_jobs_with_stale_empty_lookup_converge():
         jobs = [pool.submit(job, chunk(str(i), 1000 + i * 60)) for i in range(2)]
         results = [job.result(timeout=5) for job in jobs]
     assert len(conversations(store)) == 1
-    assert conversations(store)[0]['id'] == '0'
+    assert conversations(store)[0]['id'] in {'0', '1'}
     assert all(result[0]['id'] in {'0', '1'} for result in results)
     assert len(conversations(store)[0]['transcript_segments']) == 2
 
@@ -92,8 +92,10 @@ def test_reverse_order_retry_and_deleted_target():
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
-    assert earlier['id'] == 'earlier'
-    assert store.rows[('users', 'u', 'conversations', later['id'])]['sync_merged_into'] == earlier['id']
+    assert earlier['id'] == later['id'] == 'later'
+    assert earlier['sync_merged_from'] == []
+    assert ('users', 'u', 'conversations', 'earlier') not in store.rows
+    assert not store.rows[('users', 'u', 'conversations', 'later')].get('deleted')
     assert [s['start'] for s in earlier['transcript_segments']] == [0, 60]
     retried, created, survivors = intake(store, chunk('retry', 1060))
     assert not created and not survivors and len(retried['transcript_segments']) == 2

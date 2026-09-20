@@ -82,6 +82,7 @@ def test_cleanup_follows_bridge_that_wins_during_audio_copy(system):
     ingest(4)
     ingest(8)
     ingest(6)
+    ingest(0)
     fired = False
 
     def copy_then_bridge(*args, **kwargs):
@@ -91,8 +92,8 @@ def test_cleanup_follows_bridge_that_wins_during_audio_copy(system):
             ingest(2)
 
     copy.side_effect = copy_then_bridge
-    assert bridge.finish_sync_bridges('u', 'chunk-004') == 'chunk-002'
-    assert store.rows[('users', 'u', 'conversations', 'chunk-002')]['sync_merged_from'] == ['chunk-004', 'chunk-008']
+    assert bridge.finish_sync_bridges('u', 'chunk-004') == 'chunk-000'
+    assert store.rows[('users', 'u', 'conversations', 'chunk-000')]['sync_merged_from'] == ['chunk-004', 'chunk-008']
 
 
 def test_shared_cleanup_retains_capture_and_propagates_task_failure(monkeypatch):

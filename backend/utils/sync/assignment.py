@@ -149,7 +149,9 @@ def assign_in_transaction(
         if len(matched) == before:
             break
 
-    canonical = target_id or min([incoming['id'], *matched])
+    canonical = target_id or (
+        min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
+    )
     current = matched.get(canonical)
     created = current is None
     records = [decode(raw) for _, raw in sorted(matched.items())]
