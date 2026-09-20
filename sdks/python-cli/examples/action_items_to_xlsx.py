@@ -85,7 +85,8 @@ def convert(source, destination):
 
         created = cell_datetime(item.get("created_at"))
         updated = cell_datetime(item.get("updated_at"))
-        completed_val = bool(item.get("completed", False))
+        completed_raw = item.get("completed", False)
+        completed_val = completed_raw is True or (isinstance(completed_raw, bool) and completed_raw)
 
         row = (
             cell_text(item.get("id")),
