@@ -62,8 +62,7 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        row.get('manual_speaker_assignments')
-        or row.get('sync_live_target')
+        row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
         or row.get('starred')
@@ -158,9 +157,15 @@ def assign_in_transaction(
         if len(matched) == before:
             break
 
-    canonical = target_id or (
-        min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
-    )
+    labeled = [cid for cid, row in matched.items() if row.get('manual_speaker_assignments')]
+    if labeled and not target_id:
+        canonical = min(labeled, key=lambda cid: (matched[cid]['started_at'], cid))
+        for cid in [cid for cid in matched if cid != canonical and matched[cid].get('manual_speaker_assignments')]:
+            del matched[cid]
+    else:
+        canonical = target_id or (
+            min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
+        )
     current = matched.get(canonical)
     created = current is None
     records = [decode(raw) for _, raw in sorted(matched.items())]

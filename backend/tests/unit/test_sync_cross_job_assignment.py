@@ -295,11 +295,17 @@ def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
     } == mapped
 
 
-def test_manually_curated_sync_conversation_is_not_an_automatic_bridge_donor():
+def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_donor():
     store = StrictFirestore()
     saved, _, _ = intake(store, chunk('manual', 1000))
-    saved['manual_speaker_assignments'] = {'generation': 1, 'segments': {}, 'speakers': {}}
+    saved['manual_speaker_assignments'] = {
+        'generation': 1,
+        'speakers': {'0': {'generation': 1, 'person_id': 'new', 'is_user': False}},
+    }
     store.rows[('users', 'u', 'conversations', 'manual')] = saved
     result, created, _ = intake(store, chunk('next', 1060))
-    assert created and result['id'] == 'next'
+    assert not created and result['id'] == 'manual'
+    assert len(result['transcript_segments']) == 2
+    assert all(segment.get('person_id') == 'new' for segment in result['transcript_segments'])
     assert not store.rows[('users', 'u', 'conversations', 'manual')].get('deleted')
+    assert ('users', 'u', 'conversations', 'next') not in store.rows
