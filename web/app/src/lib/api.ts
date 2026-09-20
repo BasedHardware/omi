@@ -2272,14 +2272,18 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 /**
  * Get custom vocabulary words from transcription preferences
  */
-export async function getCustomVocabulary(): Promise<string[]> {
+/**
+ * Returns null when the list could not be fetched, so a failure is not read as
+ * an empty vocabulary. The save path replaces the whole list.
+ */
+export async function getCustomVocabulary(): Promise<string[] | null> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
       '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
-    return [];
+    return null;
   }
 }
 
