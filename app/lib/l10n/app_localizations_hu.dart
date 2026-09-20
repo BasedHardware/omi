@@ -10150,4 +10150,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Jelöld meg ennek a beszélőnek a későbbi beszédét is';
+
+  @override
+  String get updateSummaryWithNewNames => 'Összefoglaló frissítése az új nevekkel';
 }

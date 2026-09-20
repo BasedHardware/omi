@@ -10108,4 +10108,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Merk også senere tale fra denne taleren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Oppdater sammendraget med de nye navnene';
 }

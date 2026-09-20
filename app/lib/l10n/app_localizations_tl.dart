@@ -10200,4 +10200,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'I-tag din ang susunod na pananalita ng speaker na ito';
+
+  @override
+  String get updateSummaryWithNewNames => 'I-update ang buod gamit ang mga bagong pangalan';
 }

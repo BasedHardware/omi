@@ -10179,4 +10179,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ενημέρωση περίληψης με τα νέα ονόματα';
 }

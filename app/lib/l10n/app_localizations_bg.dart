@@ -10146,4 +10146,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Маркирай и по-късната реч на този говорител';
+
+  @override
+  String get updateSummaryWithNewNames => 'Актуализирай резюмето с новите имена';
 }

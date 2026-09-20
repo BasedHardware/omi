@@ -9939,4 +9939,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'この話者の以降の発話もタグ付けする';
+
+  @override
+  String get updateSummaryWithNewNames => '新しい名前で要約を更新';
 }

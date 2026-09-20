@@ -10118,4 +10118,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'या वक्त्याचे नंतरचे बोलणेही टॅग करा';
+
+  @override
+  String get updateSummaryWithNewNames => 'नवीन नावांसह सारांश अद्यतनित करा';
 }

@@ -10166,4 +10166,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Etiqueta també la parla posterior d\'aquest parlant';
+
+  @override
+  String get updateSummaryWithNewNames => 'Actualitza el resum amb els noms nous';
 }

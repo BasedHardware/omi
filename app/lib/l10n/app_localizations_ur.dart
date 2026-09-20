@@ -10121,4 +10121,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں';
+
+  @override
+  String get updateSummaryWithNewNames => 'نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں';
 }

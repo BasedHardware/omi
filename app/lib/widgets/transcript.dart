@@ -8,12 +8,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:provider/provider.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
@@ -808,6 +811,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
@@ -851,7 +855,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 final segment = widget.segments[segmentIndex];
                 final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
                 Widget child = customSegment == null
-                    ? _buildSegmentItem(segmentIndex)
+                    ? _buildSegmentItem(segmentIndex, people)
                     : Container(key: _segmentKeys[segment.id], child: customSegment);
                 if (widget.separator && segmentIndex > 0) {
                   child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
@@ -921,9 +925,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return null;
   }
 
-  Widget _buildSegmentItem(int segmentIdx) {
+  Widget _buildSegmentItem(int segmentIdx, List<Person> people) {
     final data = widget.segments[segmentIdx];
-    final Person? person = currentSpeakerPerson(context, data.personId);
+    final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(

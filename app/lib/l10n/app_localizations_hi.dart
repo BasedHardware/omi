@@ -10088,4 +10088,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'इस वक्ता की बाद की बात भी टैग करें';
+
+  @override
+  String get updateSummaryWithNewNames => 'नए नामों के साथ सारांश अपडेट करें';
 }

@@ -18686,6 +18686,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Also tag later speech from this speaker'**
   String get tagSpeakerIncludingLaterSpeech;
+
+  /// No description provided for @updateSummaryWithNewNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Update summary with new names'**
+  String get updateSummaryWithNewNames;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

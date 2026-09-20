@@ -10110,4 +10110,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'گفتار بعدی این گوینده را هم برچسب بزن';
+
+  @override
+  String get updateSummaryWithNewNames => 'به‌روزرسانی خلاصه با نام‌های جدید';
 }

@@ -10192,4 +10192,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Spätere Sprache dieses Sprechers ebenfalls markieren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Zusammenfassung mit neuen Namen aktualisieren';
 }

@@ -11924,5 +11924,6 @@
             }
         }
     },
-    "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker"
+    "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker",
+    "updateSummaryWithNewNames": "Update summary with new names"
 }

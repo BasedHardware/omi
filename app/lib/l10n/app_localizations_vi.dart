@@ -10104,4 +10104,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Gắn thẻ cả lời nói sau này của người nói này';
+
+  @override
+  String get updateSummaryWithNewNames => 'Cập nhật tóm tắt với tên mới';
 }

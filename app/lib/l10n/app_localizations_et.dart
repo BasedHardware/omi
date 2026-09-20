@@ -10103,4 +10103,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Märgi ka selle kõneleja hilisem kõne';
+
+  @override
+  String get updateSummaryWithNewNames => 'Uuenda kokkuvõtet uute nimedega';
 }

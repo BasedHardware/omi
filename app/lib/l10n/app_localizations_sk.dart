@@ -10101,4 +10101,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Označiť aj neskoršiu reč tohto hovoriaceho';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aktualizovať súhrn s novými menami';
 }

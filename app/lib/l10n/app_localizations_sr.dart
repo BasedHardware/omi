@@ -10124,4 +10124,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Означи и каснији говор овог говорника';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ажурирај резиме са новим именима';
 }

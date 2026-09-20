@@ -10163,4 +10163,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Означи го и подоцнежниот говор на овој говорник';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ажурирај го резимето со новите имиња';
 }

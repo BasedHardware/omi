@@ -10144,4 +10144,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Označi i kasniji govor ovog govornika';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ažuriraj sažetak s novim imenima';
 }

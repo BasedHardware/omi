@@ -10133,4 +10133,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Etiquetar también el habla posterior de este hablante';
+
+  @override
+  String get updateSummaryWithNewNames => 'Actualizar el resumen con los nombres nuevos';
 }

@@ -10156,4 +10156,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Etichetează și vorbirea ulterioară a acestui vorbitor';
+
+  @override
+  String get updateSummaryWithNewNames => 'Actualizează rezumatul cu numele noi';
 }

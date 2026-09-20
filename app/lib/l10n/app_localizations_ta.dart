@@ -10180,4 +10180,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு';
+
+  @override
+  String get updateSummaryWithNewNames => 'புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி';
 }

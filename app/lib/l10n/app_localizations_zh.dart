@@ -9920,4 +9920,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => '同时标记该说话人之后的发言';
+
+  @override
+  String get updateSummaryWithNewNames => '用新名字更新摘要';
 }

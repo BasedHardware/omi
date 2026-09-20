@@ -9942,4 +9942,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => '이 화자의 이후 발화도 태그하기';
+
+  @override
+  String get updateSummaryWithNewNames => '새 이름으로 요약 업데이트';
 }

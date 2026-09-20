@@ -10141,4 +10141,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'ಈ ಮಾತುಗಾರನ ನಂತರದ ಮಾತನ್ನು ಕೂಡ ಟ್ಯಾಗ್ ಮಾಡಿ';
+
+  @override
+  String get updateSummaryWithNewNames => 'ಹೊಸ ಹೆಸರುಗಳೊಂದಿಗೆ ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸಿ';
 }

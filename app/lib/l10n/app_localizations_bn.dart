@@ -10115,4 +10115,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'এই বক্তার পরবর্তী কথাও ট্যাগ করুন';
+
+  @override
+  String get updateSummaryWithNewNames => 'নতুন নাম দিয়ে সারাংশ আপডেট করুন';
 }

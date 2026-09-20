@@ -10196,4 +10196,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Étiqueter aussi les propos ultérieurs de cet interlocuteur';
+
+  @override
+  String get updateSummaryWithNewNames => 'Mettre à jour le résumé avec les nouveaux noms';
 }

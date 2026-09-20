@@ -10136,4 +10136,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan kemudian daripada penceramah ini';
+
+  @override
+  String get updateSummaryWithNewNames => 'Kemas kini ringkasan dengan nama baharu';
 }

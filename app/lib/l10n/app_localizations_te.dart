@@ -10157,4 +10157,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి';
+
+  @override
+  String get updateSummaryWithNewNames => 'కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి';
 }

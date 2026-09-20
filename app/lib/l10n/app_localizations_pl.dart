@@ -10139,4 +10139,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Oznacz też późniejszą mowę tego mówcy';
+
+  @override
+  String get updateSummaryWithNewNames => 'Zaktualizuj podsumowanie o nowe imiona';
 }

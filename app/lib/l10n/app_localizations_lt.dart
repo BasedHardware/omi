@@ -10129,4 +10129,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Pažymėti ir vėlesnę šio kalbėtojo kalbą';
+
+  @override
+  String get updateSummaryWithNewNames => 'Atnaujinti santrauką su naujais vardais';
 }

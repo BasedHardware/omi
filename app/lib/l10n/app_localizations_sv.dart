@@ -10114,4 +10114,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Märk även senare tal från den här talaren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Uppdatera sammanfattningen med de nya namnen';
 }

@@ -10122,4 +10122,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Bu konuşmacının sonraki konuşmasını da etiketle';
+
+  @override
+  String get updateSummaryWithNewNames => 'Özeti yeni adlarla güncelle';
 }

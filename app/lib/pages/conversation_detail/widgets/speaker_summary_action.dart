@@ -20,7 +20,7 @@ class SpeakerSummaryAction extends StatelessWidget {
                       ? const SizedBox(
                           width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.refresh, color: Colors.white70),
-                  label: Text(context.l10n.reprocessConversation, style: const TextStyle(color: Colors.white)),
+                  label: Text(context.l10n.updateSummaryWithNewNames, style: const TextStyle(color: Colors.white)),
                 )),
       );
 }

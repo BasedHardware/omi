@@ -10,12 +10,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -411,6 +413,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
 
     // Group consecutive photos taken within 30 seconds of each other
     final List<List<ConversationPhoto>> photoGroups = [];
@@ -450,7 +453,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       layoutIdentity: 'photo-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people),
     );
   }
 
@@ -646,9 +649,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider) {
+  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
     final bool isUser = segment.isUser;
-    final name = speakerLabel(context, segment, currentSpeakerPerson(context, segment.personId));
+    final name = speakerLabel(context, segment, personById(people, segment.personId));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(

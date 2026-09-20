@@ -10029,4 +10029,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'תייג גם דיבור מאוחר יותר של הדובר הזה';
+
+  @override
+  String get updateSummaryWithNewNames => 'עדכן את הסיכום עם השמות החדשים';
 }

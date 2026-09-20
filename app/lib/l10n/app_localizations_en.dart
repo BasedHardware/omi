@@ -10100,4 +10100,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Also tag later speech from this speaker';
+
+  @override
+  String get updateSummaryWithNewNames => 'Update summary with new names';
 }

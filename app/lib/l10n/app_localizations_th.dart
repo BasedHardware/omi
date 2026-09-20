@@ -10052,4 +10052,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย';
+
+  @override
+  String get updateSummaryWithNewNames => 'อัปเดตสรุปด้วยชื่อใหม่';
 }

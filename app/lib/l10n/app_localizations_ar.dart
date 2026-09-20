@@ -10050,4 +10050,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'وسم الكلام اللاحق من هذا المتحدث أيضًا';
+
+  @override
+  String get updateSummaryWithNewNames => 'تحديث الملخص بالأسماء الجديدة';
 }

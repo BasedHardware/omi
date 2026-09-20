@@ -10111,4 +10111,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Merkitse myös tämän puhujan myöhempi puhe';
+
+  @override
+  String get updateSummaryWithNewNames => 'Päivitä yhteenveto uusilla nimillä';
 }

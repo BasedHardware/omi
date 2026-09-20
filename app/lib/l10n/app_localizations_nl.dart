@@ -10137,4 +10137,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Ook latere spraak van deze spreker taggen';
+
+  @override
+  String get updateSummaryWithNewNames => 'Samenvatting bijwerken met nieuwe namen';
 }

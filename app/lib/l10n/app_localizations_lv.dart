@@ -10133,4 +10133,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Atzīmēt arī šī runātāja turpmāko runu';
+
+  @override
+  String get updateSummaryWithNewNames => 'Atjaunināt kopsavilkumu ar jaunajiem vārdiem';
 }

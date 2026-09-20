@@ -1,8 +1,6 @@
-import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -13,11 +11,11 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -35,7 +33,9 @@ import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
@@ -48,8 +48,7 @@ import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/edit_segment_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
-
-import 'package:omi/backend/preferences.dart';
+import 'widgets/speaker_summary_action.dart';
 
 // import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
@@ -1860,8 +1859,13 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                                   ? (await peopleProvider.createPersonProvider(personName))?.id
                                   : personId;
                               if (finalPersonId == null || finalPersonId.isEmpty) return false;
-                              return provider.assignSpeaker(segmentIds, finalPersonId,
+                              final saved = await provider.assignSpeaker(segmentIds, finalPersonId,
                                   speakerId: applyToSpeaker ? speakerId : null, expectedConversationId: targetId);
+                              if (saved) {
+                                PlatformManager.instance.analytics
+                                    .taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                              }
+                              return saved;
                             },
                           );
                         },

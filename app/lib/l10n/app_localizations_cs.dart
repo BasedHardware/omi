@@ -10109,4 +10109,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Označit i pozdější řeč tohoto mluvčího';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aktualizovat souhrn s novými jmény';
 }

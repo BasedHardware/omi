@@ -10119,4 +10119,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan berikutnya dari pembicara ini';
+
+  @override
+  String get updateSummaryWithNewNames => 'Perbarui ringkasan dengan nama baru';
 }
