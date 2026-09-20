@@ -10,6 +10,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -39,6 +40,7 @@ void clearAllUserState(BuildContext context) {
   context.read<GoalsProvider>().clearUserData();
   context.read<PhoneCallProvider>().clearUserData();
   context.read<SyncProvider>().clearUserData();
+  context.read<LocalRecordingsProvider>().clearUserData();
   context.read<DeviceProvider>().clearUserData();
   context.read<TaskIntegrationProvider>().clearUserData();
   context.read<IntegrationProvider>().clearUserData();
