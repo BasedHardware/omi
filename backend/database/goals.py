@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 
@@ -34,6 +35,26 @@ logger = logging.getLogger(__name__)
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
+
+
+def _history_date_str(uid: str, now: datetime) -> str:
+    """The goal-history document id: the user's own calendar day, not UTC's.
+
+    ``goal_history`` is keyed one document per day (``write_transaction.set``/
+    ``.set(merge=True)`` on ``document(<date>)``), so bucketing by UTC date splits
+    or merges a user's day at the wrong boundary for anyone not on UTC — the same
+    class of bug already fixed for the proactive-notification cap via
+    ``resolve_user_timezone``.
+    """
+    from database.notifications import resolve_user_timezone  # local: keep database.goals import-light
+
+    tz = resolve_user_timezone(uid)
+    try:
+        return now.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')
+    except Exception:
+        return now.strftime('%Y-%m-%d')
+
+
 users_collection = 'users'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -853,10 +874,11 @@ def _append_goal_progress_event(
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
         if authority_account_generation is not None and record.metric is not None:
-            history_ref = goal_ref.collection(goal_history_collection).document(now.strftime('%Y-%m-%d'))
+            history_date = _history_date_str(uid, now)
+            history_ref = goal_ref.collection(goal_history_collection).document(history_date)
             write_transaction.set(
                 history_ref,
-                {'date': now.strftime('%Y-%m-%d'), 'value': record.metric.current, 'recorded_at': now},
+                {'date': history_date, 'value': record.metric.current, 'recorded_at': now},
             )
         return record
 
@@ -955,10 +977,9 @@ def save_goal_progress_history(
     firestore_client: Any = None,
 ) -> None:
     now = datetime.now(timezone.utc)
+    history_date = _history_date_str(uid, now)
     history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(now.strftime('%Y-%m-%d')).set(
-        {'date': now.strftime('%Y-%m-%d'), 'value': value, 'recorded_at': now}, merge=True
-    )
+    history_ref.document(history_date).set({'date': history_date, 'value': value, 'recorded_at': now}, merge=True)
 
 
 def get_goal_history(
