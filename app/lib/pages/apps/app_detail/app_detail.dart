@@ -1628,14 +1628,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
         });
       }
     } else {
-      prefs.disableApp(appId);
-      var res = await disableAppServer(appId);
-      print(res);
-      PlatformManager.instance.analytics.appDisabled(appId);
+      final disabled = await context.read<AppProvider>().toggleApp(appId, false, null);
 
       if (!mounted) return;
+      if (!disabled) {
+        setState(() => appLoading = false);
+        return;
+      }
 
-      context.read<AppProvider>().filterApps();
       setState(() {
         app.enabled = false;
         appLoading = false;
