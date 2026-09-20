@@ -1184,7 +1184,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
         ext_int_update['chat_messages_enabled'] = False
         ext_int_update['chat_messages_target'] = 'app'
         ext_int_update['chat_messages_notify'] = False
-    update_dict['external_integration'] = ext_int_update
+    update_dict.update({f'external_integration.{key}': value for key, value in ext_int_update.items()})
 
     update_app_in_db(update_dict)
 
