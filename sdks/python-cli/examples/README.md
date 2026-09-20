@@ -15,7 +15,11 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
+* [`conversations_sqlite.md`](conversations_sqlite.md) — load conversation-list
+  JSON exports into SQLite and query them across pages with plain SQL.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`memories_csv.md`](memories_csv.md) — convert a memory-list JSON export
+  to CSV with full content, tags and categories for spreadsheets.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
