@@ -429,19 +429,21 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   return null;
 }
 
-Future<Map<String, dynamic>> getTrainingDataOptIn() async {
+/// Returns `null` on a failed fetch, so a transient error is not read as a user
+/// who never opted in.
+Future<Map<String, dynamic>?> getTrainingDataOptIn() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return {'opted_in': false, 'status': null};
+  if (response == null) return null;
   Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
     return wire.GeneratedTrainingDataOptInResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
-  return {'opted_in': false, 'status': null};
+  return null;
 }
 
 Future<bool> setTrainingDataOptIn() async {
