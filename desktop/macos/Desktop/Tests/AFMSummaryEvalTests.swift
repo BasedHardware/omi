@@ -94,6 +94,13 @@ final class AFMSummaryEvalTests: XCTestCase {
       )
       latencies[scenario.id] = max(0, Int(started.duration(to: .now) / .milliseconds(1)))
 
+      // Read-only side channel for hand-auditing precision; scoring is unchanged.
+      if let dump = ProcessInfo.processInfo.environment["OMI_AFM_EVAL_DUMP_DIR"] {
+        let directory = URL(fileURLWithPath: dump)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try stored.json.write(to: directory.appendingPathComponent("\(scenario.id).json"))
+      }
+
       let projection = try ClientProcessingContract.decode(stored.json)
       let structure = projection.structure
       let isDeterministic = projection.provenance.runtime == ClientProcessingContract.deterministicRuntime

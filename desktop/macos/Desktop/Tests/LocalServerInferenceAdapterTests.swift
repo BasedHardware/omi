@@ -30,6 +30,43 @@ private actor RecordingLocalInferenceHTTPClient: LocalInferenceHTTPClient {
 }
 
 final class LocalServerInferenceAdapterTests: XCTestCase {
+  // red-proof: restore the literal `contextWindowTokens: 8192` in fromKillSwitchSources
+  func testContextWindowAndTimeoutComeFromTheEnvironment() throws {
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: "local-server-config-\(UUID().uuidString)"))
+    let configured = LocalServerInferenceConfiguration.fromKillSwitchSources(
+      environment: [
+        "OMI_LOCAL_INFERENCE_CONTEXT_TOKENS": "32768",
+        "OMI_LOCAL_INFERENCE_TIMEOUT_SECONDS": "900",
+      ],
+      defaults: defaults
+    )
+    XCTAssertEqual(configured.contextWindowTokens, 32768)
+    XCTAssertEqual(configured.timeout, 900)
+    XCTAssertEqual(
+      LocalServerInferenceAdapter(configuration: configured).capabilities.contextWindowTokens, 32768,
+      "the chunker reads the window from capabilities; a configured value that stops short of it changes nothing"
+    )
+  }
+
+  // red-proof: drop the `parsed >= minimumLocalServerContextTokens` guard
+  func testUnusableContextAndTimeoutValuesFallBackToTheDefaults() throws {
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: "local-server-config-\(UUID().uuidString)"))
+    for (context, timeout) in [("", ""), ("abc", "soon"), ("0", "0"), ("-4096", "-1"), ("512", "nan")] {
+      let configured = LocalServerInferenceConfiguration.fromKillSwitchSources(
+        environment: [
+          "OMI_LOCAL_INFERENCE_CONTEXT_TOKENS": context,
+          "OMI_LOCAL_INFERENCE_TIMEOUT_SECONDS": timeout,
+        ],
+        defaults: defaults
+      )
+      XCTAssertEqual(
+        configured.contextWindowTokens, LocalInferenceKillSwitches.defaultLocalServerContextTokens,
+        "context=\(context)")
+      XCTAssertEqual(
+        configured.timeout, LocalInferenceKillSwitches.defaultLocalServerTimeoutSeconds, "timeout=\(timeout)")
+    }
+  }
+
   // red-proof: return `request` instead of `nil` from the delegate
   func testRedirectPolicyRefusesEveryRedirect() throws {
     let policy = LocalInferenceRedirectPolicy()
@@ -84,6 +121,48 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
     }
     XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1"))))
     XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "https://localhost:8443/v1"))))
+  }
+
+  // red-proof: build the body with `"schema": schemaObject` from JSONSerialization again
+  func testProductionSchemaReachesTheWireInItsAuthoredPropertyOrder() async throws {
+    let http = RecordingLocalInferenceHTTPClient()
+    let url = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1/chat/completions"))
+    let payload = #"{"choices":[{"message":{"content":"{\"title\":\"t\"}"}}]}"#
+    await http.setResult(
+      .success(
+        (
+          Data(payload.utf8),
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        )))
+    let adapter = LocalServerInferenceAdapter(
+      configuration: LocalServerInferenceConfiguration(
+        baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1")),
+        model: "local",
+        contextWindowTokens: 8192,
+        timeout: 5
+      ),
+      httpClient: http
+    )
+    // A prompt that quotes a schema-looking token must not be what gets replaced.
+    let _: ProbeSummary = try await adapter.generateStructured(
+      prompt: #"say "omi-schema-" and {"schema": "x"}"#,
+      schema: LocalSummaryDraft.jsonSchema
+    )
+
+    let recorded = await http.recordedBodies()
+    let body = try XCTUnwrap(recorded.first)
+    let text = try XCTUnwrap(String(data: body, encoding: .utf8))
+    // Generation order is property order under a llama.cpp grammar, so the
+    // model must be asked for the title and overview before the sections.
+    let order = try ["\"title\"", "\"overview\"", "\"sections\"", "\"action_items\""].map { key in
+      try XCTUnwrap(text.range(of: "\(key): {"), "\(key) property missing from the wire schema").lowerBound
+    }
+    XCTAssertEqual(order, order.sorted(), "schema properties were reordered on the way to the server")
+
+    let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(parsed["max_tokens"] as? Int, 4096)
+    let messages = try XCTUnwrap(parsed["messages"] as? [[String: Any]])
+    XCTAssertEqual(messages.first?["content"] as? String, #"say "omi-schema-" and {"schema": "x"}"#)
   }
 
   func testRejectsNonLoopbackURLWithoutSendingHTTP() async throws {
