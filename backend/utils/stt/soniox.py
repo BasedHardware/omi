@@ -18,6 +18,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,15 @@ SONIOX_KEEPALIVE_SECONDS: Final = 10.0
 # all surfaced as one free-text ERROR signature, indistinguishable in metrics
 # and in the terminal-failure reason vocabulary.
 SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
-SONIOX_DEATH_ACCOUNT_STATE: Final = 'soniox_account_state'
 SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
 SONIOX_DEATH_INVALID_HINT: Final = 'soniox_invalid_hint'
+_SONIOX_BUDGET_ERROR_TYPES: Final = frozenset(
+    {
+        'organization_balance_exhausted',
+        'organization_monthly_budget_exhausted',
+        'project_monthly_budget_exhausted',
+    }
+)
 
 
 def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = None) -> str:
@@ -50,12 +57,17 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     metric cardinality per message.
     """
     error = str(error_type or '').strip().lower()
-    if error == 'organization_balance_exhausted':
-        return SONIOX_DEATH_ACCOUNT_STATE
+    if error in _SONIOX_BUDGET_ERROR_TYPES:
+        return PROVIDER_BUDGET_EXHAUSTED
     try:
         code = int(error_code)
     except (TypeError, ValueError):
         return 'connection_lost'
+    if code == 402:
+        # HTTP 402 is payment/quota regardless of error_type wording. Monthly
+        # budget used to fall through here as connection_lost (WARNING), so a
+        # 27.5h organization_monthly_budget_exhausted outage never paged.
+        return PROVIDER_BUDGET_EXHAUSTED
     if code == 400:
         message = str(error_message or '').strip().lower()
         if 'invalid language hint' in message:
@@ -98,7 +110,7 @@ class SafeSonioxSocket(STTSocket):
         self._dead = False
         self._closed = False
         self._death_reason: Optional[str] = None
-        # Typed, bounded death reason (e.g. SONIOX_DEATH_ACCOUNT_STATE) for the
+        # Typed, bounded death reason (e.g. PROVIDER_BUDGET_EXHAUSTED) for the
         # terminal-failure vocabulary; None until the socket dies.
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
@@ -221,12 +233,15 @@ class SafeSonioxSocket(STTSocket):
                 if msg.get('error_code'):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
                     typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'), msg.get('error_message'))
-                    if typed in (SONIOX_DEATH_ACCOUNT_STATE, SONIOX_DEATH_INVALID_HINT):
-                        # The provider evaluated the account (402) or the session
-                        # config (400 invalid language hint) and refused to
-                        # serve: our side of the fence owns the fix, so these
-                        # stay at ERROR for the on-call instead of hiding behind
-                        # the idle/rotation WARNING that hid this signature.
+                    record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)
+                    if typed in (PROVIDER_BUDGET_EXHAUSTED, SONIOX_DEATH_INVALID_HINT):
+                        # The provider evaluated the account (402 / monthly budget)
+                        # or the session config (400 invalid language hint) and
+                        # refused to serve: our side of the fence owns the fix,
+                        # so these stay at ERROR for the on-call instead of
+                        # hiding behind the idle/rotation WARNING that hid this
+                        # signature. Monthly budget used to miss the typed set
+                        # and log at WARNING for 27.5h.
                         logger.error(f'Soniox streaming error: {err}')
                     else:
                         # Idle-timeout and documented rotation are the

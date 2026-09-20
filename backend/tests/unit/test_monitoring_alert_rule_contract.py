@@ -657,12 +657,17 @@ STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
 )
 STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
-    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",' 'component="stt_selection"}[6h]))'
+    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
+    'component=~"stt_selection|stt_live_session"}[6h]))'
 )
 STT_FALLBACK_LEG_RECOVERED_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component="stt_selection",outcome="recovered"}[6h])) or sum by (to_mode) '
-    '(increase(omi_fallback_total{job="backend-listen-metrics",component="stt_selection"}[6h])) * 0'
+    'component=~"stt_selection|stt_live_session",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
+)
+STT_PROVIDER_BUDGET_EXPR = (
+    'sum(increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
+    'reason="provider_budget_exhausted"}[5m])) or vector(0)'
 )
 STT_CHAIN_EXHAUSTION_RULES = {
     "omi-stt-chain-exhausted-warn": ("warning", "$A >= 50 && $B > 0.35", "10m"),
@@ -713,7 +718,33 @@ def test_stt_fallback_leg_dead_alert_zero_fills_legs_with_no_recovered_series():
         assert math_nodes == ["$A >= 50 && $B < 1"], export_name
         assert "evaluated_bad" in rule["annotations"], export_name
         assert "recovered=0" in rule["annotations"]["evaluated_bad"], export_name
+        assert "stt_live_session" in exprs[0], export_name
         assert rule["annotations"]["__panelId__"] == "16"
+
+
+def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
+    """Monthly/quota exhaustion is never transient. The 2026-09-19 Soniox
+    organization_monthly_budget_exhausted outage closed every hop and was
+    unpaged for 27.5h because recovered was recorded at connect.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-provider-budget"]
+        assert len(rule["uid"]) < 40, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "product", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "2m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == STT_PROVIDER_BUDGET_EXPR, export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A >= 5"], export_name
+        assert "or vector(0)" in exprs[0], export_name
+        assert "evaluated_bad" in rule["annotations"], export_name
+        assert "64" in rule["annotations"]["evaluated_bad"], export_name
+        assert "evaluated_good" in rule["annotations"], export_name
+        assert "0 budget closes" in rule["annotations"]["evaluated_good"], export_name
+        assert "Prometheus evaluation" in rule["annotations"]["verification"], export_name
+        assert rule["annotations"]["__panelId__"] == "18"
 
 
 def test_sync_intake_fragmentation_alert_uses_cloud_logging_until_scrape_exists():
@@ -748,5 +779,8 @@ def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():
     assert "omi_fallback_total" in panels[16]["targets"][0]["expr"]
     assert 'outcome="recovered"' in panels[16]["targets"][0]["expr"]
     assert "to_mode" in panels[16]["targets"][0]["expr"]
+    assert "stt_live_session" in panels[16]["targets"][0]["expr"]
     assert "omi_sync_intake_total" in panels[17]["targets"][0]["expr"]
     assert "Scrape gap" in panels[17]["description"]
+    assert "omi_stt_stream_close_total" in panels[18]["targets"][0]["expr"]
+    assert "provider_budget_exhausted" in panels[18]["fieldConfig"]["defaults"]["description"]

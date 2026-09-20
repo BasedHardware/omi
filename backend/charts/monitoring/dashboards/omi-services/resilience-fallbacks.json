@@ -1017,7 +1017,7 @@
           "max": 1,
           "min": 0,
           "unit": "percentunit",
-          "description": "Zero recovered with real attempts is a dead fallback leg (Deepgram was 0 recovered for 6h+ during 2026-09-19)."
+          "description": "Zero recovered with real attempts is a dead fallback leg. Includes stt_selection (connect-time) and stt_live_session (mid-session hops). Soniox looked 100% recovered during 2026-09-19 budget exhaustion because recovered was recorded at connect."
         },
         "overrides": []
       },
@@ -1050,7 +1050,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"recovered\"}[$__rate_interval])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[$__rate_interval])) * 0) / clamp_min(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[$__rate_interval])), 1)",
+          "expr": "(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}[$__rate_interval])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[$__rate_interval])) * 0) / clamp_min(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[$__rate_interval])), 1)",
           "legendFormat": "{{to_mode}} recovered share",
           "range": true,
           "refId": "A"
@@ -1110,6 +1110,55 @@
       "title": "Sync intake created share (created / created+merged)",
       "type": "timeseries",
       "description": "**Scrape gap:** `omi_sync_intake_total` is emitted from `ingest_sync_conversation` on Cloud Run `backend-sync`. The Cloud Run metrics exporter allowlist is `backend` + `desktop-backend` only, so this panel will be empty until backend-sync is ingested. Until then the alert evaluates Cloud Logging `omi_sync_intake outcome=created|merged`."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "description": "Vendor stream-close frames. reason=provider_budget_exhausted is never transient — raise the monthly cap. Brand-new series; no Prometheus history yet."
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 104
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (provider, reason) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+          "legendFormat": "{{provider}} {{reason}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Live STT provider stream closes by reason",
+      "type": "timeseries"
     }
   ],
   "preload": false,

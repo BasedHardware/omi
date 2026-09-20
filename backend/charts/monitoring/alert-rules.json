@@ -11992,7 +11992,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[6h]))",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -12012,7 +12012,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[6h])) * 0",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h])) * 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -12090,21 +12090,143 @@
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "16",
-      "summary": "A live-STT fallback leg (to_mode) had at least 50 selection attempts in 6h and recovered none of them",
-      "threshold": "recovered < 1 with >= 50 stt_selection attempts in 6h, per to_mode, for 30m",
-      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14.",
-      "scope": "backend-listen omi_fallback_total component=stt_selection, grouped by to_mode. job=backend-listen-metrics Counter.",
-      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection to=deepgram. Recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Deepgram handshake payment errors have been 100% since 2026-09-14. Prometheus evaluation of this exact increase() expression is still owed.",
-      "safe_next_action": "Identify the to_mode on panel 16. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
+      "summary": "A live-STT fallback leg (to_mode) had at least 50 selection or mid-session hops in 6h and recovered none of them",
+      "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode, for 30m",
+      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
+      "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. job=backend-listen-metrics Counter.",
+      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus evaluation of this exact increase() expression is still owed.",
+      "safe_next_action": "Identify the to_mode on panel 16. For budget exhaustion see panel 18 and raise the vendor cap. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z",
-      "evaluated_good": "to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window \u2014 this leg has been dead through both periods, which is why the alert is the standing-failure detector"
+      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m \u2014 after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus evaluation still owed.",
+      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window \u2014 that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus evaluation still owed."
     },
     "labels": {
       "alert_identity": "omi-stt-fallback-leg-dead",
       "component": "live-transcription",
       "impact": "product",
       "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-provider-budget",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Live STT - provider budget/quota exhausted",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "18",
+      "summary": "An STT provider is closing streams for budget/quota/payment exhaustion",
+      "threshold": "omi_stt_stream_close_total reason=provider_budget_exhausted >= 5 in 5m, for 2m",
+      "user_impact": "The provider will not serve any stream until a human raises the monthly cap or waits for month rollover. Live sessions that hop onto this leg get no transcript and fall to offline sync.",
+      "scope": "backend-listen omi_stt_stream_close_total reason=provider_budget_exhausted. job=backend-listen-metrics Counter. Brand-new series.",
+      "verification": "Evidence layer is Cloud Logging counts of WARNING utils.stt.soniox Soniox stream closed: organization_monthly_budget_exhausted on backend-listen (the line the incident logged because monthly budget was untyped). 5-minute samples: 2026-09-19 03:00Z=64, 04:40Z=87, 16:00Z=106. 2-minute samples: 03:00Z 30/30 budget-closes/connections, 04:40Z 32/32, 04:00Z 20th 40/39. Good: 2026-09-18 09:00Z 0/16, 2026-09-20 07:30Z 0/13, 16:38Z 0/26. Threshold >=5 in 5m sits between 0 and 64. New series omi_stt_stream_close_total has no Prometheus history; Prometheus evaluation of this exact increase() expression is still owed.",
+      "safe_next_action": "Raise the vendor monthly budget (Soniox org/project limits, Deepgram billing, Modulate usage dashboard). This is a monthly cap and can recur before month end. Do not rotate unrelated provider keys.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "Cloud Logging proxy for the new series: 64 / 87 / 106 budget closes in 5m at 2026-09-19 03:00 / 04:40 / 16:00Z (2m peaks 30, 32, 42). Prometheus evaluation still owed.",
+      "evaluated_good": "Cloud Logging proxy: 0 budget closes in 5m at 2026-09-18 09:00Z and 2026-09-20 07:30Z (2m 0/16 and 0/13 connections). Prometheus evaluation still owed."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-provider-budget",
+      "component": "live-transcription",
+      "impact": "product",
+      "severity": "critical",
       "instatus_component": "live-transcription"
     },
     "isPaused": false,
