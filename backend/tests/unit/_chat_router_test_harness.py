@@ -64,7 +64,14 @@ def cleanup(saved):
     for name in [k for k in sys.modules if k not in saved]:
         del sys.modules[name]
     for name, module in saved.items():
-        sys.modules[name] = module
+        if module is None:
+            # The module was never imported before this suite stubbed it.
+            # Writing None back into sys.modules poisons every later import of
+            # that package for the rest of the shard process ( ImportModuleError
+            # "No module named 'database.read_boundary'" in unrelated files).
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 
 def wire_common_stubs(install) -> SimpleNamespace:

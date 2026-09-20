@@ -59,6 +59,9 @@ for sub in [
     "notifications",
     "workstreams",
     "firestore_transaction_retry",
+    # Landing with #15099: routers/account_cutover.py imports this submodule at
+    # module scope; collection of this file fails without the stub.
+    "account_cutover",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
