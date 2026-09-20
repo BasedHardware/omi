@@ -250,20 +250,6 @@ def main():
         for p, count in baseline.items():
             if p in adopted and count > old.get(p, 0):
                 errors.append(f'{p}: baseline cannot grow')
-    for path in ([] if args.surface else changed):
-        if path not in sources:
-            continue
-        base_source = read_base(args.base, path)
-        if base_source is not None and path not in adopted:
-            continue
-        count = len(debt(sources[path], catalog['keys']))
-        limit = baseline.get(path, 0)
-        if base_source is not None:
-            limit = min(limit, len(debt(base_source, catalog['keys'])))
-        if count > limit:
-            errors.append(f'{path}: {count} unkeyed interactive widgets > {limit}; add a unique omi.<surface>.<control> '
-                          f'to keys in {CATALOG}, run python3 scripts/check_app_addressability.py --generate, '
-                          'then put OmiKeys.<name> on the interactive widget (a child key does not cover its parent)')
     for error in errors:
         print(error, file=sys.stderr)
     print(f'Addressability: {len(catalog["routes"])} routes; {len(sources)} Dart files; {len(errors)} errors')

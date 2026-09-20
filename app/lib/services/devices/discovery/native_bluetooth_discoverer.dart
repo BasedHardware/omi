@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -83,6 +84,15 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
 
+  @visibleForTesting
+  static bool isSupportedPeripheral(BlePeripheral p) => _isSupportedPeripheral(p);
+
+  @visibleForTesting
+  static bool isPlaud(BlePeripheral p) => _isPlaud(p);
+
+  @visibleForTesting
+  static BtDevice peripheralToDevice(BlePeripheral p) => _peripheralToDevice(p);
+
   static bool _isSupportedPeripheral(BlePeripheral p) {
     return _isBee(p) || _isPlaud(p) || _isFieldy(p) || _isFriendPendant(p) || _isLimitless(p) || _isOmi(p);
   }
@@ -92,7 +102,8 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   }
 
   static bool _isPlaud(BlePeripheral p) {
-    return p.name.toUpperCase().startsWith('PLAUD');
+    final name = p.name.toLowerCase();
+    return name.startsWith('plaud') || name.contains('notepin') || _hasService(p, plaudServiceUuid);
   }
 
   static bool _isFieldy(BlePeripheral p) {

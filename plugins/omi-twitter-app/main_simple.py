@@ -708,7 +708,7 @@ async def process_segments(
         SimpleSessionStorage.update_session(
             session_id,
             tweet_mode="recording",
-            accumulated_text=tweet_content,
+            accumulated_text=tweet_content or "",
             segments_count=1
         )
         
@@ -717,7 +717,7 @@ async def process_segments(
     
     # If in recording mode, collect more segments
     elif session["tweet_mode"] == "recording":
-        accumulated = session.get("accumulated_text", "")
+        accumulated = session.get("accumulated_text") or ""
         segments_count = session.get("segments_count", 0)
         
         # Add this segment

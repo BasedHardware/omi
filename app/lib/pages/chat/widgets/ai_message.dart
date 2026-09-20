@@ -1256,7 +1256,8 @@ class _MessageActionBarState extends State<MessageActionBar> {
   void _showThumbsDownReasonPicker() {
     showFeedbackBottomSheet(
       context,
-      onSubmit: (reason, comment) {
+      onSubmit: (reason, comment) async {
+        final previous = _selectedNps;
         setState(() {
           _selectedNps = -1;
         });
@@ -1265,7 +1266,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
         if (comment != null && comment.isNotEmpty) {
           feedbackReason = '$reason: $comment';
         }
-        widget.setMessageNps?.call(-1, reason: feedbackReason);
+        final saved = await widget.setMessageNps?.call(-1, reason: feedbackReason);
+        if (saved == false) {
+          if (mounted) setState(() => _selectedNps = previous);
+          return;
+        }
 
         // Show confirmation snackbar
         if (mounted) {
@@ -1315,26 +1320,29 @@ class _MessageActionBarState extends State<MessageActionBar> {
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
             isSelected: _selectedNps == 1,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.lightImpact();
+              final previous = _selectedNps;
               setState(() {
                 _selectedNps = _selectedNps == 1 ? null : 1;
               });
-              widget.setMessageNps?.call(_selectedNps ?? 0);
+              final saved = await widget.setMessageNps?.call(_selectedNps ?? 0);
+              if (saved == false && mounted) setState(() => _selectedNps = previous);
             },
           ),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
             isSelected: _selectedNps == -1,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.lightImpact();
               if (_selectedNps == -1) {
                 // Already thumbs down, toggle off
                 setState(() {
                   _selectedNps = null;
                 });
-                widget.setMessageNps?.call(0);
+                final saved = await widget.setMessageNps?.call(0);
+                if (saved == false && mounted) setState(() => _selectedNps = -1);
               } else {
                 // Show reason picker for thumbs down
                 _showThumbsDownReasonPicker();

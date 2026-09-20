@@ -562,7 +562,13 @@ def list_api_keys_db(app_id: str) -> List[Dict[str, Any]]:
 
 
 def delete_api_key_db(app_id: str, key_id: str) -> bool:
-    """Delete an API key"""
+    """Delete an API key.
+
+    Returns False when no key was stored under [key_id], so callers can tell a
+    confirmed revocation from a delete that removed nothing.
+    """
     api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
+    if not api_key_ref.get().exists:
+        return False
     api_key_ref.delete()
     return True

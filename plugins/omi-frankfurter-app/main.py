@@ -55,51 +55,64 @@ class ConvertCurrencyRequest(BaseModel):
     from_currency: str = Field(..., min_length=3, max_length=3)
     to_currencies: list[str] = Field(..., min_length=1, max_length=MAX_TARGET_CURRENCIES)
 
-    @field_validator("from_currency")
+    @field_validator("from_currency", mode="before")
     @classmethod
     def normalize_from_currency(cls, value: str) -> str:
         return _normalize_currency_code(value)
 
-    @field_validator("to_currencies")
+    @field_validator("to_currencies", mode="before")
     @classmethod
     def normalize_to_currencies(cls, values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        normalized: list[str] = []
-        for value in values:
-            code = _normalize_currency_code(value)
-            if code not in seen:
-                normalized.append(code)
-                seen.add(code)
-        return normalized
+        return _coerce_currency_list(values, allow_null=False)
 
 
 class LatestRatesRequest(BaseModel):
     base_currency: str = Field(..., min_length=3, max_length=3)
     to_currencies: list[str] = Field(default_factory=list, max_length=MAX_TARGET_CURRENCIES)
 
-    @field_validator("base_currency")
+    @field_validator("base_currency", mode="before")
     @classmethod
     def normalize_base_currency(cls, value: str) -> str:
         return _normalize_currency_code(value)
 
-    @field_validator("to_currencies")
+    @field_validator("to_currencies", mode="before")
     @classmethod
     def normalize_to_currencies(cls, values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        normalized: list[str] = []
-        for value in values:
-            code = _normalize_currency_code(value)
-            if code not in seen:
-                normalized.append(code)
-                seen.add(code)
-        return normalized
+        return _coerce_currency_list(values, allow_null=True)
 
 
 def _normalize_currency_code(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("currency codes must be 3 letters, such as USD or EUR")
     code = value.strip().upper()
     if len(code) != 3 or not code.isalpha():
         raise ValueError("currency codes must be 3 letters, such as USD or EUR")
     return code
+
+
+def _coerce_currency_list(values: Any, *, allow_null: bool) -> list[str]:
+    """Accept a single code or a list of codes; tolerate JSON null for optional fields.
+
+    Chat runners forward unprovided optional parameters as JSON ``null`` and
+    sometimes collapse single-element lists to a bare string. Normalize both so
+    an optional filter cannot turn into a rejected tool call.
+    """
+    if values is None:
+        if allow_null:
+            return []
+        raise ValueError("to_currencies must be a list of 3-letter currency codes")
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple)):
+        raise ValueError("to_currencies must be a list of 3-letter currency codes")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        code = _normalize_currency_code(value)
+        if code not in seen:
+            seen.add(code)
+            normalized.append(code)
+    return normalized
 
 
 def _parse_amount(value: str | float | int) -> Decimal:
@@ -237,23 +250,39 @@ async def omi_tools() -> dict[str, Any]:
 async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
     try:
         amount = _parse_amount(request.amount)
-        payload = await _request_json(
-            "/latest",
-            {
-                "amount": str(amount),
-                "from": request.from_currency,
-                "to": ",".join(request.to_currencies),
-            },
-        )
-        if not isinstance(payload, dict):
-            return ChatToolResponse(error="no rates returned for the requested currencies")
 
-        rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+        # Frankfurter rejects a target currency identical to the source (HTTP 422
+        # "bad currency pair") and, in a mixed request, just omits it from the
+        # response. Resolve same-currency targets locally as a 1:1 identity instead
+        # of sending them upstream.
+        same_currency_targets = [code for code in request.to_currencies if code == request.from_currency]
+        other_targets = [code for code in request.to_currencies if code != request.from_currency]
+
+        rates: dict[str, Any] = {}
+        base_curr = request.from_currency
+        date_val = "latest"
+
+        if other_targets:
+            payload = await _request_json(
+                "/latest",
+                {
+                    "amount": str(amount),
+                    "from": request.from_currency,
+                    "to": ",".join(other_targets),
+                },
+            )
+            if not isinstance(payload, dict):
+                return ChatToolResponse(error="no rates returned for the requested currencies")
+            rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+            base_curr = payload.get("base") or request.from_currency
+            date_val = payload.get("date") or "latest"
+
+        for code in same_currency_targets:
+            rates[code] = amount
+
         if not rates:
             return ChatToolResponse(error="no rates returned for the requested currencies")
 
-        base_curr = payload.get("base") or request.from_currency
-        date_val = payload.get("date") or "latest"
         lines = [f"{_format_decimal(amount)} {base_curr} on {date_val}:"]
         for code in request.to_currencies:
             if code in rates and rates[code] is not None:
@@ -273,21 +302,35 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
 @app.post("/tools/get_latest_rates", response_model=ChatToolResponse)
 async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
     try:
-        params: dict[str, Any] = {"from": request.base_currency}
-        if request.to_currencies:
-            params["to"] = ",".join(request.to_currencies)
+        # Frankfurter never includes the base currency in its own rates, so a
+        # mixed request (base=USD, to=[USD, EUR]) silently drops the USD line.
+        # Resolve it locally as a 1:1 identity instead.
+        wants_base = request.base_currency in request.to_currencies
+        other_targets = [code for code in request.to_currencies if code != request.base_currency]
 
-        payload = await _request_json("/latest", params)
-        if not isinstance(payload, dict):
-            return ChatToolResponse(error="no rates returned")
+        rates: dict[str, Any] = {}
+        base_curr = request.base_currency
+        date_val = "latest"
 
-        rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+        if not request.to_currencies or other_targets:
+            params: dict[str, Any] = {"from": request.base_currency}
+            if other_targets:
+                params["to"] = ",".join(other_targets)
+            payload = await _request_json("/latest", params)
+            if not isinstance(payload, dict):
+                return ChatToolResponse(error="no rates returned")
+            rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+            base_curr = payload.get("base") or request.base_currency
+            date_val = payload.get("date") or "latest"
+
+        if wants_base:
+            rates = dict(rates)
+            rates[request.base_currency] = Decimal("1")
+
         if not rates:
             return ChatToolResponse(error="no rates returned")
 
         codes = request.to_currencies or sorted(rates.keys())
-        base_curr = payload.get("base") or request.base_currency
-        date_val = payload.get("date") or "latest"
         lines = [f"Latest {base_curr} reference rates for {date_val}:"]
         for code in codes[:MAX_TARGET_CURRENCIES]:
             if code in rates and rates[code] is not None:

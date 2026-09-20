@@ -322,8 +322,8 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     return val.decode()
 
 
-def enable_app(uid: str, app_id: str) -> None:
-    r.sadd(f'users:{uid}:enabled_plugins', app_id)
+def enable_app(uid: str, app_id: str) -> bool:
+    return bool(r.sadd(f'users:{uid}:enabled_plugins', app_id))
 
 
 def disable_app(uid: str, app_id: str) -> None:
@@ -1621,6 +1621,24 @@ def release_notifications_job_run_lock(token: str) -> None:
         _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
+
+
+def try_acquire_x_sync_window_lock(date: str, window: int, ttl: int = 6 * 60 * 60 + 10 * 60) -> bool:
+    """At most one X-connector sweep per 6-hour window across job executions.
+
+    Cloud Scheduler fires every minute, so a whole sync hour of executions can
+    otherwise start overlapping full-registry sweeps. The key carries the UTC
+    date and window index (``hour // 6``); the TTL is one window plus a margin
+    so a crashed holder cannot black out the next window for long and stale
+    keys reap themselves. Fail-open on Redis errors: losing the lock degrades
+    to the previous always-run behavior instead of silently skipping syncs.
+    """
+    try:
+        result = r.set(f'notifications_job:x_sync_lock:{date}:{window}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception as error:
+        logger.warning('notifications-job x-sync window lock unavailable, running sweep without dedupe: %s', error)
+        return True
 
 
 @try_catch_decorator

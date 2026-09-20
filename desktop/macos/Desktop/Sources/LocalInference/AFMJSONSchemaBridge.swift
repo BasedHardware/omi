@@ -23,9 +23,11 @@ import Foundation
 /// `LocalInferenceError.capabilityUnavailable` with the keyword/path. No silent
 /// degradation.
 enum AFMJSONSchemaBridge {
-  private static let allowedKeys: Set<String> = ["type", "properties", "required", "items", "description"]
+  private static let allowedKeys: Set<String> = [
+    "type", "properties", "required", "items", "description", "maxItems",
+  ]
   private static let objectKeys: Set<String> = ["type", "properties", "required", "description"]
-  private static let arrayKeys: Set<String> = ["type", "items", "description"]
+  private static let arrayKeys: Set<String> = ["type", "items", "description", "maxItems"]
   private static let scalarKeys: Set<String> = ["type", "description"]
   /// Root is depth 0. LocalSummaryDraft nests object → array → object (depth 2).
   static let maximumNestingDepth = 8
@@ -79,8 +81,18 @@ enum AFMJSONSchemaBridge {
         return DynamicGenerationSchema(type: Int.self)
       case .boolean:
         return DynamicGenerationSchema(type: Bool.self)
-      case .array(let items):
-        return DynamicGenerationSchema(arrayOf: makeDynamicSchema(items))
+      case .array(let items, let maximumElements):
+        // An unbounded array is how a chunked conversation overflowed the window:
+        // the session transcript is prompt PLUS completion, and a map pass that
+        // decided to emit 26 action items pushed the total past the model's
+        // context even though the prompt alone had room.
+        guard let maximumElements else {
+          return DynamicGenerationSchema(arrayOf: makeDynamicSchema(items))
+        }
+        return DynamicGenerationSchema(
+          arrayOf: makeDynamicSchema(items),
+          maximumElements: maximumElements
+        )
       case .object(let name, let properties, let description):
         let props = properties.map { property in
           DynamicGenerationSchema.Property(
@@ -182,7 +194,14 @@ enum AFMJSONSchemaBridge {
       throw LocalInferenceError.capabilityUnavailable("items_must_be_object:\(path)")
     }
     let item = try parseNode(itemsObject, name: "\(name)_item", path: "\(path).items", depth: depth + 1)
-    return .array(items: item)
+    var maximumElements: Int?
+    if let raw = raw["maxItems"] {
+      guard let value = raw as? Int, value > 0 else {
+        throw LocalInferenceError.capabilityUnavailable("maxItems_must_be_positive_integer:\(path)")
+      }
+      maximumElements = value
+    }
+    return .array(items: item, maximumElements: maximumElements)
   }
 
   private static func stringDescription(_ raw: [String: Any], path: String) throws -> String? {
@@ -205,7 +224,7 @@ indirect enum AFMJSONSchemaNode: Sendable, Equatable {
   case integer
   case boolean
   case object(name: String, properties: [ObjectProperty], description: String?)
-  case array(items: AFMJSONSchemaNode)
+  case array(items: AFMJSONSchemaNode, maximumElements: Int? = nil)
 
   struct ObjectProperty: Sendable, Equatable {
     var name: String

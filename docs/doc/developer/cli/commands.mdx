@@ -103,7 +103,7 @@ cat meeting_notes.md | omi conversation create --text - --text-source message
 | `omi action-item list [--completed/--open ...]` | `GET /v1/dev/user/action-items`                           |
 | `omi action-item get ID`                      | client-side scan                                            |
 | `omi action-item create DESC [--due-at ISO]`  | `POST /v1/dev/user/action-items`                            |
-| `omi action-item update ID [--description ... --completed/--open --due-at ...]` | `PATCH /v1/dev/user/action-items/{id}` |
+| `omi action-item update ID [--description ... --completed/--open --due-at ... --clear-due-at]` | `PATCH /v1/dev/user/action-items/{id}` |
 | `omi action-item complete ID`                 | shortcut for `update --completed`                           |
 | `omi action-item delete ID [-y]`              | `DELETE /v1/dev/user/action-items/{id}`                     |
 

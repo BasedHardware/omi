@@ -154,6 +154,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     byok = ModuleType('utils.byok')
     byok.get_byok_key = lambda _provider: None
@@ -405,6 +406,90 @@ def test_basic_desktop_without_projection_is_terminal_minimum(monkeypatch, pc) -
     spies['assign_folder'].assert_not_called()
     spies['init_first_open'].assert_not_called()
     spies['should_defer'].assert_not_called()
+
+
+def _desktop_custom_stt(conversation_id: str = 'desktop-custom-stt') -> Conversation:
+    conversation = _existing_desktop(conversation_id)
+    conversation.uses_custom_stt = True
+    return conversation
+
+
+def _local_projection() -> ClientProcessing:
+    return ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='local title', overview='local overview'),
+        provenance=ProjectionProvenance(
+            model_id='local-test-model',
+            runtime='test-runtime',
+            device_class='test-device',
+            generated_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        ),
+    )
+
+
+# red-proof: put the custom-STT skip back above the S6 branch (desktop custom-STT
+# would complete without persist and without asking the uid-gated flag).
+def test_custom_stt_skip_does_not_strip_unpaid_on_device_projection(monkeypatch, pc) -> None:
+    """#14300 rebase vs #14513: exhausted custom-STT still stores the local summary.
+
+    The skip is a trial-paywall-style early return (completed, no `_get_structured`).
+    It must sit after the unpaid desktop path so a desktop custom-STT session that
+    would hit `store_projection` still persists that projection. Policy is
+    unchanged — this only pins ordering.
+    """
+    seen_uids: list[Any] = []
+
+    def _record(uid):
+        seen_uids.append(uid)
+        return True
+
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', _record)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    original_store = pc._store_projected_conversation
+    store_projected = MagicMock(side_effect=original_store)
+    monkeypatch.setattr(pc, '_store_projected_conversation', store_projected)
+    monkeypatch.setattr(pc, 'should_skip_omi_paid_postprocessing', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'store_projection', 'basic_not_entitled'),
+    )
+
+    result = pc.process_conversation(
+        'basic-uid',
+        'en',
+        _desktop_custom_stt(),
+        client_projection=_local_projection(),
+    )
+
+    assert seen_uids == ['basic-uid']
+    store_projected.assert_called_once()
+    spies['get_structured'].assert_not_called()
+    assert payloads, 'unpaid on-device persist must run; custom-STT skip must not return first'
+    assert result.status == ConversationStatus.completed
+
+
+# red-proof: drop the skip after a process_normally fall-through (paid desktop
+# custom-STT would call `_get_structured` on Omi's bill).
+def test_custom_stt_skip_still_blocks_omi_paid_llm_after_unpaid_path(monkeypatch, pc) -> None:
+    """The #7690 gate still skips Omi-paid structuring when S6 falls through."""
+    _enable_flag(monkeypatch, pc)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    monkeypatch.setattr(pc, 'should_skip_omi_paid_postprocessing', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'process_normally', 'plan_paid'),
+    )
+
+    result = pc.process_conversation('paid-uid', 'en', _desktop_custom_stt('desktop-custom-stt-paid'))
+
+    spies['get_structured'].assert_not_called()
+    assert not payloads, 'Omi-paid persist must not run when the custom-STT processing gate skips'
+    assert result.status == ConversationStatus.completed
 
 
 # red-proof: skip `_get_structured` on process_normally (paid desktop would not enrich)

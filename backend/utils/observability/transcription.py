@@ -8,6 +8,7 @@ from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
 from models.conversation_enums import ConversationSource
+from utils.journey_metrics_contract import bounded_app_build
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
@@ -302,12 +303,17 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
     ).inc()
 
 
-def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only."""
+def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
+    """Count one accepted /v4/listen socket with bounded labels only.
+
+    WebSocket accept paths omit app_build (unknown): the handshake does not
+    carry a trusted version contract.
+    """
 
     OMI_LISTEN_ACCEPTED_TOTAL.labels(
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
+        app_build=bounded_app_build(app_build),
     ).inc()
 
 
