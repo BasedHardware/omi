@@ -69,9 +69,7 @@ def get_focus_sessions(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_sessions(
-        uid, limit=limit, offset=offset, date=date, tz=_user_zone(uid)
-    )
+    return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date, tz=_user_zone(uid))
 
 
 @router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
