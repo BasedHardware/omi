@@ -5,7 +5,7 @@
 ## Tại sao CLI thân thiện với agent
 
 * **Hợp đồng JSON ổn định.** `--json` xuất một tài liệu JSON hợp lệ ra stdout và *chỉ* tài liệu đó — không có thông báo tiến trình hay spinner. Lỗi được ghi vào stderr dưới dạng `{"error": "...", "detail": "..."}`.
-* **Mã thoát ổn định.** `0` ok / `1` lỗi sử dụng / `2` lỗi quyền / `3` lỗi máy chủ / `4` giới hạn tốc độ / `5` không tìm thấy. Agent có thể phân nhánh theo các mã này mà không cần phân tích ngôn ngữ tự nhiên trong thông báo lỗi.
+* **Mã thoát ổn định.** `0` ok / `1` lỗi sử dụng / `2` lỗi xác thực / `3` lỗi máy chủ / `4` giới hạn tốc độ / `5` không tìm thấy. Agent có thể phân nhánh theo các mã này mà không cần phân tích ngôn ngữ tự nhiên trong thông báo lỗi.
 * **Không có lời nhắc tương tác trong ngữ cảnh headless.** Truyền `--yes` (hoặc `-y`) cho các lệnh phá hủy; truyền `--api-key` hoặc đặt `OMI_API_KEY` để bỏ qua đăng nhập tương tác.
 * **Logic thử lại khoan dung.** `429` và `5xx` được thử lại với backoff theo cấp số nhân trước khi báo cáo.
 
@@ -15,7 +15,7 @@ Người dùng lấy khóa API nhà phát triển từ ứng dụng web Omi (`ht
 
 ```bash
 omi auth login                          # dán tương tác; khóa không vào lịch sử shell
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# hoặc
 export OMI_API_KEY=omi_dev_...          # tạm thời, thân thiện với container
 ```
 

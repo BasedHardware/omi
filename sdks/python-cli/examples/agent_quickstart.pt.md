@@ -5,7 +5,7 @@
 ## Por que o CLI é amigável para agentes
 
 * **Contrato JSON estável.** `--json` emite um documento JSON válido para stdout e *somente* esse documento — sem mensagens de progresso ou spinners. Erros são escritos em stderr como `{"error": "...", "detail": "..."}`.
-* **Códigos de saída estáveis.** `0` ok / `1` erro de uso / `2` erro de permissão / `3` erro de servidor / `4` limite de taxa atingido / `5` não encontrado. Agentes podem ramificar nesses códigos sem analisar linguagem natural em mensagens de erro.
+* **Códigos de saída estáveis.** `0` ok / `1` erro de uso / `2` erro de autenticação / `3` erro de servidor / `4` limite de taxa atingido / `5` não encontrado. Agentes podem ramificar nesses códigos sem analisar linguagem natural em mensagens de erro.
 * **Sem prompts interativos em contextos headless.** Passe `--yes` (ou `-y`) para comandos destrutivos; passe `--api-key` ou defina `OMI_API_KEY` para pular o login interativo.
 * **Lógica de repetição tolerante.** `429` e `5xx` são repetidos com backoff exponencial antes de serem relatados.
 
@@ -15,7 +15,7 @@ O usuário obtém uma chave de API de desenvolvedor no aplicativo web Omi (`http
 
 ```bash
 omi auth login                          # pasta interativa; a chave não fica no histórico do shell
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# ou
 export OMI_API_KEY=omi_dev_...          # temporário, compatível com contêineres
 ```
 
@@ -102,7 +102,7 @@ def omi(*args: str) -> Any:
             err = json.loads(result.stderr)
         except json.JSONDecodeError:
             err = {"error": result.stderr.strip()}
-        raise RuntimeError(f"omi avslutades {result.returncode}: {err}")
+        raise RuntimeError(f"omi terminou com o código {result.returncode}: {err}")
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 # Ler todos os itens de ação abertos e marcar como concluídos os mais antigos que 30 dias.

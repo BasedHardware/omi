@@ -5,7 +5,7 @@
 ## Per què el CLI és amigable amb els agents
 
 * **Contracte JSON estable.** `--json` emet un document JSON vàlid cap a stdout i *només* aquest document — sense missatges de progrés ni spinners. Els errors s'escriuen a stderr com `{"error": "...", "detail": "..."}`.
-* **Codis de sortida estables.** `0` ok / `1` error d'ús / `2` error de permisos / `3` error del servidor / `4` límit de taxa / `5` no trobat. Els agents poden ramificar-se en aquests codis sense analitzar el llenguatge natural als missatges d'error.
+* **Codis de sortida estables.** `0` ok / `1` error d'ús / `2` error d'autenticació / `3` error del servidor / `4` límit de taxa / `5` no trobat. Els agents poden ramificar-se en aquests codis sense analitzar el llenguatge natural als missatges d'error.
 * **Sense avisos interactius en contextos headless.** Passeu `--yes` (o `-y`) per a ordres destructives; passeu `--api-key` o establiu `OMI_API_KEY` per ometre l'inici de sessió interactiu.
 * **Lògica de reintents tolerant.** Els codis `429` i `5xx` es reintenten amb backoff exponencial abans de ser notificats.
 
@@ -15,7 +15,7 @@ L'usuari obté una clau d'API de desenvolupador de l'aplicació web d'Omi (`http
 
 ```bash
 omi auth login                          # enganxament interactiu; la clau no va a l'historial de l'intèrpret d'ordres
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# o
 export OMI_API_KEY=omi_dev_...          # temporal, compatible amb contenidors
 ```
 

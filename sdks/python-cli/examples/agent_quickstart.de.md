@@ -5,7 +5,7 @@
 ## Warum das CLI agentenfreundlich ist
 
 * **Stabiler JSON-Vertrag.** `--json` gibt ein gültiges JSON-Dokument nach stdout aus und *nur* dieses — keine Fortschrittsmeldungen oder Spinner. Fehler werden nach stderr als `{"error": "...", "detail": "..."}` geschrieben.
-* **Stabile Exit-Codes.** `0` OK / `1` Verwendungsfehler / `2` Berechtigungsfehler / `3` Serverfehler / `4` Rate-Limit erreicht / `5` Nicht gefunden. Agenten können ohne natürliche-Sprachanalyse von Fehlermeldungen auf diese Codes verzweigen.
+* **Stabile Exit-Codes.** `0` OK / `1` Verwendungsfehler / `2` Authentifizierungsfehler / `3` Serverfehler / `4` Rate-Limit erreicht / `5` Nicht gefunden. Agenten können ohne natürliche-Sprachanalyse von Fehlermeldungen auf diese Codes verzweigen.
 * **Keine interaktiven Eingabeaufforderungen in headless-Kontexten.** Übergeben Sie `--yes` (oder `-y`) für destruktive Befehle; übergeben Sie `--api-key` oder setzen Sie `OMI_API_KEY`, um den interaktiven Login zu überspringen.
 * **Tolerante Retry-Logik.** `429` und `5xx` werden mit exponentiellem Backoff wiederholt, bevor sie gemeldet werden.
 
@@ -15,7 +15,7 @@ Der Benutzer holt einen Entwickler-API-Schlüssel aus der Omi-Web-App (`https://
 
 ```bash
 omi auth login                          # interaktives Einfügen; der Schlüssel landet nicht in der Shell-Historie
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# oder
 export OMI_API_KEY=omi_dev_...          # temporär, container-freundlich
 ```
 

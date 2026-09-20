@@ -5,7 +5,7 @@
 ## Mengapa CLI mesra agen
 
 * **Kontrak JSON yang stabil.** `--json` mengeluarkan dokumen JSON yang sah ke stdout dan *hanya* dokumen itu — tiada mesej kemajuan atau spinner. Ralat ditulis ke stderr sebagai `{"error": "...", "detail": "..."}`.
-* **Kod keluar yang stabil.** `0` ok / `1` ralat penggunaan / `2` ralat kebenaran / `3` ralat pelayan / `4` had kadar / `5` tidak dijumpai. Agen boleh bercabang pada kod-kod ini tanpa menghurai bahasa semula jadi dalam mesej ralat.
+* **Kod keluar yang stabil.** `0` ok / `1` ralat penggunaan / `2` ralat pengesahan / `3` ralat pelayan / `4` had kadar / `5` tidak dijumpai. Agen boleh bercabang pada kod-kod ini tanpa menghurai bahasa semula jadi dalam mesej ralat.
 * **Tiada gesaan interaktif dalam konteks headless.** Hantar `--yes` (atau `-y`) untuk arahan yang merosakkan; hantar `--api-key` atau tetapkan `OMI_API_KEY` untuk melangkau log masuk interaktif.
 * **Logik cuba semula yang pemaaf.** `429` dan `5xx` dicuba semula dengan backoff eksponen sebelum dilaporkan.
 
@@ -15,7 +15,7 @@ Pengguna mendapatkan kunci API pembangun dari aplikasi web Omi (`https://app.omi
 
 ```bash
 omi auth login                          # tampal interaktif; kunci tidak masuk ke sejarah shell
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# atau
 export OMI_API_KEY=omi_dev_...          # sementara, mesra kontena
 ```
 

@@ -5,7 +5,7 @@
 ## Pourquoi le CLI est adapté aux agents
 
 * **Contrat JSON stable.** `--json` émet un document JSON valide vers stdout et *uniquement* ce document — aucun message de progression ni spinner. Les erreurs sont écrites vers stderr sous la forme `{"error": "...", "detail": "..."}`.
-* **Codes de sortie stables.** `0` ok / `1` erreur d'utilisation / `2` erreur de permission / `3` erreur serveur / `4` limite de débit / `5` non trouvé. Les agents peuvent se ramifier sur ces codes sans analyser le langage naturel dans les messages d'erreur.
+* **Codes de sortie stables.** `0` ok / `1` erreur d'utilisation / `2` erreur d'authentification / `3` erreur serveur / `4` limite de débit / `5` non trouvé. Les agents peuvent se ramifier sur ces codes sans analyser le langage naturel dans les messages d'erreur.
 * **Aucune invite interactive dans les contextes headless.** Passez `--yes` (ou `-y`) pour les commandes destructives ; passez `--api-key` ou définissez `OMI_API_KEY` pour ignorer la connexion interactive.
 * **Logique de réessai indulgente.** Les codes `429` et `5xx` sont réessayés avec un backoff exponentiel avant d'être signalés.
 
@@ -15,7 +15,7 @@ L'utilisateur récupère une clé API développeur depuis l'application web Omi 
 
 ```bash
 omi auth login                          # collage interactif ; la clé ne va pas dans l'historique du shell
-# oder / ou / ili / or / ή / veya / või / o / ale /
+# ou
 export OMI_API_KEY=omi_dev_...          # temporaire, compatible avec les conteneurs
 ```
 
