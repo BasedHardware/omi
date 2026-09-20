@@ -55,7 +55,8 @@ struct ConversationChunkSummarizer: Sendable {
         digest: digest,
         minimumInput: minimumInput,
         generatedAt: generatedAt,
-        deviceClass: deviceClass
+        deviceClass: deviceClass,
+        fallback: runtime.fallback
       )
     } else {
       let generation: LocalInferenceGeneration<LocalSummaryDraft> = await runtime.generateStructuredFailClosed(
@@ -68,7 +69,8 @@ struct ConversationChunkSummarizer: Sendable {
         digest: digest,
         minimumInput: minimumInput,
         generatedAt: generatedAt,
-        deviceClass: deviceClass
+        deviceClass: deviceClass,
+        fallback: runtime.fallback
       )
     }
 
@@ -119,12 +121,13 @@ struct ConversationChunkSummarizer: Sendable {
     digest: String,
     minimumInput: DeterministicMinimumInput,
     generatedAt: Date,
-    deviceClass: String
+    deviceClass: String,
+    fallback: (any LocalInferenceFallbackRecording)? = nil
   ) -> OmiAPI.ClientProcessing {
     switch generation {
     case .engine(let draft, let engineID):
       let minimum = DeterministicConversationMinimum.make(from: minimumInput)
-      return ClientProcessingContract.assemble(
+      let assembled = ClientProcessingContract.assemble(
         draft: draft,
         transcriptSha256: digest,
         provenance: OmiAPI.ProjectionProvenance(
@@ -135,6 +138,30 @@ struct ConversationChunkSummarizer: Sendable {
         ),
         fallbackTitle: minimum.title
       )
+      // A draft can satisfy the schema and still say nothing: every field on
+      // `LocalSummaryDraft` decodes through `decodeIfPresent ?? ""` / `?? []`,
+      // so `{"title": "Summary"}` is a well-formed draft. Constrained decoding
+      // is what normally prevents that, and it is exactly what fails open --
+      // llama.cpp has shipped a build that accepted a JSON schema, returned
+      // HTTP 200, and generated unconstrained anyway. An empty projection is
+      // worse than none: it carries a model id and, because a free-tier
+      // conversation's canonical structure is itself the minimum, it is
+      // selected over that minimum for display. Fail closed to the minimum.
+      guard ClientProcessingContract.carriesContent(assembled) else {
+        fallback?.recordLocalInferenceFallback(
+          from: engineID.rawValue,
+          to: ClientProcessingContract.deterministicModelID,
+          reason: "contentless_projection",
+          outcome: .degraded
+        )
+        return ClientProcessingContract.assembleMinimum(
+          minimum,
+          transcriptSha256: digest,
+          generatedAt: generatedAt,
+          deviceClass: deviceClass
+        )
+      }
+      return assembled
     case .deterministicMinimum(let minimum):
       return ClientProcessingContract.assembleMinimum(
         minimum,
