@@ -114,6 +114,29 @@ void main() {
       expect(SharedPreferencesUtil().getDeviceCustomName('AA:BB:CC:DD:EE:FF'), isNull);
     });
 
+    test('a device that has never stored a name keeps the name typed on this phone', () async {
+      await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
+
+      expect(SharedPreferencesUtil().shouldPushLocalDeviceName('AA:BB:CC:DD:EE:FF', ''), isTrue);
+    });
+
+    test('once a name has been read from the device an empty read clears this phone', () async {
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
+
+      expect(SharedPreferencesUtil().shouldPushLocalDeviceName('AA:BB:CC:DD:EE:FF', ''), isFalse);
+
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', '');
+
+      expect(SharedPreferencesUtil().getDeviceCustomName('AA:BB:CC:DD:EE:FF'), isNull);
+    });
+
+    test('unpairing forgets that this phone ever synced with the device', () async {
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
+      await SharedPreferencesUtil().clearDeviceCustomName('AA:BB:CC:DD:EE:FF');
+
+      expect(SharedPreferencesUtil().hasSyncedDeviceName('AA:BB:CC:DD:EE:FF'), isFalse);
+    });
+
     test('a failed device read keeps the name on this phone', () async {
       await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
 

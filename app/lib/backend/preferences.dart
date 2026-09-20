@@ -551,11 +551,36 @@ class SharedPreferencesUtil {
     await saveString('deviceCustomNames', jsonEncode(names));
   }
 
-  Future<void> clearDeviceCustomName(String deviceId) => setDeviceCustomName(deviceId, '');
+  Future<void> clearDeviceCustomName(String deviceId) async {
+    await setDeviceCustomName(deviceId, '');
+    await clearDeviceNameSynced(deviceId);
+  }
 
   Future<void> adoptStoredDeviceName(String deviceId, String? storedName) async {
     if (storedName == null) return;
     await setDeviceCustomName(deviceId, storedName);
+    await markDeviceNameSynced(deviceId);
+  }
+
+  bool shouldPushLocalDeviceName(String deviceId, String storedName) =>
+      storedName.isEmpty && getDeviceCustomName(deviceId) != null && !hasSyncedDeviceName(deviceId);
+
+  List<String> get deviceNameSyncedIds => List<String>.from(getStringList('deviceNameSyncedIds'));
+
+  bool hasSyncedDeviceName(String deviceId) => deviceNameSyncedIds.contains(deviceId);
+
+  Future<void> markDeviceNameSynced(String deviceId) async {
+    if (deviceId.isEmpty) return;
+    final ids = deviceNameSyncedIds;
+    if (ids.contains(deviceId)) return;
+    ids.add(deviceId);
+    await saveStringList('deviceNameSyncedIds', ids);
+  }
+
+  Future<void> clearDeviceNameSynced(String deviceId) async {
+    final ids = deviceNameSyncedIds;
+    if (!ids.remove(deviceId)) return;
+    await saveStringList('deviceNameSyncedIds', ids);
   }
 
   bool get deviceIsV2 => getBool('deviceIsV2');

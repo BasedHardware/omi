@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/rename_device_widget.dart';
+import 'package:omi/services/devices/stored_device_name.dart';
 
 const _deviceId = 'AA:BB:CC:DD:EE:FF';
 
@@ -70,6 +73,29 @@ void main() {
 
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), 'Studio Pendant');
     expect(results.single, isTrue);
+  });
+
+  testWidgets('a name the device cannot store is refused at the keyboard, not after saving', (tester) async {
+    await openDialog(tester, saveToDevice: (_) async => true);
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), 'ஸ்ரீ' * 11);
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byKey(const Key('rename_device_field')));
+    expect(utf8.encode(field.controller!.text).length, lessThanOrEqualTo(maxStoredDeviceNameBytes));
+  });
+
+  testWidgets('a save that throws reports the failure instead of silently stopping', (tester) async {
+    await openDialog(tester, saveToDevice: (_) async => throw Exception('ble down'));
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Studio Pendant');
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
+    final context = tester.element(find.byKey(const Key('rename_device_field')));
+    expect(find.text(AppLocalizations.of(context)!.anErrorOccurredTryAgain), findsOneWidget);
   });
 
   testWidgets('prefills the field with an existing custom name', (tester) async {

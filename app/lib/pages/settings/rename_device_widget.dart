@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/devices/stored_device_name.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -57,7 +60,10 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
     } catch (e) {
       Logger.debug('Error saving device name: $e');
       if (mounted) {
-        setState(() => isSaving = false);
+        setState(() {
+          isSaving = false;
+          saveFailed = true;
+        });
       }
       return;
     }
@@ -99,7 +105,10 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                   controller: nameController,
                   autofocus: true,
                   textInputAction: TextInputAction.done,
-                  inputFormatters: [LengthLimitingTextInputFormatter(32)],
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(32),
+                    _Utf8ByteLimitFormatter(maxStoredDeviceNameBytes),
+                  ],
                   onSubmitted: (_) => isSaving ? null : _save(),
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: InputDecoration(
@@ -188,5 +197,16 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
         ),
       ),
     );
+  }
+}
+
+class _Utf8ByteLimitFormatter extends TextInputFormatter {
+  final int maxBytes;
+
+  _Utf8ByteLimitFormatter(this.maxBytes);
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return utf8.encode(newValue.text).length > maxBytes ? oldValue : newValue;
   }
 }
