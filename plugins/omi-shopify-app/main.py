@@ -35,6 +35,8 @@ from models import (
     ShopifyShop,
 )
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 # Shopify API Configuration
@@ -107,13 +109,13 @@ def shopify_api_request(
     
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data, params=params)
+            response = requests.post(url, headers=headers, json=json_data, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "PUT":
-            response = requests.put(url, headers=headers, json=json_data, params=params)
+            response = requests.put(url, headers=headers, json=json_data, params=params, timeout=REQUEST_TIMEOUT)
         elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers, params=params)
+            response = requests.delete(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         else:
             return {"error": f"Unsupported HTTP method: {method}"}
         
@@ -417,6 +419,7 @@ async def shopify_callback(
             "client_secret": SHOPIFY_CLIENT_SECRET,
             "code": code,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code != 200:
@@ -444,7 +447,8 @@ async def shopify_callback(
     headers = get_auth_header(access_token)
     shop_response = requests.get(
         f"https://{shop}/admin/api/{SHOPIFY_API_VERSION}/shop.json",
-        headers=headers
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
     )
     if shop_response.status_code == 200:
         shop_data = shop_response.json().get("shop", {})

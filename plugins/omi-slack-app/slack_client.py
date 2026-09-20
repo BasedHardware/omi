@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 
@@ -47,7 +49,8 @@ class SlackClient:
                     "client_secret": self.client_secret,
                     "code": code,
                     "redirect_uri": redirect_uri
-                }
+                },
+                timeout=REQUEST_TIMEOUT,
             )
             
             if response.status_code == 200:

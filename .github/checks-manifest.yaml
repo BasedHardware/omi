@@ -1293,6 +1293,16 @@ checks:
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
+  - id: plugin-request-timeouts
+    command: ["python3", "scripts/check_plugin_request_timeouts.py"]
+    triggers: ["plugins/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "requests applies no default timeout; an upstream that completes the TCP handshake and then stalls blocks the caller forever, and a blocking call inside an async def handler stalls the whole event loop for every route on that worker. This guard is the reusable version of the #14278/#14255/#14257 one-off fixes and fails when any requests call under plugins/ omits timeout"
+  - id: plugin-request-timeout-check-tests
+    command: ["python3", "scripts/test_check_plugin_request_timeouts.py"]
+    triggers: ["scripts/check_plugin_request_timeouts.py", "scripts/test_check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "unit tests for the plugin requests-timeout guard AST scanner: requests and Session verb calls without timeout are flagged, while timeout-carrying and non-requests calls are ignored"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
