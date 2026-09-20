@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -30,9 +29,7 @@ class TranscriptWidget extends StatefulWidget {
   final bool isConversationDetail;
   final double bottomMargin;
   final Function(String, int)? editSegment;
-  final Map<String, SpeakerLabelSuggestionEvent> suggestions;
   final List<String> taggingSegmentIds;
-  final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
   final String searchQuery;
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
@@ -58,9 +55,7 @@ class TranscriptWidget extends StatefulWidget {
     this.isConversationDetail = false,
     this.bottomMargin = 200,
     this.editSegment,
-    this.suggestions = const {},
     this.taggingSegmentIds = const [],
-    this.onAcceptSuggestion,
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onScrollControllerReady,

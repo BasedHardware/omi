@@ -500,7 +500,7 @@ class TranscriptProcessor:
                     )
                 except asyncio.QueueFull:
                     pass
-            name = detect_speaker_from_text(segment.text)
+            name = detect_speaker_from_text(segment.text, language=self.host.language)
             if not name:
                 continue
             person = await self.host.persistence.call(user_db.get_person_by_name, self.host.request.uid, name)

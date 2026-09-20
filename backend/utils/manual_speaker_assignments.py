@@ -39,9 +39,11 @@ def manual_assignment(
     use_for_speech_training: bool = True,
 ) -> tuple[list[dict], dict, list[str], set[str]]:
     segments = deepcopy(conversation.get('transcript_segments', []))
-    from models.transcript_segment import TranscriptSegment
+    from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
-    for segment in segments:
+    for index, segment in enumerate(segments):
+        if not segment.get('id') and conversation.get('id'):
+            segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
         if segment.get('speaker_id') is None:
             segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
     if segment_index is not None:

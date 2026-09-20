@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from routers.listen import receiver, transcripts
 from database import conversations as db
 from utils.manual_speaker_assignments import acknowledged_teaching
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -195,3 +196,24 @@ def test_socket_cannot_teach_without_persisted_manual_receipt(world):
         assert receiver.host.state.speaker_map_dirty
 
     asyncio.run(exercise())
+
+
+def test_legacy_wire_id_targets_the_same_stored_segment(world):
+    from datetime import datetime, timezone
+    from models.conversation import Conversation
+
+    raw = world[0].rows[world[1]]
+    raw['transcript_segments'][0].pop('id')
+    wire = Conversation(
+        id='c',
+        created_at=datetime.now(timezone.utc),
+        started_at=None,
+        finished_at=None,
+        structured={},
+        transcript_segments=raw['transcript_segments'],
+    )
+    target = wire.transcript_segments[0].id
+    saved, ids, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=[target])
+    assert ids == [target]
+    assert saved['transcript_segments'][0]['id'] == target
+    assert saved['transcript_segments'][0]['person_id'] == 'new'

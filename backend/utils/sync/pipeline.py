@@ -909,6 +909,7 @@ def identify_speakers_for_segments(
     audio_bytes: Optional[bytes],
     person_embeddings_cache: Dict[str, dict],
     uid: str,
+    language: Optional[str] = None,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
 
@@ -997,7 +998,7 @@ def identify_speakers_for_segments(
         if speaker_id in speaker_to_person_map:
             continue
         for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
+            detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
@@ -1147,6 +1148,7 @@ def process_segment(
                 audio_bytes if person_embeddings_cache else None,
                 person_embeddings_cache or {},
                 uid,
+                language=language,
             )
         except Exception as e:
             logger.warning(

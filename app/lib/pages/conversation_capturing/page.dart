@@ -263,21 +263,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           provider.photos,
                                           deviceProvider.connectedDevice,
                                           bottomMargin: 0,
-                                          suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
                                           transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
                                           followLatest: true,
                                           scrollState: transcriptScrollState,
                                           jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
                                           contentVersion: provider.segmentsPhotosVersion,
-                                          onAcceptSuggestion: (suggestion) {
-                                            provider.assignSpeakerToConversation(
-                                              suggestion.speakerId,
-                                              suggestion.personId,
-                                              suggestion.personName,
-                                              [suggestion.segmentId],
-                                            );
-                                          },
                                           editSegment: (segmentId, speakerId) {
                                             final connectivityProvider = Provider.of<ConnectivityProvider>(
                                               context,

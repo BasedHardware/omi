@@ -355,8 +355,9 @@ void main() {
     });
     final provider = CaptureProvider(
         externalActions: actions,
-        inProgressConversationLoader: () async => [conversation],
+        inProgressConversationLoader: () async {},
         conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
     expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isFalse);
@@ -386,8 +387,9 @@ void main() {
     });
     final provider = CaptureProvider(
         externalActions: actions,
-        inProgressConversationLoader: () async => [conversation],
+        inProgressConversationLoader: () async {},
         conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
     final pending = provider.assignSpeakerToConversation(0, 'new', 'New', ['a']);
@@ -396,6 +398,42 @@ void main() {
     actions.assignmentCompleter!.complete(true);
     expect(await pending, isTrue);
     expect(provider.segments.single.personId, isNull);
+    provider.dispose();
+  });
+
+  test('name-only suggestions stay local and malformed or stale suggestions cannot rewrite manual labels', () {
+    final actions = MockCaptureExternalActions();
+    final provider = CaptureProvider(externalActions: actions);
+    provider.segments = [_segment('candidate', 'hello'), _segment('manual', 'hello')..personId = 'saved'];
+    Map<String, dynamic> payload = {
+      'type': 'speaker_label_suggestion',
+      'speaker_id': 0,
+      'person_id': '',
+      'person_name': 'Alex',
+      'segment_id': 'candidate'
+    };
+    provider.onMessageEventReceived(MessageEvent.fromJson(payload));
+    expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
+    expect(provider.segments.first.personId, isNull);
+    expect(actions.assignmentCalls, 0);
+    for (final invalid in [
+      {...payload, 'speaker_id': '0'},
+      {...payload, 'speaker_id': null},
+      {...payload, 'person_id': 42},
+      {...payload, 'person_name': false},
+      {...payload, 'segment_id': []},
+      {...payload, 'segment_id': 'old-conversation'},
+      {...payload, 'speaker_id': 9}
+    ]) {
+      provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
+    }
+    expect(provider.segments.first.personId, isNull);
+    provider.onMessageEventReceived(MessageEvent.fromJson({...payload, 'person_id': 'inferred'}));
+    expect(provider.segments.first.personId, 'inferred');
+    expect(actions.setPeopleCallCount, 1);
+    expect(provider.segments.last.personId, 'saved');
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['candidate']));
+    expect(provider.suggestionsBySegmentId, isEmpty);
     provider.dispose();
   });
 
@@ -427,7 +465,7 @@ void main() {
     final locationCapture = _CountingConversationLocationCapture();
     final provider = CaptureProvider(
       conversationLocationCapture: locationCapture,
-      inProgressConversationLoader: () async => [],
+      inProgressConversationLoader: () async {},
     );
 
     provider.onSegmentReceived([_segment('first', 'hello')]);
@@ -681,17 +719,16 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('ignores event when personId is empty', () {
+    test('retains a name-only suggestion without assigning a person', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
-      // Empty personId: backend didn't assign, nothing happens
+      // Wire contract: person_id_for_client can withhold assignment while supplying a name.
       final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 
-      // Nothing stored, nothing applied
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
       expect(provider.segments.first.personId, isNull);
     });
 
@@ -1810,7 +1847,6 @@ void main() {
         var loadCalls = 0;
         final provider = CaptureProvider(inProgressConversationLoader: () async {
           loadCalls++;
-          return [];
         });
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);

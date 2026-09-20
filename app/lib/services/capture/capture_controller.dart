@@ -75,7 +75,7 @@ class CaptureController extends ChangeNotifier
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
   final ConversationLocationCapture _conversationLocationCapture;
-  final Future<List<ServerConversation>> Function()? _inProgressConversationLoader;
+  final Future<void> Function()? _inProgressConversationLoader;
   final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
   final Future<bool> Function()? _microphonePermissionRequester;
   // Controllable external boundaries (capture_seams.dart). Null means the
@@ -207,7 +207,7 @@ class CaptureController extends ChangeNotifier
   CaptureController({
     CaptureExternalActions? externalActions,
     ConversationLocationCapture? conversationLocationCapture,
-    Future<List<ServerConversation>> Function()? inProgressConversationLoader,
+    Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
@@ -2388,10 +2388,19 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _loadInProgressConversation() async {
-    final convos = _inProgressConversationLoader != null
-        ? await _inProgressConversationLoader!()
-        : await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    _conversation = convos.isNotEmpty ? convos.first : null;
+    if (_inProgressConversationLoader != null) {
+      await _inProgressConversationLoader!();
+      return;
+    }
+    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+  }
+
+  /// Install an acknowledged server snapshot. Shared by REST refresh and
+  /// hermetic capture scenarios that control the conversation boundary.
+  void applyInProgressConversation(ServerConversation? nextConversation) {
+    if (_conversation?.id != nextConversation?.id) suggestionsBySegmentId.clear();
+    _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
       // Merge server photos with locally-captured temp photos to avoid losing
@@ -2668,15 +2677,20 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    if (event.speakerId < 0 || event.segmentId.isEmpty || event.personName.trim().isEmpty) return;
     // Tagging
     if (taggingSegmentIds.contains(event.segmentId)) {
       return;
     }
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
-    if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+    if (segment == null || segment.speakerId != event.speakerId || segment.personId != null || segment.isUser) return;
+    if (event.personId.isEmpty) {
+      suggestionsBySegmentId[event.segmentId] = event;
+      notifyListeners();
       return;
     }
+    suggestionsBySegmentId.remove(event.segmentId);
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
@@ -2684,12 +2698,18 @@ class CaptureController extends ChangeNotifier
       _preferences.addCachedPerson(
         Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
+      _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
     }
 
     // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
     if (event.personId.isNotEmpty) {
       for (var seg in segments) {
-        if (seg.speakerId == event.speakerId) {
+        if (seg.speakerId == event.speakerId &&
+            !seg.isUser &&
+            seg.personId == null &&
+            !taggingSegmentIds.contains(seg.id)) {
           seg.isUser = isUser;
           seg.personId = isUser ? null : event.personId;
         }

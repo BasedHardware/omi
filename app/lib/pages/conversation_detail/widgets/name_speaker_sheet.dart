@@ -83,6 +83,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     super.initState();
     _selectedSegmentIds.add(widget.segmentId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final peopleProvider = context.read<PeopleProvider>();
       final people = peopleProvider.people;
       final userName = SharedPreferencesUtil().givenName;
@@ -101,6 +102,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           _controller.text = suggestion.personName;
           setAllowSave(true);
         });
+        return;
       }
 
       // Predict selected person

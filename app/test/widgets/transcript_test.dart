@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -145,12 +144,6 @@ void main() {
 
     testWidgets('Tag button is removed from UI', (tester) async {
       final segment = segmentFor('seg3', 1);
-      final suggestion = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: 'person-456',
-        personName: 'Bob',
-        segmentId: 'seg3',
-      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -162,7 +155,7 @@ void main() {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true, suggestions: {'seg3': suggestion}),
+            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
           ),
         ),
       );

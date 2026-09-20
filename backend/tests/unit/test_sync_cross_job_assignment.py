@@ -198,7 +198,7 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
                 is_user=False,
             )
         ]
-        pipeline.identify_speakers_for_segments = lambda *a: None
+        pipeline.identify_speakers_for_segments = lambda *a, **kw: None
         pipeline.get_timestamp_from_path = float
         pipeline.get_wav_duration = lambda path: 60
 
@@ -276,3 +276,30 @@ def test_stale_processor_cannot_erase_new_chunks_or_remove_search_row(monkeypatc
     assert not persisted and ref.written is None
     sync.assert_called_once()
     remove.assert_not_called()
+
+
+def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
+    store = StrictFirestore()
+    a, b = chunk('a', 1000), chunk('b', 1240)
+    for item in [a, b]:
+        item['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:' + item['id'])
+        intake(store, item)
+    result, _, _ = intake(store, chunk('bridge', 1120))
+    mapped = {
+        s.get('speaker_id_scope'): s['speaker_id'] for s in result['transcript_segments'] if s.get('speaker_id_scope')
+    }
+    assert mapped['sync:a'] != mapped['sync:b']
+    replay, _, _ = intake(store, b)
+    assert {
+        s.get('speaker_id_scope'): s['speaker_id'] for s in replay['transcript_segments'] if s.get('speaker_id_scope')
+    } == mapped
+
+
+def test_manually_curated_sync_conversation_is_not_an_automatic_bridge_donor():
+    store = StrictFirestore()
+    saved, _, _ = intake(store, chunk('manual', 1000))
+    saved['manual_speaker_assignments'] = {'generation': 1, 'segments': {}, 'speakers': {}}
+    store.rows[('users', 'u', 'conversations', 'manual')] = saved
+    result, created, _ = intake(store, chunk('next', 1060))
+    assert created and result['id'] == 'next'
+    assert not store.rows[('users', 'u', 'conversations', 'manual')].get('deleted')

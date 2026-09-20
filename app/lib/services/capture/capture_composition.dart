@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:omi/backend/schema/conversation.dart';
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -59,7 +57,7 @@ class CaptureDependencies {
   final LocalSegmentStore localSegments;
   final Future<BleAudioCodec> Function(String) codec;
   final Future<bool> Function() microphonePermission;
-  final Future<List<ServerConversation>> Function() refreshConversation;
+  final Future<void> Function() refreshConversation;
 }
 
 /// Production must use this exact constructor path too. No test-only subclass.

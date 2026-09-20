@@ -20,6 +20,11 @@ SENTENCE_FINDALL_RE = re.compile(
 )
 
 
+def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
+    """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi/conversations/{conversation_id}/transcript-segments/{index}'))
+
+
 class Translation(BaseModel):
     lang: str
     text: str

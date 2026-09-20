@@ -68,7 +68,7 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
   final phone = _InertPhoneCallProvider();
   final capture = CaptureProvider(
     externalActions: const NoopCaptureExternalActions(),
-    inProgressConversationLoader: () async => [],
+    inProgressConversationLoader: () async {},
     localSegmentStore: LocalSegmentStore.disabled(),
   );
 
