@@ -1867,19 +1867,25 @@ def _write_action_items(uid: str, conversation: Conversation):
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
     action_items_db.delete_action_items_for_conversation(uid, conversation.id)
-    for item in old_items:
-        # The replaced rows may own client-scheduled reminders, which the client only
-        # cancels on the deletion data message (#5085). Reprocessing re-creates the
-        # tasks under new ids and schedules their reminders below, so leaving these
-        # armed duplicates every surviving task and keeps reminders for dropped ones.
-        if item.get('due_at') and not item.get('completed'):
-            sync_action_item_reminder(
-                user_id=uid,
-                action_item_id=item['id'],
-                description='',
-                completed=True,
-                due_at=None,
-            )
+    try:
+        for item in old_items:
+            # The replaced rows may own client-scheduled reminders, which the client
+            # only cancels on the deletion data message (#5085). Reprocessing re-creates
+            # the tasks under new ids and schedules their reminders below, so leaving
+            # these armed duplicates every surviving task and keeps reminders for
+            # dropped ones.
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=item['id'],
+                    description='',
+                    completed=True,
+                    due_at=None,
+                )
+    except Exception as e:
+        # The old rows are already gone; a failed reminder send must never cost the
+        # conversation its new extraction.
+        logger.error(f"Error cancelling replaced task reminders for {conversation.id}: {e}")
 
     action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
     logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")

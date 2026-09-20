@@ -89,3 +89,18 @@ def test_a_first_processing_with_no_previous_tasks_cancels_nothing(monkeypatch, 
     _write(monkeypatch, writer, [])
 
     writer.sync_action_item_reminder.assert_not_called()
+
+
+def test_a_failing_reminder_cancel_does_not_skip_the_new_tasks(monkeypatch, writer):
+    """The old rows are already deleted at this point; the new extraction must still be written."""
+    writer.sync_action_item_reminder.side_effect = RuntimeError("fcm unavailable")
+    create = MagicMock(return_value=["new-task"])
+    monkeypatch.setattr(writer.action_items_db, "create_action_items_batch", create)
+
+    _write(
+        monkeypatch,
+        writer,
+        [{"id": "old-open", "description": "Send the budget", "due_at": DUE, "completed": False}],
+    )
+
+    create.assert_called_once()
