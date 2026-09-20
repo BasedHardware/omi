@@ -89,11 +89,9 @@ class TestSyncLocalFilesOffload:
 
     def test_gates_use_the_same_executors_the_rest_of_the_repo_uses(self):
         offloaded = _offloaded_via_awaited_run_blocking(_handler_node())
-        # The v2 handler in this same file picks these two pools for these calls.
         assert offloaded["get_hard_restriction_status"] == "critical_executor"
         assert offloaded["has_transcription_credits"] == "critical_executor"
         assert offloaded["is_daily_audio_ceiling_exceeded"] == "db_executor"
-        # routers/listen/runtime.py reaches these through ListenPersistence.call, which is db_executor.
         assert offloaded["get_enforcement_stage"] == "db_executor"
         assert offloaded["is_dg_budget_exhausted"] == "db_executor"
         assert offloaded["record_usage"] == "db_executor"
