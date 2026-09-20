@@ -422,10 +422,11 @@ class TranscriptProcessor:
                 )
             await self._translate(updated, conversation.id, removed)
             await self._speaker_detection(updated, offset)
-        try:
-            await asyncio.wait_for(self.host.state.speaker_id_done.wait(), timeout=15.0)
-        except asyncio.TimeoutError:
-            logger.warning('Timed out waiting for listen speaker identification to finish')
+        if self.host.speakers.tasks:
+            try:
+                await asyncio.wait_for(self.host.state.speaker_id_done.wait(), timeout=15.0)
+            except asyncio.TimeoutError:
+                logger.warning('Timed out waiting for listen speaker identification to finish')
         await self.host.speakers.drain(timeout=10, label='listen_speaker_final')
         await self.flush_speaker_assignments(self.host.state.current_conversation_id)
         for conversation_id, diarized_speaker_ids in diarized_speaker_ids_by_conversation.items():

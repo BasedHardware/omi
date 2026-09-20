@@ -117,6 +117,9 @@ class SpeakerMatcher:
         # prepare() may already have loaded the first conversation's profiles.
         if self._profile_conversation_id is None:
             await self._load_profiles()
+        if not self.person_embeddings:
+            state.speaker_id_done.set()
+            return
         while True:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
@@ -175,16 +178,23 @@ class SpeakerMatcher:
             return None
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
-        if segment.get('conversation_id') is not None and segment['conversation_id'] != self._profile_conversation_id:
+        conversation_id = self._profile_conversation_id
+        if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
             return
         generation = self._generation
         lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
         async with lock:
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
-            await self._match_unmapped(speaker_id, segment, generation)
+            await self._match_unmapped(speaker_id, segment, generation, conversation_id)
 
-    async def _match_unmapped(self, speaker_id: int, segment: dict[str, Any], generation: int) -> None:
+    async def _match_unmapped(
+        self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
+    ) -> None:
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
             if ring_buffer is None or segment['duration'] < self.host.limits.speaker_id_min_audio:
@@ -237,7 +247,11 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
             # Reserve only successful embeddings: a failed request may be retried.
             covered.append((extract_start, extract_end))
@@ -270,6 +284,12 @@ class SpeakerMatcher:
                 decision.runner_up_distance,
                 decision.accepted,
             )
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
+                return
             if decision.person_id is not None:
                 best_id = decision.person_id
                 best_name = self.person_embeddings[best_id]['name']
@@ -292,7 +312,7 @@ class SpeakerMatcher:
 
     def clear(self) -> None:
         self._generation += 1
-        self._speaker_locks.clear()
+        self._profile_conversation_id = None
         self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
