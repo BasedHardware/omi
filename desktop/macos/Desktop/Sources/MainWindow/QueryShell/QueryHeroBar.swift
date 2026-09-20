@@ -387,6 +387,10 @@ struct QueryHeroBar: View {
       focusOnAppear: false,
       onMarkedTextChange: { hasMarkedText = $0 },
       focusRequest: caretClaim,
+      // Without these the NSTextView swallows the drag before the SwiftUI `.onDrop` below ever sees
+      // it, so only the padding around the field — never the field itself — could stage a file.
+      onFileDrop: { url in onAttachmentsAdded([url]) },
+      onFileDragTargeted: { isDropTargeted = $0 },
       onPasteAttachments: onPasteAttachments,
       minHeight: minEditorHeight,
       maxHeight: maxEditorHeight

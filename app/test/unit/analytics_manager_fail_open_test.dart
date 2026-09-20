@@ -325,6 +325,9 @@ class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   }
 
   @override
+  void registerSuperProperties(Map<String, Object> properties) {}
+
+  @override
   void enable() {}
 
   @override

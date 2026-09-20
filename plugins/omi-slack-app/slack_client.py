@@ -67,7 +67,6 @@ class SlackClient:
                         print(f"⚠️  Check Slack app settings - ensure User Token Scopes are set", flush=True)
                     else:
                         print("✅ Using USER token (messages will appear as user)", flush=True)
-                        print(f"✅ User token starts with: {user_token[:15]}...", flush=True)
                     
                     return {
                         "access_token": user_token,
@@ -97,7 +96,8 @@ class SlackClient:
         try:
             cursor = None
             page_count = 0
-            
+            seen_cursors = set()
+
             while True:
                 # Get channels with pagination
                 params = {
@@ -136,9 +136,15 @@ class SlackClient:
                 # Check if there are more pages
                 response_metadata = result.get("response_metadata", {})
                 cursor = response_metadata.get("next_cursor")
-                
+
+                if cursor and cursor in seen_cursors:
+                    print("⚠️  Pagination stalled: repeated cursor, stopping", flush=True)
+                    break
+
                 if not cursor:
                     break
+
+                seen_cursors.add(cursor)
             
             # Log summary
             public_channels = [c for c in channels if not c.get("is_private")]
@@ -180,9 +186,8 @@ class SlackClient:
         client = WebClient(token=access_token)
         
         # Debug: Check token type
-        token_prefix = access_token[:15] if access_token else "None"
         token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
-        print(f"🔑 Sending with {token_type} token: {token_prefix}...", flush=True)
+        print(f"🔑 Sending with {token_type} token", flush=True)
         
         try:
             # Note: as_user parameter is deprecated and not needed with user tokens

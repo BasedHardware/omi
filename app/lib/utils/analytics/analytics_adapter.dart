@@ -29,6 +29,11 @@ abstract class AnalyticsAdapter {
   /// they cannot otherwise identify the Flutter screen or control involved.
   void setInteractionContext({String? screenName, required String target}) {}
 
+  /// Register properties that attach to every subsequent event (PostHog super
+  /// properties). Default is a no-op so test fakes and SDKs without this
+  /// concept do not need an override.
+  void registerSuperProperties(Map<String, Object> properties) {}
+
   /// Resume capture after a previous `disable()`.
   void enable();
 

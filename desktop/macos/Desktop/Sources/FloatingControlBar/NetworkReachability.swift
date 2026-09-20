@@ -37,9 +37,9 @@ final class NetworkReachability {
   func start() {
     guard !started else { return }
     started = true
-    monitor.pathUpdateHandler = { path in
+    monitor.pathUpdateHandler = { [weak self] path in
       let satisfied = path.status == .satisfied
-      Task { @MainActor [weak self] in
+      Task { @MainActor [weak self = self] in
         guard let self, self.online != satisfied else { return }
         self.online = satisfied
         log("NetworkReachability: network \(satisfied ? "available" : "unavailable")")

@@ -174,6 +174,8 @@ env:
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "true"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "true"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: GOOGLE_CALENDAR_AUTO_LINK_ENABLED
@@ -207,6 +209,8 @@ env:
     value: "on"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
@@ -269,7 +273,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

@@ -180,6 +180,27 @@ class TestBoostExemption(unittest.TestCase):
     def test_action_items_list_is_exempt_by_default(self):
         self.assertIn("action_items:list", BOOST_EXEMPT_POLICIES)
 
+    def test_dev_abuse_ceilings_are_exempt_by_default(self):
+        """GH #13505: the /v1/dev/* abuse ceilings are decisions, not defaults.
+
+        RATE_LIMIT_BOOST exists to widen limits for events; at the documented
+        production value 100 it would turn the 30/min memories burst ceiling
+        into 3,000/min and the 30/hour from-segments budget into 3,000/hour —
+        exactly the scripted-abuse shape these policies exist to stop. The
+        shared hourly ceilings (dev:memories, dev:conversations) ride the same
+        exemption so the dedicated budgets always compose with real caps.
+        """
+        for policy in (
+            "dev:memories",
+            "dev:memories_write_burst",
+            "dev:conversations",
+            "dev:conversations_from_segments",
+        ):
+            self.assertIn(policy, BOOST_EXEMPT_POLICIES)
+            base = RATE_POLICIES[policy]
+            for boost in (2.0, 100.0, 1000.0):
+                self.assertEqual(get_effective_limit(policy, boost=boost), base)
+
     def test_exempt_policy_ignores_the_boost(self):
         """(b) The exempt policy enforces its base limit under any boost."""
         base = RATE_POLICIES["action_items:list"]
@@ -511,6 +532,16 @@ class TestWithRateLimitWrapper(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             asyncio.run(dep_func(uid="user123"))
         self.assertEqual(ctx.exception.status_code, 429)
+
+    def test_with_rate_limit_dependency_maps_executor_saturation_to_503(self):
+        dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+
+        with patch.object(self.ep, 'run_blocking', side_effect=self.ep.ExecutorSaturatedError('saturated')):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(dep_func(uid="user123"))
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.headers, {'Retry-After': '1'})
 
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_with_rate_limit_context_uses_app_key_identity(self, mock_enforce):

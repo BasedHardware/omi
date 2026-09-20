@@ -58,6 +58,14 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   }
 
   @override
+  void registerSuperProperties(Map<String, Object> properties) {
+    if (!_initialized) return;
+    for (final entry in properties.entries) {
+      unawaited(Posthog().register(entry.key, entry.value));
+    }
+  }
+
+  @override
   void setInteractionContext({String? screenName, required String target}) {
     if (!_initialized) return;
 

@@ -52,6 +52,7 @@ class DeepgramTranscriber:
                         asyncio.create_task(send_audio()),
                         asyncio.create_task(receive()),
                     )
+                    caller_stopped = False
                     try:
                         done, _ = await asyncio.wait(
                             tasks, return_when=asyncio.FIRST_COMPLETED
@@ -60,10 +61,18 @@ class DeepgramTranscriber:
                             task.result()
                         # A clean receive EOF must also trigger the retry loop.
                         raise ConnectionError("Deepgram connection closed")
+                    except asyncio.CancelledError:
+                        caller_stopped = True
+                        raise
                     finally:
                         for task in tasks:
                             task.cancel()
                         await asyncio.gather(*tasks, return_exceptions=True)
+                        if caller_stopped:
+                            try:
+                                await ws.send(json.dumps({"type": "CloseStream"}))
+                            except Exception:
+                                pass
             except Exception as exc:
                 print(f"Deepgram error: {exc}")
                 await asyncio.sleep(1)

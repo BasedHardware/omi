@@ -1,5 +1,7 @@
 # omi-cli
 
+[Русский: быстрый старт](README.ru.md)
+
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
 `omi-cli` is the command-line interface to the [Omi](https://omi.me) developer
@@ -63,8 +65,30 @@ Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
+> [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), or [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), or the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md).
+
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), or the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md).
+
+> 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
+
+> Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
+
+> Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
+> Looking for localized guides? See the [🇭🇰 廣東話上手指南 (Cantonese Quickstart)](examples/quickstart.yue.md).
+
+> Looking for localized guides? See the [डोगरी च शुरूआती मार्गदर्शिका (Dogri Quickstart)](examples/quickstart.doi.md).
+
+> Looking for localized guides? See the [🇫🇷 Guide de démarrage rapide en français (French Quickstart)](examples/quickstart.fr.md), the [🇩🇪 Deutsche Schnellstartanleitung (German Quickstart)](examples/quickstart.de.md), the [🇵🇹 Guia de início rápido em português (Portuguese Quickstart)](examples/quickstart.pt.md), or the [🇮🇹 Guida rapida in italiano (Italian Quickstart)](examples/quickstart.it.md).
+> Looking for localized guides? See the [🇮🇳 हिंदी में शुरुआत (Hindi Quickstart)](examples/quickstart.hi.md).
+
+> Looking for localized guides? See the [नेपालीमा सुरुवात (Nepali Quickstart)](examples/quickstart.ne.md).
+> Looking for localized guides? See the [🇵🇰 سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart)](examples/quickstart.sd.md).
+
+> Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
+> Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
+> Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
 
 ## Auth
 
@@ -184,6 +208,10 @@ Task writes should only run after the user clearly asks for that change:
 omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```
+
+### Apply the requested time window to exact screen search
+
+The exact app/window/OCR fallback for `omi --json local search-screen` honors the same rolling `--days` window as semantic search.
 
 ## Command surface
 
@@ -325,6 +353,10 @@ write. These failures return exit code `3` with an `outcome unknown` message.
 Check the resource before trying again. Connection-establishment failures and
 rate-limit responses still retry; read retries are unchanged.
 
+## Allow clearing an action item due date
+
+`omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
 (UTC), numeric offsets, and optional fractional seconds, for example
@@ -353,3 +385,6 @@ bash release.sh --build-only
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
+- [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
+- [Furlan (Friulian)](examples/quickstart.fur.md)

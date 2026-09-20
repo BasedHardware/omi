@@ -14,6 +14,7 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 import sys
@@ -209,7 +210,7 @@ def load(path: Optional[Path] = None) -> Config:
         )
 
     profiles_data = data.get("profiles", {})
-    
+
     # Validate that profiles is a table (dict), not a string or other scalar.
     if not isinstance(profiles_data, dict):
         return Config(
@@ -218,9 +219,18 @@ def load(path: Optional[Path] = None) -> Config:
             profiles={},
             load_error=f"'profiles' must be a table, got {type(profiles_data).__name__}",
         )
-    
-    # Validate each profile value is a table before constructing Profile objects.
+
+    # Validate each profile value is a table and known fields have valid types before constructing Profile objects.
     profiles = {}
+    string_fields = (
+        "auth_method",
+        "api_key",
+        "id_token",
+        "refresh_token",
+        "api_base",
+        "local_api_url",
+        "local_token",
+    )
     for name, raw in profiles_data.items():
         if not isinstance(raw, dict):
             return Config(
@@ -229,6 +239,33 @@ def load(path: Optional[Path] = None) -> Config:
                 profiles={},
                 load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
             )
+        for field_name in string_fields:
+            if field_name in raw:
+                val = raw[field_name]
+                if val is not None and not isinstance(val, str):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field '{field_name}' must be a string, got {type(val).__name__}",
+                    )
+        if "id_token_expires_at" in raw:
+            val = raw["id_token_expires_at"]
+            if val is not None:
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got {type(val).__name__}",
+                    )
+                if not math.isfinite(val):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got non-finite ({val})",
+                    )
         profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
@@ -249,16 +286,19 @@ def save(config: Config) -> None:
     """
     if config.load_error is not None:
         raise PermissionError(
-            f"refusing to overwrite {config.path}: {config.load_error}. "
-            "Fix or remove the config file and try again."
+            f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    config.path.parent.mkdir(parents=True, exist_ok=True)
-    # Tighten parent dir perms too — credentials live underneath. Best-effort:
-    # don't fail if the user has a custom mode they want to keep.
-    try:
-        os.chmod(config.path.parent, 0o700)
-    except OSError:
-        pass
+    parent = config.path.parent
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Owner-only perms on a directory we create ourselves. Leave a
+    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
+    # directory's permissions untouched — best-effort, don't fail on it.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
 
     payload: dict[str, Any] = {
         **config.extra,
@@ -286,8 +326,12 @@ def save(config: Config) -> None:
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
+            # Atomic rename. The destination inherits the temp's 0o600 mode.
+            os.replace(tmp_path, config.path)
         except Exception:
-            # Best-effort cleanup if the dump itself failed mid-write.
+            # Best-effort cleanup of our own temp file, whether the dump or
+            # the replace failed. A failed replace (e.g. destination locked
+            # on Windows) must not leave a credential-bearing temp behind.
             try:
                 os.unlink(tmp_path)
             except FileNotFoundError:
@@ -295,9 +339,6 @@ def save(config: Config) -> None:
             raise
     finally:
         os.umask(old_umask)
-
-    # Atomic rename. The destination inherits the temp's 0o600 mode.
-    os.replace(tmp_path, config.path)
 
 
 def resolve_profile_name(cli_flag: Optional[str], config: Config) -> str:

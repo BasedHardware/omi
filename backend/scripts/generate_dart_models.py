@@ -407,6 +407,10 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'memories_wire.g.dart',
         'schemas': (
             'Evidence',
+            'MemoryCaptureContext',
+            'MemoryUseAction',
+            'MemoryUseRequest',
+            'MemoryUseResponse',
             'MemoryDB',
             'MemoryEditResponse',
             'MemoryRevertRequest',

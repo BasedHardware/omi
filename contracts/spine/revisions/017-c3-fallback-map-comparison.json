@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c3_projection_test.dart",
+  "owner": "C3",
+  "before": "ec479fa35d4562216971032e9bbb198ba56b1c2d94c80268a776c81904000220",
+  "after": "1c9b4adaef4ac2541ab2ba4dd801e2e4aec7baeedcb712e6493d3ffaaa4599fe",
+  "reason": "Dart Record.== compares Map fields by identity; compare emission cardinality and name separately, and pass the Map directly to expect for deep collection matching. All closed fields and pending markers are preserved. Reproduced on Flutter 3.44.5 with equal-content distinct Maps; wrong names, duplicate events, changed outcomes and extra private fields still fail. Same language fact as C7 revision 009."
+}

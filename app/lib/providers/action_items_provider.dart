@@ -4,6 +4,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
@@ -21,6 +24,8 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   String? conversationId,
   DateTime? startDate,
   DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
 });
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
@@ -29,15 +34,22 @@ class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
-        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final api.ActionItemsApi? _actionItemsApi;
+  ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
+  Future<void>? _homeTodayLoad;
+  bool _homeDayLoaded = false;
+  List<ActionItemWithMetadata> _homeDayItems = [];
 
   List<ActionItemWithMetadata> _actionItems = [];
 
@@ -80,6 +92,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
+  ApiViewState<List<ActionItemWithMetadata>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
@@ -88,6 +104,33 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
+
+  /// Home preview: due-window rows plus any first-page matches, so an empty
+  /// due-window response cannot hide a task already on the global first page.
+  List<ActionItemWithMetadata> todayPreviewTasks({DateTime? now, int limit = 3}) {
+    final clock = now ?? DateTime.now();
+    final byId = <String, ActionItemWithMetadata>{};
+    for (final item in filterTodayTasks(_actionItems, now: clock)) {
+      byId[item.id] = item;
+    }
+    if (_homeDayLoaded) {
+      for (final item in filterTodayTasks(_homeDayItems, now: clock)) {
+        byId[item.id] = item;
+      }
+    }
+    return byId.values.take(limit).toList();
+  }
+
+  static List<ActionItemWithMetadata> filterTodayTasks(List<ActionItemWithMetadata> items, {required DateTime now}) {
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    return items.where((item) {
+      if (item.completed) return false;
+      if (item.dueAt == null) return false;
+      if (item.dueAt!.isBefore(sevenDaysAgo)) return false;
+      return item.dueAt!.isBefore(startOfTomorrow);
+    }).toList();
+  }
 
   // Selection getters
   bool get isSelectionMode => _isSelectionMode;
@@ -176,6 +219,43 @@ class ActionItemsProvider extends ChangeNotifier {
     return _initialLoad!;
   }
 
+  /// Home asks only for incomplete tasks due in the visible window, instead of
+  /// paging the whole task history. Does not replace `_actionItems`.
+  Future<void> ensureHomeTodayTasksLoaded({DateTime? now}) {
+    final existing = _homeTodayLoad;
+    if (existing != null) return existing;
+    if (_homeDayLoaded) return Future.value();
+
+    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(() {
+      _homeTodayLoad = null;
+    });
+    _homeTodayLoad = load;
+    return load;
+  }
+
+  Future<void> _fetchHomeTodayTasks({required DateTime now}) async {
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    try {
+      final response = await _fetchActionItemsPage(
+        limit: 100,
+        offset: 0,
+        completed: false,
+        dueStartDate: sevenDaysAgo,
+        dueEndDate: startOfTomorrow.subtract(const Duration(microseconds: 1)),
+      );
+      if (response != null) {
+        _homeDayItems = _pendingDeletionIds.isEmpty
+            ? List.of(response.actionItems)
+            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _homeDayLoaded = true;
+      }
+    } catch (e) {
+      Logger.debug('Error fetching home today tasks: $e');
+    }
+    notifyListeners();
+  }
+
   /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
   Future<void> _migrateCategoryOrderFromPrefs() async {
     final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
@@ -209,6 +289,49 @@ class ActionItemsProvider extends ChangeNotifier {
   static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
       items.isNotEmpty && items.every((item) => item.completed);
 
+  /// Shared list fetch. A typed outage returns null so Home today and
+  /// load-more keep existing rows instead of looking like an empty account.
+  Future<ActionItemsResponse?> _fetchActionItemsPage({
+    required int limit,
+    required int offset,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+    void Function(ApiResult<ActionItemsResponse> typed)? onTyped,
+  }) async {
+    final typedApi = _actionItemsApi;
+    if (typedApi != null) {
+      final typed = await typedApi.list(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+        dueStartDate: dueStartDate,
+        dueEndDate: dueEndDate,
+      );
+      onTyped?.call(typed);
+      return switch (typed) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null,
+      };
+    }
+    return _getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      conversationId: conversationId,
+      startDate: startDate,
+      endDate: endDate,
+      dueStartDate: dueStartDate,
+      dueEndDate: dueEndDate,
+    );
+  }
+
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     var loaded = false;
     if (showShimmer) {
@@ -218,38 +341,17 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
+        onTyped: _projectTypedList,
       );
-
       if (response != null) {
-        // Snapshot server IDs before filtering so tombstone retirement is
-        // based on the full server response, not the filtered subset.
-        final serverIds = response.actionItems.map((e) => e.id).toSet();
-        // Filter into a new list rather than mutating response.actionItems
-        // in-place: the response list may be unmodifiable, and aliasing it
-        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
-        // and retire tombstones prematurely.
-        _actionItems = _pendingDeletionIds.isEmpty
-            ? List.of(response.actionItems)
-            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-        // Lazily retire tombstones once the server confirms the item is gone:
-        // any ID still tracked as pending-deletion that did not appear in the
-        // fresh server response can be cleared, because subsequent refreshes
-        // will no longer see it.
-        if (_pendingDeletionIds.isNotEmpty) {
-          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
-        }
-        _hasMore = response.hasMore;
+        _applyFetchedActionItems(response);
         loaded = true;
-
-        if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
-          _showCompletedView = true;
-        }
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
@@ -265,13 +367,50 @@ class ActionItemsProvider extends ChangeNotifier {
     return loaded;
   }
 
+  void _projectTypedList(ApiResult<ActionItemsResponse> result) {
+    _listViewState = presentApiResult(
+      switch (result) {
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(data.actionItems, rejectedRows: rejectedRows),
+        ApiFailure(:final problem) => ApiFailure<List<ActionItemWithMetadata>>(problem),
+      },
+      previous: _actionItems.isNotEmpty ? _actionItems : null,
+      isEmpty: (rows) => rows.isEmpty,
+      fallback: recordFallback,
+    );
+  }
+
+  void _applyFetchedActionItems(ActionItemsResponse response) {
+    // Snapshot server IDs before filtering so tombstone retirement is
+    // based on the full server response, not the filtered subset.
+    final serverIds = response.actionItems.map((e) => e.id).toSet();
+    // Filter into a new list rather than mutating response.actionItems
+    // in-place: the response list may be unmodifiable, and aliasing it
+    // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+    // and retire tombstones prematurely.
+    _actionItems = _pendingDeletionIds.isEmpty
+        ? List.of(response.actionItems)
+        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+    // Lazily retire tombstones once the server confirms the item is gone:
+    // any ID still tracked as pending-deletion that did not appear in the
+    // fresh server response can be cleared, because subsequent refreshes
+    // will no longer see it.
+    if (_pendingDeletionIds.isNotEmpty) {
+      _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+    }
+    _hasMore = response.hasMore;
+
+    if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+      _showCompletedView = true;
+    }
+  }
+
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
 
     setFetching(true);
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
@@ -662,13 +801,18 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
+    ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {
       _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
-      return _actionItems[mainIndex];
+      updated = _actionItems[mainIndex];
     }
-
-    return null;
+    final homeIndex = _homeDayItems.indexWhere((item) => item.id == itemId);
+    if (homeIndex != -1) {
+      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState);
+      updated ??= _homeDayItems[homeIndex];
+    }
+    return updated;
   }
 
   ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
@@ -805,6 +949,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void clearUserData() {
     _actionItems = [];
+    _homeDayItems = [];
+    _homeDayLoaded = false;
+    _homeTodayLoad = null;
     _selectedItems = {};
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();

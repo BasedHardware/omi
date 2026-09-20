@@ -148,6 +148,8 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "false"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -168,6 +170,8 @@ env:
   - name: MEMORY_ENABLED
     value: "on"
   - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
     value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
@@ -337,7 +341,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

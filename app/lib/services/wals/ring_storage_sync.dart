@@ -340,6 +340,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// Returns true if the transfer ran to completion (DONE received and acted on).
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
+    final admittedGeneration = _localSync?.sessionGeneration ?? -1;
     final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
 
@@ -391,7 +392,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         bytesData.removeRange(0, take);
         try {
           final file = await _flushToDisk(wal, chunk, chunkTimerStart);
-          await _registerWithLocalSync(wal, file, chunkTimerStart, chunk.length);
+          await _registerWithLocalSync(wal, file, chunkTimerStart, chunk.length, admittedGeneration);
         } catch (e) {
           Logger.debug('RingStorageSync._syncRing: flush error: $e');
           flushError = true;
@@ -495,8 +496,6 @@ class RingStorageSyncImpl implements RingStorageSync {
               pct,
               speedKBps: _currentSpeedKBps,
               phase: SyncPhase.downloadingFromDevice,
-              currentFile: 1,
-              totalFiles: 1,
             );
           }
         }
@@ -631,7 +630,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     return file;
   }
 
-  Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
+  Future<void> _registerWithLocalSync(
+      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug('RingStorageSync: WARNING - LocalWalSync not available, chunk will not be uploaded');
       return;
@@ -655,7 +655,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       originalStorage: WalStorage.sdcard,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug('RingStorageSync: registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames)');
   }
 }
