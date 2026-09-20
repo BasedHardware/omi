@@ -86,6 +86,7 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
+from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -1466,7 +1467,10 @@ def _assign_manual_speaker(
                 uid=uid,
                 person_id=person_id,
                 conversation_id=conversation_id,
-                segment_ids=resolved,
+                segment_ids=teaching_segment_ids(
+                    [segment.model_dump() for segment in conversation.transcript_segments],
+                    resolved,
+                ),
             )
     _emit_speaker_identity_confirmed(
         uid=uid,

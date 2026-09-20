@@ -8,7 +8,7 @@ import pytest
 
 from routers.listen import receiver, transcripts
 from database import conversations as db
-from utils.manual_speaker_assignments import acknowledged_teaching, apply_manual_assignments
+from utils.manual_speaker_assignments import acknowledged_teaching, apply_manual_assignments, teaching_segment_ids
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -403,3 +403,49 @@ def test_absorbed_labeled_segment_moves_receipt_and_is_not_resurrected(world):
     assert saved['transcript_segments'][0]['person_id'] == 'new'
     assert 'cont' not in (saved['manual_speaker_assignments'].get('segments') or {})
     assert saved['manual_speaker_assignments']['segments']['keep']['person_id'] == 'new'
+
+
+def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded(world, monkeypatch):
+    from types import SimpleNamespace
+    from routers import conversations as conv
+    from models.transcript_segment import TranscriptSegment
+    from utils.speaker_identification import extract_speaker_samples
+
+    store, path, _ = world
+    durations = [1.0, 9.0, 3.0, 7.0, 2.0, 4.0]
+    segments = [
+        dict(
+            id=f's{i}',
+            speaker='SPEAKER_00',
+            speaker_id=4,
+            text='Synthetic speech',
+            start=0,
+            end=duration,
+            is_user=False,
+            person_id=None,
+        )
+        for i, duration in enumerate(durations)
+    ]
+    store.rows[path]['transcript_segments'] = segments
+    captured = []
+
+    class Tasks:
+        def add_task(self, fn, *args, **kwargs):
+            captured.append((fn, kwargs))
+
+    monkeypatch.setattr(conv, 'emit_product_event', lambda **kwargs: None)
+    monkeypatch.setattr(conv, '_drop_display_projection', lambda conversation: None)
+    monkeypatch.setattr(
+        conv,
+        'deserialize_conversation',
+        lambda raw: SimpleNamespace(
+            transcript_segments=[TranscriptSegment(**segment) for segment in raw['transcript_segments']]
+        ),
+    )
+    conv._assign_manual_speaker('c', 'person_id', 'new', 'u', Tasks(), speaker_id=4)
+    saved = read(world)
+    assert [segment['person_id'] for segment in saved['transcript_segments']] == ['new'] * len(segments)
+    extract_calls = [(fn, kwargs) for fn, kwargs in captured if fn is extract_speaker_samples]
+    assert len(extract_calls) == 1
+    assert extract_calls[0][1]['segment_ids'] == ['s1', 's3', 's5']
+    assert teaching_segment_ids(segments, [segment['id'] for segment in segments]) == ['s1', 's3', 's5']

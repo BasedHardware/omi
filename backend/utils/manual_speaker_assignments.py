@@ -9,6 +9,22 @@ import uuid
 
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
+TEACHING_CANDIDATE_LIMIT = 3
+
+
+def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int = TEACHING_CANDIDATE_LIMIT) -> list[str]:
+    """Longest labeled clips first, capped so extraction never walks the whole speaker cluster."""
+    by_id = {segment.get('id'): segment for segment in segments if segment.get('id')}
+    ranked = []
+    for sid in resolved:
+        segment = by_id.get(sid)
+        if not segment:
+            continue
+        duration = float(segment.get('end') or 0) - float(segment.get('start') or 0)
+        ranked.append((duration, sid))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [sid for _, sid in ranked[:limit]]
+
 
 def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     speakers = receipt.get('speakers') or {}
