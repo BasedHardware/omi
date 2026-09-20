@@ -1,6 +1,6 @@
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Optional, List, Tuple, cast
+from typing import Any, Dict, Optional, List, Tuple, cast
 import uuid
 import re
 from pydantic import BaseModel, Field, PrivateAttr
@@ -23,6 +23,14 @@ SENTENCE_FINDALL_RE = re.compile(
 def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
     """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi/conversations/{conversation_id}/transcript-segments/{index}'))
+
+
+class _RemovedSegmentIds(list):
+    __slots__ = ('into',)
+
+    def __init__(self, ids: List[str], into: Dict[str, str]):
+        super().__init__(ids)
+        self.into = into
 
 
 class Translation(BaseModel):
@@ -194,6 +202,16 @@ class TranscriptSegment(BaseModel):
                 and a.speech_profile_processed == b.speech_profile_processed
             )
 
+        absorbed_into: Dict[str, str] = {}
+        removed_ids: List[str] = []
+
+        def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
+            if child is None or not child.id:
+                return
+            removed_ids.append(cast(str, child.id))
+            if parent is not None and parent.id:
+                absorbed_into[cast(str, child.id)] = cast(str, parent.id)
+
         # Combined
         def _merge(
             a: Optional['TranscriptSegment'], b: Optional['TranscriptSegment']
@@ -215,6 +233,7 @@ class TranscriptSegment(BaseModel):
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
                     b.text = f'{last_incomplete} {b.text}'.strip()
@@ -227,16 +246,16 @@ class TranscriptSegment(BaseModel):
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                _absorb(b, a)
                 return a, None
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                _absorb(b, a)
                 return a, None
 
             return a, b
-
-        removed_ids: List[str] = []
 
         # Join
         joined_similar_segments: List[TranscriptSegment] = [segments[-1].model_copy(deep=True)] if segments else []
@@ -270,7 +289,7 @@ class TranscriptSegment(BaseModel):
                 segment.text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
-        return segments, joined_similar_segments, removed_ids
+        return segments, joined_similar_segments, _RemovedSegmentIds(removed_ids, absorbed_into)
 
 
 class ImprovedTranscriptSegment(BaseModel):

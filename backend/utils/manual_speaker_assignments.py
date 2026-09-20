@@ -40,6 +40,30 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     return result if result is not None else segments
 
 
+def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict:
+    """Move segment overrides from absorbed ids onto the surviving segment."""
+    if not absorbed_into:
+        return receipt
+    segments = dict(receipt.get('segments') or {})
+    changed = False
+    for absorbed_id, survivor_id in absorbed_into.items():
+        entry = segments.pop(absorbed_id, None)
+        if entry is None:
+            continue
+        changed = True
+        existing = segments.get(survivor_id)
+        if existing is None or entry.get('generation', 0) >= existing.get('generation', 0):
+            segments[survivor_id] = entry
+    if not changed:
+        return receipt
+    updated = dict(receipt)
+    if segments:
+        updated['segments'] = segments
+    else:
+        updated.pop('segments', None)
+    return updated
+
+
 def manual_assignment(
     conversation: dict,
     *,

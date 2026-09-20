@@ -22,7 +22,7 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
-from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment
+from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment, remap_absorbed_receipt
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -2168,6 +2168,9 @@ def update_conversation_segments(
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
+        absorbed_into = getattr(removed_segment_ids, 'into', None) or {}
+        if absorbed_into:
+            receipt = remap_absorbed_receipt(receipt, absorbed_into)
         incoming = list(segments)
         if preserve_unseen:
             known = {s.get('id') for s in incoming} | set(removed_segment_ids or [])
@@ -2183,6 +2186,8 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(segments),
         }
+        if absorbed_into:
+            update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
             update_payload['finished_at'] = finished_at
         if started_at:
