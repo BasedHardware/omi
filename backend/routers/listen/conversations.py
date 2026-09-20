@@ -343,6 +343,7 @@ class LiveConversationController:
                 closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
                 await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
         self.host.state.current_conversation_id = conversation_id
+        await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)
 
     async def prepare(self) -> Optional[str]:

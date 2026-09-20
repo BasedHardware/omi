@@ -11914,5 +11914,14 @@
                 "type": "String"
             }
         }
+    },
+    "voiceRecognitionStatus": "{status, select, ready{Voice ready for recognition} saved_sample_awaiting_embedding{Sample saved; voice processing still needed} not_learned{Voice not learned} other{Voice status unknown}}",
+    "@voiceRecognitionStatus": {
+        "description": "Stored voice readiness only; no guarantee of a queued learning job.",
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
     }
 }

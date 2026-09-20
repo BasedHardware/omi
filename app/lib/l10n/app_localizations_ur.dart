@@ -10104,4 +10104,18 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'آواز شناخت کے لیے تیار ہے',
+        'saved_sample_awaiting_embedding': 'نمونہ محفوظ ہے؛ آواز کی پروسیسنگ ابھی درکار ہے',
+        'not_learned': 'آواز سیکھی نہیں گئی',
+        'other': 'آواز کی حالت نامعلوم ہے',
+      },
+    );
+    return '$_temp0';
+  }
 }

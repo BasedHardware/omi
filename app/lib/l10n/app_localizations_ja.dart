@@ -9922,4 +9922,18 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '声の認識準備ができています',
+        'saved_sample_awaiting_embedding': 'サンプル保存済み・音声処理が必要です',
+        'not_learned': '声は未学習です',
+        'other': '声の状態は不明です',
+      },
+    );
+    return '$_temp0';
+  }
 }

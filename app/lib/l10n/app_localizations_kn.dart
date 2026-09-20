@@ -10124,4 +10124,18 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಗೆ ಸಿದ್ಧವಾಗಿದೆ',
+        'saved_sample_awaiting_embedding': 'ಮಾದರಿ ಉಳಿಸಲಾಗಿದೆ; ಧ್ವನಿ ಸಂಸ್ಕರಣೆ ಇನ್ನೂ ಅಗತ್ಯವಿದೆ',
+        'not_learned': 'ಧ್ವನಿಯನ್ನು ಕಲಿತಿಲ್ಲ',
+        'other': 'ಧ್ವನಿಯ ಸ್ಥಿತಿ ತಿಳಿದಿಲ್ಲ',
+      },
+    );
+    return '$_temp0';
+  }
 }

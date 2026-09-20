@@ -10120,4 +10120,18 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Stem klaar voor herkenning',
+        'saved_sample_awaiting_embedding': 'Fragment opgeslagen; stemverwerking nog nodig',
+        'not_learned': 'Stem niet geleerd',
+        'other': 'Stemstatus onbekend',
+      },
+    );
+    return '$_temp0';
+  }
 }

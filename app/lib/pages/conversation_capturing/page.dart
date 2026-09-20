@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/widgets/speaker_label.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -654,6 +655,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
   Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider) {
     final bool isUser = segment.isUser;
+    final name = speakerLabel(context, segment, currentSpeakerPerson(context, segment.personId));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -683,15 +685,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFF8B5CF6).withValues(alpha: 0.8) : const Color(0xFF2A2A32),
+                  color: isUser ? Colors.blueGrey.withValues(alpha: 0.8) : const Color(0xFF2A2A32),
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4, offset: const Offset(0, 1)),
                   ],
                 ),
-                child: Text(
-                  segment.text,
-                  style: TextStyle(color: isUser ? Colors.white : Colors.grey.shade100, fontSize: 15, height: 1.4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(segment.text,
+                        style:
+                            TextStyle(color: isUser ? Colors.white : Colors.grey.shade100, fontSize: 15, height: 1.4)),
+                  ],
                 ),
               ),
             ),
@@ -704,7 +712,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    backgroundColor: Colors.blueGrey.withValues(alpha: 0.3),
                     child: const Icon(Icons.person, size: 16, color: Colors.white70),
                   ),
                   const SizedBox(height: 2),

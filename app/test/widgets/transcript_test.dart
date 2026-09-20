@@ -10,6 +10,9 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   setUpAll(() async {
@@ -41,6 +44,39 @@ void main() {
       translations: [],
     );
   }
+
+  testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
+    await setupSharedPreferences();
+    var loaded = <Person>[];
+    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final segment = segmentFor('reactive', 2)..personId = 'later';
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: people,
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment])),
+        )));
+    await tester.pumpAndSettle();
+    expect(find.text('Speaker 3'), findsOneWidget);
+    loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
+    await people.setPeople();
+    await tester.pumpAndSettle();
+    expect(find.text('Alex'), findsOneWidget);
+    await people.updatePersonProvider(people.people.single, 'Sam');
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Alex'), findsNothing);
+    people.clearUserData();
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsNothing);
+    expect(find.text('Speaker 3'), findsOneWidget);
+  });
 
   group('Speaker label display', () {
     testWidgets('shows person name when personId is set and in cache', (tester) async {

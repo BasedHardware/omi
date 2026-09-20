@@ -10179,4 +10179,18 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voix prête pour la reconnaissance',
+        'saved_sample_awaiting_embedding': 'Échantillon enregistré ; traitement vocal encore nécessaire',
+        'not_learned': 'Voix non apprise',
+        'other': 'État de la voix inconnu',
+      },
+    );
+    return '$_temp0';
+  }
 }

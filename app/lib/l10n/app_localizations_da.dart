@@ -10077,4 +10077,18 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Stemmen er klar til genkendelse',
+        'saved_sample_awaiting_embedding': 'Prøve gemt, afventer stemmebehandling',
+        'not_learned': 'Stemmen er ikke lært',
+        'other': 'Stemmestatus ukendt',
+      },
+    );
+    return '$_temp0';
+  }
 }

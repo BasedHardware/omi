@@ -10093,4 +10093,18 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'صدا آمادهٔ شناسایی است',
+        'saved_sample_awaiting_embedding': 'نمونه ذخیره شد؛ پردازش صدا هنوز لازم است',
+        'not_learned': 'صدا یاد گرفته نشده است',
+        'other': 'وضعیت صدا نامشخص است',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -303,3 +303,26 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         matcher, suggestions = asyncio.run(fresh_live_match(monkeypatch, 'account-a', world.vector))
         assert matcher.speaker_to_person[7] == ('person-2', 'Synthetic Sam')
         assert set(pipeline.build_person_embeddings_cache('account-a')) == {'person-2'}
+
+
+def test_next_conversation_refreshes_profiles_but_same_conversation_keeps_locked_matches(world, monkeypatch):
+    async def exercise():
+        matcher, _ = await fresh_live_match(monkeypatch, 'account-a', world.vector)
+        await matcher.refresh_for_conversation('first')
+        assert not matcher.person_embeddings
+        await teaching.extract_speaker_samples('account-a', 'person-1', 'teach-1', ['s1', 's2'])
+        matcher.speaker_to_person[7] = ('locked', 'Locked')
+        await matcher.refresh_for_conversation('first')
+        assert matcher.speaker_to_person[7][0] == 'locked'
+        assert not matcher.person_embeddings
+        await matcher.refresh_for_conversation('second')
+        assert 'person-1' in matcher.person_embeddings
+        assert not matcher.speaker_to_person
+        await matcher.match(7, {'id': 'old', 'conversation_id': 'first', 'duration': 10, 'abs_start': 0, 'abs_end': 10})
+        assert not matcher.speaker_to_person
+        await matcher.match(
+            7, {'id': 'new', 'conversation_id': 'second', 'duration': 10, 'abs_start': 0, 'abs_end': 10}
+        )
+        assert matcher.speaker_to_person[7][0] == 'person-1'
+
+    asyncio.run(exercise())

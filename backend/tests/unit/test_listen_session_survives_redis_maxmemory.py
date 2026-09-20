@@ -41,6 +41,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import pytest
@@ -162,6 +163,7 @@ class _Host:
         self.storage_calls: List[str] = []
         self.transcripts = SimpleNamespace(flush_speaker_assignments=self._flush_speakers)
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         index = min(self._wait_index, len(self._wait_returns) - 1)

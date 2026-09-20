@@ -9903,4 +9903,18 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '声音已就绪，可用于识别',
+        'saved_sample_awaiting_embedding': '样本已保存，仍需处理声音',
+        'not_learned': '尚未学习声音',
+        'other': '声音状态未知',
+      },
+    );
+    return '$_temp0';
+  }
 }

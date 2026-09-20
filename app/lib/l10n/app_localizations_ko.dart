@@ -9925,4 +9925,18 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '음성 인식 준비 완료',
+        'saved_sample_awaiting_embedding': '샘플 저장됨; 음성 처리가 더 필요합니다',
+        'not_learned': '음성 학습 안 됨',
+        'other': '음성 상태 알 수 없음',
+      },
+    );
+    return '$_temp0';
+  }
 }

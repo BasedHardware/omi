@@ -10120,4 +10120,18 @@ class AppLocalizationsBs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Glas je spreman za prepoznavanje',
+        'saved_sample_awaiting_embedding': 'Uzorak je sačuvan, čeka obradu glasa',
+        'not_learned': 'Glas nije naučen',
+        'other': 'Status glasa je nepoznat',
+      },
+    );
+    return '$_temp0';
+  }
 }

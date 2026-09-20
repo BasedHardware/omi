@@ -10084,4 +10084,18 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hlas je pripravený na rozpoznanie',
+        'saved_sample_awaiting_embedding': 'Vzorka uložená, hlas ešte treba spracovať',
+        'not_learned': 'Hlas nie je naučený',
+        'other': 'Stav hlasu nie je známy',
+      },
+    );
+    return '$_temp0';
+  }
 }

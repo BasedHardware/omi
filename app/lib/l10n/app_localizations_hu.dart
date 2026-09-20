@@ -10133,4 +10133,18 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'A hang készen áll a felismerésre',
+        'saved_sample_awaiting_embedding': 'Minta mentve, a hang feldolgozása még szükséges',
+        'not_learned': 'A hang nincs megtanulva',
+        'other': 'A hang állapota ismeretlen',
+      },
+    );
+    return '$_temp0';
+  }
 }

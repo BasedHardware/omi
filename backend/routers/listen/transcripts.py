@@ -491,6 +491,7 @@ class TranscriptProcessor:
                     speaker.queue.put_nowait(
                         {
                             'id': segment.id,
+                            'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': segment.speaker_id,
                             'abs_start': self.host.state.first_audio_byte_timestamp + segment.start - offset,
                             'abs_end': self.host.state.first_audio_byte_timestamp + segment.end - offset,

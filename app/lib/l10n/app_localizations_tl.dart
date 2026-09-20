@@ -10183,4 +10183,18 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Handa na ang boses para makilala',
+        'saved_sample_awaiting_embedding': 'Na-save ang sample; kailangan pa ng pagproseso ng boses',
+        'not_learned': 'Hindi pa natutunan ang boses',
+        'other': 'Hindi alam ang katayuan ng boses',
+      },
+    );
+    return '$_temp0';
+  }
 }

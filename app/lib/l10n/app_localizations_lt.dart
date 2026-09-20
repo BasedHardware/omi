@@ -10112,4 +10112,18 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Balsas paruoštas atpažinti',
+        'saved_sample_awaiting_embedding': 'Pavyzdys išsaugotas, dar reikia apdoroti balsą',
+        'not_learned': 'Balsas neišmoktas',
+        'other': 'Balso būsena nežinoma',
+      },
+    );
+    return '$_temp0';
+  }
 }

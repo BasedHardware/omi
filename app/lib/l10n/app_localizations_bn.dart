@@ -10098,4 +10098,18 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'কণ্ঠ শনাক্তকরণের জন্য প্রস্তুত',
+        'saved_sample_awaiting_embedding': 'নমুনা সংরক্ষিত, কণ্ঠ প্রক্রিয়াকরণের অপেক্ষায়',
+        'not_learned': 'কণ্ঠ শেখা হয়নি',
+        'other': 'কণ্ঠের অবস্থা অজানা',
+      },
+    );
+    return '$_temp0';
+  }
 }
