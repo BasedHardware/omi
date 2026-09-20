@@ -1,15 +1,29 @@
+"""Tests for memories_to_sqlite recipe (PR #15142).
+
+Covers: UTC normalisation, tag formatting, load+query, idempotence,
+and ValueError on records missing a required id field.
+Uses importlib.util.spec_from_file_location to match the project
+convention established in test_memories_to_markdown.py.
+"""
+
+from __future__ import annotations
+
+import importlib.util
 import json
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
-# Add parent directories to import path if needed
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Load memories_to_sqlite example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "memories_to_sqlite.py"
+spec = importlib.util.spec_from_file_location("memories_to_sqlite", script_path)
+m2s = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m2s)
 
-from memories_to_sqlite import load, SCHEMA, boolean_to_int, format_tags, utc_stamp
+load = m2s.load
+utc_stamp = m2s.utc_stamp
+format_tags = m2s.format_tags
 
 
 class TestMemoriesToSqlite(unittest.TestCase):
@@ -65,19 +79,15 @@ class TestMemoriesToSqlite(unittest.TestCase):
         self.assertEqual(added, 2)
         self.assertEqual(total, 2)
 
-        # Verify in SQLite
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
-        # Check count by category
         cursor.execute("SELECT COUNT(*) FROM memories WHERE category = 'work'")
         self.assertEqual(cursor.fetchone()[0], 1)
 
-        # Check tag search
         cursor.execute("SELECT content FROM memories WHERE tags LIKE '%roadmap%'")
         self.assertEqual(cursor.fetchone()[0], "Discussed roadmap with team in morning sync.")
 
-        # Check manually_added query
         cursor.execute("SELECT COUNT(*) FROM memories WHERE manually_added = 1")
         self.assertEqual(cursor.fetchone()[0], 1)
 
@@ -89,7 +99,7 @@ class TestMemoriesToSqlite(unittest.TestCase):
         ]
         batch2 = [
             {"id": "mem_1", "content": "Updated memory", "category": "notes", "created_at": "2026-09-20T08:00:00Z"},
-            {"id": "mem_2", "content": "Another memory", "category": "notes", "created_at": "2026-09-20T10:00:00Z"}
+            {"id": "mem_2", "content": "Another memory", "category": "notes", "created_at": "2026-09-20T10:00:00Z"},
         ]
         f1 = self.dir_path / "m1.json"
         f2 = self.dir_path / "m2.json"
@@ -108,6 +118,18 @@ class TestMemoriesToSqlite(unittest.TestCase):
         cursor.execute("SELECT content FROM memories WHERE id = 'mem_1'")
         self.assertEqual(cursor.fetchone()[0], "Updated memory")
         conn.close()
+
+    def test_missing_id_raises_value_error(self):
+        """Records without an id field must raise ValueError before touching the DB."""
+        bad_data = [{"content": "No id field here", "category": "notes"}]
+        bad_file = self.dir_path / "bad.json"
+        bad_file.write_text(json.dumps(bad_data), encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            load(str(self.db_path), [str(bad_file)])
+
+        # DB must not have been created / written to
+        self.assertFalse(self.db_path.exists())
 
 
 if __name__ == "__main__":
