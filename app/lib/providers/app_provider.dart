@@ -688,9 +688,18 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  void toggleAppPublic(String appId, bool value) {
+  Future<void> toggleAppPublic(String appId, bool value) async {
+    final updated = await changeAppVisibilityServer(appId, value);
+    if (updated != true) {
+      final context = globalNavigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarError(
+        context != null && context.mounted
+            ? context.l10n.somethingWentWrong
+            : 'Something went wrong! Please try again later.',
+      );
+      return;
+    }
     appPublicToggled = value;
-    changeAppVisibilityServer(appId, value);
     var appIndex = apps.indexWhere((app) => app.id == appId);
     if (appIndex != -1) {
       apps[appIndex].private = !value;
@@ -701,7 +710,7 @@ class AppProvider extends BaseProvider {
       }
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarSuccess(
-        context != null
+        context != null && context.mounted
             ? context.l10n.appVisibilityChangedSuccessfully
             : 'App visibility changed successfully. It may take a few minutes to reflect.',
       );
