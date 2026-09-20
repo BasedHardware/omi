@@ -730,23 +730,30 @@ async def get_async_redis_client() -> Any:
     return _async_redis_client
 
 
-@try_catch_decorator
-def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+def _daily_notification_key(uid: str, tz: Optional[Any] = None) -> str:
+    """Bucket the count by the user's own calendar day, not UTC's.
+
+    A UTC bucket rolls over mid-afternoon west of UTC, which hands the user a
+    second full allotment inside one of their days.
+    """
     from datetime import datetime, timezone
 
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    return f'{uid}:daily_noti_count:{datetime.now(tz or timezone.utc).strftime("%Y-%m-%d")}'
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+    key = _daily_notification_key(uid, tz)
     count = r.incr(key)
-    r.expire(key, 90000)  # 25 hours TTL
+    r.expire(key, 172800)  # 48 hours TTL: a local day can start up to 14 hours before the UTC one
     return count
 
 
 @try_catch_decorator
-def get_daily_notification_count(uid: str) -> int:
+def get_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
     """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
-    from datetime import datetime, timezone
-
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    key = _daily_notification_key(uid, tz)
     val = r.get(key)
     if not val:
         return 0
