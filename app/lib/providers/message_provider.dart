@@ -413,12 +413,13 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
-  Future setMessageNps(ServerMessage message, int value, {String? reason}) async {
-    await setMessageResponseRating(message.id, value, reason: reason);
+  Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
+    if (!await setMessageResponseRating(message.id, value, reason: reason)) return false;
     message.askForNps = false;
     // Update local message rating so it persists when scrolling
     message.rating = value == 0 ? null : value;
     notifyListeners();
+    return true;
   }
 
   Future clearChat() async {
