@@ -178,9 +178,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
 
         instances = []
 
-        def __init__(self, journey, client_kind):
+        def __init__(self, journey, client_kind, app_build='unknown'):
             self.journey = journey
             self.client_kind = client_kind
+            self.app_build = app_build
             self.finished = False
             self.outcome = None
             self.issue_class = None

@@ -1029,6 +1029,7 @@ def _load_sync_router_for_fast_path():
         'utils.observability',
         'utils.observability.fallback',
         'utils.metrics',
+        'utils.product_metrics',
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.multipart',
