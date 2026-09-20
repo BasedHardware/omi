@@ -1318,6 +1318,8 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
         'response': old_review.get('response', ''),
         'uid': uid,
     }
+    if old_review.get('responded_at'):
+        review_data['responded_at'] = old_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
