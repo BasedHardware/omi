@@ -95,7 +95,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
     final context = tester.element(find.byKey(const Key('rename_device_field')));
-    expect(find.text(AppLocalizations.of(context)!.anErrorOccurredTryAgain), findsOneWidget);
+    expect(find.text(AppLocalizations.of(context).anErrorOccurredTryAgain), findsOneWidget);
   });
 
   testWidgets('prefills the field with an existing custom name', (tester) async {
