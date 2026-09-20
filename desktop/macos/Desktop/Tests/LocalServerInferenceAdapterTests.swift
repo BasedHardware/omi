@@ -161,8 +161,44 @@ final class LocalServerInferenceAdapterTests: XCTestCase {
 
     let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(parsed["max_tokens"] as? Int, 4096)
+    // red-proof: omit the sampling fields or the non-thinking template switch
+    XCTAssertEqual(parsed["temperature"] as? Double, 0.7)
+    XCTAssertEqual(parsed["top_p"] as? Double, 0.8)
+    XCTAssertEqual(parsed["top_k"] as? Int, 20)
+    XCTAssertEqual(parsed["min_p"] as? Double, 0)
+    XCTAssertEqual(parsed["presence_penalty"] as? Double, 1.5)
+    let template = try XCTUnwrap(parsed["chat_template_kwargs"] as? [String: Bool])
+    XCTAssertEqual(template, ["enable_thinking": false])
     let messages = try XCTUnwrap(parsed["messages"] as? [[String: Any]])
     XCTAssertEqual(messages.first?["content"] as? String, #"say "omi-schema-" and {"schema": "x"}"#)
+  }
+
+  // red-proof: hard-code the default sampling values in encodeChatRequest
+  func testCustomSamplingReachesTheWireAndCanOmitThinkingOverride() async throws {
+    let http = RecordingLocalInferenceHTTPClient()
+    let url = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1"))
+    await http.setResult(
+      .success(
+        (
+          Data(#"{"choices":[{"message":{"content":"{\"title\":\"t\"}"}}]}"#.utf8),
+          try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        )))
+    let adapter = LocalServerInferenceAdapter(
+      configuration: .init(
+        baseURL: url, model: "local", contextWindowTokens: 8192, timeout: 5,
+        sampling: .init(temperature: 0.6, topP: 0.9, topK: 30, minP: 0.1, presencePenalty: 0.5, disableThinking: false)),
+      httpClient: http)
+    let _: ProbeSummary = try await adapter.generateStructured(
+      prompt: "summarize", schema: LocalSummaryDraft.jsonSchema)
+    let bodies = await http.recordedBodies()
+    let body = try XCTUnwrap(bodies.first)
+    let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(parsed["temperature"] as? Double, 0.6)
+    XCTAssertEqual(parsed["top_p"] as? Double, 0.9)
+    XCTAssertEqual(parsed["top_k"] as? Int, 30)
+    XCTAssertEqual(parsed["min_p"] as? Double, 0.1)
+    XCTAssertEqual(parsed["presence_penalty"] as? Double, 0.5)
+    XCTAssertNil(parsed["chat_template_kwargs"])
   }
 
   func testRejectsNonLoopbackURLWithoutSendingHTTP() async throws {

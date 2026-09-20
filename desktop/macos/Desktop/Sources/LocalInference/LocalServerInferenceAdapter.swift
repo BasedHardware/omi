@@ -93,6 +93,18 @@ enum LocalInferenceLoopback {
   }
 }
 
+/// Qwen3.5 defaults to thinking on; temperature zero also looped inside strings
+/// in 3/19 measured calls. The model-card non-thinking settings had 0/51 loops
+/// (2026-09-20). Send them explicitly so server launch flags do not pick behavior.
+struct LocalServerInferenceSampling: Sendable, Equatable {
+  var temperature: Double = 0.7
+  var topP: Double = 0.8
+  var topK: Int = 20
+  var minP: Double = 0
+  var presencePenalty: Double = 1.5
+  var disableThinking: Bool = true
+}
+
 struct LocalServerInferenceConfiguration: Sendable, Equatable {
   var baseURL: URL
   var model: String
@@ -102,6 +114,7 @@ struct LocalServerInferenceConfiguration: Sendable, Equatable {
   /// tokens on a 40-minute meeting; this leaves headroom and still ends a
   /// runaway in about a minute instead of at the end of the window.
   var maxCompletionTokens: Int = 4096
+  var sampling: LocalServerInferenceSampling = .init()
 
   static func fromKillSwitchSources(
     environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -249,9 +262,14 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
     // spliced into a body by text.
     _ = try JSONSerialization.jsonObject(with: schema.json)
     let placeholder = "omi-schema-\(UUID().uuidString)"
-    let body: [String: Any] = [
+    var body: [String: Any] = [
       "model": configuration.model,
       "max_tokens": configuration.maxCompletionTokens,
+      "temperature": configuration.sampling.temperature,
+      "top_p": configuration.sampling.topP,
+      "top_k": configuration.sampling.topK,
+      "min_p": configuration.sampling.minP,
+      "presence_penalty": configuration.sampling.presencePenalty,
       "messages": [
         ["role": "user", "content": prompt]
       ],
@@ -264,6 +282,9 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
         ],
       ],
     ]
+    if configuration.sampling.disableThinking {
+      body["chat_template_kwargs"] = ["enable_thinking": false]
+    }
     let encoded = try JSONSerialization.data(withJSONObject: body)
     guard
       let text = String(data: encoded, encoding: .utf8),
