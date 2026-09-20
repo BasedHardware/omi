@@ -33,6 +33,7 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
 from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
@@ -130,7 +131,11 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
-    return conversations_db.assign_sync_conversation(uid, incoming, candidate_id=candidate_id, target_id=target_id)
+    assigned, created, survivors = conversations_db.assign_sync_conversation(
+        uid, incoming, candidate_id=candidate_id, target_id=target_id
+    )
+    record_sync_intake_outcome(created=created)
+    return assigned, created, survivors
 
 
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:

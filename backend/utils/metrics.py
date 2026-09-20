@@ -588,6 +588,16 @@ OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     ['transcription_source', 'client_platform'],
 )
 
+# Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
+# backend-sync, which Prometheus does not scrape today (exporter allowlist is
+# backend + desktop-backend only). Counters are still the contract; alerts on this
+# series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
+OMI_SYNC_INTAKE_TOTAL = Counter(
+    'omi_sync_intake_total',
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
+)
+
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',
     'Canonical evidence association outcomes with bounded adjudication reasons',
