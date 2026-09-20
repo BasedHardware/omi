@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const { getTrainingDataOptIn, setTrainingDataOptIn } = vi.hoisted(() => ({
   getTrainingDataOptIn: vi.fn(async () => ({ opted_in: true })),
@@ -36,7 +36,9 @@ import { SettingsPage } from '@/components/settings/SettingsPage';
 
 async function trainingDataToggle() {
   const label = await screen.findByText('Training Data');
-  return label.parentElement!.parentElement!.querySelector('button')!;
+  let row = label.parentElement;
+  while (row && !row.querySelector('button')) row = row.parentElement;
+  return within(row!).getByRole('button');
 }
 
 describe('Settings > Privacy > Training Data', () => {
