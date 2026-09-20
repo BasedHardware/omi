@@ -21,6 +21,7 @@ export const SearchBar = memo(function SearchBar({
   const [searchResults, setSearchResults] = useState<Plugin[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -30,6 +31,7 @@ export const SearchBar = memo(function SearchBar({
       if (!searchContent) {
         setIsSearching(false);
         setSearchResults([]);
+        setSearchError(null);
         setIsLoading(false);
         onSearching?.(false);
         return;
@@ -38,12 +40,19 @@ export const SearchBar = memo(function SearchBar({
       // Show searching state
       setIsSearching(true);
       setIsLoading(true);
+      setSearchError(null);
       onSearching?.(true);
 
       try {
         // Call server-side search API
         const response = await fetch(`/api/apps/search?q=${encodeURIComponent(searchContent)}`);
+        if (!response.ok) {
+          throw new Error('Search failed');
+        }
         const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
 
         // Transform results to have capabilities as Set
         const transformedResults = (data.results || []).map((app: any) => ({
@@ -55,6 +64,7 @@ export const SearchBar = memo(function SearchBar({
       } catch (error) {
         console.error('Search failed:', error);
         setSearchResults([]);
+        setSearchError('Search failed. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -69,6 +79,7 @@ export const SearchBar = memo(function SearchBar({
 
   const clearSearch = useCallback(() => {
     setSearchQuery('');
+    setSearchError(null);
     handleSearch('');
   }, [handleSearch]);
 
@@ -117,14 +128,33 @@ export const SearchBar = memo(function SearchBar({
       {isSearching && (
         <div className="container mx-auto mt-8">
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-white">
-              Search Results ({searchResults.length})
-            </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {searchResults.map((plugin, index) => (
-                <CompactPluginCard key={plugin.id} plugin={plugin} index={index + 1} />
-              ))}
-            </div>
+            {searchError ? (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-center text-red-400">
+                <p className="text-sm font-medium">{searchError}</p>
+                <button
+                  onClick={() => handleSearch(searchQuery)}
+                  className="mt-3 inline-flex items-center rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/30"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-white">
+                  Search Results ({searchResults.length})
+                </h2>
+                {searchResults.length === 0 && !isLoading && (
+                  <p className="py-8 text-center text-sm text-gray-400">
+                    No apps found matching &quot;{searchQuery}&quot;
+                  </p>
+                )}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {searchResults.map((plugin, index) => (
+                    <CompactPluginCard key={plugin.id} plugin={plugin} index={index + 1} />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
