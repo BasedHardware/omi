@@ -761,6 +761,7 @@ _STUB_MODULES = [
     'utils.sync.merge_dedupe',
     'utils.conversations.deterministic_minimum',
     'utils.conversations.lifecycle',
+    'utils.sync.bridge',
     'utils.conversations.process_conversation',
     'python_multipart',
     'python_multipart.multipart',
@@ -964,7 +965,8 @@ class TestProcessSegmentReal:
         _lifecycle = sys.modules['utils.conversations.lifecycle']
 
         def _ingest_sync_conversation(uid, incoming, *, candidate_id=None, target_id=None):
-            raise AssertionError('test must patch utils.conversations.lifecycle.ingest_sync_conversation')
+            assert not incoming['transcript_segments'], 'speech intake must be patched per test'
+            return ({**incoming, 'sync_relevance': 'review'}, True, [])
 
         _lifecycle.ingest_sync_conversation = _ingest_sync_conversation
 
@@ -982,10 +984,15 @@ class TestProcessSegmentReal:
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
 
+        sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
+
         # Import under stubs
         from utils.sync.pipeline import process_segment
 
         cls._process_segment = staticmethod(process_segment)
+        sys.modules['utils.sync.pipeline'].get_wav_duration = lambda path: 60
+        sys.modules['utils.sync.pipeline'].get_timestamp_from_path = lambda path: float(Path(path).stem)
+        sys.modules['utils.sync.bridge'].finish_sync_bridges = lambda uid, cid: cid
 
     @classmethod
     def teardown_class(cls):
@@ -1025,10 +1032,11 @@ class TestProcessSegmentReal:
                 '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
             )
 
-        assert result is False
+        assert result is False  # valid silence creates no conversation
         assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
+        assert not response.get('_merged')
 
     def test_empty_postprocessed_after_vad_is_silence_not_failure(self):
         """Provider words filtered to no segments is silence, not a failure."""
@@ -1051,10 +1059,11 @@ class TestProcessSegmentReal:
                 '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
             )
 
-        assert result is False
+        assert result is False  # valid silence creates no conversation
         assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
+        assert not response.get('_merged')
 
     def test_exception_caught_and_collected(self):
         """Real process_segment: Deepgram raises → exception caught, error collected."""

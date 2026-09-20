@@ -640,3 +640,13 @@ def test_text_speaker_assignment_create_speakers_compatibility():
     assert no_create.should_create_person is False
     assert no_create.event_person_id == ''
     assert no_create.update_maps is False
+
+
+def test_default_boundary_agrees_with_capture_coverage():
+    from utils.conversation_continuity import DEFAULT_GAP_SECONDS, intervals_connect
+
+    for gap in (0, 119.99, 120, 120.01):
+        action = decide_existing_conversation_action(
+            seconds_since_last_segment=gap, conversation_creation_timeout=DEFAULT_GAP_SECONDS
+        )
+        assert intervals_connect(0, 70, 70 + gap, 140 + gap) == (action == ConversationLifecycleAction.continue_current)
