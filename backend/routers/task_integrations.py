@@ -232,8 +232,8 @@ def set_default_task_integration(request: DefaultTaskIntegrationRequest, uid: st
 )
 def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = Depends(auth.get_current_user_uid)):
     """Save or update a task integration connection."""
-    # Convert Pydantic model to dict, excluding None values
-    integration_data = data.model_dump(exclude_none=True)
+    # Convert Pydantic model to dict, excluding unset values so explicit nulls can clear fields
+    integration_data = data.model_dump(exclude_unset=True)
 
     users_db.set_task_integration(uid, app_key, integration_data)
 
