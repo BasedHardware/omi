@@ -39,7 +39,7 @@ class AppProvider extends BaseProvider {
 
   /// Test seam — overrides [disableAppServer] in [toggleApp].
   @visibleForTesting
-  Future<void> Function(String appId)? disableAppOverride;
+  Future<bool> Function(String appId)? disableAppOverride;
 
   @visibleForTesting
   Future<List<Map<String, dynamic>>> Function()? retrieveAppsGroupedOverride;
@@ -950,9 +950,15 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await (disableAppOverride ?? disableAppServer)(appId);
-        success = true;
-        PlatformManager.instance.analytics.appDisabled(appId);
+        success = await (disableAppOverride ?? disableAppServer)(appId);
+        if (success) {
+          PlatformManager.instance.analytics.appDisabled(appId);
+        } else {
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
+              ? context.l10n.errorUpdatingAppStatus
+              : 'An error occurred while updating the app status.';
+        }
       }
     } catch (e) {
       print('Error toggling app $appId: $e');
