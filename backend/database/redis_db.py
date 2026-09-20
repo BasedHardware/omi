@@ -1395,10 +1395,6 @@ return {0, 0}
 """)
 
 
-def _seconds_until_midnight_utc() -> int:
-    return _seconds_until_next_midnight(None)
-
-
 def _seconds_until_next_midnight(tz: Optional[Any]) -> int:
     now = datetime.now(tz or timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
