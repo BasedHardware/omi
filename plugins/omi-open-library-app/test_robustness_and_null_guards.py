@@ -1,8 +1,63 @@
 import asyncio
 import os
 import sys
+import types
 import unittest
 from unittest.mock import patch
+
+
+# Pre-emptively stub non-stdlib dependencies so this suite can run hermetically
+# in minimal Python CI runners without external pip packages.
+class _Framework:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get(self, *args, **kwargs):
+        return lambda f: f
+
+    post = get
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+class _BaseModelStub:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+def _stub_module(name, **attributes):
+    val = types.ModuleType(name)
+    val.__dict__.update(attributes)
+    return val
+
+
+_stubs = {
+    "httpx": _stub_module(
+        "httpx",
+        AsyncClient=_Framework,
+        RequestError=Exception,
+        HTTPStatusError=Exception,
+    ),
+    "fastapi": _stub_module(
+        "fastapi",
+        FastAPI=_Framework,
+        Body=lambda default=None, **kw: default,
+    ),
+    "fastapi.responses": _stub_module(
+        "fastapi.responses",
+        HTMLResponse=_Framework,
+        JSONResponse=_Framework,
+    ),
+    "pydantic": _stub_module("pydantic", BaseModel=_BaseModelStub),
+}
+for _name, _mod in _stubs.items():
+    if _name not in sys.modules:
+        try:
+            __import__(_name)
+        except ImportError:
+            sys.modules[_name] = _mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
