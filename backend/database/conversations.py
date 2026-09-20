@@ -102,6 +102,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
     data = copy.deepcopy(conversation_data)
 
     if 'transcript_segments' not in data:
+        _reveal_manual_speaker_assignments_for_read(data, uid)
         return data
 
     if isinstance(data['transcript_segments'], str):
@@ -128,22 +129,59 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
+    _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
+
+
+def _protect_json_value(value: Any, uid: str, level: str) -> Any:
+    payload = json.dumps(value)
+    compressed = zlib.compress(payload.encode('utf-8'))
+    if level == 'enhanced':
+        return encryption.encrypt(compressed.hex(), uid)
+    return compressed
+
+
+def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, str):
+        payload = encryption.decrypt(raw, uid)
+        if compressed:
+            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+        return json.loads(payload)
+    if isinstance(raw, bytes) and compressed:
+        return json.loads(zlib.decompress(raw).decode('utf-8'))
+    raise ValueError(f'undecodable json blob: {type(raw).__name__} compressed={compressed}')
+
+
+def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> dict:
+    if raw is None:
+        return {}
+    parsed = _reveal_json_value(raw, uid, compressed)
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) -> None:
+    if 'manual_speaker_assignments' not in data:
+        return
+    try:
+        data['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+            uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+        )
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
+        logger.error(f"{error} {uid}")
+        data['manual_speaker_assignments'] = {}
 
 
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
-        segments_json = json.dumps(data['transcript_segments'])
-        compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
+        data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
-
-        if level == 'enhanced':
-            encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
-            data['transcript_segments'] = encrypted_segments
-        else:
-            data['transcript_segments'] = compressed_segments_bytes
+    if 'manual_speaker_assignments' in data and isinstance(data['manual_speaker_assignments'], dict):
+        data['manual_speaker_assignments'] = _protect_json_value(data['manual_speaker_assignments'], uid, level)
+        data['manual_speaker_assignments_compressed'] = True
     return data
 
 
@@ -322,6 +360,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 logger.error(e)
                 pass
 
+    _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
 
@@ -2039,6 +2078,9 @@ def assign_conversation_speaker(
         current['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
+        current['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+        )
         before = copy.deepcopy(current['transcript_segments'])
         segments, receipt, resolved, previous = manual_assignment(
             current,
@@ -2123,7 +2165,9 @@ def update_conversation_segments(
             return False
         current = doc_snapshot.to_dict() or {}
         doc_level = data_protection_level or current.get('data_protection_level', 'standard')
-        receipt = current.get('manual_speaker_assignments') or {}
+        receipt = decode_manual_speaker_assignments(
+            uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
+        )
         incoming = list(segments)
         if preserve_unseen:
             known = {s.get('id') for s in incoming} | set(removed_segment_ids or [])
@@ -2499,6 +2543,9 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         result = copy.deepcopy(raw)
         result['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+        )
+        result['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         return result
 

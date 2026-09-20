@@ -1,13 +1,17 @@
 """Exercise the manual owner through real transactions with synthetic storage."""
 
 from copy import deepcopy
+import json
+import os
 
 import pytest
 
 from routers.listen import receiver, transcripts
 from database import conversations as db
-from utils.manual_speaker_assignments import acknowledged_teaching
+from utils.manual_speaker_assignments import acknowledged_teaching, apply_manual_assignments
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 
 @pytest.fixture
@@ -47,6 +51,9 @@ def read(world):
     raw['transcript_segments'] = db._decode_transcript_segments_strict(
         'u', raw['transcript_segments'], raw.get('transcript_segments_compressed', False)
     )
+    raw['manual_speaker_assignments'] = db.decode_manual_speaker_assignments(
+        'u', raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+    )
     return raw
 
 
@@ -57,7 +64,8 @@ def test_selected_edit_survives_stale_snapshot_and_preserves_append(world):
     raw, ids, removed, before = db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert ids == ['s1'] and removed == ['sample']
     assert len(raw['transcript_segments']) == 3
-    assert raw['manual_speaker_assignments']['segments']['s1']['origin'] == 'MANUAL'
+    assert raw['manual_speaker_assignments']['segments']['s1']['person_id'] == 'new'
+    assert 'origin' not in raw['manual_speaker_assignments']['segments']['s1']
     assert raw['manual_speaker_assignments']['generation'] == 1
     assert acknowledged_teaching(raw, 'new', ['s1'])
     assert not acknowledged_teaching(raw, 'new', ['s0'])
@@ -73,6 +81,9 @@ def test_selected_edit_survives_stale_snapshot_and_preserves_append(world):
 def test_whole_speaker_default_and_newer_selected_override(world):
     raw, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4)
     assert all(s['person_id'] == 'new' and not s['is_user'] for s in raw['transcript_segments'])
+    assert not raw['manual_speaker_assignments'].get('segments')
+    assert raw['manual_speaker_assignments']['speakers']['4']['person_id'] == 'new'
+    assert acknowledged_teaching(raw, 'new', ['s0', 's1'])
     db.assign_conversation_speaker('u', 'c', is_user=True, segment_ids=['s0'])
     added = dict(world[2][0], id='future')
     db.update_conversation_segments('u', 'c', [*world[2], added])
@@ -81,6 +92,7 @@ def test_whole_speaker_default_and_newer_selected_override(world):
     assert saved['transcript_segments'][1]['person_id'] == 'new'
     assert saved['transcript_segments'][2]['person_id'] == 'new'
     assert saved['manual_speaker_assignments']['generation'] == 2
+    assert saved['manual_speaker_assignments']['segments']['s0']['is_user'] is True
     assert not acknowledged_teaching(saved, 'new', ['s0'])
 
 
@@ -217,3 +229,65 @@ def test_legacy_wire_id_targets_the_same_stored_segment(world):
     assert ids == [target]
     assert saved['transcript_segments'][0]['id'] == target
     assert saved['transcript_segments'][0]['person_id'] == 'new'
+
+
+def test_apply_returns_input_when_receipt_has_no_decisions():
+    segments = [{'id': 's0', 'person_id': None, 'speaker_id': 0}]
+    assert apply_manual_assignments(segments, {}) is segments
+    assert apply_manual_assignments(segments, {'generation': 1}) is segments
+
+
+def test_apply_copies_only_segments_whose_identity_changes():
+    labeled = {
+        'id': 's0',
+        'speaker_id': 0,
+        'person_id': 'new',
+        'is_user': False,
+        'speaker_identity_status': 'not_user',
+    }
+    unlabeled = {'id': 's1', 'speaker_id': 0, 'person_id': None, 'is_user': False}
+    receipt = {'speakers': {'0': {'generation': 1, 'person_id': 'new', 'is_user': False}}}
+    result = apply_manual_assignments([labeled, unlabeled], receipt)
+    assert result[0] is labeled
+    assert result[1] is not unlabeled
+    assert result[1]['person_id'] == 'new'
+
+
+def test_whole_speaker_receipt_stays_constant_size_for_thousands_of_segments(world):
+    store, path, _ = world
+    store.rows[path]['transcript_segments'] = [
+        dict(
+            id=f's{i}',
+            speaker='SPEAKER_00',
+            speaker_id=4,
+            text='Synthetic speech',
+            start=i,
+            end=i + 1,
+            is_user=False,
+            person_id=None,
+        )
+        for i in range(3000)
+    ]
+    raw, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4)
+    receipt = raw['manual_speaker_assignments']
+    blob = json.dumps(receipt, separators=(',', ':'))
+    assert len(blob) < 256
+    assert not receipt.get('segments')
+    assert receipt['speakers']['4']['person_id'] == 'new'
+    stored = store.rows[path]['manual_speaker_assignments']
+    stored_size = len(stored) if isinstance(stored, (bytes, str)) else len(json.dumps(stored))
+    assert stored_size < 2048
+
+
+def test_enhanced_receipt_has_no_plaintext_person_id(world):
+    store, path, _ = world
+    store.rows[path]['data_protection_level'] = 'enhanced'
+    raw, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=4)
+    assert raw['manual_speaker_assignments']['speakers']['4']['person_id'] == 'new'
+    stored = store.rows[path]['manual_speaker_assignments']
+    assert isinstance(stored, str)
+    assert 'new' not in stored
+    assert 'person_id' not in stored
+    decoded = read(world)
+    assert decoded['manual_speaker_assignments']['speakers']['4']['person_id'] == 'new'
+    assert acknowledged_teaching(decoded, 'new', ['s0', 's1'])

@@ -878,10 +878,20 @@ class ListenReceiver:
         if not conversation:
             return
         receipt = conversation.get('manual_speaker_assignments') or {}
+        if not isinstance(receipt, dict):
+            receipt = {}
+        by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
+        speakers = receipt.get('speakers') or {}
+        overrides = receipt.get('segments') or {}
         for sid in segment_ids:
-            decision = receipt.get('segments', {}).get(sid)
-            if decision:
-                self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
+            segment = by_id.get(sid) or {}
+            override = overrides.get(sid)
+            covering = speakers.get(str(segment.get('speaker_id')))
+            decisions = [value for value in (override, covering) if value]
+            if not decisions:
+                continue
+            decision = max(decisions, key=lambda value: value.get('generation', 0))
+            self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
         self.host.state.speaker_map_dirty = True
         person_id = payload.get('person_id')
         if (

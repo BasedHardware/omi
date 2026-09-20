@@ -4,28 +4,40 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
-from copy import deepcopy
 from typing import Optional
 import uuid
 
+from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
+
 
 def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
-    result = deepcopy(segments)
-    for segment in result:
-        by_segment = receipt.get('segments', {}).get(segment.get('id'))
-        by_speaker = receipt.get('speakers', {}).get(str(segment.get('speaker_id')))
+    speakers = receipt.get('speakers') or {}
+    overrides = receipt.get('segments') or {}
+    if not speakers and not overrides:
+        return segments
+    result = None
+    for index, segment in enumerate(segments):
+        by_segment = overrides.get(segment.get('id'))
+        by_speaker = speakers.get(str(segment.get('speaker_id')))
         decisions = [value for value in (by_segment, by_speaker) if value]
         if not decisions:
             continue
-        decision = max(decisions, key=lambda value: value['generation'])
-        segment.update(
-            is_user=decision['is_user'],
-            person_id=decision['person_id'],
-            speaker_identity_status=(
-                'user' if decision['is_user'] else 'not_user' if decision['person_id'] else 'unknown'
-            ),
-        )
-    return result
+        decision = max(decisions, key=lambda value: value.get('generation', 0))
+        is_user = decision['is_user']
+        person_id = decision['person_id']
+        status = 'user' if is_user else 'not_user' if person_id else 'unknown'
+        if (
+            segment.get('is_user') == is_user
+            and segment.get('person_id') == person_id
+            and segment.get('speaker_identity_status') == status
+        ):
+            continue
+        if result is None:
+            result = list(segments)
+        copied = dict(segment)
+        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status)
+        result[index] = copied
+    return result if result is not None else segments
 
 
 def manual_assignment(
@@ -38,8 +50,7 @@ def manual_assignment(
     segment_index: Optional[int] = None,
     use_for_speech_training: bool = True,
 ) -> tuple[list[dict], dict, list[str], set[str]]:
-    segments = deepcopy(conversation.get('transcript_segments', []))
-    from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
+    segments = [dict(segment) for segment in conversation.get('transcript_segments', [])]
 
     for index, segment in enumerate(segments):
         if not segment.get('id') and conversation.get('id'):
@@ -65,16 +76,14 @@ def manual_assignment(
                 indices.append(index)
     if not indices:
         raise LookupError('Segment not found')
-    receipt = deepcopy(conversation.get('manual_speaker_assignments') or {})
+    receipt = dict(conversation.get('manual_speaker_assignments') or {})
+    receipt['segments'] = dict(receipt.get('segments') or {})
+    receipt['speakers'] = dict(receipt.get('speakers') or {})
     generation = receipt.get('generation', 0) + 1
     receipt['generation'] = generation
-    decision = dict(
-        origin='MANUAL',
-        generation=generation,
-        person_id=person_id,
-        is_user=is_user,
-        use_for_speech_training=use_for_speech_training,
-    )
+    identity = dict(generation=generation, person_id=person_id, is_user=is_user)
+    if not use_for_speech_training:
+        identity['use_for_speech_training'] = False
     previous = set()
     resolved = []
     for index in indices:
@@ -84,21 +93,44 @@ def manual_assignment(
         if not segment.get('id'):
             segment['id'] = str(uuid.uuid4())
         resolved.append(segment['id'])
-        receipt.setdefault('segments', {})[segment['id']] = dict(decision)
+        if speaker_id is None:
+            receipt['segments'][segment['id']] = dict(identity)
     if speaker_id is not None:
-        receipt.setdefault('speakers', {})[str(speaker_id)] = dict(decision)
+        receipt['speakers'][str(speaker_id)] = dict(identity)
+        by_id = {segment.get('id'): segment for segment in segments}
+        for sid in list(receipt['segments']):
+            owner = by_id.get(sid)
+            if sid in resolved or (owner and owner.get('speaker_id') == speaker_id):
+                receipt['segments'].pop(sid, None)
+    if not receipt['segments']:
+        receipt.pop('segments', None)
+    if not receipt['speakers']:
+        receipt.pop('speakers', None)
     return apply_manual_assignments(segments, receipt), receipt, resolved, previous
 
 
 def acknowledged_teaching(conversation: dict, person_id: str, segment_ids: list[str]) -> bool:
     """Only a persisted manual decision can authorize the delayed socket attempt."""
+    if not person_id or not segment_ids:
+        return False
     receipt = conversation.get('manual_speaker_assignments') or {}
-    decisions = receipt.get('segments', {})
-    current = {s.get('id'): s for s in conversation.get('transcript_segments', [])}
-    return bool(segment_ids) and all(
-        decisions.get(sid, {}).get('person_id') == person_id
-        and decisions[sid].get('use_for_speech_training', False)
-        and current.get(sid, {}).get('person_id') == person_id
-        and not current[sid].get('is_user')
-        for sid in segment_ids
-    )
+    current = {segment.get('id'): segment for segment in conversation.get('transcript_segments', [])}
+    speakers = receipt.get('speakers') or {}
+    overrides = receipt.get('segments') or {}
+    for sid in segment_ids:
+        segment = current.get(sid) or {}
+        override = overrides.get(sid)
+        covering = speakers.get(str(segment.get('speaker_id')))
+        decisions = [value for value in (override, covering) if value]
+        if not decisions:
+            return False
+        decision = max(decisions, key=lambda value: value.get('generation', 0))
+        if (
+            decision.get('person_id') != person_id
+            or decision.get('is_user')
+            or not decision.get('use_for_speech_training', True)
+            or segment.get('person_id') != person_id
+            or segment.get('is_user')
+        ):
+            return False
+    return True
