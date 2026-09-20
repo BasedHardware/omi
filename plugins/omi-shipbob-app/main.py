@@ -7,6 +7,8 @@ and chat tools for managing inventory, WROs, and orders.
 
 import os
 import sys
+import json
+import html
 import secrets
 import urllib.parse
 import asyncio
@@ -425,11 +427,16 @@ async def home(request: Request, uid: Optional[str] = None):
                     selected_channel = ch
                     break
 
+    safe_uid_json = json.dumps(str(uid)).replace("</", "<\\/")
+    safe_uid_param = urllib.parse.quote(str(uid), safe="")
+
     return templates.TemplateResponse(
         "setup.html",
         {
             "request": request,
             "uid": uid,
+            "safe_uid_json": safe_uid_json,
+            "safe_uid_param": safe_uid_param,
             "authenticated": authenticated,
             "channels": channels,
             "selected_channel": selected_channel,
@@ -596,7 +603,7 @@ async def check_setup(uid: str):
 async def disconnect_shipbob(uid: str):
     """Disconnect ShipBob account."""
     delete_shipbob_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(str(uid), safe='')}")
 
 
 @app.post("/select-channel", dependencies=[Depends(require_shipbob_tools_auth)])
