@@ -485,6 +485,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
+    *,
+    on_first_completion: Callable[[], None] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
@@ -494,6 +496,10 @@ def persist_processing_result_with_lifecycle(
     from the content in front of it.  Fencing on either stranded conversations a
     later sync had filled with speech — transcribed, untitled, and invisible to
     their owner — to prevent races that had never been observed.
+
+    ``on_first_completion`` runs after a successful commit that transitioned the
+    existing row onto ``completed``. It must not raise; the persist outcome is
+    independent of observers.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -506,11 +512,13 @@ def persist_processing_result_with_lifecycle(
     transaction = db.transaction()
 
     stale_sync_revision = False
+    first_completed = False
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision
+        nonlocal stale_sync_revision, first_completed
         stale_sync_revision = False
+        first_completed = False
         write_data = copy.deepcopy(conversation_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
@@ -556,6 +564,12 @@ def persist_processing_result_with_lifecycle(
             structured['title'] = user_title
 
         transaction.set(conversation_ref, write_data, merge=True)
+        existing_status = existing.get('status')
+        write_status = write_data.get('status')
+        first_completed = existing_status not in (
+            ConversationStatus.completed,
+            ConversationStatus.completed.value,
+        ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
     persisted = _persist(transaction)
@@ -565,6 +579,11 @@ def persist_processing_result_with_lifecycle(
         # A processor result for a conversation whose owner is already gone:
         # converge the search index to absence too.
         _delete_conversation_search_index(uid, conversation_data['id'])
+    if persisted and first_completed and on_first_completion is not None:
+        try:
+            on_first_completion()
+        except Exception:
+            pass
     return persisted
 
 
