@@ -15,7 +15,7 @@ from utils.stt.outcomes import (
     failure_from_exception,
 )
 from utils.observability.fallback import record_fallback
-from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ _KNOWN_FAILURE_REASONS = frozenset(
         # provider failed to serve the stream it had accepted
         # (utils.stt.streaming.modulate_death_reason).
         'modulate_serve_error',
-        PROVIDER_BUDGET_EXHAUSTED,
+        *ACCOUNT_REJECTION_REASONS,
         'soniox_idle_timeout',
         'soniox_rotation',
         'soniox_invalid_hint',
@@ -56,6 +56,7 @@ _FAILURE_PHASE_BY_REASON = {
     # would claim our send failed, so 'connection' is the truthful bucket.
     'modulate_serve_error': 'connection',
     PROVIDER_BUDGET_EXHAUSTED: 'connection',
+    PROVIDER_AUTH_REJECTED: 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
@@ -73,7 +74,7 @@ _CIRCUIT_OPENING_REASONS = frozenset(
         # session-scoped — an idle-timeout is this session's VAD pattern and a
         # 413 rotation serves fine on a fresh connection — so they must not
         # bench the provider for everyone.
-        PROVIDER_BUDGET_EXHAUSTED,
+        *ACCOUNT_REJECTION_REASONS,
         # Velma's mid-session "Internal server error" / "Unable to complete
         # the request" frames: the provider accepted the stream, served audio,
         # and then failed. This is the dominant live-STT outage shape
@@ -103,6 +104,8 @@ def fallback_reason_for_typed_death(typed_reason: str | None) -> str:
 
     if typed_reason == PROVIDER_BUDGET_EXHAUSTED:
         return 'quota'
+    if typed_reason == PROVIDER_AUTH_REJECTED:
+        return 'auth'
     return 'other'
 
 
@@ -123,7 +126,10 @@ class PendingLiveFailover:
     so a 100% dead failover leg looked 100% healthy for 27.5h.
     """
 
-    def __init__(self, *, from_mode: str, to_mode: str) -> None:
+    def __init__(
+        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+    ) -> None:
+        self.component, self.reason = component, reason
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
@@ -139,10 +145,10 @@ class PendingLiveFailover:
             return
         self._settled = True
         record_fallback(
-            component='stt_live_session',
+            component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason='connection_lost',
+            reason=self.reason,
             outcome='recovered',
         )
 
@@ -151,7 +157,7 @@ class PendingLiveFailover:
             return
         self._settled = True
         record_fallback(
-            component='stt_live_session',
+            component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
             reason=fallback_reason_for_typed_death(typed_reason),
