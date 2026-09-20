@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 from database import conversations as conversations_db
 from utils.observability.fallback import record_fallback
+from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
 MIN_OVERLAP_SECONDS = 60.0
@@ -100,6 +101,7 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
                 continue
             primary, secondary = sorted((candidate, other), key=lambda row: row.primary_rank)
             if conversations_db.link_duplicate_capture(uid, primary, secondary, match):
+                record_product_event('duplicate_capture_detected')
                 logger.info(
                     'cross_device_duplicate_detected overlap_seconds=%.1f overlap_ratio=%.3f',
                     match['overlap_seconds'],

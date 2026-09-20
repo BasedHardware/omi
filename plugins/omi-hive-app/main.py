@@ -122,6 +122,26 @@ def get_graphql_error(result: Dict) -> Optional[str]:
     return None
 
 
+def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
+    """Return a message when the payload carries an error, else None.
+
+    Hive's own failures come back as [{"message": ...}], but a 2xx body can carry
+    any shape under "errors", including an empty list on a successful write, so
+    presence of the key is not on its own an error.
+    """
+    errors = result.get("errors")
+    if not errors:
+        return None
+    if isinstance(errors, list):
+        first = errors[0]
+        if isinstance(first, dict):
+            return first.get("message", "Unknown error")
+        return str(first)
+    if isinstance(errors, dict):
+        return errors.get("message", "Unknown error")
+    return str(errors)
+
+
 def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
     """Make authenticated REST request for a user."""
     credentials = get_hive_credentials(uid)
@@ -817,8 +837,8 @@ async def tool_hive_create_task(request: Request):
 
         result = hive_rest_request(uid, "POST", "actions/create", data=create_data)
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to create task: {error_msg}")
 
         success_msg = f"✅ Created task **{task_name}** in project **{target_project.name}**!"
@@ -941,8 +961,8 @@ async def tool_hive_update_task_status(request: Request):
         # Hive usually uses PUT /actions/{id}
         result = hive_rest_request(uid, "PUT", f"actions/{task_id}", data={"status": hive_status})
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
 
         task_display = f"**{task_name}**" if task_name else f"`{task_id}`"

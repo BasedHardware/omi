@@ -8,8 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 
+typedef GoalsFetcher = Future<List<Goal>?> Function();
+
 class GoalsProvider extends ChangeNotifier {
   static const String _legacyGoalsStorageKey = 'goals_tracker_local_goals';
+
+  GoalsProvider({GoalsFetcher? goalsFetcher}) : _goalsFetcher = goalsFetcher ?? getAllGoals;
+
+  final GoalsFetcher _goalsFetcher;
 
   List<Goal> _goals = [];
   bool _isLoading = true;
@@ -72,9 +78,9 @@ class GoalsProvider extends ChangeNotifier {
     if (skipApiSync) return;
 
     try {
-      final goals = await getAllGoals();
+      final goals = await _goalsFetcher();
       if (generation != _sessionGeneration) return;
-      if (goals.isNotEmpty) {
+      if (goals != null) {
         _goals = goals;
         await _saveToLocalStorage();
         _notifyAfterFrame();
@@ -190,15 +196,22 @@ class GoalsProvider extends ChangeNotifier {
 
   /// Delete a goal
   Future<bool> deleteGoal(String goalId) async {
+    final generation = _sessionGeneration;
     _lastGoalDeletion = DateTime.now();
 
     // Remove from local state immediately (optimistic update)
-    _goals.removeWhere((g) => g.id == goalId);
+    final index = _goals.indexWhere((g) => g.id == goalId);
+    final removed = index == -1 ? null : _goals.removeAt(index);
     await _saveToLocalStorage();
     notifyListeners();
 
     // Then delete from server
     final success = await deleteGoalApi(goalId);
+    if (!success && removed != null && generation == _sessionGeneration && !_goals.any((g) => g.id == goalId)) {
+      _goals.insert(index.clamp(0, _goals.length), removed);
+      await _saveToLocalStorage();
+      notifyListeners();
+    }
     return success;
   }
 

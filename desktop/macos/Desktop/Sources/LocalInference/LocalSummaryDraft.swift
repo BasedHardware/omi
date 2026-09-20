@@ -55,6 +55,19 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
   /// Map/reduce prompts ask for title, overview, sections, and action items;
   /// those four are required so AFM cannot omit them. `emoji`, `category`, and
   /// `events` stay optional.
+  ///
+  /// **The arrays are bounded, and that is load-bearing.** A
+  /// `LanguageModelSession`'s transcript is prompt *plus* completion against one
+  /// context window, so an unbounded array lets the model spend the window on its
+  /// own output and overflow. Measured 2026-09-18 on live AFM: a map pass emitted
+  /// 7 sections and 26 action items and the session threw
+  /// `"The session's transcript exceeded the model's context size."` — while a
+  /// *larger* prompt that happened to generate less succeeded. That is why the
+  /// failure looked non-deterministic and unrelated to prompt size.
+  ///
+  /// The caps sit at or below `ClientProcessingContract`'s own limits (12 sections,
+  /// 25 action items, 12 events), which truncate after assembly anyway. Generating
+  /// items that are about to be discarded costs context we cannot spare.
   static let jsonSchema = LocalInferenceJSONSchema(
     name: "client_processing_draft",
     json: Data(
@@ -68,6 +81,7 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
           "category": {"type": "string"},
           "sections": {
             "type": "array",
+            "maxItems": 8,
             "items": {
               "type": "object",
               "properties": {
@@ -79,6 +93,7 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
           },
           "events": {
             "type": "array",
+            "maxItems": 6,
             "items": {
               "type": "object",
               "properties": {
@@ -92,6 +107,7 @@ struct LocalSummaryDraft: Codable, Sendable, Equatable {
           },
           "action_items": {
             "type": "array",
+            "maxItems": 15,
             "items": {
               "type": "object",
               "properties": {

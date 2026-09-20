@@ -7,8 +7,9 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 class SpeechProfileUploadException implements Exception {
-  const SpeechProfileUploadException(this.statusCode);
+  const SpeechProfileUploadException(this.statusCode, {this.detail});
   final int statusCode;
+  final String? detail;
   @override
   String toString() => 'Speech profile upload failed ($statusCode)';
 }
@@ -67,6 +68,14 @@ Future<String?> getUserSpeechProfile() async {
   return null;
 }
 
+String? _errorDetail(String body) {
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is Map && decoded['detail'] is String) return decoded['detail'] as String;
+  } catch (_) {}
+  return null;
+}
+
 Future<bool> uploadProfile(File file) async {
   try {
     var response = await makeMultipartApiCall(
@@ -83,7 +92,7 @@ Future<bool> uploadProfile(File file) async {
       return true;
     } else {
       Logger.debug('Failed to upload sample. Status code: ${response.statusCode} body: ${response.body}');
-      throw SpeechProfileUploadException(response.statusCode);
+      throw SpeechProfileUploadException(response.statusCode, detail: _errorDetail(response.body));
     }
   } catch (e) {
     Logger.debug('An error occurred uploadSample: $e');

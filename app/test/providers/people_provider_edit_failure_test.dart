@@ -1,0 +1,56 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/providers/people_provider.dart';
+
+class _UnreachableApiEnv implements EnvFields {
+  @override
+  String? get apiBaseUrl => 'http://127.0.0.1:1/';
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  final alice = Person(
+    id: 'person-alice',
+    name: 'Alice',
+    createdAt: DateTime(2026, 1, 1),
+    updatedAt: DateTime(2026, 1, 1),
+  );
+  final bob = Person(id: 'person-bob', name: 'Bob', createdAt: DateTime(2026, 1, 1), updatedAt: DateTime(2026, 1, 1));
+
+  setUpAll(() {
+    Env.init(_UnreachableApiEnv());
+  });
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SharedPreferencesUtil().cachedPeople = [alice, bob];
+  });
+
+  test('a rename the server did not accept keeps the old name', () async {
+    final provider = PeopleProvider();
+
+    await provider.updatePersonProvider(provider.people.first, 'Alicia');
+
+    expect(provider.loading, isFalse);
+    expect(provider.people.map((person) => person.name), ['Alice', 'Bob']);
+    expect(SharedPreferencesUtil().cachedPeople.map((person) => person.name), ['Alice', 'Bob']);
+  });
+
+  test('a delete the server did not accept puts the person back', () async {
+    final provider = PeopleProvider();
+
+    await provider.deletePersonProvider(provider.people.firstWhere((person) => person.id == bob.id));
+
+    expect(provider.people.map((person) => person.id), [alice.id, bob.id]);
+    expect(SharedPreferencesUtil().cachedPeople.map((person) => person.id), [alice.id, bob.id]);
+  });
+}

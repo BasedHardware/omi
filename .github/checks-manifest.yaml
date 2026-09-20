@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
+  - id: iq-rating-score-parsing-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -34,6 +39,11 @@ checks:
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue numbers/limits arriving as JSON null or formatted strings must be coerced cleanly, while repo parameter resolution disambiguates short names, sanitizes URLs, and catches dirty types"
+  - id: github-app-tools-auth-tests
+    command: ["python3", "plugins/omi-github-app/test_github_tools_auth.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "all eight /tools/* chat-tool routes in omi-github-app read uid from request bodies and act on stored OAuth credentials; the shared-secret guard must fail closed when unconfigured, reject invalid tokens, and guard every tool route"
   - id: plugin-db-transcript-segments-tests
     command: ["python3", "plugins/test_db_transcript_segments.py"]
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
@@ -44,6 +54,11 @@ checks:
     triggers: ["plugins/omi-whoop-app/**"]
     lanes: ["local", "ci"]
     reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
+  - id: whoop-weekly-summary-hardening-tests
+    command: ["python3", "plugins/omi-whoop-app/test_measurements_and_summary_hardening.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
@@ -1086,7 +1101,6 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
-
   - id: hume-ai-create-memory-route-tests
     command: ["python3", "plugins/hume-ai/test_create_omi_memory_route.py"]
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
@@ -1161,7 +1175,7 @@ checks:
     command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the backend sends every optional tool parameter the model omitted as JSON null; the request models rejected null, so all four CoinGecko tools failed on the ordinary call"
+    reason: "the backend sends every optional tool parameter the model omitted as JSON null; the request models rejected null, so all four CoinGecko tools failed on the ordinary call. Provider payloads carry null too: dict.get(key, default) does not apply its default for a present-but-null key, so coin.get('symbol', '').upper() raised AttributeError and discarded the whole result list"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -1212,7 +1226,6 @@ checks:
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
-
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
@@ -1223,6 +1236,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: wikipedia-request-boundary-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
+    triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Wikipedia app interpolated caller input straight into the outbound request: str.isalpha() accepted Unicode letters that IDNA-map to a different host label, quote() defaulted to safe='/' so a title could walk out of the summary path segment, and non-string tool arguments raised AttributeError as HTTP 500; the suite pins the hostname, the encoded path segment, and the tool-error envelope"
   - id: crossref-doi-normalization-tests
     command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
@@ -1258,6 +1276,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
+  - id: dropbox-token-refresh-and-tools-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_token_refresh_and_tools.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
@@ -1293,6 +1316,11 @@ checks:
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
+  - id: chatgpt-plugin-tests
+    command: ["python3", "plugins/chatgpt/test_main.py"]
+    triggers: ["plugins/chatgpt/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ChatGPT plugin must return timezone-aware UTC ISO timestamps in /stats and properly validate and redirect user IDs"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
