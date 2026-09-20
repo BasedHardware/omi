@@ -7,7 +7,8 @@ IDs as labels. Label names follow the repo convention (``client_kind``,
 
 Counters are per-pod. Alert queries must ``sum()`` across
 ``job=backend-listen-metrics``. Zero-initialize ``event × client_kind`` only;
-``app_build`` is recorded when seen and is not pre-expanded.
+``app_build`` is recorded when seen and is not pre-expanded. Per-user-daily
+threshold crossings zero-initialize ``event × threshold``.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from typing import Any
 
 from utils.account_cutover.control import parse_client_build
 from utils.journey_metrics_contract import CLIENT_KINDS, resolve_client_kind_from_headers
-from utils.metrics import OMI_PRODUCT_EVENT_TOTAL, OMI_PRODUCT_EVENT_USER_DAILY
+from utils.metrics import OMI_PRODUCT_EVENT_TOTAL, OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL
 
 EVENTS = frozenset(
     {
@@ -56,7 +57,8 @@ OUTCOMES = frozenset(
         'unknown',
     }
 )
-SOURCES = frozenset({'none', 'client', 'import', 'extract', 'integration'})
+SOURCES = frozenset({'none', 'client', 'import', 'extract', 'integration', 'live', 'sync', 'desktop'})
+USER_DAILY_THRESHOLDS = (5, 10, 20, 50, 100, 200, 500)
 OPS = frozenset(
     {
         'none',
@@ -186,17 +188,20 @@ def _zero_initialize_label_children() -> None:
                 op='none',
             )
     for event in sorted(PER_USER_DAILY_EVENTS):
-        OMI_PRODUCT_EVENT_USER_DAILY.labels(event=event, app_build='unknown')
+        for threshold in USER_DAILY_THRESHOLDS:
+            OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL.labels(event=event, threshold=str(threshold))
 
 
 _zero_initialize_label_children()
 
 
 def observe_per_user_daily(event: str, uid: str, app_build: str | None = None, *, increment: int = 1) -> None:
-    """Observe this process's per-(uid, UTC-day) tally into a uid-free histogram.
+    """Increment uid-free threshold counters when this process's uid-day tally crosses N.
 
-    The histogram labels are only ``event`` and ``app_build``. ``uid`` is the
-    in-memory grouping key and is never exported. Fail-open.
+    ``uid`` is the in-memory grouping key and is never exported. ``app_build`` is
+    accepted for call-site compatibility and is not a label (threshold cardinality
+    is already event × 7). Fail-open. Crossings are pod-local: sum() across pods
+    counts (pod, uid-day) pairs, not globally unique users.
     """
     try:
         if not uid or increment <= 0:
@@ -204,17 +209,23 @@ def observe_per_user_daily(event: str, uid: str, app_build: str | None = None, *
         event_label = _closed(event, EVENTS, 'unknown')
         if event_label not in PER_USER_DAILY_EVENTS:
             return
-        build_label = sanitize_app_build(app_build) if app_build not in (None, '') else 'unknown'
+        _ = app_build
         day = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         key = (event_label, uid, day)
+        crossed: list[str] = []
         with _per_user_lock:
             if key not in _per_user_counts and len(_per_user_counts) >= MAX_PER_USER_KEYS:
                 stale_day = min((item[2] for item in _per_user_counts), default=day)
                 for stale in [item for item in _per_user_counts if item[2] <= stale_day]:
                     _per_user_counts.pop(stale, None)
-            tally = _per_user_counts.get(key, 0) + int(increment)
+            previous = _per_user_counts.get(key, 0)
+            tally = previous + int(increment)
             _per_user_counts[key] = tally
-        OMI_PRODUCT_EVENT_USER_DAILY.labels(event=event_label, app_build=build_label).observe(tally)
+            for threshold in USER_DAILY_THRESHOLDS:
+                if previous < threshold <= tally:
+                    crossed.append(str(threshold))
+        for threshold_label in crossed:
+            OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL.labels(event=event_label, threshold=threshold_label).inc()
     except Exception:
         return
 
@@ -237,7 +248,7 @@ def record_product_event(
 
     ``app_version`` / ``surface`` remain accepted so the stage-1 exemplar call
     site can be migrated independently; ``surface`` is ignored (replaced by
-    ``client_kind``). ``uid`` is used only for the per-user histogram.
+    ``client_kind``). ``uid`` is used only for the per-user-daily threshold counter.
     """
     try:
         event_label = _closed(event, EVENTS, 'unknown')
