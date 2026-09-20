@@ -6,9 +6,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
+import {
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
@@ -26,6 +26,7 @@ import {
   TaskRow,
 } from './DesktopRows';
 import {desktopTokens as token} from './tokens';
+import {homeBriefing} from './homeBriefing';
 
 type Props = {
   draft: string;
@@ -100,6 +101,7 @@ export function DesktopHome({
 }: Props) {
   const [wide, setWide] = useState(false);
   const query = draft.trim();
+  const briefing = homeBriefing(outcomes, readsPhase);
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
     return reads.filter(item => {
@@ -156,16 +158,11 @@ export function DesktopHome({
           contentContainerStyle={styles.listContent}
           style={styles.list}>
           <PageHeading
-            eyebrow="YOUR PERSONAL CONTEXT"
-            title={
-              query
-                ? 'A little easier to find.'
-                : 'A little space for your day.'
-            }
+            title={query ? 'A little easier to find.' : briefing.title}
             subtitle={
               query
                 ? `Results from loaded history for “${query}”`
-                : 'Pick up a thought. Follow through. Find your way back.'
+                : briefing.subtitle
             }
           />
           <View

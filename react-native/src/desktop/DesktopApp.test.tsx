@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {DesktopChat} from './DesktopChat';
+import {PageHeading} from './DesktopRows';
 import {TaskPagination} from '../ui/TaskPagination';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 
@@ -236,6 +237,7 @@ afterEach(() => {
   act(() => {
     renderers.splice(0).forEach(renderer => renderer.unmount());
   });
+  jest.restoreAllMocks();
 });
 
 function renderDesktop(
@@ -275,6 +277,162 @@ function renderDesktop(
   renderers.push(renderer!);
   return renderer!;
 }
+
+test('Home leads with the earliest unfinished deadline, not list order or a completed task', () => {
+  const task = outcomes.tasks.value.items[0];
+  const now = new Date(2026, 8, 20, 10).getTime();
+  jest.spyOn(Date, 'now').mockReturnValue(now);
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          items: [
+            {...task, id: 'undated', title: 'Organize notes', sortOrder: 0},
+            {...task, id: 'later', title: 'Review launch', dueAt: now + 60000},
+            {
+              ...task,
+              id: 'done',
+              title: 'Already done',
+              completed: true,
+              dueAt: now - 7200000,
+            },
+            {
+              ...task,
+              id: 'urgent',
+              title: 'Send the proposal',
+              dueAt: now - 3600000,
+            },
+          ],
+          page: {...outcomes.tasks.value.page, complete: false, hasMore: true},
+        },
+      },
+    },
+  });
+  const heading = renderer.root.findByType(PageHeading).props;
+  expect(heading.title).toBe('Send the proposal');
+  expect(heading.subtitle).toBe('Overdue · 3 open tasks loaded');
+  expect(renderedText(renderer)).not.toContain('YOUR PERSONAL CONTEXT');
+  expect(renderedText(renderer)).not.toContain('Enter to submit');
+});
+
+test.each([
+  {offset: 60000, timing: 'Due today'},
+  {offset: null, timing: 'On your list'},
+])(
+  'Home distinguishes a future deadline from an undated task: $timing',
+  ({offset, timing}) => {
+    const now = new Date(2026, 8, 20, 10).getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const renderer = renderDesktop({
+      outcomes: {
+        ...outcomes,
+        tasks: {
+          ...outcomes.tasks,
+          value: {
+            ...outcomes.tasks.value,
+            items: [
+              {
+                ...outcomes.tasks.value.items[0],
+                id: 'later-in-list',
+                title: 'Organize notes',
+                sortOrder: 9,
+              },
+              {
+                ...outcomes.tasks.value.items[0],
+                title: 'First on your list',
+                sortOrder: 1,
+                dueAt: offset === null ? null : now + offset,
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(renderer.root.findByType(PageHeading).props.title).toBe(
+      'First on your list',
+    );
+    expect(renderer.root.findByType(PageHeading).props.subtitle).toBe(
+      `${timing} · 2 open tasks`,
+    );
+  },
+);
+
+test('Home falls back to the newest usable conversation when there are no open tasks', () => {
+  const conversation = outcomes.conversations.value.items[0];
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {...outcomes.tasks, value: {...outcomes.tasks.value, items: []}},
+      conversations: {
+        ...outcomes.conversations,
+        value: {
+          ...outcomes.conversations.value,
+          items: [
+            conversation,
+            {
+              ...conversation,
+              id: 'newest',
+              title: 'Launch decisions',
+              startedAt: '2026-09-01T10:00:00Z',
+            },
+            {
+              ...conversation,
+              id: 'hidden',
+              title: 'Discarded content',
+              discarded: true,
+              startedAt: '2026-09-02T10:00:00Z',
+            },
+          ],
+        },
+      },
+    },
+  });
+  const heading = renderer.root.findByType(PageHeading).props;
+  expect(heading.title).toBe('Launch decisions');
+  expect(heading.subtitle).toContain('From your conversations');
+});
+
+test.each([
+  'initial-loading',
+  'refreshing',
+  'unavailable',
+  'saved-but-refresh-failed',
+] as const)(
+  'Home does not present stale tasks as a current briefing during %s',
+  readsPhase => {
+    const renderer = renderDesktop({readsPhase});
+    const heading = renderer.root.findByType(PageHeading).props;
+    expect(heading.title).toBe(
+      readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+        ? 'Getting your day ready'
+        : 'Your daily brief is waiting',
+    );
+    expect(heading.subtitle).not.toContain('open task');
+  },
+);
+
+test('Home distinguishes unavailable tasks from genuinely empty context', () => {
+  const empty = {
+    ...outcomes,
+    tasks: {...outcomes.tasks, value: {...outcomes.tasks.value, items: []}},
+    conversations: {
+      ...outcomes.conversations,
+      value: {...outcomes.conversations.value, items: []},
+    },
+  };
+  expect(
+    renderDesktop({outcomes: empty}).root.findByType(PageHeading).props.title,
+  ).toBe('What’s on your mind?');
+  const failed = renderDesktop({
+    outcomes: {...empty, tasks: {status: 'error', error: 'Unavailable'}},
+  });
+  expect(failed.root.findByType(PageHeading).props.title).toBe(
+    'Your daily brief is waiting',
+  );
+});
 
 test('Chat suggestions prepare an editable draft without sending', () => {
   const onDraftChange = jest.fn();
@@ -681,7 +839,7 @@ test('Chat has its own selected destination, keeps one omnibar, and closes to th
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
     'Ask Omi',
   );
-  expect(renderedText(renderer)).toContain('Enter to submit');
+  expect(renderedText(renderer)).not.toContain('Enter to submit');
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Chat').props
       .accessibilityState.selected,
