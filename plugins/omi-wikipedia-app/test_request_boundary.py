@@ -98,6 +98,13 @@ class LanguageValidationTests(unittest.TestCase):
     def test_fullwidth_letters_are_rejected(self):
         self.assertEqual(wikipedia._safe_language("ｅｎ"), "en")
 
+    def test_letters_that_casefold_into_ascii_are_rejected(self):
+        # str.lower() maps U+212A KELVIN SIGN to "k", so a non-ASCII value
+        # could otherwise reach the pattern as an ASCII-looking code.
+        for code in ("eK", "KK", "Ko"):
+            with self.subTest(code=code):
+                self.assertEqual(wikipedia._safe_language(code), "en")
+
     def test_hyphen_edges_and_empty_segments_are_rejected(self):
         for code in ("-en", "en-", "en--us", "-", "--"):
             with self.subTest(code=code):

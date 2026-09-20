@@ -77,8 +77,15 @@ def _safe_language(language: Any) -> str:
     values through that IDNA-encode into a different host: "ss" for "ß",
     or the punycode label "xn--l1ae" for Cyrillic look-alikes.  Only lowercase
     ASCII codes matching a real Wikipedia subdomain are accepted now.
+
+    The ASCII test precedes casefolding on purpose: ``str.lower()`` folds a
+    few non-ASCII letters into ASCII, so U+212A KELVIN SIGN would otherwise
+    reach the pattern as "k" and let a non-ASCII value name a language code.
     """
-    lang = _coerce_text(language).lower()
+    raw = _coerce_text(language)
+    if not raw.isascii():
+        return DEFAULT_LANGUAGE
+    lang = raw.lower()
     if not lang:
         return DEFAULT_LANGUAGE
     if len(lang) > MAX_LANGUAGE_LENGTH or not _LANGUAGE_RE.fullmatch(lang):
