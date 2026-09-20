@@ -191,6 +191,18 @@ def requested_count(body: dict, default: int = 10) -> int:
     return max(1, min(count, MAX_RESULTS_CEILING))
 
 
+def api_error_detail(result: Optional[dict]) -> str:
+    """Error text for a failed twitter_api_request result.
+
+    twitter_api_request returns None when the stored token cannot be refreshed
+    or the HTTP call itself raises, so the failure branches cannot assume a
+    dict here.
+    """
+    if isinstance(result, dict):
+        return str(result.get("error") or "Unknown error")
+    return "no response from X - please reconnect your Twitter account in the app settings"
+
+
 def page_size(count: int, floor: int) -> int:
     """The max_results value the endpoint accepts for a request of ``count`` posts."""
     return max(floor, min(count, MAX_RESULTS_CEILING))
@@ -500,7 +512,7 @@ async def tool_post_tweet(request: Request):
         result = twitter_api_request(uid, "POST", "/tweets", json_data=tweet_data)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to post tweet: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to post tweet: {api_error_detail(result)}")
 
         tweet = result.get("data", {})
         tweet_id = tweet.get("id", "")
@@ -553,7 +565,7 @@ async def tool_get_timeline(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get timeline: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to get timeline: {api_error_detail(result)}")
 
         tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
@@ -603,7 +615,7 @@ async def tool_get_my_tweets(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get tweets: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to get tweets: {api_error_detail(result)}")
 
         tweets = result.get("data", [])[:count]
 
@@ -669,7 +681,7 @@ async def tool_get_mentions(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get mentions: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to get mentions: {api_error_detail(result)}")
 
         tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
@@ -720,7 +732,7 @@ async def tool_search_tweets(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Search failed: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Search failed: {api_error_detail(result)}")
 
         tweets = result.get("data", [])[:count]
         includes = result.get("includes", {})
@@ -770,7 +782,7 @@ async def tool_like_tweet(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to like tweet: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to like tweet: {api_error_detail(result)}")
 
         return ChatToolResponse(result=f"**Liked!**\n\nTweet ID: `{tweet_id}`")
 
@@ -803,8 +815,8 @@ async def tool_unlike_tweet(request: Request):
 
         result = twitter_api_request(uid, "DELETE", f"/users/{twitter_user_id}/likes/{tweet_id}")
 
-        if result and "error" in result:
-            return ChatToolResponse(error=f"Failed to unlike tweet: {result.get('error', 'Unknown error')}")
+        if not result or "error" in result:
+            return ChatToolResponse(error=f"Failed to unlike tweet: {api_error_detail(result)}")
 
         return ChatToolResponse(result=f"**Unliked!**\n\nTweet ID: `{tweet_id}`")
 
@@ -840,7 +852,7 @@ async def tool_retweet(request: Request):
         })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to retweet: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to retweet: {api_error_detail(result)}")
 
         return ChatToolResponse(result=f"**Retweeted!**\n\nTweet ID: `{tweet_id}`")
 
@@ -869,8 +881,8 @@ async def tool_delete_tweet(request: Request):
 
         result = twitter_api_request(uid, "DELETE", f"/tweets/{tweet_id}")
 
-        if result and "error" in result:
-            return ChatToolResponse(error=f"Failed to delete tweet: {result.get('error', 'Unknown error')}")
+        if not result or "error" in result:
+            return ChatToolResponse(error=f"Failed to delete tweet: {api_error_detail(result)}")
 
         return ChatToolResponse(result=f"**Tweet Deleted!**\n\nTweet ID: `{tweet_id}`")
 
@@ -906,7 +918,7 @@ async def tool_get_user_profile(request: Request):
             })
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get profile: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=f"Failed to get profile: {api_error_detail(result)}")
 
         user = result.get("data", {})
         name = user.get("name", "Unknown")
