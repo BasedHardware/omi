@@ -4,10 +4,26 @@ Ancestry is persisted with the transcript. Failure propagates to the sync job's
 existing retry path; original audio and redirect tombstones are never removed.
 """
 
+from _thread import LockType
+from typing import NotRequired, TypedDict
+
 from database import conversations as conversations_db
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
-from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge, _delete_conversation_and_related_data
+from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
+
+
+class SyncBridgeAssignment(TypedDict):
+    id: str
+    sync_relevance: str
+    sync_merged_from: NotRequired[list[str]]
+    private_cloud_sync_enabled: NotRequired[bool]
+
+
+class SyncSegmentResponse(TypedDict):
+    new_memories: set[str]
+    updated_memories: set[str]
+    _merged: NotRequired[dict[str, str | None]]
 
 
 def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
@@ -33,7 +49,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 needs_cleanup or source.get('sync_bridge_audio_target') != audio_target or source_id == audio_source_id
             )
             if needs_cleanup:
-                _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
+                retract_sync_bridge_source(uid, source_id)
             if needs_copy:
                 # Invalidate an older copy receipt before late audio copying:
                 # if copying fails, a retry without this worker's source hint
@@ -41,7 +57,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 if source_id == audio_source_id and source.get('sync_bridge_audio_target') == audio_target:
                     if not mark_sync_bridge_cleaned(uid, source_id, revision, None):
                         raise RuntimeError('sync bridge completion revision changed')
-                _copy_audio_chunks_for_merge(uid, [{'id': source_id}], conversation_id, strict=True)
+                copy_sync_bridge_audio(uid, source_id, conversation_id)
             if (needs_cleanup or needs_copy) and not mark_sync_bridge_cleaned(uid, source_id, revision, audio_target):
                 raise RuntimeError('sync bridge completion revision changed')
         current = conversations_db.get_conversation(uid, conversation_id)
@@ -53,7 +69,15 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
         return conversation_id
 
 
-def finish_sync_segment(uid, assigned, response, lock, language, *, audio_source_id=None):
+def finish_sync_segment(
+    uid: str,
+    assigned: SyncBridgeAssignment,
+    response: SyncSegmentResponse,
+    lock: LockType,
+    language: str | None,
+    *,
+    audio_source_id: str | None = None,
+) -> None:
     """One completion point, after audio persistence; follow a concurrent bridge."""
     if not assigned.get('sync_merged_from') and not assigned.get('private_cloud_sync_enabled'):
         return
@@ -64,6 +88,7 @@ def finish_sync_segment(uid, assigned, response, lock, language, *, audio_source
             response['new_memories'].discard(conversation_id)
             response['updated_memories'].discard(conversation_id)
             response['updated_memories'].add(canonical_id)
-            response.setdefault('_merged', {}).pop(conversation_id, None)
+            merged = response.setdefault('_merged', {})
+            merged.pop(conversation_id, None)
             if assigned['sync_relevance'] == 'keep':
-                response['_merged'][canonical_id] = language
+                merged[canonical_id] = language

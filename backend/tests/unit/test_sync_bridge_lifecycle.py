@@ -37,8 +37,11 @@ def system(monkeypatch):
     )
     retract = MagicMock()
     copy = MagicMock()
-    monkeypatch.setattr(bridge, '_delete_conversation_and_related_data', retract)
-    monkeypatch.setattr(bridge, '_copy_audio_chunks_for_merge', copy)
+    from utils.conversations import merge_conversations
+
+    # Exercise the public seams; replace only their external-effect leaves.
+    monkeypatch.setattr(merge_conversations, '_delete_conversation_and_related_data', retract)
+    monkeypatch.setattr(merge_conversations, '_copy_audio_chunks_for_merge', copy)
 
     def ingest(i):
         row = capture(i)
@@ -117,9 +120,9 @@ def test_shared_cleanup_retains_capture_and_propagates_task_failure(monkeypatch)
     monkeypatch.setattr(merge.conversations_db, '_delete_conversation_search_index', MagicMock())
     monkeypatch.setattr(merge, 'delete_vector', MagicMock())
     with pytest.raises(RuntimeError, match='task store unavailable'):
-        merge._delete_conversation_and_related_data('u', 'donor', retain_capture=True)
+        merge.retract_sync_bridge_source('u', 'donor')
     tasks.side_effect = None
-    merge._delete_conversation_and_related_data('u', 'donor', retain_capture=True)
+    merge.retract_sync_bridge_source('u', 'donor')
     audio.assert_not_called()
     delete.assert_not_called()
 

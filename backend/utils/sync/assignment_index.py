@@ -4,9 +4,15 @@ Day documents are read and written in the same transaction as conversations.
 The recent document remains a migration hint and cross-version serialization fence.
 """
 
+from collections.abc import ValuesView
 from datetime import timedelta, timezone
+from typing import TYPE_CHECKING
 
 from utils.conversation_continuity import DEFAULT_GAP_SECONDS
+
+if TYPE_CHECKING:
+    from google.cloud.firestore_v1 import transaction as firestore_transaction
+    from google.cloud.firestore_v1.document import DocumentReference
 
 
 def days_for(row: dict, *, padding: bool = False) -> list[str]:
@@ -17,21 +23,21 @@ def days_for(row: dict, *, padding: bool = False) -> list[str]:
 
 
 class AssignmentIndex:
-    def __init__(self, transaction, user_ref):
+    def __init__(self, transaction: 'firestore_transaction.Transaction', user_ref: 'DocumentReference') -> None:
         self.transaction = transaction
         self.collection = user_ref.collection('sync_assignment')
         self.recent_ref = self.collection.document('recent')
         self.recent = (self.recent_ref.get(transaction=transaction).to_dict() or {}).get('entries', [])
-        self.buckets = {}
+        self.buckets: dict[str, list[dict]] = {}
 
-    def read(self, interval):
+    def read(self, interval: dict) -> ValuesView[dict]:
         for day in days_for(interval, padding=True):
             if day not in self.buckets:
                 raw = self.collection.document(day).get(transaction=self.transaction).to_dict() or {}
                 self.buckets[day] = raw.get('entries', [])
         return {row['id']: row for rows in [self.recent, *self.buckets.values()] for row in rows}.values()
 
-    def write(self, result, replaced):
+    def write(self, result: dict, replaced: set[str]) -> None:
         keys = ('id', 'started_at', 'finished_at', 'source', 'client_device_id', 'is_locked')
         entry = {key: result.get(key) for key in keys}
         occupied = set(days_for(result))

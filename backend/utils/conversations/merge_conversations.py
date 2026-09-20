@@ -610,6 +610,16 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def retract_sync_bridge_source(uid: str, source_id: str) -> None:
+    """Retract derived data, retaining redirect/audio; propagate failures for retry."""
+    _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
+
+
+def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
+    """Copy retained donor audio strictly; never checkpoint a failed copy."""
+    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+
+
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
     row = conversations_db.get_conversation(uid, conversation_id) or {}

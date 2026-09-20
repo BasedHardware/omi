@@ -89,9 +89,9 @@ def assign_in_transaction(
     incoming = deepcopy(incoming)
     index = AssignmentIndex(transaction, user_ref)
     collection = user_ref.collection('conversations')
-    read = {}
+    read: dict[str, dict | None] = {}
 
-    def load(cid):
+    def load(cid: str) -> dict | None:
         if cid not in read:
             read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         return read[cid]
@@ -102,15 +102,15 @@ def assign_in_transaction(
     if own and own.get('deleted') and not own.get('sync_merged_into'):
         raise SyncAssignmentSuperseded('sync anchor was deleted')
 
-    def resolve(cid):
+    def resolve(cid: str | None) -> tuple[str | None, dict | None]:
         row = load(cid) if cid else None
         seen = set()
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle')
             seen.add(row['id'])
-            cid = row['sync_merged_into']
-            row = load(cid)
+            redirect_id: str = row['sync_merged_into']
+            cid, row = redirect_id, load(redirect_id)
         if seen and (not row or row.get('deleted')):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
