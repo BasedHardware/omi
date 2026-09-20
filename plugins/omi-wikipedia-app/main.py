@@ -7,11 +7,11 @@ and finding a random article for exploration.
 
 from html import unescape
 import re
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -36,8 +36,14 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
+def _safe_payload(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
 def _safe_limit(limit: Any) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return 5
     try:
         limit = int(limit)
@@ -46,9 +52,11 @@ def _safe_limit(limit: Any) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _safe_language(language: Optional[str]) -> str:
-    lang = (language or DEFAULT_LANGUAGE).strip().lower()
-    if not lang.replace("-", "").isalpha() or len(lang) > 12:
+def _safe_language(language: Any) -> str:
+    if not isinstance(language, str) or isinstance(language, bool):
+        return DEFAULT_LANGUAGE
+    lang = language.strip().lower()
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", lang) or len(lang) > 12:
         return DEFAULT_LANGUAGE
     return lang
 
@@ -62,7 +70,7 @@ async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> di
 
 
 def _article_url(language: str, title: str) -> str:
-    return f"https://{language}.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+    return f"https://{language}.wikipedia.org/wiki/{quote(title.replace(' ', '_'), safe='')}"
 
 
 def _clean_snippet(value: Optional[str]) -> str:
@@ -184,10 +192,12 @@ async def get_omi_tools_manifest():
 
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
-async def search_articles(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
-    if not query:
+async def search_articles(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
+    query = payload.get("query")
+    if not isinstance(query, str) or not query.strip():
         return ChatToolResponse(error="Missing required field: query")
+    query = query.strip()
 
     language = _safe_language(payload.get("language"))
     limit = _safe_limit(payload.get("limit"))
@@ -226,13 +236,15 @@ async def search_articles(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_article_summary(payload: dict[str, Any]):
-    title = (payload.get("title") or "").strip()
-    if not title:
+async def get_article_summary(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
+    title = payload.get("title")
+    if not isinstance(title, str) or not title.strip():
         return ChatToolResponse(error="Missing required field: title")
+    title = title.strip()
 
     language = _safe_language(payload.get("language"))
-    url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
+    url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'), safe='')}"
 
     try:
         data = await _request_json(url)
@@ -251,7 +263,8 @@ async def get_article_summary(payload: dict[str, Any]):
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
-async def get_random_article(payload: dict[str, Any]):
+async def get_random_article(payload: Annotated[Any, Body()] = None):
+    payload = _safe_payload(payload)
     language = _safe_language(payload.get("language"))
     url = f"https://{language}.wikipedia.org/w/api.php"
 
@@ -275,7 +288,7 @@ async def get_random_article(payload: dict[str, Any]):
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
-        summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
+        summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'), safe='')}"
         summary = await _request_json(summary_url)
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
     except httpx.HTTPStatusError as exc:
