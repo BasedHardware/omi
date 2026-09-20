@@ -64,13 +64,13 @@ Wal _ringWal() => Wal(
       fileNum: -1,
     );
 
-Wal _sdWal({int timerStart = 3000, int fileNum = 1}) => Wal(
+Wal _sdWal({int timerStart = 3000, int fileNum = 1, String device = 'omi-1'}) => Wal(
       timerStart: timerStart,
       codec: BleAudioCodec.opus,
       seconds: 60,
       status: WalStatus.miss,
       storage: WalStorage.sdcard,
-      device: 'omi-1',
+      device: device,
       fileNum: fileNum,
       storageTotalBytes: 800000,
     );
@@ -162,6 +162,32 @@ void main() {
       expect(connection.deleteCommands, 1);
       expect(connection.storageListCalls, 1);
       expect(await sync.getMissingWals(), isEmpty);
+    });
+
+    test('keeps the wal when no device is set', () async {
+      final connection = _FakeConnection();
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testConnection = connection
+        ..testWals = [_sdWal()];
+
+      await sync.deleteWal(_sdWal());
+
+      expect(connection.deleteCommands, 0);
+      expect((await sync.getMissingWals()).map((w) => w.id), [_sdWal().id]);
+    });
+
+    test('keeps the wal when its owning device is not the active one', () async {
+      final connection = _FakeConnection();
+      final stale = _sdWal(device: 'omi-0');
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = _device
+        ..testConnection = connection
+        ..testWals = [stale];
+
+      await sync.deleteWal(stale);
+
+      expect(connection.deleteCommands, 0);
+      expect((await sync.getMissingWals()).map((w) => w.id), [stale.id]);
     });
 
     test('keeps the wal when the delete command is not accepted', () async {

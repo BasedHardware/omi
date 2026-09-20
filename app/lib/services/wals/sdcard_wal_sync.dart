@@ -119,18 +119,22 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   /// Delete a device recording. The wal leaves [_wals] only after the device
   /// confirmed the delete (command accepted AND storage readback shows the
-  /// bytes gone); an unconfirmed delete keeps the wal so the recording
+  /// bytes gone); an unconfirmed delete — including when the owning device is
+  /// absent or a different device is active — keeps the wal so the recording
   /// cannot resurrect as "new" on the next sync (fail-closed).
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
 
-    if (_device != null && wal.device == _device!.id) {
-      final confirmed = await _deleteOnDevice(wal);
-      if (!confirmed) {
-        Logger.debug("SDCardWalSync.deleteWal: device did not confirm deletion of ${wal.id}, keeping WAL");
-        return;
-      }
+    if (_device == null || wal.device != _device!.id) {
+      Logger.debug("SDCardWalSync.deleteWal: owning device of ${wal.id} not connected, keeping WAL");
+      return;
+    }
+
+    final confirmed = await _deleteOnDevice(wal);
+    if (!confirmed) {
+      Logger.debug("SDCardWalSync.deleteWal: device did not confirm deletion of ${wal.id}, keeping WAL");
+      return;
     }
 
     _wals.removeWhere((w) => w.id == wal.id);
