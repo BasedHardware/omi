@@ -37,6 +37,16 @@ MAX_HTTP_BYTES = 512 * 1024
 CHUNK_MILLISECONDS = 100
 SYNTHETIC_UID_CLASS = "firebase_release_probe"
 FIXTURE_CODEC = "pcm16"
+# A single mid-session STT failover pushes the final transcript segment past
+# a short tail: when the lane falls back mid-session (e.g. the requested
+# provider is downgraded at selection, then the fallback dies at serve time
+# and the session fails over again), the successor provider flushes its
+# final segment on its own end-of-speech timer, seconds after the last audio
+# chunk. Hold the collection window open long enough to absorb exactly one
+# such failover, then still fail closed when the expected phrase has not
+# landed by the bounded deadline.
+TRANSCRIPT_SETTLE_SECONDS = 20
+TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
 
 
 class ProbeError(RuntimeError):
@@ -171,7 +181,7 @@ async def _listen_sample(
         chunk_bytes = fixture.sample_rate * 2 * CHUNK_MILLISECONDS // 1000
 
         async def receive_transcripts() -> None:
-            deadline = time.monotonic() + 30
+            deadline = time.monotonic() + TRANSCRIPT_RECEIVE_BOUND_SECONDS
             while time.monotonic() < deadline:
                 try:
                     payload = await _receive_json(websocket, deadline)
@@ -195,8 +205,7 @@ async def _listen_sample(
             if len(chunk) != chunk_bytes:
                 break
             await websocket.send(chunk)
-            await asyncio.sleep(CHUNK_MILLISECONDS / 1000)
-        await asyncio.sleep(5)
+        await asyncio.sleep(TRANSCRIPT_SETTLE_SECONDS)
         receiver.cancel()
         try:
             await receiver
