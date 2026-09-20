@@ -12,7 +12,11 @@
   agents (French agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`action_items_markdown.md`](action_items_markdown.md) — export action items to a
+  Markdown checklist with Obsidian Tasks due dates (Obsidian & Notion).
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
+* [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
+  exports into a digest: per-day totals, categories and longest sessions.
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
