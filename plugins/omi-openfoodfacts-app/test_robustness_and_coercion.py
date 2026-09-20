@@ -1,7 +1,57 @@
 import asyncio
 import os
 import sys
+import types
 import unittest
+
+
+# Pre-emptively stub non-stdlib dependencies so this suite can run hermetically
+# in minimal Python CI runners without external pip packages.
+class _Framework:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get(self, *args, **kwargs):
+        return lambda f: f
+
+    post = get
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+
+class _BaseModelStub:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+def _stub_module(name, **attributes):
+    val = types.ModuleType(name)
+    val.__dict__.update(attributes)
+    return val
+
+
+_stubs = {
+    "requests": _stub_module("requests", RequestException=OSError),
+    "fastapi": _stub_module(
+        "fastapi",
+        FastAPI=_Framework,
+        Request=_Framework,
+        Body=lambda default=None, **kw: default,
+    ),
+    "pydantic": _stub_module("pydantic", BaseModel=_BaseModelStub),
+    "starlette.concurrency": _stub_module(
+        "starlette.concurrency",
+        run_in_threadpool=lambda f, *args, **kwargs: f(*args, **kwargs),
+    ),
+}
+for _name, _mod in _stubs.items():
+    if _name not in sys.modules:
+        try:
+            __import__(_name)
+        except ImportError:
+            sys.modules[_name] = _mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
