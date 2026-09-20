@@ -53,8 +53,22 @@ def test_capture_partition_and_identity_are_permutation_invariant(seed):
     if seed == 0:
         # Newest-first batches, each independently ascending within a server job.
         order = [i for end in range(45, 0, -5) for i in range(end - 5, end)]
+    elif seed == 1:
+        # Two jobs overlap: HTTP 202 permits the next newest-first batch to
+        # start while the previous job still assigns its chunks oldest-first.
+        pending = [list(range(end - 5, end)) for end in range(45, 0, -5)]
+        active = [pending.pop(0), pending.pop(0)]
+        order = []
+        rng = random.Random(seed)
+        while active:
+            job = rng.choice(active)
+            order.append(job.pop(0))
+            if not job:
+                active.remove(job)
+                if pending:
+                    active.append(pending.pop(0))
     else:
-        # Interleave multiple newest-first jobs, with arbitrary worker completion.
+        # Arbitrary cross-job arrival, including timed-out ordering optimizations.
         random.Random(seed).shuffle(order)
     for i in order:
         intake(actual, rows[i])
