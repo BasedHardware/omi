@@ -39,6 +39,11 @@ checks:
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue numbers/limits arriving as JSON null or formatted strings must be coerced cleanly, while repo parameter resolution disambiguates short names, sanitizes URLs, and catches dirty types"
+  - id: github-app-tools-auth-tests
+    command: ["python3", "plugins/omi-github-app/test_github_tools_auth.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "all eight /tools/* chat-tool routes in omi-github-app read uid from request bodies and act on stored OAuth credentials; the shared-secret guard must fail closed when unconfigured, reject invalid tokens, and guard every tool route"
   - id: plugin-db-transcript-segments-tests
     command: ["python3", "plugins/test_db_transcript_segments.py"]
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
