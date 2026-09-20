@@ -125,8 +125,12 @@ def observe_completed_conversation_shape(uid: str, payload: object) -> None:
         OMI_CONVERSATION_SPEECH_SECONDS.labels(source=source).observe(max(0.0, speech))
         OMI_CONVERSATION_SEGMENTS.labels(source=source).observe(max(0.0, segments))
         event_source = source if source in SOURCES else 'none'
+        # conversation_created is the dead event this seam revives and the one
+        # that feeds per-user-daily. Do not also emit conversation_finalized:
+        # request_finalization already records that on job admission
+        # (lifecycle.request_finalization, intent.created). A second increment
+        # here would give one counter two meanings.
         record_product_event('conversation_created', uid=uid, source=event_source, outcome='ok')
-        record_product_event('conversation_finalized', uid=uid, source=event_source, outcome='ok')
         if source == 'sync':
             duration_le = bucket_le(duration if duration is not None else 0.0, CONVERSATION_DURATION_BUCKETS)
             speech_le = bucket_le(max(0.0, speech), CONVERSATION_DURATION_BUCKETS)

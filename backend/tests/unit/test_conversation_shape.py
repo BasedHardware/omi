@@ -135,36 +135,19 @@ def test_observe_fail_open_when_histogram_raises(monkeypatch):
     shape.observe_completed_conversation_shape(SECRET_UID, _live_payload())
 
 
-def test_observe_emits_created_and_finalized_with_closed_source(registries):
+def test_observe_emits_created_not_finalized_with_closed_source(registries):
     shape.observe_completed_conversation_shape(SECRET_UID, _live_payload())
-    assert (
-        registries.get_sample_value(
-            'omi_product_event_total',
-            {
-                'event': 'conversation_created',
-                'client_kind': 'unknown',
-                'app_build': 'unknown',
-                'outcome': 'ok',
-                'source': 'live',
-                'op': 'none',
-            },
-        )
-        == 1
-    )
-    assert (
-        registries.get_sample_value(
-            'omi_product_event_total',
-            {
-                'event': 'conversation_finalized',
-                'client_kind': 'unknown',
-                'app_build': 'unknown',
-                'outcome': 'ok',
-                'source': 'live',
-                'op': 'none',
-            },
-        )
-        == 1
-    )
+    created_labels = {
+        'event': 'conversation_created',
+        'client_kind': 'unknown',
+        'app_build': 'unknown',
+        'outcome': 'ok',
+        'source': 'live',
+        'op': 'none',
+    }
+    assert registries.get_sample_value('omi_product_event_total', created_labels) == 1
+    for sample in next(f for f in registries.collect() if f.name == 'omi_product_event').samples:
+        assert sample.labels.get('event') != 'conversation_finalized'
 
 
 def test_zero_init_exports_shape_sources_and_drops_old_user_daily_histogram():
