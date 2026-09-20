@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,11 +37,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   final ScrollController _scrollController = ScrollController();
 
   OverlayEntry? _deleteNotificationOverlay;
+  Timer? _deleteNotificationTimer;
 
   bool _isInitialLoad = true;
 
   @override
   void dispose() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
     _searchController.dispose();
     _scrollController.dispose();
     _removeDeleteNotification();
@@ -48,6 +53,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   // Remove the delete notification overlay if it exists
   void _removeDeleteNotification() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
     _deleteNotificationOverlay?.remove();
     _deleteNotificationOverlay = null;
   }
@@ -116,7 +123,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     Overlay.of(context).insert(_deleteNotificationOverlay!);
 
-    Future.delayed(const Duration(seconds: 4), () {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = Timer(const Duration(seconds: 4), () {
       if (!mounted) return;
       _removeDeleteNotification();
     });
@@ -129,14 +137,18 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     (() async {
       final provider = context.read<MemoriesProvider>();
-      await provider.init();
-      if (!mounted) return;
-
-      if (!mounted) return;
-
-      setState(() {
-        _isInitialLoad = false;
-      });
+      try {
+        await provider.init();
+      } finally {
+        // Always leave the initial-load state, even if init() threw. Otherwise
+        // `provider.loading && _isInitialLoad` stays true and the page is stuck
+        // on the loading skeleton forever.
+        if (mounted) {
+          setState(() {
+            _isInitialLoad = false;
+          });
+        }
+      }
     }).withPostFrameCallback();
   }
 
@@ -184,10 +196,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           hintText: context.l10n.searchMemories,
                                           leading: const Padding(
                                             padding: EdgeInsets.only(left: 6.0),
-                                            child: FaIcon(
-                                              FontAwesomeIcons.magnifyingGlass,
-                                              color: Colors.white70,
-                                              size: 14,
+                                            child: ExcludeSemantics(
+                                              child: FaIcon(
+                                                FontAwesomeIcons.magnifyingGlass,
+                                                color: Colors.white70,
+                                                size: 14,
+                                              ),
                                             ),
                                           ),
                                           backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
@@ -238,10 +252,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               hintText: context.l10n.searchMemories,
                                               leading: const Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
-                                                child: FaIcon(
-                                                  FontAwesomeIcons.magnifyingGlass,
-                                                  color: Colors.white70,
-                                                  size: 14,
+                                                child: ExcludeSemantics(
+                                                  child: FaIcon(
+                                                    FontAwesomeIcons.magnifyingGlass,
+                                                    color: Colors.white70,
+                                                    size: 14,
+                                                  ),
                                                 ),
                                               ),
                                               backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
@@ -255,6 +271,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                                   ? [
                                                       IconButton(
                                                         icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                        tooltip: context.l10n.clear,
                                                         padding: EdgeInsets.zero,
                                                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
                                                         onPressed: () {
@@ -296,47 +313,69 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     SizedBox(
                                       width: 44,
                                       height: 44,
-                                      child: ElevatedButton(
-                                        onPressed: () {
+                                      child: Semantics(
+                                        button: true,
+                                        label: context.l10n.memoryGraph,
+                                        excludeSemantics: true,
+                                        onTap: () {
                                           Navigator.of(
                                             context,
                                           ).push(MaterialPageRoute(builder: (context) => const MemoryGraphPage()));
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppStyles.backgroundSecondary,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.of(
+                                              context,
+                                            ).push(MaterialPageRoute(builder: (context) => const MemoryGraphPage()));
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppStyles.backgroundSecondary,
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.zero,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                         ),
-                                        child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     SizedBox(
                                       width: 44,
                                       height: 44,
-                                      child: ElevatedButton(
-                                        onPressed: () {
+                                      child: Semantics(
+                                        button: true,
+                                        label: context.l10n.memoryManagement,
+                                        excludeSemantics: true,
+                                        onTap: () {
                                           _showMemoryManagementSheet(context, provider);
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppStyles.backgroundSecondary,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            _showMemoryManagementSheet(context, provider);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppStyles.backgroundSecondary,
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.zero,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                         ),
-                                        child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                            if (provider.ledgerHistoryTruncated)
-                              const SliverToBoxAdapter(
+                            if (provider.memoryBeliefEnabled &&
+                                provider.showHistory &&
+                                (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
+                              SliverToBoxAdapter(
                                 child: Padding(
-                                  padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-                                  child: MemoryHistoryStatusBanner(),
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  child: MemoryHistoryStatusBanner(
+                                    onLoadMore: provider.ledgerHistoryHasMore ? provider.loadMoreHistory : null,
+                                  ),
                                 ),
                               ),
                             if (provider.showLoadError || provider.filteredMemories.isEmpty)
@@ -399,15 +438,24 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                 Positioned(
                   right: 20,
                   bottom: 100,
-                  child: FloatingActionButton(
-                    heroTag: 'memories_fab',
-                    onPressed: () {
+                  child: Semantics(
+                    button: true,
+                    label: context.l10n.createMemoryTooltip,
+                    excludeSemantics: true,
+                    onTap: () {
                       showMemoryDialog(context, provider);
                       PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
                     },
-                    backgroundColor: Colors.deepPurple,
-                    tooltip: context.l10n.createMemoryTooltip,
-                    child: const Icon(Icons.add, color: Colors.white),
+                    child: FloatingActionButton(
+                      heroTag: 'memories_fab',
+                      onPressed: () {
+                        showMemoryDialog(context, provider);
+                        PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
+                      },
+                      backgroundColor: Colors.deepPurple,
+                      tooltip: context.l10n.createMemoryTooltip,
+                      child: const Icon(Icons.add, color: Colors.white),
+                    ),
                   ),
                 ),
               ],

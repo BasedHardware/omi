@@ -90,9 +90,10 @@ This repo already has an in-flight catalog migration — `.github/agent-docs/pla
 
 | Location | Kind | Needs update when prices/tiers change? |
 |---|---|---|
-| `web/frontend/src/app/components/product-banner/types.ts` (line 23) `PRODUCT_INFO.price` | hardcoded_amount | Yes, if the $89 hardware price changes (device price, not subscription) |
-| `web/frontend/src/app/apps/utils/metadata.ts` (line 104) | hardcoded_amount | Yes — independent duplicate of the $89 device price for SEO JSON-LD |
-| `web/frontend/src/app/apps/[id]/page.tsx` (line 118) | hardcoded_amount | Yes — third independent duplicate of the $89 device price |
+| `web/frontend/src/constants/app-store-hardware-product.ts` `APP_STORE_HARDWARE_PRODUCT` | hardcoded_amount | Yes, if the $89 hardware price or storefront URL changes (device price, not subscription) |
+| `web/frontend/src/app/components/product-banner/types.ts` `PRODUCT_INFO` | reads_live_no_update_needed | No — re-exports banner fields from `APP_STORE_HARDWARE_PRODUCT` |
+| `web/frontend/src/app/apps/utils/metadata.ts` product JSON-LD | reads_live_no_update_needed | No — reads `APP_STORE_HARDWARE_PRODUCT` for SEO schema |
+| `web/frontend/src/app/apps/[id]/page.tsx` Product schema | reads_live_no_update_needed | No — reads `APP_STORE_HARDWARE_PRODUCT` for structured data |
 | `web/frontend/src/app/unlimited/page.tsx` (line 6,39,41) | plan_name_or_tier_copy | Yes — stale "Omi Unlimited" landing page name vs. current catalog naming (unlimited_v2 vs deprecated Neo) |
 | `src/__tests__/wrapped-unlimited-deeplink-parity.test.mjs` | test_fixture | Yes — static string tripwire on the `/unlimited` route name, breaks if route is renamed |
 | `web/frontend/src/app/apps/utils/metadata.ts` (line 214-215) `generateAppListSchema` | other | No — correctly hardcoded $0 for free-to-list marketplace apps |

@@ -13,6 +13,11 @@ log = logging.getLogger(__name__)
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RETRIES = 3
+# Upper bound on pages a single get_all() will walk. Graph collections are
+# server-paged and $top is a page size, not a result cap, so a caller asking
+# for "everything" must follow @odata.nextLink; this keeps a malformed or
+# self-referencing nextLink from turning that into an infinite loop.
+MAX_PAGES = 20
 
 
 class GraphError(Exception):
@@ -20,6 +25,25 @@ class GraphError(Exception):
         super().__init__(f"Graph {status}: {payload}")
         self.status = status
         self.payload = payload
+
+
+def _parse_retry_after(header_val: str | None, default: int = 2) -> int:
+    """Safely parse Retry-After header (seconds or RFC 7231 HTTP-date)."""
+    if not header_val:
+        return default
+    try:
+        return max(1, int(header_val))
+    except (ValueError, TypeError):
+        pass
+    try:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(header_val)
+        now = datetime.now(timezone.utc)
+        delta = (dt - now).total_seconds()
+        return max(1, int(delta)) if delta > 0 else default
+    except Exception:
+        return default
 
 
 class GraphClient:
@@ -58,8 +82,9 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"), default=2)
+                # Honour the server cooldown; do not shorten a long Retry-After.
+                backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
@@ -82,6 +107,42 @@ class GraphClient:
 
     async def get(self, path: str, **kw: Any) -> Any:
         return await self._request("GET", path, **kw)
+
+    async def get_all(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        max_items: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET a collection and follow ``@odata.nextLink`` until Graph runs out.
+
+        Graph returns at most one page per request regardless of ``$top``;
+        the rest arrives only by requesting the ``@odata.nextLink`` it hands
+        back. That link already carries every query option (``$top``,
+        ``$filter``, ``$orderby``, ``startDateTime``…), so ``params`` are sent
+        with the first request only — repeating them on a nextLink makes Graph
+        reject the request.
+        """
+        items: list[dict[str, Any]] = []
+        url = path
+        first = True
+        seen: set[str] = set()
+        for _ in range(MAX_PAGES):
+            data = await self.get(url, params=params if first else None)
+            first = False
+            items.extend(data.get("value") or [])
+            if max_items is not None and len(items) >= max_items:
+                return items[:max_items]
+            url = data.get("@odata.nextLink")
+            if not url:
+                return items
+            if url in seen:
+                log.warning("Graph returned a repeating @odata.nextLink for %s — stopping", path)
+                return items
+            seen.add(url)
+        log.warning("Graph collection %s exceeded %d pages — returning what was read", path, MAX_PAGES)
+        return items
 
     async def post(self, path: str, json: Any, **kw: Any) -> Any:
         return await self._request("POST", path, json=json, **kw)
@@ -118,9 +179,10 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
-                log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
+                retry_after = _parse_retry_after(resp.headers.get("Retry-After"), default=2)
+                # Honour the server cooldown; do not shorten a long Retry-After.
+                backoff = max(retry_after, min(2 ** attempt + 1, 30))
+                log.warning("Graph %s on %s (bytes) — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
 

@@ -12,6 +12,8 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -20,6 +22,8 @@ overlay:
           value: http://nllb.omiapi.com
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'true'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
         REFERRAL_PUBLIC_BASE_URL:
           value: https://api.omiapi.com
         OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
@@ -68,8 +72,13 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'true'
+          category: rollout
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -104,6 +113,10 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: MODULATE_API_KEY
+        SONIOX_API_KEY:
+          secret:
+            name: dev-omi-backend-secrets
+            key: SONIOX_API_KEY
         GOOGLE_MAPS_API_KEY:
           secret:
             name: dev-omi-backend-secrets
@@ -120,7 +133,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -198,7 +211,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -213,6 +226,14 @@ overlay:
           source: environment
   desktop_backend:
     env:
+      MEMORY_BELIEF_MODEL_ENABLED:
+        value: 'true'
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        value: 'true'
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+        value: 'true'
+      MEMORY_BELIEF_AUTOMATION_PAUSED:
+        value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
   cloud_run:
@@ -234,10 +255,16 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+            value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -295,9 +322,13 @@ overlay:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
@@ -349,10 +380,14 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -407,6 +442,8 @@ overlay:
             value: http://parakeet.omiapi.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -460,6 +497,8 @@ overlay:
             value: memories-backend-dev
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
@@ -474,6 +513,8 @@ overlay:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
@@ -483,9 +524,9 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0.80'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-            value: 'true'
+            value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-            value: daily-memory-sweep-v1
+            value: ''
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'true'
       knowledge-ledger-drain-job:

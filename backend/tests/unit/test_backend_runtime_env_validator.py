@@ -108,10 +108,11 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags,
+        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -216,7 +217,7 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_belief_model_env(payload: str) -> str:
-    """MEMORY_BELIEF_MODEL_ENABLED is declared beside every dev MEMORY_ENABLED site.
+    """Belief processing and its deployment-wide pause are declared together.
 
     The belief model gates writes in process_conversation (backend-listen, pusher, and
     the Cloud Run backend for reprocess), API memory create (backend-integration), and
@@ -225,7 +226,9 @@ def with_belief_model_env(payload: str) -> str:
     """
     return payload.replace(
         '{"name": "MEMORY_ENABLED", "value": "on"},',
-        '{"name": "MEMORY_ENABLED", "value": "on"},\n        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n'
+        '        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},\n'
+        '        {"name": "MEMORY_BELIEF_AUTOMATION_PAUSED", "value": "false"},',
     )
 
 
@@ -442,6 +445,24 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
         and "'true'" in error.message
         for error in errors
     )
+
+
+@pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    # utils.free_tier_basic_gates lights a gate only on an untrimmed,
+    # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
+    # the loose summary-flag literal set while every host ran ungated.
+    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    env_config['gke']['backend-listen']['env'][flag]['value'] = literal
+    env_config['gke']['pusher']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend-sync']['env'][flag]['value'] = literal
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
 
 
 def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():
@@ -1242,7 +1263,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,dg-nova-3,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
         ),
     ]
 

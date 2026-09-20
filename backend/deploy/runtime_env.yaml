@@ -61,7 +61,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -83,6 +83,9 @@ environments:
             category: rollout
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
           WAKE_WORD_ADJUDICATION_ENABLED:
@@ -167,6 +170,9 @@ environments:
           MEMORY_BELIEF_MODEL_ENABLED:
             category: rollout
             value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -221,6 +227,9 @@ environments:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
@@ -228,6 +237,9 @@ environments:
             category: rollout
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
           OMI_LLM_GATEWAY_URL:
@@ -285,6 +297,10 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: MODULATE_API_KEY
+          SONIOX_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: SONIOX_API_KEY
           GOOGLE_MAPS_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -301,7 +317,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -379,7 +395,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -395,6 +411,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        MEMORY_BELIEF_MODEL_ENABLED:
+          category: rollout
+          value: 'true'
+        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+          category: rollout
+          value: 'true'
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+          category: rollout
+          value: 'true'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
+          category: rollout
         USE_VERTEX_AI:
           value: 'true'
         GOOGLE_CLOUD_PROJECT:
@@ -479,6 +507,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+              category: rollout
+              value: 'true'
             WAKE_WORD_ADJUDICATION_ENABLED:
               value: 'true'
               category: rollout
@@ -550,6 +584,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -695,6 +732,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             CONVERSATION_NOTES_V2_ENABLED:
               value: 'true'
               category: rollout
@@ -702,6 +742,9 @@ environments:
               category: rollout
               value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
+              category: rollout
+              value: 'true'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
@@ -773,6 +816,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'true'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -847,6 +893,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -956,6 +1005,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -1143,6 +1195,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1210,6 +1265,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'true'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               category: memory_rollout
               value: 'true'
@@ -1230,10 +1288,10 @@ environments:
               value: '0.80'
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
               category: memory_rollout
-              value: daily-memory-sweep-v1
+              value: ''
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
               value: '3'
               category: memory_rollout
@@ -1383,7 +1441,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1405,6 +1463,9 @@ environments:
             category: rollout
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+            value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
           WAKE_WORD_ADJUDICATION_ENABLED:
@@ -1489,6 +1550,9 @@ environments:
           MEMORY_BELIEF_MODEL_ENABLED:
             category: rollout
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -1573,6 +1637,9 @@ environments:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
+            category: rollout
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
@@ -1580,6 +1647,9 @@ environments:
             category: rollout
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+            value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
       config_map:
@@ -1610,7 +1680,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1638,6 +1708,18 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        MEMORY_BELIEF_MODEL_ENABLED:
+          category: rollout
+          value: 'false'
+        BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+          category: rollout
+          value: 'false'
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+          category: rollout
+          value: 'false'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
+          value: 'false'
+          category: rollout
         USE_VERTEX_AI:
           value: 'true'
         GOOGLE_CLOUD_PROJECT:
@@ -1727,6 +1809,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+              category: rollout
+              value: 'false'
             WAKE_WORD_ADJUDICATION_ENABLED:
               value: 'true'
               category: rollout
@@ -1798,6 +1886,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1960,6 +2051,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             CONVERSATION_NOTES_V2_ENABLED:
               value: 'true'
               category: rollout
@@ -1967,6 +2061,9 @@ environments:
               category: rollout
               value: 'false'
             CONVERSATION_OCR_CONTEXT_ENABLED:
+              category: rollout
+              value: 'false'
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
@@ -2040,6 +2137,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -2114,6 +2214,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -2225,6 +2328,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -2396,6 +2502,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -2462,6 +2571,9 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               category: rollout
               value: 'false'
+            MEMORY_BELIEF_AUTOMATION_PAUSED:
+              value: 'false'
+              category: rollout
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               category: memory_rollout
               value: 'false'

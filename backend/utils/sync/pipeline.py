@@ -17,6 +17,7 @@ import shutil
 import threading
 import time
 import wave
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
@@ -129,7 +130,8 @@ from utils.sync.telemetry import bounded_exception_type as _bounded_exception_ty
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.merge_dedupe import dedupe_segments_for_merge
+from utils.sync.assignment import needs_fragment_review
+from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -776,6 +778,13 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
+    # Visible transcript-only review: never discard uncertain real speech.
+    # Re-evaluate the entire current transcript so later content promotes it.
+    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
+        conversation_data.get('transcript_segments', [])
+    ):
+        return
+
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
 
@@ -826,7 +835,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
         emb = person.get('speaker_embedding')
         # Only load embedding if person has speech samples — contacts without
         # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples'):
+        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],
@@ -1022,6 +1031,9 @@ class _OrderedTurnstile:
     conversation, so every chunk becomes its own conversation (#6551, #5747).
     """
 
+    # Cross-job correctness lives in assign_sync_conversation; this turnstile
+    # is only an in-job ordering optimization, never a persistence lock.
+
     def __init__(self, ordered_keys: List[str]):
         self._pending = deque(ordered_keys)
         self._done = set()
@@ -1149,7 +1161,7 @@ def process_segment(
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
-        segment_end_timestamp = timestamp + transcript_segments[-1].end
+        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
 
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
@@ -1165,134 +1177,51 @@ def process_segment(
         else:
             closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
-        if not closest_memory:
-            started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-            finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
-            create_memory = CreateConversation(
-                started_at=started_at,
-                finished_at=finished_at,
-                transcript_segments=transcript_segments,
-                source=source,
-                is_locked=is_locked,
-                private_cloud_sync_enabled=private_cloud_sync_enabled,
-                client_device_id=client_device_id,
-                client_platform=client_platform,
-                geolocation=geolocation,
-            )
-            created = process_conversation(
-                uid,
-                language,
-                create_memory,
-                persistence_observer=_require_current_conversation_persistence,
-            )
-            with lock:
-                response['new_memories'].add(created.id)
-            if private_cloud_sync_enabled:
-                _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
-        else:
-            if geolocation and not closest_memory.get('geolocation'):
-                conversations_db.update_conversation(
-                    uid, closest_memory['id'], {'geolocation': geolocation.model_dump()}
-                )
-                closest_memory['geolocation'] = geolocation.model_dump()
-            transcript_segments = [s.model_dump() for s in transcript_segments]
+        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        create_memory = CreateConversation(
+            started_at=started_at,
+            finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
+            transcript_segments=transcript_segments,
+            source=source,
+            language=language,
+            is_locked=is_locked,
+            private_cloud_sync_enabled=private_cloud_sync_enabled,
+            client_device_id=client_device_id,
+            client_platform=client_platform,
+            geolocation=geolocation,
+        )
+        incoming = Conversation(
+            id=str(uuid.uuid4()),
+            created_at=started_at,
+            structured=build_deterministic_minimum_structured(create_memory),
+            **create_memory.model_dump(),
+        ).model_dump()
+        incoming['data_protection_level'] = data_protection_level
+        from utils.conversations.lifecycle import ingest_sync_conversation
 
-            # assign timestamps to each segment
-            for segment in transcript_segments:
-                segment['timestamp'] = timestamp + segment['start']
-            for segment in closest_memory['transcript_segments']:
-                segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
-
-            incoming_count = len(transcript_segments)
-            # Deduplicate before append. Exact absolute ranges cover 207 retries;
-            # text+slop covers live+offline / clock-offset duplicates (#4769).
-            deduped_segments = dedupe_segments_for_merge(
-                closest_memory['started_at'].timestamp(),
-                closest_memory['transcript_segments'],
-                transcript_segments,
-            )
-            dropped_for_dedupe = incoming_count - len(deduped_segments)
-            if not deduped_segments:
-                logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
-                with lock:
-                    response['updated_memories'].add(closest_memory['id'])
-                # No chunk upload: duplicate of existing/realtime audio.
-                _set_deferred_segment_outcome(
-                    deferred_outcome,
-                    outcome=TranscriptionOutcome.SUCCESS,
-                    provider=provider,
-                    model=model,
-                    retryable=False,
-                )
-                if deferred_outcome is None:
-                    _record_sync_segment_outcome(
-                        TranscriptionOutcome.SUCCESS,
-                        provider=provider,
-                        model=model,
-                        lane=sync_lane,
-                        retryable=False,
-                    )
-                return True
-
-            # Private-cloud audio before conversation-relative rewrite so partial
-            # survivors still have chunk-relative start/end (#4769 David CR).
-            if private_cloud_sync_enabled:
-                if dropped_for_dedupe == 0:
-                    _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
-                else:
-                    store_partial_merge_survivor_audio(
-                        uid=uid,
-                        conversation_id=closest_memory['id'],
-                        file_timestamp=timestamp,
-                        audio_bytes=audio_bytes,
-                        data_protection_level=data_protection_level,
-                        survivors=deduped_segments,
-                    )
-
-            # merge and sort segments by start timestamp
-            segments = closest_memory['transcript_segments'] + deduped_segments
-            segments.sort(key=lambda x: x['timestamp'])
-
-            # fix segment.start .end to be relative to the memory
-            for i, segment in enumerate(segments):
-                duration = segment['end'] - segment['start']
-                segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
-                segment['end'] = segment['start'] + duration
-
-            # Calculate new finished_at based on the latest segment
-            last_segment_end = segments[-1]['end'] if segments else 0
-            new_finished_at = datetime.fromtimestamp(
-                closest_memory['started_at'].timestamp() + last_segment_end, tz=timezone.utc
-            )
-
-            # Ensure finished_at doesn't go backwards
-            if new_finished_at < closest_memory['finished_at']:
-                new_finished_at = closest_memory['finished_at']
-
-            # remove timestamp field
-            for segment in segments:
-                segment.pop('timestamp')
-
-            # save with updated finished_at
-            with lock:
-                response['updated_memories'].add(closest_memory['id'])
-            update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
-
-            # Lock existing conversation if credits exhausted
-            if is_locked:
-                conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
-
-            # Reprocess if conversation was discarded or if auto-synced WALs added new segments
-            if closest_memory.get('discarded', False) or target_conversation_id:
-                reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
-                logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
-                _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+        assigned, created, survivors = ingest_sync_conversation(
+            uid,
+            incoming,
+            candidate_id=closest_memory['id'] if closest_memory else None,
+            target_id=target_conversation_id,
+        )
+        conversation_id = assigned['id']
+        with lock:
+            response['new_memories' if created else 'updated_memories'].add(conversation_id)
+            if assigned['sync_relevance'] == 'keep':
+                response.setdefault('_merged', {})[conversation_id] = language
+        if private_cloud_sync_enabled and survivors:
+            if len(survivors) == len(transcript_segments):
+                _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
             else:
-                # Summary/structured data is now stale (it predates the merged segments).
-                # Record it so the caller reprocesses once per conversation at batch end,
-                # instead of once per merged segment.
-                with lock:
-                    response.setdefault('_merged', {})[closest_memory['id']] = language
+                store_partial_merge_survivor_audio(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    file_timestamp=timestamp,
+                    audio_bytes=audio_bytes,
+                    data_protection_level=data_protection_level,
+                    survivors=survivors,
+                )
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=TranscriptionOutcome.SUCCESS,
@@ -1343,10 +1272,12 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
     same batch.
     """
     merged = response.pop('_merged', {})
+    fenced_ids = set()
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
+            fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
             response.get('updated_memories', set()).discard(conversation_id)
             response.get('new_memories', set()).discard(conversation_id)
@@ -1355,6 +1286,17 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+    # A task-mode worker whose every conversation was superseded by a newer
+    # ingest must not publish an empty success: re-raise so the Cloud Tasks
+    # lane terminally ACKs the delivery as superseded (never retried). The
+    # v1 inline lane keeps the absorb behavior (no on_fenced checkpoint there).
+    if (
+        fenced_ids
+        and on_fenced is not None
+        and not response.get('new_memories')
+        and not response.get('updated_memories')
+    ):
+        raise SyncConversationPersistenceFenced('all merged conversations fenced')
 
 
 async def _checkpoint_fenced_conversations_for_run(
@@ -1993,7 +1935,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             len(triggered_caps),
                         )
                         try:
-                            asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                            start_background_task(
+                                trigger_classifier_if_needed(uid, triggered_caps),
+                                name=f'sync_job_fair_use_classifier:{uid}',
+                            )
                         except Exception as e:
                             logger.error(
                                 'event=sync_classifier outcome=schedule_failed exception_type=%s',

@@ -113,7 +113,7 @@ def apply_conversation_sync_mutation(
     base_revision: datetime,
     operation: Dict[str, Any],
     firestore_client: Any = None,
-) -> Dict[str, Any]:
+) -> tuple[Dict[str, Any], bool]:
     """Apply one user mutation exactly once against a canonical revision.
 
     The conversation write and its compact receipt share one Firestore commit.
@@ -128,9 +128,11 @@ def apply_conversation_sync_mutation(
     )
     receipt_ref = conversation_ref.collection(_RECEIPTS_COLLECTION).document(_receipt_id(client_mutation_id))
     fingerprint = _fingerprint(base_revision, operation)
+    replayed = False
 
     @firestore.transactional
     def _apply(transaction) -> None:
+        nonlocal replayed
         # Firestore requires every read to finish before the first write.
         receipt_snapshot = receipt_ref.get(transaction=transaction)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -147,6 +149,7 @@ def apply_conversation_sync_mutation(
                         'conversation': None,
                     }
                 )
+            replayed = True
             return
 
         if not getattr(conversation_snapshot, 'exists', False):
@@ -251,4 +254,4 @@ def apply_conversation_sync_mutation(
         if revision is None:
             raise ConversationMutationReceiptUnavailableError('conversation mutation receipt has no revision')
         conversation['revision'] = revision
-    return result
+    return result, replayed

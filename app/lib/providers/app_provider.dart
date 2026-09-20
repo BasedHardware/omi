@@ -39,7 +39,7 @@ class AppProvider extends BaseProvider {
 
   /// Test seam — overrides [disableAppServer] in [toggleApp].
   @visibleForTesting
-  Future<void> Function(String appId)? disableAppOverride;
+  Future<bool> Function(String appId)? disableAppOverride;
 
   @visibleForTesting
   Future<List<Map<String, dynamic>>> Function()? retrieveAppsGroupedOverride;
@@ -688,9 +688,18 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  void toggleAppPublic(String appId, bool value) {
+  Future<void> toggleAppPublic(String appId, bool value) async {
+    final updated = await changeAppVisibilityServer(appId, value);
+    if (updated != true) {
+      final context = globalNavigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarError(
+        context != null && context.mounted
+            ? context.l10n.somethingWentWrong
+            : 'Something went wrong! Please try again later.',
+      );
+      return;
+    }
     appPublicToggled = value;
-    changeAppVisibilityServer(appId, value);
     var appIndex = apps.indexWhere((app) => app.id == appId);
     if (appIndex != -1) {
       apps[appIndex].private = !value;
@@ -701,7 +710,7 @@ class AppProvider extends BaseProvider {
       }
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarSuccess(
-        context != null
+        context != null && context.mounted
             ? context.l10n.appVisibilityChangedSuccessfully
             : 'App visibility changed successfully. It may take a few minutes to reflect.',
       );
@@ -941,9 +950,15 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await (disableAppOverride ?? disableAppServer)(appId);
-        success = true;
-        PlatformManager.instance.analytics.appDisabled(appId);
+        success = await (disableAppOverride ?? disableAppServer)(appId);
+        if (success) {
+          PlatformManager.instance.analytics.appDisabled(appId);
+        } else {
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
+              ? context.l10n.errorUpdatingAppStatus
+              : 'An error occurred while updating the app status.';
+        }
       }
     } catch (e) {
       print('Error toggling app $appId: $e');

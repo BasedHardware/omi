@@ -160,6 +160,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=fast-dev-bundle.sh
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
+# shellcheck source=desktop-build-identity.sh
+source "$SCRIPT_DIR/scripts/desktop-build-identity.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
 # shellcheck source=jit-qa-target.sh
@@ -1311,6 +1313,9 @@ if [ "$FAST_BUNDLE" = "1" ]; then
         omi_write_jit_qa_bundle_env "$APP_PATH/Contents/Resources/.env" || exit $?
     fi
 
+    step "Stamping source identity..."
+    omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_PATH/Contents/Info.plist"
+
     step "Signing updated app with hardened runtime..."
     sign_app_bundle "$APP_PATH" false
     reset_local_profile_keychain_state
@@ -1410,6 +1415,7 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
+omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_BUNDLE/Contents/Info.plist"
 
 substep "Copying GoogleService-Info.plist"
 if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then

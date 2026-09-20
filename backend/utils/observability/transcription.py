@@ -8,6 +8,7 @@ from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
 from models.conversation_enums import ConversationSource
+from utils.journey_metrics_contract import bounded_app_build
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
@@ -287,12 +288,32 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
     ).inc(seconds)
 
 
-def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only."""
+def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
+    """Count a replacement provider that accepted a mid-session failover.
+
+    A session's ``LiveSTTAttempt`` is bound to the provider that accepted it at
+    start, so a provider that only ever serves as a failover hop would otherwise
+    read as accepted=0 while carrying real traffic (#13662).
+    """
+
+    OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
+        provider=bounded_provider(provider),
+        client_platform=_bounded_platform(platform),
+        deployment_environment=_deployment_environment(),
+    ).inc()
+
+
+def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
+    """Count one accepted /v4/listen socket with bounded labels only.
+
+    WebSocket accept paths omit app_build (unknown): the handshake does not
+    carry a trusted version contract.
+    """
 
     OMI_LISTEN_ACCEPTED_TOTAL.labels(
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
+        app_build=bounded_app_build(app_build),
     ).inc()
 
 

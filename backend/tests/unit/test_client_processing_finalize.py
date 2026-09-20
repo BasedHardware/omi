@@ -187,6 +187,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_reprocess_transcript_structure',
         'extract_action_items',
         'get_conversation_notes',
+        'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
         'SummaryProviderError',
     ):
@@ -194,6 +195,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
+    gateway_error_contract = add('utils.llm.gateway_error_contract', AutoMockModule('utils.llm.gateway_error_contract'))
+    gateway_error_contract.conversation_processing_http_exception = lambda error: error
     add('utils.apps', AutoMockModule('utils.apps'))
     add('utils.analytics', AutoMockModule('utils.analytics')).record_usage = MagicMock()
     add('utils.conversations.transcript_chunks', AutoMockModule('utils.conversations.transcript_chunks'))
@@ -217,6 +220,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     byok = ModuleType('utils.byok')
     byok.get_byok_key = lambda _provider: None
@@ -429,7 +433,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch: pytest.MonkeyPatch, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
 
 
 def _authorize(monkeypatch: pytest.MonkeyPatch, pc: Any, decision: Decision) -> None:

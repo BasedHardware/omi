@@ -12,6 +12,27 @@ from utils.journey_metrics_contract import (
     CLIENT_KINDS,
 )
 
+OMI_PRODUCT_EVENT_TOTAL = Counter(
+    'omi_product_event_total',
+    (
+        'Product events by bounded event, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Never labeled by uid or raw version strings.'
+    ),
+    ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+)
+
+OMI_PRODUCT_EVENT_USER_DAILY = Histogram(
+    'omi_product_event_user_daily',
+    (
+        'Per-(uid, UTC-day) product-event tallies observed into a histogram. '
+        'Labels are only event and app_build — never uid. Per-pod; alert queries '
+        'must sum() across job=backend-listen-metrics to read p10/p90.'
+    ),
+    ['event', 'app_build'],
+    buckets=(1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000),
+)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',
@@ -209,20 +230,26 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
-    'Accepted client-segmented product journeys by bounded journey and client kind',
-    ['journey', 'client_kind'],
+    (
+        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build'],
 )
 
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_client_journey_terminal_total',
-    'Terminal client-segmented product journey outcomes by bounded labels',
-    ['journey', 'client_kind', 'outcome'],
+    (
+        'Terminal client-segmented product journey outcomes by bounded labels. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build', 'outcome'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
     'omi_client_journey_issues_total',
     'Bounded issue detail for failed or degraded client-segmented product journeys',
-    ['journey', 'client_kind', 'issue_class'],
+    ['journey', 'client_kind', 'app_build', 'issue_class'],
 )
 
 OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
@@ -237,19 +264,23 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # would multiply the most expensive metric without helping outcome segmentation.
 # Initialize the complete bounded product so healthy-but-idle exporters expose
 # zeros instead of making an idle process indistinguishable from a missing one.
+# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
+# the app_build axis would multiply series by every historical client build.
 for _journey in CLIENT_JOURNEYS:
     for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind)
+        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
         for _outcome in CLIENT_JOURNEY_OUTCOMES:
             OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 outcome=_outcome,
             )
         for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
             OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 issue_class=_issue_class,
             )
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
@@ -372,8 +403,12 @@ OMI_FALLBACK_TOTAL = Counter(
 
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
-    'Desktop update channel resolutions by platform, channel, and source',
-    ['platform', 'channel', 'source'],
+    (
+        'Desktop update channel resolutions by platform, channel, source, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Server-to-server emitters omit app_build (unknown).'
+    ),
+    ['platform', 'channel', 'source', 'app_build'],
 )
 
 DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
@@ -402,8 +437,11 @@ DESKTOP_UPDATE_FEED_VALID = Gauge(
 
 OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     'omi_sync_dispatch_attempts_total',
-    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
-    ['mode'],
+    (
+        'Sync v2 dispatch attempts by selected mode and app build (denominator for fallback rates). '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['mode', 'app_build'],
 )
 
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
@@ -530,8 +568,12 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
 # are closed enums; no user, call, or session identifiers appear as labels.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
-    'Accepted /v4/listen WebSocket sessions by bounded transcription source and client platform',
-    ['transcription_source', 'client_platform'],
+    (
+        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
+        'sum() across job=backend-listen-metrics.'
+    ),
+    ['transcription_source', 'client_platform', 'app_build'],
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -615,8 +657,11 @@ for _outcome in ('not_needed', 'committed'):
 
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
-    'Auth flow events by provider, stage, outcome, and sanitized failure class',
-    ['provider', 'stage', 'outcome', 'failure_class'],
+    (
+        'Auth flow events by provider, stage, outcome, sanitized failure class, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['provider', 'stage', 'outcome', 'failure_class', 'app_build'],
 )
 
 AUTH_FLOW_DURATION_SECONDS = Histogram(

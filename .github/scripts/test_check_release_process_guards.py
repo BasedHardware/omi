@@ -462,6 +462,23 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_
     assert errors == ["mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py"], errors
 
 
+def test_mobile_codemagic_dispatcher_guard_rejects_missing_pipefail(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
+    dispatcher.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
+    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
+    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
+    _mutate(dispatcher, "          set -euo pipefail\n", "")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert errors == ["mobile internal build dispatcher must enable pipefail"], errors
+
+
 def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)

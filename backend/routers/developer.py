@@ -21,6 +21,7 @@ from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
@@ -753,12 +754,28 @@ class CreateActionItemRequest(BaseModel):
     )
 
 
+def _optional_patch_text(value: Optional[str], field_name: str) -> Optional[str]:
+    """Shared guard for optional PATCH text fields: an omitted field (None) leaves the stored value
+    unchanged, but a provided value must contain non-whitespace text and is stored stripped (#13933)."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f'{field_name} cannot be blank')
+    return stripped
+
+
 class UpdateActionItemRequest(BaseModel):
     model_config = ConfigDict(title='UpdateActionItemRequest')
 
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
+
+    @field_validator('description')
+    @classmethod
+    def description_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'description')
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -959,6 +976,7 @@ def delete_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     action_items_db.delete_action_item(uid, action_item_id)
+    sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
 
@@ -1124,6 +1142,11 @@ class UpdateConversationRequest(BaseModel):
         default=None, description="New title for the conversation", min_length=1, max_length=500
     )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
+
+    @field_validator('title')
+    @classmethod
+    def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'title')
 
 
 class DevTranscriptSegment(BaseModel):
@@ -1868,6 +1891,8 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    client_kind: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -2081,6 +2106,13 @@ def _create_conversation_from_segments(
     receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
+    # Only new successful ingests reach here; idempotent replays return above.
+    record_product_event(
+        "conversation_created",
+        client_kind=client_kind,
+        app_build=app_build,
+        uid=uid,
+    )
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -2106,6 +2138,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind=extract_client_kind(http_request),
+        app_build=extract_app_build(http_request),
     )
 
 
@@ -2173,6 +2207,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind='unknown',
+        app_build='unknown',
     )
 
 

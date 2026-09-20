@@ -70,6 +70,27 @@ describe("external realtime surface authority", () => {
     fixture.store.close();
   });
 
+  it("returns the persisted floating-chat surface for a shared realtime session", () => {
+    const store = new SqliteAgentStore({ stateDir: newRoot(), reconcileOnOpen: false });
+    const floating = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "shared" },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const realtime = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "shared" },
+      defaultAdapterId: "acp",
+    }, () => 2);
+    expect(realtime.agentSessionId).toBe(floating.agentSessionId);
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+
+    const result = kernel.beginExternalSurfaceRun(beginInput(realtime.agentSessionId));
+
+    expect(result.surfaceKind).toBe("floating_chat");
+    store.close();
+  });
+
   it("owner revocation terminalizes externally-owned realtime runs and their pending tools", () => {
     const fixture = createFixture();
     const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
@@ -458,6 +479,29 @@ describe("external realtime surface authority", () => {
         recoveredFromDelegation: false,
       });
     }
+  });
+
+  it("authorizes create_memory when the runtime clock preamble precedes the typed command", () => {
+    const preamble = "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\n";
+    const reproPrompt = `${preamble}remember that my favorite color is red`;
+
+    expect(hasExplicitMemorySaveIntent("remember that my favorite color is red")).toBe(true);
+    expect(hasExplicitMemorySaveIntent(reproPrompt)).toBe(true);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: reproPrompt,
+    })).toMatchObject({
+      action: "execute",
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+    });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: `${preamble}my favorite color is red`,
+    })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
+    expect(hasExplicitMemorySaveIntent(preamble)).toBe(false);
   });
 
   it("lets create_memory persist a clean standalone fact when save intent is present", () => {

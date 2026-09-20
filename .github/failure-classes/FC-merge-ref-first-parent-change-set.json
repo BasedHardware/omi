@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "FC-merge-ref-first-parent-change-set",
+  "violated_contract": "A gate that reasons about what a PR changed must compute that set as the three-dot diff against the PR's live base (merge-base versus HEAD). GitHub's pull_request merge ref has BASE as first parent, so walking first-parent or diffing HEAD~ describes the base instead of the PR; the same walk on a local merge describes the incoming base-side files and can drop the PR's own files entirely.",
+  "canonical_prevention": "Diff merge-base(<live-base>, HEAD) versus HEAD (three-dot <live-base>...HEAD). Never rewrite that to first-parent, never use HEAD~. Commit subjects are `git log --no-merges <merge-base>..<head>`. The reusable guard is the parent-order invariance tests, which assert the same files and subjects on the branch head and on a --no-ff merge in both parent orders: scripts/test-changed-files.sh, FailureClassCliTests.test_validate_agrees_on_branch_head_and_both_merge_parent_orders, SelectionTests.test_changed_files_agrees_on_branch_head_and_both_merge_parent_orders, ThreeDotChangeSetTests.test_load_changed_paths_agrees_on_both_merge_parent_orders.",
+  "canonical_prevention_artifact": [
+    "scripts/test-changed-files.sh",
+    "scripts/test_failure_class.py",
+    ".github/scripts/test_pr_preflight.py",
+    ".github/scripts/test_check_product_invariants.py",
+    "backend/tests/unit/test_changed_files_script.py"
+  ],
+  "evidence_prs": [14465],
+  "scope_hints": [
+    "scripts/changed-files",
+    "scripts/failure-class",
+    "scripts/test-changed-files.sh",
+    "scripts/test_failure_class.py",
+    ".github/scripts/pr_preflight.py",
+    ".github/scripts/run_checks.py",
+    ".github/scripts/check_product_invariants.py",
+    ".github/scripts/test_pr_preflight.py",
+    ".github/scripts/test_check_product_invariants.py",
+    "backend/tests/unit/test_changed_files_script.py"
+  ],
+  "status": "open"
+}

@@ -12,6 +12,7 @@ import asyncio
 
 from .db import store_notion_credentials, get_notion_credentials, store_memory
 from .omi_api import store_fact
+from .tools_auth import require_composio_tools_auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -206,7 +207,7 @@ async def extract_all_pages(access_token: str, uid: str):
                     logger.info(f"✓ Successfully stored {facts_stored} facts from page: {title}")
 
                 except Exception as e:
-                    logger.error(f"Error processing page {page_id}: {str(e)}")
+                    logger.error(f"Error processing page {page_id}: {type(e).__name__}")
                     continue  # Continue with next page even if one fails
 
             # Small delay between batches to prevent overload
@@ -216,7 +217,7 @@ async def extract_all_pages(access_token: str, uid: str):
         return total_facts_stored
 
     except Exception as e:
-        logger.error(f"Error in extract_all_pages: {str(e)}")
+        logger.error(f"Error in extract_all_pages: {type(e).__name__}")
         raise
 
 
@@ -248,7 +249,7 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         return templates.TemplateResponse("notion_success.html", {"request": request})
 
     except Exception as e:
-        logger.error(f"Error in notion_callback: {str(e)}")
+        logger.error(f"Error in notion_callback: {type(e).__name__}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
@@ -308,7 +309,11 @@ async def search_notion(request: NotionSearchRequest):
 
 
 @router.post("/blocks/{block_id}")
-async def get_blocks(block_id: str, request: NotionBlocksRequest):
+async def get_blocks(
+    block_id: str,
+    request: NotionBlocksRequest,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get blocks from a Notion page or block"""
     creds = get_notion_credentials(request.uid)
     if not creds or not creds.get("notion_access_token"):
@@ -331,7 +336,11 @@ async def get_blocks(block_id: str, request: NotionBlocksRequest):
 
 
 @router.get("/page/{page_id}")
-async def get_page(page_id: str, uid: str):
+async def get_page(
+    page_id: str,
+    uid: str,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get content of a Notion page"""
     creds = get_notion_credentials(uid)
     if not creds or not creds.get("notion_access_token"):

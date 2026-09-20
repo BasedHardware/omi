@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "route-registry-v1.schema.json",
+  "title": "B1 route registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "identity_fixture",
+    "fixture_backend",
+    "fixtures",
+    "keys",
+    "routes",
+    "controls",
+    "interactive_widgets"
+  ],
+  "properties": {
+    "version": {
+      "const": "addressability/v1"
+    },
+    "identity_fixture": {
+      "const": "scripts/dev-harness/fixtures/mobile/v1.json"
+    },
+    "fixture_backend": {
+      "const": "app/integration_test/journeys/support/fixture_backend.dart"
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "uid",
+          "records"
+        ],
+        "properties": {
+          "uid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "keys": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^omi\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z0-9][a-z0-9_-]*)?$"
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source",
+          "widget",
+          "root",
+          "reach",
+          "fixture",
+          "auth",
+          "profile",
+          "ready_provider"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^app/lib/.*\\.dart$"
+          },
+          "widget": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string",
+            "pattern": "^omi\\.[a-z][a-z0-9_]*\\.root$"
+          },
+          "reach": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "tab"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "tab",
+                  "push",
+                  "sheet",
+                  "onboarding"
+                ]
+              },
+              "tab": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 3
+              }
+            }
+          },
+          "fixture": {
+            "type": "string"
+          },
+          "auth": {
+            "enum": [
+              "signed_in",
+              "signed_out"
+            ]
+          },
+          "profile": {
+            "const": "local_dev"
+          },
+          "ready_provider": {
+            "enum": [
+              "messages",
+              "conversations",
+              "memories",
+              "tasks",
+              null
+            ]
+          }
+        }
+      }
+    },
+    "interactive_widgets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^on[A-Z][a-zA-Z]*$"
+            }
+          }
+        ]
+      }
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "source",
+            "scope",
+            "label_en",
+            "role",
+            "action",
+            "row_id"
+          ],
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^omi\\."
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^app/lib/.*\\.dart$"
+            },
+            "scope": {
+              "enum": [
+                "root",
+                "shell"
+              ]
+            },
+            "label_en": {
+              "type": "string",
+              "minLength": 1
+            },
+            "role": {
+              "enum": [
+                "button",
+                "textField"
+              ]
+            },
+            "action": {
+              "enum": [
+                "tap",
+                "setText"
+              ]
+            },
+            "row_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

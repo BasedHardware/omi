@@ -1,3 +1,4 @@
+# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -46,6 +47,7 @@ from routers import (
     conversations,
     conversation_mutations,
     memories,
+    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -182,6 +184,15 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
+    expose_headers=[
+        'X-Omi-Memory-As-Of',
+        'X-Omi-Memory-Belief-Enabled',
+        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
+        'X-Omi-Memory-Device-Scope-Supported',
+        'X-Omi-Memory-Next-Cursor',
+        'X-Omi-List-Truncated',
+    ],
 )
 
 app.include_router(transcribe.router)
@@ -207,6 +218,7 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
+app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
 app.include_router(notifications.router)
@@ -312,7 +324,7 @@ async def startup_event():
     start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
-    asyncio.create_task(log_executor_health())
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

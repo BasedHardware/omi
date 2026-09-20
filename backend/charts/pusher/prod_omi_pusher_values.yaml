@@ -151,6 +151,10 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
   - name: CONVERSATION_NOTES_V2_ENABLED
@@ -158,6 +162,8 @@ env:
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   - name: FAL_KEY
     valueFrom:
@@ -209,6 +215,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -303,7 +315,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
