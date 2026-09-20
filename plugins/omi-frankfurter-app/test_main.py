@@ -47,19 +47,62 @@ def load_app():
 
             return decorator
 
+    class _FieldInfo:
+        def __init__(self, default, metadata):
+            self.default = default
+            self.metadata = metadata
+
+        def get_default(self):
+            factory = self.metadata.get("default_factory")
+            if factory is not None:
+                return factory()
+            return self.default
+
     class DummyBaseModel:
         def __init__(self, **kwargs):
-            for key, value in kwargs.items():
-                setattr(self, key, value)
+            annotations = {}
+            defaults = {}
+            for cls in reversed(type(self).__mro__):
+                annotations.update(getattr(cls, "__annotations__", {}))
+                for name, member in getattr(cls, "__dict__", {}).items():
+                    if isinstance(member, _FieldInfo):
+                        defaults[name] = member
+
+            resolved = {}
+            for name in annotations:
+                if name in kwargs:
+                    resolved[name] = kwargs[name]
+                elif name in defaults:
+                    info = defaults[name]
+                    default = info.get_default()
+                    if default is not ...:
+                        resolved[name] = default
+
+            for cls in reversed(type(self).__mro__):
+                for name, member in getattr(cls, "__dict__", {}).items():
+                    raw = member.__func__ if isinstance(member, classmethod) else member
+                    metadata = getattr(raw, "__field_validator__", None)
+                    if not metadata:
+                        continue
+                    fields, options = metadata
+                    if options.get("mode") == "before":
+                        for field in fields:
+                            if field in resolved:
+                                resolved[field] = getattr(type(self), name)(resolved[field])
+
+            for name, value in resolved.items():
+                setattr(self, name, value)
 
         def model_dump(self):
             return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
-    def Field(default=None, **_kwargs):
-        return default
+    def Field(default=..., **metadata):
+        return _FieldInfo(default, metadata)
 
-    def field_validator(*_args, **_kwargs):
+    def field_validator(*fields, **options):
         def decorator(func):
+            raw = func.__func__ if isinstance(func, classmethod) else func
+            raw.__field_validator__ = (fields, options)
             return func
 
         return decorator
@@ -180,6 +223,42 @@ class HelperFunctionTests(unittest.TestCase):
             main._normalize_currency_code("USDT")
         with self.assertRaises(ValueError):
             main._normalize_currency_code("123")
+        with self.assertRaises(ValueError):
+            main._normalize_currency_code(None)
+
+    def test_coerce_currency_list_accepts_single_string(self):
+        self.assertEqual(main._coerce_currency_list("eur", allow_null=True), ["EUR"])
+        self.assertEqual(main._coerce_currency_list("eur", allow_null=False), ["EUR"])
+
+    def test_coerce_currency_list_null_takes_default_only_when_optional(self):
+        self.assertEqual(main._coerce_currency_list(None, allow_null=True), [])
+        with self.assertRaises(ValueError):
+            main._coerce_currency_list(None, allow_null=False)
+
+    def test_coerce_currency_list_rejects_non_string_entries(self):
+        with self.assertRaises(ValueError):
+            main._coerce_currency_list(["EUR", None], allow_null=True)
+        with self.assertRaises(ValueError):
+            main._coerce_currency_list(["EUR", 123], allow_null=True)
+        with self.assertRaises(ValueError):
+            main._coerce_currency_list(42, allow_null=True)
+
+    def test_convert_request_null_optional_targets_rejected_cleanly(self):
+        with self.assertRaises(ValueError):
+            main.ConvertCurrencyRequest(amount=50, from_currency="usd", to_currencies=None)
+
+    def test_latest_rates_request_null_optional_targets_take_default(self):
+        request = main.LatestRatesRequest(base_currency="usd", to_currencies=None)
+        self.assertEqual(request.to_currencies, [])
+        self.assertEqual(request.base_currency, "USD")
+
+    def test_latest_rates_request_single_string_target_is_accepted(self):
+        request = main.LatestRatesRequest(base_currency="usd", to_currencies="eur")
+        self.assertEqual(request.to_currencies, ["EUR"])
+
+    def test_convert_request_normalizes_and_dedupes_targets(self):
+        request = main.ConvertCurrencyRequest(amount="10", from_currency="usd", to_currencies=["eur", "eur", "gbp"])
+        self.assertEqual(request.to_currencies, ["EUR", "GBP"])
 
     def test_parse_amount_valid(self):
         self.assertEqual(main._parse_amount(50), Decimal("50"))
@@ -283,6 +362,56 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             req = main.LatestRatesRequest(base_currency="USD", to_currencies=[])
             resp = await main.get_latest_rates(req)
             self.assertEqual(resp.error, "no rates returned")
+
+    async def test_convert_currency_identity_only_skips_upstream_call(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["USD"])
+            resp = await main.convert_currency(req)
+            mock_req.assert_not_called()
+            self.assertIsNone(resp.error)
+            self.assertIn("50 USD on latest:", resp.result)
+            self.assertIn("- USD: 50", resp.result)
+
+    async def test_convert_currency_mixed_identity_and_other_target(self):
+        mock_data = {
+            "amount": 100.0,
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.ConvertCurrencyRequest(amount=100, from_currency="USD", to_currencies=["USD", "EUR"])
+            resp = await main.convert_currency(req)
+            mock_req.assert_called_once()
+            self.assertEqual(mock_req.call_args.args[1]["to"], "EUR")
+            self.assertIsNone(resp.error)
+            self.assertIn("- USD: 100", resp.result)
+            self.assertIn("- EUR: 0.92", resp.result)
+
+    async def test_get_latest_rates_identity_only_skips_upstream_call(self):
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=["USD"])
+            resp = await main.get_latest_rates(req)
+            mock_req.assert_not_called()
+            self.assertIsNone(resp.error)
+            self.assertIn("- 1 USD = 1 USD", resp.result)
+
+    async def test_get_latest_rates_mixed_identity_and_other_target(self):
+        mock_data = {
+            "base": "USD",
+            "date": "2026-09-15",
+            "rates": {"EUR": 0.92},
+        }
+        with patch.object(main, "_request_json", new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = mock_data
+            req = main.LatestRatesRequest(base_currency="USD", to_currencies=["USD", "EUR"])
+            resp = await main.get_latest_rates(req)
+            mock_req.assert_called_once()
+            self.assertEqual(mock_req.call_args.args[1]["to"], "EUR")
+            self.assertIsNone(resp.error)
+            self.assertIn("- 1 USD = 1 USD", resp.result)
+            self.assertIn("- 1 USD = 0.92 EUR", resp.result)
 
     async def test_list_supported_currencies_success(self):
         mock_data = {"USD": "United States Dollar", "EUR": "Euro", "GBP": "British Pound"}

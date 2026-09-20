@@ -41,6 +41,7 @@ if "fastapi" not in sys.modules:
     try:
         import fastapi  # type: ignore
         import fastapi.responses  # type: ignore
+        import fastapi.exceptions  # type: ignore
     except ImportError:
         fastapi = types.ModuleType("fastapi")
 
@@ -54,7 +55,14 @@ if "fastapi" not in sys.modules:
             def post(self, *args, **kwargs):
                 return lambda f: f
 
+            def exception_handler(self, *args, **kwargs):
+                return lambda f: f
+
+        class Request:
+            pass
+
         fastapi.FastAPI = FastAPI
+        fastapi.Request = Request
         sys.modules["fastapi"] = fastapi
 
         responses = types.ModuleType("fastapi.responses")
@@ -62,9 +70,28 @@ if "fastapi" not in sys.modules:
         class HTMLResponse:
             pass
 
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.content = content
+                self.status_code = status_code
+
         responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
         sys.modules["fastapi.responses"] = responses
         fastapi.responses = responses
+
+        exceptions = types.ModuleType("fastapi.exceptions")
+
+        class RequestValidationError(Exception):
+            def __init__(self, errors=None):
+                self._errors = errors or []
+
+            def errors(self):
+                return self._errors
+
+        exceptions.RequestValidationError = RequestValidationError
+        sys.modules["fastapi.exceptions"] = exceptions
+        fastapi.exceptions = exceptions
 
 if "pydantic" not in sys.modules:
     try:
@@ -75,6 +102,12 @@ if "pydantic" not in sys.modules:
         def Field(default=None, **kwargs):
             return default
 
+        def model_validator(*args, **kwargs):
+            return lambda f: f
+
+        def field_validator(*args, **kwargs):
+            return lambda f: f
+
         class BaseModel:
             def __init__(self, **kwargs):
                 for cls in reversed(self.__class__.__mro__):
@@ -84,8 +117,19 @@ if "pydantic" not in sys.modules:
                 for k, v in kwargs.items():
                     setattr(self, k, v)
 
+            @classmethod
+            def model_validate(cls, data):
+                if isinstance(data, dict):
+                    return cls(**{k: v for k, v in data.items() if v is not None})
+                return cls()
+
+            def model_dump(self):
+                return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+
         pydantic.BaseModel = BaseModel
         pydantic.Field = Field
+        pydantic.model_validator = model_validator
+        pydantic.field_validator = field_validator
         sys.modules["pydantic"] = pydantic
 
 # Add plugin directory to path so main can be loaded hermetically
@@ -339,6 +383,35 @@ class OpenMeteoEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Air quality for Delhi, India", res.result)
         self.assertIn("PM2.5: 95.5", res.result)
         self.assertIn("Ozone: 45 μg/m³", res.result)
+
+    async def test_current_weather_with_null_temperature_unit(self):
+        place = {"name": "Berlin", "country": "Germany", "latitude": 52.5, "longitude": 13.4}
+        payload = {
+            "current": {"time": "2026-09-18T12:00", "temperature_2m": 20.0, "weather_code": 1},
+            "current_units": {"temperature_2m": "°C"},
+        }
+        req = main.CurrentWeatherRequest.model_validate({"location": "Berlin", "temperature_unit": None})
+        self.assertEqual(req.temperature_unit, "celsius")
+        with patch.object(main, "_resolve_location", new=AsyncMock(return_value=(place, None))), \
+             patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            res = await main.get_current_weather(req)
+        self.assertIsNone(res.error)
+        self.assertIn("Temperature: 20°C", res.result)
+
+    async def test_forecast_with_null_days_and_unit(self):
+        place = {"name": "Berlin", "country": "Germany", "latitude": 52.5, "longitude": 13.4}
+        payload = {
+            "daily": {"time": ["2026-09-18", "2026-09-19", "2026-09-20"]},
+            "daily_units": {},
+        }
+        req = main.ForecastRequest.model_validate({"location": "Berlin", "days": None, "temperature_unit": None})
+        self.assertEqual(req.days, 3)
+        self.assertEqual(req.temperature_unit, "celsius")
+        with patch.object(main, "_resolve_location", new=AsyncMock(return_value=(place, None))), \
+             patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            res = await main.get_weather_forecast(req)
+        self.assertIsNone(res.error)
+        self.assertIn("3-day forecast for Berlin, Germany", res.result)
 
 
 class OpenMeteoMalformedPayloadTests(unittest.IsolatedAsyncioTestCase):

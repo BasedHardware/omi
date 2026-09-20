@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: hive-limit-coercion-tests
+    command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -14,6 +19,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open-Meteo app must safely handle partial daily arrays, null unit metrics, and empty forecasts without IndexError or TypeError"
+  - id: open-meteo-null-params-tests
+    command: ["python3", "plugins/omi-open-meteo-app/test_null_optionals.py"]
+    triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
@@ -29,6 +39,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: whoop-measurements-tests
+    command: ["python3", "plugins/omi-whoop-app/test_main.py"]
+    triggers: ["plugins/omi-whoop-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
@@ -39,6 +54,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: composio-memory-route-tests
+    command: ["python3", "plugins/composio/test_omi_api_route.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14384: Composio memory sync must post to the documented /user/memories integration route instead of the nonexistent /user/facts route"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
@@ -1066,6 +1086,12 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
+
+  - id: hume-ai-create-memory-route-tests
+    command: ["python3", "plugins/hume-ai/test_create_omi_memory_route.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
@@ -1106,6 +1132,11 @@ checks:
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the fuzzy channel match posted to the first workspace channel containing the spoken name (\"dev\" hit whichever of #dev-ops and #frontend-dev was listed first), and a named channel that did not resolve fell through to the user's default channel; resolve_channel accepts one exact or one fuzzy candidate only and process_segments refuses a named channel it could not resolve"
+  - id: slack-app-settings-page-encoding-tests
+    command: ["python3", "plugins/omi-slack-app/test_settings_page.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "escapes Slack channel and workspace names at HTML boundaries, percent-encodes reflected uid parameter to prevent attribute breakout and URL query corruption in setup and OAuth callback pages"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
@@ -1176,6 +1207,12 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+  - id: twitter-recording-accumulator-tests
+    command: ["python3", "plugins/omi-twitter-app/test_recording_state.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
+
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
@@ -1186,6 +1223,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: crossref-doi-normalization-tests
+    command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
@@ -1246,6 +1288,11 @@ checks:
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
+  - id: composio-backend-route-auth-tests
+    command: ["python3", "plugins/composio/test_tools_auth.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

@@ -212,8 +212,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        beta_groups:
-          - Internal
         submit_to_app_store: false
 
   android-internal-auto:
@@ -649,8 +647,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 
@@ -838,8 +838,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 

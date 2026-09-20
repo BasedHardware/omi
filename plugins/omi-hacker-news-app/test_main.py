@@ -35,6 +35,7 @@ def load_app():
     httpx.HTTPError = HTTPError
     fastapi = ModuleType("fastapi")
     fastapi.FastAPI = FastAPI
+    fastapi.Body = lambda *args, **kwargs: None
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = str
     pydantic = ModuleType("pydantic")
