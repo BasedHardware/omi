@@ -415,7 +415,7 @@ class CreateTaskTests(unittest.TestCase):
     def _due_date_for(self, due_date, timezone="Asia/Kolkata"):
         captured_data = {}
 
-        def fake_post(url, headers=None, json=None):
+        def fake_post(url, headers=None, json=None, timeout=None):
             captured_data.update(json)
             return FakeResponse({"id": "task_z", "name": json.get("name"), "status": "to do"})
 
