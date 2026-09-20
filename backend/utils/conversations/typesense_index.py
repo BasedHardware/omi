@@ -61,9 +61,12 @@ def _resolve_default_db_client() -> Any:
 
 
 def _resolve_firestore_client() -> Any:
-    from database._client import get_firestore_client as client
+    # Lazy import for the same stub-loading reasons as above; unlike
+    # `data_plane_db` above, `get_firestore_client` is a memoized factory,
+    # so it must be called, not returned.
+    from database._client import get_firestore_client
 
-    return client
+    return get_firestore_client()
 
 
 def _record_fallback_helper(component: str, *, from_mode: str, to_mode: str, reason: str) -> None:
