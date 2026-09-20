@@ -1223,6 +1223,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: iq-rating-completion-content-tests
+    command: ["python3", "plugins/iq_rating/test_completion_content.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "OpenAI-compatible responses set content to null whenever the model answers with tool calls, and dict.get(key, default) does not apply its default for a present-but-null key; filter_names_with_openai wrapped its whole batch loop in one try, so that AttributeError escaped the loop and the function returned the unfiltered input, defeating its own per-batch skip and letting non-names through"
   - id: crossref-doi-normalization-tests
     command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]

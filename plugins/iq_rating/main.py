@@ -238,6 +238,21 @@ def has_people_in_db(uid: str) -> bool:
 init_db()
 
 
+def _completion_text(message: object) -> str:
+    """Return the assistant text of a chat completion, or "" when there is none.
+
+    OpenAI-compatible responses set ``"content": null`` whenever the model
+    answers with tool calls instead of text, and some providers do the same on
+    a refusal. ``message.get("content", "")`` does not apply its default for a
+    present-but-null key, so ``.strip()`` raised AttributeError on a value the
+    API is documented to send.
+    """
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    return content.strip() if isinstance(content, str) else ""
+
+
 # ============== OPENAI NAME FILTERING ==============
 
 def filter_names_with_openai(names: List[str]) -> List[str]:
@@ -294,8 +309,7 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
                 result = response.json()
                 choices = result.get("choices") if isinstance(result, dict) else None
                 if choices and isinstance(choices, list) and isinstance(choices[0], dict):
-                    message = choices[0].get("message")
-                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                    answer = _completion_text(choices[0].get("message"))
                 else:
                     answer = ""
                 
@@ -1087,8 +1101,7 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
                 result = response.json()
                 choices = result.get("choices") if isinstance(result, dict) else None
                 if choices and isinstance(choices, list) and isinstance(choices[0], dict):
-                    message = choices[0].get("message")
-                    answer = message.get("content", "").strip() if isinstance(message, dict) else ""
+                    answer = _completion_text(choices[0].get("message"))
                 else:
                     answer = ""
                 
@@ -1100,7 +1113,8 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
                     if json_match:
                         scores = json.loads(json_match.group())
                         for score in scores:
-                            name = score.get("name", "").lower()
+                            raw_name = score.get("name")
+                            name = raw_name.lower() if isinstance(raw_name, str) else ""
                             iq = score.get("iq", 100)
                             is_name = score.get("is_name", True)
                             
