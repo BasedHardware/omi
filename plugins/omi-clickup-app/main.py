@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import html
+import json
 import os
 import sys
 from dotenv import load_dotenv
@@ -173,7 +174,8 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        escaped_uid = html.escape(uid)
+        auth_url = f"/auth?uid={escaped_uid}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -247,8 +249,9 @@ async def root(uid: str = Query(None)):
     # Authenticated - show list selection page
     lists = user.get("available_lists", [])
     selected_list = user.get("selected_list", "")
-    team_name = user.get("team_name", "Unknown")
-    user_timezone = user.get("timezone", "UTC")
+    team_name = html.escape(str(user.get("team_name", "Unknown")))
+    user_timezone = html.escape(str(user.get("timezone", "UTC")))
+    js_uid = json.dumps(str(uid))
 
     list_options = '<option value="">Select a list...</option>'
     for lst in lists:
@@ -395,7 +398,7 @@ async def root(uid: str = Query(None)):
                     const list = select.value;
 
                     try {{
-                        const response = await fetch('/update-list?uid={uid}&list=' + encodeURIComponent(list), {{
+                        const response = await fetch('/update-list?uid=' + encodeURIComponent({js_uid}) + '&list=' + encodeURIComponent(list), {{
                             method: 'POST'
                         }});
 
@@ -412,7 +415,7 @@ async def root(uid: str = Query(None)):
                 }}
 
                 function refreshLists() {{
-                    fetch('/refresh-lists?uid={uid}', {{
+                    fetch('/refresh-lists?uid=' + encodeURIComponent({js_uid}), {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -434,7 +437,7 @@ async def root(uid: str = Query(None)):
                     const timezone = select.value;
 
                     try {{
-                        const response = await fetch('/update-timezone?uid={uid}&timezone=' + encodeURIComponent(timezone), {{
+                        const response = await fetch('/update-timezone?uid=' + encodeURIComponent({js_uid}) + '&timezone=' + encodeURIComponent(timezone), {{
                             method: 'POST'
                         }});
 
@@ -453,14 +456,14 @@ async def root(uid: str = Query(None)):
 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid=' + encodeURIComponent({js_uid}), {{
                             method: 'POST'
                         }});
 
                         const data = await response.json();
 
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid=' + encodeURIComponent({js_uid});
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
