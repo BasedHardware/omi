@@ -820,6 +820,10 @@ def _append_goal_progress_event(
     goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
+    # Resolved once, outside the transaction: `apply` below can retry on contention,
+    # and resolve_user_timezone() is a Firestore read of its own — repeating it on
+    # every retry would multiply reads for no benefit, since `now` doesn't change.
+    history_date = _history_date_str(uid, now)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
@@ -874,7 +878,6 @@ def _append_goal_progress_event(
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
         if authority_account_generation is not None and record.metric is not None:
-            history_date = _history_date_str(uid, now)
             history_ref = goal_ref.collection(goal_history_collection).document(history_date)
             write_transaction.set(
                 history_ref,
