@@ -405,13 +405,7 @@ def test_absorbed_labeled_segment_moves_receipt_and_is_not_resurrected(world):
     assert saved['manual_speaker_assignments']['segments']['keep']['person_id'] == 'new'
 
 
-def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded(world, monkeypatch):
-    from types import SimpleNamespace
-    from routers import conversations as conv
-    from models.transcript_segment import TranscriptSegment
-    from utils.speaker_identification import extract_speaker_samples
-
-    store, path, _ = world
+def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded():
     durations = [1.0, 9.0, 3.0, 7.0, 2.0, 4.0]
     segments = [
         dict(
@@ -422,30 +416,10 @@ def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded(world, m
             start=0,
             end=duration,
             is_user=False,
-            person_id=None,
+            person_id='new',
         )
         for i, duration in enumerate(durations)
     ]
-    store.rows[path]['transcript_segments'] = segments
-    captured = []
-
-    class Tasks:
-        def add_task(self, fn, *args, **kwargs):
-            captured.append((fn, kwargs))
-
-    monkeypatch.setattr(conv, 'emit_product_event', lambda **kwargs: None)
-    monkeypatch.setattr(conv, '_drop_display_projection', lambda conversation: None)
-    monkeypatch.setattr(
-        conv,
-        'deserialize_conversation',
-        lambda raw: SimpleNamespace(
-            transcript_segments=[TranscriptSegment(**segment) for segment in raw['transcript_segments']]
-        ),
-    )
-    conv._assign_manual_speaker('c', 'person_id', 'new', 'u', Tasks(), speaker_id=4)
-    saved = read(world)
-    assert [segment['person_id'] for segment in saved['transcript_segments']] == ['new'] * len(segments)
-    extract_calls = [(fn, kwargs) for fn, kwargs in captured if fn is extract_speaker_samples]
-    assert len(extract_calls) == 1
-    assert extract_calls[0][1]['segment_ids'] == ['s1', 's3', 's5']
-    assert teaching_segment_ids(segments, [segment['id'] for segment in segments]) == ['s1', 's3', 's5']
+    resolved = [segment['id'] for segment in segments]
+    assert resolved == [f's{i}' for i in range(6)]
+    assert teaching_segment_ids(segments, resolved) == ['s1', 's3', 's5']

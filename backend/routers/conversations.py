@@ -1467,10 +1467,7 @@ def _assign_manual_speaker(
                 uid=uid,
                 person_id=person_id,
                 conversation_id=conversation_id,
-                segment_ids=teaching_segment_ids(
-                    [segment.model_dump() for segment in conversation.transcript_segments],
-                    resolved,
-                ),
+                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
             )
     _emit_speaker_identity_confirmed(
         uid=uid,

@@ -272,16 +272,19 @@ class _FakeSegment:
         self.id = segment_id
         self.is_user = False
         self.person_id = None
+        self.speaker_id = 0
+        self.start = 0
+        self.end = 1
 
     def model_dump(self):
         return {
             "id": self.id,
             "is_user": self.is_user,
             "person_id": self.person_id,
-            "speaker_id": 0,
+            "speaker_id": self.speaker_id,
             "text": "test",
-            "start": 0,
-            "end": 1,
+            "start": self.start,
+            "end": self.end,
         }
 
 
