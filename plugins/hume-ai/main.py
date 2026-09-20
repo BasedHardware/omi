@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # FastAPI imports
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import Depends, FastAPI, Request, Query, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -53,6 +53,8 @@ from app import (
     analyze_audio_with_hume,
 )
 
+from hume_tools_auth import require_hume_tools_auth
+
 # Initialize FastAPI app
 app = FastAPI(title="Omi Audio Streaming Service with Hume AI")
 
@@ -80,7 +82,7 @@ async def startup_event():
 # API ENDPOINTS
 # ============================================================================
 
-@app.post("/audio")
+@app.post("/audio", dependencies=[Depends(require_hume_tools_auth)])
 async def handle_audio_stream(
     request: Request,
     sample_rate: int = Query(..., description="Audio sample rate in Hz"),
@@ -495,7 +497,7 @@ async def reset_stats(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/save-emotion-memory")
+@app.post("/save-emotion-memory", dependencies=[Depends(require_hume_tools_auth)])
 async def manual_save_emotion_memory(uid: Optional[str] = Query(None, description="User ID (optional)")):
     """
     Manually save current emotion statistics to Omi memories.
@@ -523,7 +525,7 @@ async def manual_save_emotion_memory(uid: Optional[str] = Query(None, descriptio
         )
 
 
-@app.post("/force-send-notification")
+@app.post("/force-send-notification", dependencies=[Depends(require_hume_tools_auth)])
 async def force_send_notification_endpoint(uid: Optional[str] = Query(None, description="User ID (optional)")):
     """
     Force send a notification immediately, bypassing cooldown.
