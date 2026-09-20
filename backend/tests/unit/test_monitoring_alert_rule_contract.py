@@ -648,3 +648,105 @@ def test_cloud_run_instance_start_fail_alert_is_zero_baseline_logging_count():
         assert query["model"]["projectId"] == "based-hardware"
         threshold = rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"]
         assert threshold == [0]
+
+
+STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
+    'sum(increase(omi_fallback_total{job="backend-listen-metrics",component="stt_selection",'
+    'outcome="exhausted"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total'
+    '{job="backend-listen-metrics"}[5m])), 1)'
+)
+STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
+STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
+    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",' 'component="stt_selection"}[6h]))'
+)
+STT_FALLBACK_LEG_RECOVERED_EXPR = (
+    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
+    'component="stt_selection",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component="stt_selection"}[6h])) * 0'
+)
+STT_CHAIN_EXHAUSTION_RULES = {
+    "omi-stt-chain-exhausted-warn": ("warning", "$A >= 50 && $B > 0.35", "10m"),
+    "omi-stt-chain-exhausted-page": ("critical", "$A >= 50 && $B > 0.60", "5m"),
+}
+
+
+def test_stt_chain_exhaustion_alerts_ratio_listen_accepted_on_the_listen_job():
+    """initialize_stt deaths never built a LiveSTTAttempt, so the 10% live-STT
+    ratio is blind to them. These rules watch omi_fallback_total exhausted over
+    the socket-accept counter that does increment at /v4/listen accept.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (severity, gate, pending) in STT_CHAIN_EXHAUSTION_RULES.items():
+            rule = rules[uid]
+            assert rule["labels"]["severity"] == severity, f"{export_name}:{uid}"
+            assert rule["labels"]["impact"] == "user-experience", f"{export_name}:{uid}"
+            assert rule["noDataState"] == "OK", f"{export_name}:{uid}"
+            assert rule["for"] == pending, f"{export_name}:{uid}"
+            exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+            assert exprs[0] == STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR, f"{export_name}:{uid}"
+            assert exprs[1] == STT_CHAIN_EXHAUSTED_RATIO_EXPR, f"{export_name}:{uid}"
+            math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+            assert math_nodes == [gate], f"{export_name}:{uid}"
+            assert "increase(" in exprs[1] and "rate(" not in exprs[1], f"{export_name}:{uid}"
+            assert 'job="backend-listen-metrics"' in exprs[1], f"{export_name}:{uid}"
+            assert "evaluated_bad" in rule["annotations"], f"{export_name}:{uid}"
+            assert "evaluated_good" in rule["annotations"], f"{export_name}:{uid}"
+            assert "0.817" in rule["annotations"]["evaluated_bad"], f"{export_name}:{uid}"
+            assert "0.251" in rule["annotations"]["evaluated_good"], f"{export_name}:{uid}"
+            assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
+            assert rule["annotations"]["__panelId__"] == "15"
+
+
+def test_stt_fallback_leg_dead_alert_zero_fills_legs_with_no_recovered_series():
+    """A to_mode that never recovered produces no recovered series; without the
+    `or ... * 0` term, 100% handshake failure (Deepgram since 2026-09-14) is silent.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-fallback-leg-dead"]
+        assert rule["labels"]["severity"] == "warning", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "30m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == STT_FALLBACK_LEG_ATTEMPTS_EXPR, export_name
+        assert exprs[1] == STT_FALLBACK_LEG_RECOVERED_EXPR, export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A >= 50 && $B < 1"], export_name
+        assert "evaluated_bad" in rule["annotations"], export_name
+        assert "recovered=0" in rule["annotations"]["evaluated_bad"], export_name
+        assert rule["annotations"]["__panelId__"] == "16"
+
+
+def test_sync_intake_fragmentation_alert_uses_cloud_logging_until_scrape_exists():
+    """backend-sync is not in the Cloud Run metrics exporter allowlist, so a
+    Prometheus alert on omi_sync_intake_total would be permanently empty=healthy.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-sync-intake-fragmented"]
+        assert rule["labels"]["severity"] == "warning", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["execErrState"] == "OK", export_name
+        queries = [d for d in rule["data"] if d.get("datasourceUid") == "deuxlwt1d569sb"]
+        assert len(queries) == 2, export_name
+        created, merged = (q["model"]["queryText"] for q in queries)
+        assert 'service_name="backend-sync"' in created and 'service_name="backend-sync"' in merged
+        assert 'omi_sync_intake outcome=created' in created
+        assert 'omi_sync_intake outcome=merged' in merged
+        assert "jsonPayload.message" in created and "textPayload" in created
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$C >= 100 && $C / ($C + $D + 0.001) > 0.80"], export_name
+        assert "no production history" in rule["annotations"]["evaluated_bad"], export_name
+        assert rule["annotations"]["__panelId__"] == "17"
+
+
+def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():
+    dashboard = json.loads(RESILIENCE_DASHBOARD.read_text(encoding="utf-8"))
+    panels = {panel["id"]: panel for panel in dashboard["panels"]}
+    assert "omi_fallback_total" in panels[15]["targets"][0]["expr"]
+    assert 'outcome="exhausted"' in panels[15]["targets"][0]["expr"]
+    assert "omi_listen_accepted_total" in panels[15]["targets"][0]["expr"]
+    assert 'job="backend-listen-metrics"' in panels[15]["targets"][0]["expr"]
+    assert "omi_fallback_total" in panels[16]["targets"][0]["expr"]
+    assert 'outcome="recovered"' in panels[16]["targets"][0]["expr"]
+    assert "to_mode" in panels[16]["targets"][0]["expr"]
+    assert "omi_sync_intake_total" in panels[17]["targets"][0]["expr"]
+    assert "Scrape gap" in panels[17]["description"]

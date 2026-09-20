@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
-from utils.observability.transcription import record_live_stt_failure
+from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -247,15 +247,22 @@ async def terminate_live_stt_session(
         # name: the provider accepts connects and refuses every stream.
         _open_serving_provider_circuit(bounded_reason, failure.provider)
     try:
+        failure_phase = _FAILURE_PHASE_BY_REASON[bounded_reason]
         record_live_stt_failure(
             provider=failure.provider,
             platform=platform,
             outcome=failure.outcome,
-            phase=_FAILURE_PHASE_BY_REASON[bounded_reason],
+            phase=failure_phase,
         )
         attempt = getattr(session, 'live_transcription_attempt', None)
         if attempt is not None:
-            attempt.finish('failure', phase=_FAILURE_PHASE_BY_REASON[bounded_reason])
+            attempt.finish('failure', phase=failure_phase)
+        else:
+            record_live_stt_pre_audio_failure(
+                provider=failure.provider,
+                platform=platform,
+                phase=failure_phase,
+            )
         client_attempt = getattr(session, 'client_live_transcription_attempt', None)
         if client_attempt is not None:
             client_attempt.fail('provider_error')

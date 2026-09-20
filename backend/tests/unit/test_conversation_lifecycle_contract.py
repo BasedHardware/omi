@@ -110,6 +110,32 @@ def lifecycle_store(monkeypatch):
     return store
 
 
+def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr(lifecycle_service, 'record_sync_intake_outcome', lambda **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: ({'id': 'created-row'}, True, []),
+    )
+
+    created_result = lifecycle_service.ingest_sync_conversation('uid', {'status': ConversationStatus.completed.value})
+    assert created_result == ({'id': 'created-row'}, True, [])
+    assert recorded == [{'created': True}]
+
+    recorded.clear()
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: ({'id': 'merged-row'}, False, []),
+    )
+    merged_result = lifecycle_service.ingest_sync_conversation(
+        'uid', {'status': ConversationStatus.completed.value}, candidate_id='hint'
+    )
+    assert merged_result == ({'id': 'merged-row'}, False, [])
+    assert recorded == [{'created': False}]
+
+
 def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
     lifecycle_store.put_conversation(
         'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
