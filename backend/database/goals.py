@@ -37,20 +37,32 @@ goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
 
 
-def _history_date_str(uid: str, now: datetime) -> str:
+def _history_date_str(uid: str, now: datetime, *, firestore_client: Any = None) -> str:
     """The goal-history document id: the user's own calendar day, not UTC's.
 
     ``goal_history`` is keyed one document per day (``write_transaction.set``/
     ``.set(merge=True)`` on ``document(<date>)``), so bucketing by UTC date splits
     or merges a user's day at the wrong boundary for anyone not on UTC — the same
-    class of bug already fixed for the proactive-notification cap via
-    ``resolve_user_timezone``.
-    """
-    from database.notifications import resolve_user_timezone  # local: keep database.goals import-light
+    class of bug already fixed for the proactive-notification cap, which resolves
+    the zone via ``database.notifications.resolve_user_timezone``.
 
-    tz = resolve_user_timezone(uid)
+    Reads ``time_zone`` directly through ``_get_db(firestore_client)`` (the same
+    seam every other read in this module goes through) rather than calling into
+    ``database.notifications``: that function has no ``firestore_client`` seam of
+    its own, so it always hit the real client — invisible in this module's own
+    tests, which inject a fake client, but it broke a *different* module's tests
+    that exercise ``goals.py`` through ``firestore_client=fake_db`` and don't know
+    to fake out `database.notifications` too. Any failure (missing field, bad
+    zone, a transient read error) falls back to UTC rather than raising, matching
+    the fail-soft posture the rest of this codebase uses for non-critical reads.
+    """
     try:
-        return now.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')
+        snapshot = _get_db(firestore_client).collection(users_collection).document(uid).get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        tz = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not tz:
+            return now.strftime('%Y-%m-%d')
+        return now.astimezone(ZoneInfo(str(tz))).strftime('%Y-%m-%d')
     except Exception:
         return now.strftime('%Y-%m-%d')
 
@@ -821,9 +833,9 @@ def _append_goal_progress_event(
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
     # Resolved once, outside the transaction: `apply` below can retry on contention,
-    # and resolve_user_timezone() is a Firestore read of its own — repeating it on
-    # every retry would multiply reads for no benefit, since `now` doesn't change.
-    history_date = _history_date_str(uid, now)
+    # and _history_date_str is a Firestore read of its own — repeating it on every
+    # retry would multiply reads for no benefit, since `now` doesn't change.
+    history_date = _history_date_str(uid, now, firestore_client=client)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
@@ -980,7 +992,7 @@ def save_goal_progress_history(
     firestore_client: Any = None,
 ) -> None:
     now = datetime.now(timezone.utc)
-    history_date = _history_date_str(uid, now)
+    history_date = _history_date_str(uid, now, firestore_client=firestore_client)
     history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
     history_ref.document(history_date).set({'date': history_date, 'value': value, 'recorded_at': now}, merge=True)
 
