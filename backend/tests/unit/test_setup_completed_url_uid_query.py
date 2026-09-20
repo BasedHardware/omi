@@ -51,7 +51,10 @@ def _enable(setup_completed_url: str) -> list[str]:
         patch.object(apps_router, 'enable_app', lambda _uid, _app_id: None),
         patch.object(apps_router, 'increase_app_installs_count', lambda _app_id: None),
     ):
-        assert asyncio.run(apps_router.enable_app_endpoint(app_id='app-1', uid='user-1')) == {'status': 'ok'}
+        request = SimpleNamespace(headers={})
+        assert asyncio.run(apps_router.enable_app_endpoint(app_id='app-1', request=request, uid='user-1')) == {
+            'status': 'ok'
+        }
     return client.urls
 
 
