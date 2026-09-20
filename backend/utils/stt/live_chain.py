@@ -106,7 +106,7 @@ async def connect_configured_chain(
                     from_mode=origin,
                     to_mode=service.value,
                     reason=reason,
-                    outcome='exhausted',
+                    outcome='degraded',
                 )
             origin, prior_reason = service.value, reason
             return None
@@ -146,16 +146,21 @@ async def connect_configured_chain(
                     from_mode=origin,
                     to_mode=service.value,
                     reason='circuit_open',
-                    outcome='exhausted',
+                    outcome='degraded',
                 )
             continue
         result = await attempt(service, connect)
         if result is not None:
             return result
 
-    # Only known-down/absent alternatives justify bypassing the primary bench.
-    # force claims the same bounded half-open slot; concurrent starts cannot herd.
-    if primary_open and not attempted and provider_for_service(primary_service) not in failed:
+    # Last-resort may force a non-account bench on a non-TDT primary only.
+    # Windowed TDT shedding (capacity/5xx) must hold; account cooldown never yields.
+    if (
+        primary_open
+        and not attempted
+        and primary_service != STTService.parakeet
+        and provider_for_service(primary_service) not in failed
+    ):
         circuit = _circuit_for_primary(primary_service)
         if circuit.allow_request(max_probes=1, force=True):
             prior_reason = 'last_resort'
@@ -163,4 +168,11 @@ async def connect_configured_chain(
             if result is not None:
                 return result
     CHAIN_EXHAUSTED.inc()
+    record_fallback(
+        component='stt_selection',
+        from_mode=origin,
+        to_mode='unavailable',
+        reason=prior_reason,
+        outcome='exhausted',
+    )
     raise RuntimeError('Configured STT chain exhausted')

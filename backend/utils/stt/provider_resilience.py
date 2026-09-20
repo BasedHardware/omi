@@ -121,6 +121,9 @@ class ProviderCircuitBreaker:
             if self._state == 'closed':
                 return True
             if self._state == 'open':
+                # force never bypasses account-state; at most one probe per cooldown.
+                if self._account_cooldown is not None and self._clock() - self._opened_at < self._account_cooldown:
+                    return False
                 if not force and self._clock() - self._opened_at < self._active_cooldown():
                     return False
                 self._state = 'half_open'

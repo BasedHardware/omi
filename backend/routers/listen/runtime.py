@@ -374,7 +374,7 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
-            window_uid=request.uid if managed_chain_enabled(self) else None,
+            **({'window_uid': request.uid} if managed_chain_enabled(self) else {}),  # legacy call shape while dark
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:

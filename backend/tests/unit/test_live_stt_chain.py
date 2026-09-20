@@ -115,7 +115,7 @@ async def test_failed_session_provider_is_never_revisited(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_open_primary_skips_to_healthy_tail_then_emergency_if_all_open(monkeypatch):
+async def test_open_primary_skips_to_healthy_tail_then_serve_error_last_resort(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     st._modulate_circuit.record_serve_failure()
     primary, tail = AsyncMock(return_value=socket()), AsyncMock(return_value=socket())
@@ -130,6 +130,55 @@ async def test_open_primary_skips_to_healthy_tail_then_emergency_if_all_open(mon
     )
     primary.assert_awaited_once()
     tail.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_last_resort_never_bypasses_account_cooldown(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
+    st._modulate_circuit.record_account_failure(1800)
+    st._soniox_circuit.record_serve_failure()
+    primary = AsyncMock(return_value=socket())
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match='exhausted'):
+            await st.connect_stt_socket_with_fallback(
+                primary_service=st.STTService.modulate,
+                connect_primary=primary,
+                connect_soniox=AsyncMock(return_value=socket()),
+            )
+    primary.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_last_resort_never_force_dials_open_tdt(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
+    st._parakeet_circuit.record_serve_failure()
+    st._soniox_circuit.record_serve_failure()
+    primary, tail = AsyncMock(return_value=socket()), AsyncMock(return_value=socket())
+    with pytest.raises(RuntimeError, match='exhausted'):
+        await st.connect_stt_socket_with_fallback(
+            primary_service=st.STTService.parakeet, connect_primary=primary, connect_soniox=tail
+        )
+    primary.assert_not_called()
+    tail.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_configured_chain_emits_exhausted_only_when_terminal(monkeypatch):
+    from utils.stt import live_chain
+
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
+    events = []
+    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: events.append(kw))
+    with pytest.raises(RuntimeError, match='exhausted'):
+        await st.connect_stt_socket_with_fallback(
+            primary_service=st.STTService.modulate,
+            connect_primary=AsyncMock(side_effect=RuntimeError('down')),
+            connect_soniox=AsyncMock(side_effect=RuntimeError('down')),
+        )
+    exhausted = [event for event in events if event['outcome'] == 'exhausted']
+    assert len(exhausted) == 1
+    assert exhausted[0]['to_mode'] == 'unavailable'
+    assert all(event['outcome'] == 'degraded' for event in events if event is not exhausted[0])
 
 
 @pytest.mark.asyncio
@@ -235,8 +284,8 @@ def test_excluded_session_shapes_do_not_enter_new_chain(monkeypatch, multi, cust
     assert not managed_chain_enabled(host)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
     service, _, model = st.get_stt_service_for_language('en')
-    assert service == st.STTService.modulate
-    assert model == 'velma-2'
+    assert service == st.STTService.soniox
+    assert model == 'soniox'
 
 
 def test_preflight_does_not_strand_a_start_with_an_open_primary(monkeypatch):

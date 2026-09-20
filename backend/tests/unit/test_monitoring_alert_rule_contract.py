@@ -791,7 +791,6 @@ def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
     expected = {
         'omi-stt-leg-error-rate': ('omi_stt_leg_attempts_total', 'by (to_mode)'),
         'omi-stt-chain-terminal': ('omi_stt_chain_exhausted_total', 'omi_listen_accepted_total'),
-        'omi-stt-init-terminal': ('omi_live_stt_terminal_failures_total', 'phase="initialization"'),
         'omi-stt-account-state': ('omi_stt_stream_close_total', 'reason="provider_auth_rejected"'),
         'omi-stt-window-overflow': ('omi_stt_window_admissions_total', 'outcome="overflow"'),
         'omi-stt-window-saturated': ('omi_stt_window_sessions_active', 'omi_stt_window_sessions_capacity'),

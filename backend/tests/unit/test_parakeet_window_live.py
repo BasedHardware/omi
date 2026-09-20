@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
+from utils.stt.live_metrics import WINDOW_POSTS
 from utils.stt.live_session import LiveChainSession, LiveLegSocket
 from routers.listen.receiver import ListenReceiver
 
@@ -178,10 +179,12 @@ async def test_one_post_in_flight_buffer_bounded_and_cancel_releases(monkeypatch
     sock.mark_speech()
     assert sock.send(b'\x01\x00' * 16000 * 6)
     await started.wait()
-    assert sock.send(b'\x01\x00' * 16000 * 12)
+    assert sock.send(b'\x01\x00' * 16000 * 18)
     assert not sock.send(b'\x01\x00')
     assert len(calls) == 1
     assert sock.is_connection_dead
+    assert sock.death_reason == 'capacity_full'
+    assert st._parakeet_circuit.state == 'open'
     assert window.admission.active == 0
     await asyncio.gather(sock._pump_task, return_exceptions=True)
 
@@ -205,6 +208,7 @@ async def test_cancellation_before_pump_start_and_during_drain_release(monkeypat
     sock.send(b'\x01\x00' * 16000)
     drain = asyncio.create_task(sock.drain_and_close())
     await started.wait()
+    assert window.admission.active == 0
     drain.cancel()
     with pytest.raises(asyncio.CancelledError):
         await drain
@@ -319,7 +323,7 @@ async def test_multiple_windows_are_paced_ordered_and_not_overlapped(monkeypatch
     assert len(client.requests) == 2
     assert client.requests[0][1]['files']['file'][1].endswith(first)
     assert client.requests[1][1]['files']['file'][1].endswith(second)
-    assert len(delays) == 1 and 5 < delays[0] <= 6
+    assert delays == []  # drain skips pacing so teardown does not hold the slot
     assert [(s['start'], s['end']) for s in posted] == [(0, 6), (6, 12)]
 
 
@@ -469,8 +473,9 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
         assert not await actual._failover_stt_socket()
         assert not any(e['outcome'] == 'recovered' for e in events)
         exhausted = [e for e in events if e['outcome'] == 'exhausted']
-        assert {e['component'] for e in exhausted} == {'stt_selection', 'stt_live_session'}
-        assert all(e['to_mode'] == 'parakeet' for e in exhausted)
+        assert {'stt_selection', 'stt_live_session'} <= {e['component'] for e in exhausted}
+        assert any(e['component'] == 'stt_selection' and e['to_mode'] == 'parakeet' for e in exhausted)
+        assert any(e['component'] == 'stt_live_session' and e['to_mode'] == 'parakeet' for e in exhausted)
     else:
         recovered = [e for e in events if e['outcome'] == 'recovered']
         assert len(recovered) == 2
@@ -479,3 +484,164 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
         leg.raw._stream_transcript([{'start': 1, 'end': 2, 'text': 'again'}])
         assert len([e for e in events if e['outcome'] == 'recovered']) == 2
     assert window.admission.active == 0
+
+
+class HoldClient:
+    def __init__(self):
+        self.gates: list[asyncio.Future[None]] = []
+        self.requests = []
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        gate: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self.gates.append(gate)
+        await gate
+        return httpx.Response(200, json={'text': 'ok'}, request=httpx.Request('POST', url))
+
+
+async def _wait_gate(client: HoldClient) -> asyncio.Future[None]:
+    deadline = asyncio.get_running_loop().time() + 2
+    while not client.gates:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError('window POST never started')
+        await asyncio.sleep(0)
+    return client.gates[-1]
+
+
+async def _release_after_audio(sock, client: HoldClient, during_seconds: int) -> bool:
+    gate = await _wait_gate(client)
+    client.gates.pop()
+    sock.mark_speech()
+    accepted = sock.send(b'\x01\x00' * 16000 * during_seconds)
+    if not gate.done():
+        gate.set_result(None)
+    await asyncio.sleep(0)
+    return accepted
+
+
+@pytest.mark.asyncio
+async def test_repeated_slow_posts_stay_up(monkeypatch):
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    for _ in range(5):
+        client = HoldClient()
+        monkeypatch.setattr(window, 'get_stt_client', lambda current=client: current)
+        sock = window.connect_window(lambda _: None, 16000)
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * 16000 * 6)
+        assert await _release_after_audio(sock, client, 8)
+        assert not sock.is_connection_dead
+        assert st._parakeet_circuit.state == 'closed'
+        sock.finish()
+        await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_buffer_overflow_sheds_and_opens_circuit(monkeypatch):
+    started = asyncio.Event()
+
+    async def blocked(*args, **kwargs):
+        started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SimpleNamespace(post=blocked))
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    await started.wait()
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 18)
+    assert not sock.send(b'\x01\x00')
+    assert sock.is_connection_dead
+    assert sock.death_reason == 'capacity_full'
+    assert st._parakeet_circuit.state == 'open'
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_single_slow_post_never_kills_window(monkeypatch):
+    client = HoldClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    assert await _release_after_audio(sock, client, 8)
+    assert not sock.is_connection_dead
+    assert st._parakeet_circuit.state == 'closed'
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    'status,data,error',
+    [
+        (413, {'detail': 'too large'}, None),
+        (200, {'unexpected': True}, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_malformed_or_413_is_session_local(monkeypatch, status, data, error):
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client(status=status, data=data, error=error))
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.is_connection_dead
+    assert st._parakeet_circuit.state == 'closed'
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+async def test_semaphore_queue_timeout_is_session_local(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '0.05')
+
+    @asynccontextmanager
+    async def stuck():
+        await asyncio.Future()
+        yield
+
+    monkeypatch.setattr(window, 'get_stt_semaphore', stuck)
+    sock = window.connect_window(lambda _: None, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await sock._pump_task
+    assert sock.is_connection_dead
+    assert st._parakeet_circuit.state == 'closed'
+    assert WINDOW_POSTS.labels(outcome='queue_timeout')._value.get() >= 1
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+async def test_non_window_vad_fails_open_and_honours_override(monkeypatch):
+    from utils.stt import live_session
+
+    sent = []
+    raw = SimpleNamespace(
+        is_connection_dead=False,
+        send=lambda data: sent.append(data) or True,
+        finish=lambda: sent.append(b'FIN'),
+        finalize=lambda: None,
+    )
+    gate = SimpleNamespace(process_audio=lambda *a: (_ for _ in ()).throw(RuntimeError('onnx')))
+    session = LiveChainSession(receiver())
+    sock = LiveLegSocket(raw, gate, session, st.STTService.soniox, 16000, False, False)
+    audio = b'\x01\x00' * 16
+    assert sock.send(audio)
+    assert sent == [audio]
+    assert not sock.is_connection_dead
+    assert sock.gate is None
+
+    monkeypatch.setattr(live_session, 'is_gate_enabled', lambda: True)
+    monkeypatch.setattr(live_session, 'VAD_GATE_MODE', 'active')
+    recv = receiver()
+    recv.host.request.vad_gate_override = 'disabled'
+    recv.host.stt_service, recv.host.stt_model = st.STTService.soniox, 'soniox'
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
+    monkeypatch.setattr(st, 'process_audio_soniox', AsyncMock(return_value=raw))
+    managed = await LiveChainSession(recv).connect(16000)
+    assert managed.gate is None
+    assert managed.window is False

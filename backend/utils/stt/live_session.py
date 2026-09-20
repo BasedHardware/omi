@@ -11,7 +11,8 @@ from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.socket import STTSocket
-from utils.stt.vad_gate import VADStreamingGate
+from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
+from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
 
 class LiveChainSession:
@@ -22,13 +23,14 @@ class LiveChainSession:
         self.generation = 0
         self.speech_ms = 0
         self.total_speech_ms = 0
+        self.vad_mode = 'off'
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
         return delta
 
     def get_metrics(self) -> dict[str, Any]:
-        return {'mode': 'active', 'speech_ms_total': self.total_speech_ms}
+        return {'mode': self.vad_mode, 'speech_ms_total': self.total_speech_ms}
 
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
@@ -76,18 +78,42 @@ class LiveChainSession:
         generation = self.generation + 1
         offset = self.audio_seconds
 
+        def build_gate(is_window: bool) -> VADStreamingGate | None:
+            if is_window:
+                gate = VADStreamingGate(sample_rate=sample_rate, channels=1, mode='active')
+                # No four-second silence tail: each early-flushed window must
+                # contain speech, with only a short boundary hangover.
+                gate._hangover_ms = 300  # type: ignore[reportPrivateUsage]  # TDT has a speech-only admission contract
+                self.vad_mode = 'active'
+                return gate
+            override = getattr(getattr(host, 'request', None), 'vad_gate_override', None)
+            if not should_initialize_vad_gate(override=override, global_gate_enabled=is_gate_enabled()):
+                self.vad_mode = 'off'
+                return None
+            try:
+                gate = VADStreamingGate(
+                    sample_rate=sample_rate,
+                    channels=1,
+                    mode=vad_gate_mode(override=override, default_mode=VAD_GATE_MODE),
+                )
+            except Exception:
+                self.vad_mode = 'off'
+                record_fallback(
+                    component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
+                )
+                return None
+            self.vad_mode = gate.mode
+            return gate
+
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
             try:
-                gate = VADStreamingGate(sample_rate=sample_rate, channels=1, mode='active')
-                if is_window:
-                    # No four-second silence tail: each early-flushed window must
-                    # contain speech, with only a short boundary hangover.
-                    gate._hangover_ms = 300  # type: ignore[reportPrivateUsage]  # TDT has a speech-only admission contract
+                gate = build_gate(is_window)
             except Exception:
                 if is_window:
                     raise st.ParakeetConnectionError('config_incomplete')
                 gate = None
+                self.vad_mode = 'off'
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
@@ -233,17 +259,30 @@ class LiveLegSocket(STTSocket):
     def send(self, data: bytes) -> bool:
         if self.is_connection_dead:
             return False
-        try:
-            # Synthetic wall clock follows the received audio, unaffected by POST
-            # delays or websocket burst delivery. Positive epoch avoids VAD's zero sentinel.
-            output = self.gate.process_audio(data, 1.0 + self._seconds) if self.gate is not None else None
-        except Exception:
-            self._dead = True
-            self.raw.finish()
-            record_fallback(
-                component='vad', from_mode='gated', to_mode='none', reason='connection_lost', outcome='exhausted'
-            )
-            return False
+        output = None
+        if self.gate is not None:
+            try:
+                # Synthetic wall clock follows received audio. Positive epoch
+                # avoids VAD's zero sentinel.
+                output = self.gate.process_audio(data, 1.0 + self._seconds)
+            except Exception:
+                if self.window:
+                    self._dead = True
+                    self.raw.finish()
+                    record_fallback(
+                        component='vad',
+                        from_mode='gated',
+                        to_mode='none',
+                        reason='connection_lost',
+                        outcome='exhausted',
+                    )
+                    return False
+                record_fallback(
+                    component='vad', from_mode='gated', to_mode='direct', reason='other', outcome='degraded'
+                )
+                self.gate.mode = 'off'
+                self.gate = None
+                self.session.vad_mode = 'off'
         audio = data if output is None or self.passthrough else output.audio_to_send
         if self.window and output is not None and output.is_speech:
             from utils.stt.parakeet_window import WindowedParakeetSocket

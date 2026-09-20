@@ -13,8 +13,16 @@ from collections import deque
 from typing import Any, Callable, cast
 
 from utils.http_client import get_stt_client, get_stt_semaphore
+from utils.stt import streaming as st
 from utils.stt.live_metrics import WINDOW_ACTIVE, WINDOW_ADMISSION, WINDOW_CAP, WINDOW_LATENCY, WINDOW_POSTS
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
+
+BUFFER_WINDOWS = 3
+PACE_SECONDS = 6.0
+
+
+class QueueTimeout(TimeoutError):
+    """Deadline expired while waiting for the shared STT semaphore."""
 
 
 class WindowAdmission:
@@ -51,10 +59,11 @@ admission = WindowAdmission()
 
 
 class WindowedParakeetSocket(ParakeetStreamingSocket):
-    """One pump/POST, <=12 seconds buffered, paced silence flushes, no retries.
+    """One pump/POST, <=18 seconds buffered, paced silence flushes, no retries.
 
     The owner must supply only actively VAD-gated audio. A gate fault kills the
     socket before any raw audio reaches send(). All shutdown paths release admission.
+    Buffer overflow sheds this pod's TDT circuit so new sessions skip the GPU.
     """
 
     def __init__(
@@ -97,11 +106,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def mark_speech(self) -> None:
         self._next_send_speech = True
 
+    def _buffer_cap(self) -> int:
+        return BUFFER_WINDOWS * self._window_bytes
+
     def send(self, data: bytes) -> bool:
         if self._closed or self._dead:
             return False
-        if len(self._buf) + len(data) > 2 * self._window_bytes:
-            self.fail('capacity_full')
+        if len(self._buf) + len(data) > self._buffer_cap():
+            self._shed_capacity()
             return False
         if self._next_send_speech and data:
             end = self._received_bytes + len(data)
@@ -129,6 +141,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._dead, self._dead_reason = True, reason
         self.finish()
 
+    def _shed_capacity(self) -> None:
+        st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+        self.fail('capacity_full')
+
     def finish(self) -> None:
         self._closed = True
         self._buf.clear()
@@ -143,6 +159,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     async def drain_and_close(self) -> None:
         self._closed = True
         self._wake.set()
+        self._release()
         try:
             if self._pump_task is not None:
                 await self._pump_task
@@ -168,11 +185,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                         self._speech_spans.popleft()
                     if not has_speech:
                         continue
-                    # Pacing includes short silence-flushed utterances and teardown.
-                    delay = self._next_post - asyncio.get_running_loop().time()
-                    if delay > 0:
-                        await asyncio.sleep(delay)
-                    self._next_post = asyncio.get_running_loop().time() + 6.0
+                    if not self._closed:
+                        delay = self._next_post - asyncio.get_running_loop().time()
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        self._next_post = asyncio.get_running_loop().time() + PACE_SECONDS
                     segments = await self._transcribe_chunk(chunk, start, duration)
                     if segments and not self._dead:
                         self._stream_transcript(segments)
@@ -208,26 +225,43 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             )
             return self._last_speaker
 
+    async def _post_window(self, pcm: bytes) -> httpx.Response:
+        acquired = False
+        try:
+            async with asyncio.timeout(self._post_timeout):
+                async with get_stt_semaphore():
+                    acquired = True
+                    return await get_stt_client().post(
+                        self._url,
+                        files={'file': ('audio.wav', _pcm16_to_wav_bytes(pcm, self._sample_rate), 'audio/wav')},
+                    )
+        except (TimeoutError, httpx.TimeoutException):
+            if not acquired:
+                raise QueueTimeout() from None
+            raise
+
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> list[dict[str, Any]]:
         started = time.monotonic()
         outcome = 'error'
         try:
-            # Timeout covers semaphore queueing as well as the POST, preventing a
-            # busy shared HTTP pool from pinning live admission forever.
-            async with asyncio.timeout(self._post_timeout):
-                async with get_stt_semaphore():
-                    response = await get_stt_client().post(
-                        self._url,
-                        files={'file': ('audio.wav', _pcm16_to_wav_bytes(pcm, self._sample_rate), 'audio/wav')},
-                    )
+            response = await self._post_window(pcm)
+            if response.status_code >= 500:
+                st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                self.fail('provider_5xx')
                 response.raise_for_status()
-                data = response.json()
-                if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
-                    raise ValueError('Invalid TDT response')
+            if response.status_code == 413:
+                self.fail('provider_5xx')
+                raise ValueError('TDT payload too large')
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
+                self.fail('provider_5xx')
+                raise ValueError('Invalid TDT response')
             self._embedded_this_window = False
             segments = await self._normalize_chunk(cast(dict[str, Any], data), pcm, start, dur)
             for segment in segments:
                 if not all(math.isfinite(float(segment[key])) for key in ('start', 'end')):
+                    self.fail('provider_5xx')
                     raise ValueError('Invalid TDT timestamps')
                 segment['start'] = min(start + dur, max(start, segment['start']))
                 segment['end'] = min(start + dur, max(segment['start'], segment['end']))
@@ -237,12 +271,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         except asyncio.CancelledError:
             outcome = 'cancelled'
             raise
-        except Exception as error:
-            from utils.stt.streaming import _parakeet_circuit  # type: ignore[reportPrivateUsage]  # shared circuit owner
-
-            reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'provider_5xx'
-            _parakeet_circuit.record_serve_failure()
-            self.fail(reason)
+        except QueueTimeout:
+            outcome = 'queue_timeout'
+            self.fail('timeout')
+            raise
+        except (TimeoutError, httpx.TimeoutException):
+            st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            self.fail('timeout')
+            raise
+        except Exception:
+            if not self._dead:
+                self.fail('provider_5xx')
             raise
         finally:
             WINDOW_POSTS.labels(outcome=outcome).inc()

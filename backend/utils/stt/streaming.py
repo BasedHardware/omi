@@ -188,7 +188,7 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
 
 
 def _primary_streaming_service() -> Optional[STTService]:
-    """Resolve the first configured provider for the legacy preflight circuit."""
+    """First configured provider; see ARCHITECTURE.md (incident history)."""
     for model in (m.strip() for m in stt_service_models):
         provider = provider_for_model_token(model)
         if provider is None:
@@ -205,7 +205,7 @@ def _primary_streaming_service() -> Optional[STTService]:
 
 
 def is_stt_available() -> bool:
-    """Read-only preflight; the ramped chain owns last-resort admission."""
+    """Read-only preflight; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled():
         return True  # the chain owns admission, including its bounded last-resort probe
     primary = _primary_streaming_service()
@@ -266,7 +266,7 @@ async def connect_stt_socket_with_fallback(
     failed: Optional[set[str]] = None,
     use_config: Optional[bool] = None,
 ) -> Tuple[STTSocket, STTService]:
-    """Connect a serving provider; the configured chain is explicitly ramped."""
+    """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
         from utils.stt.live_chain import connect_configured_chain
 
@@ -544,7 +544,7 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """Check configured RNNT fallback credentials, policy and resolved language."""
+    """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
     return (
         STTService.parakeet.value in (model.strip() for model in stt_service_models)
         and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
@@ -601,11 +601,7 @@ def get_stt_service_for_language(
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
-    """Select a surface-compatible provider, excluding session failures.
-
-    Only managed listen callers supply window_uid; all other surfaces retain
-    their legacy model policy. Deepgram availability includes its runtime endpoint.
-    """
+    """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
@@ -692,8 +688,8 @@ def get_stt_service_for_language(
             )
 
     models = stt_service_models
-    if configured_chain_enabled() and window_uid is None and 'parakeet-window' in models:
-        models = list(default_models_for_surface(surface))
+    if configured_chain_enabled() and window_uid is None:
+        models = [model for model in models if model.strip() != 'parakeet-window']
     selected, parakeet_fallback_reason = select(models)
     if selected is not None:
         record_selected_fallback(selected, used_default=False, parakeet_fallback_reason=parakeet_fallback_reason)
