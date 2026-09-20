@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -232,9 +233,13 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
   return [];
 }
 
+@visibleForTesting
+String personNamePath(String personId, String newName) =>
+    'v1/users/people/$personId/name?value=${Uri.encodeQueryComponent(newName)}';
+
 Future<bool> updatePersonName(String personId, String newName) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people/$personId/name?value=$newName',
+    url: '${Env.apiBaseUrl}${personNamePath(personId, newName)}',
     headers: {},
     method: 'PATCH',
     body: '',

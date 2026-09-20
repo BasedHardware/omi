@@ -125,3 +125,5 @@ concurrent intents coalesce, all resources cancel, failed init is observable and
 retry recovers; declare adoption for each migrated pattern and retain journeys.
 Settings/plans/payments can reuse generation checks for stale rollback and explicit
 loading/error state. Their context-after-await cases are linted; no C1 scope there.
+
+Capture admission and mute use the shared [capture policy contract](CAPTURE_POLICY.md). It defines durable intent, native admission acknowledgement, and the cross-platform regression fixtures.

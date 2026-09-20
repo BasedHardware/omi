@@ -1490,12 +1490,12 @@ void main() {
   // doesn't it stay off?", "Cv1 unmutes on disconnect/reconnect").      //
   // ------------------------------------------------------------------ //
   group('device mute persistence', () {
-    setUp(() {
-      SharedPreferencesUtil().deviceMuted = false;
+    setUp(() async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
     });
 
-    test('constructor restores muted state when deviceMuted pref is set', () {
-      SharedPreferencesUtil().deviceMuted = true;
+    test('constructor restores the shared muted capture policy', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
 
       final provider = CaptureProvider();
 
@@ -1505,8 +1505,8 @@ void main() {
       provider.dispose();
     });
 
-    test('constructor leaves recording unpaused when deviceMuted pref is unset', () {
-      SharedPreferencesUtil().deviceMuted = false;
+    test('constructor leaves recording unpaused when capture policy permits it', () async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
 
       final provider = CaptureProvider();
 
@@ -1521,7 +1521,7 @@ void main() {
       await provider.pauseDeviceRecording();
 
       expect(provider.isPaused, isTrue);
-      expect(SharedPreferencesUtil().deviceMuted, isTrue);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
       provider.dispose();
     });
   });

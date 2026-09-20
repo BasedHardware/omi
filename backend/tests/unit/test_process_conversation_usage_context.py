@@ -270,6 +270,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     executors = add("utils.executors", AutoMockModule("utils.executors"))
     executors.db_executor = MagicMock()
@@ -1944,6 +1945,9 @@ def test_custom_stt_conversation_without_llm_byok_key_runs_llm_work(monkeypatch)
     process_conversation.process_conversation('uid', 'en', completed_conversation)
 
     assert structured_calls, 'LLM structuring was skipped for a custom-STT conversation'
+    process_conversation.should_skip_omi_paid_postprocessing.assert_called()
+    _, kwargs = process_conversation.should_skip_omi_paid_postprocessing.call_args
+    assert kwargs.get('uses_custom_stt') is True
 
 
 def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
@@ -1978,6 +1982,35 @@ def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
     process_conversation.process_conversation('uid', 'en', input_conversation)
 
     assert structured_calls, 'LLM structuring was skipped despite an LLM BYOK key'
+
+
+def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
+    """#7690 residual: custom-STT still hits the LLM processing gate. When that
+    budget is exhausted, Omi-paid structuring must not run — without the
+    #10962 blanket skip that removed summaries for every custom-STT user."""
+    completed_conversation = Conversation(
+        id='conversation-custom-stt-exhausted',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.processing,
+        discarded=False,
+        uses_custom_stt=True,
+    )
+
+    structured_calls = []
+    monkeypatch.setattr(
+        process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
+    )
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
+
+    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
+
+    assert not structured_calls, 'LLM structuring ran after the processing budget was exhausted'
+    assert result.status == ConversationStatus.completed
 
 
 def test_dedup_candidates_exclude_own_and_merge_source_items():

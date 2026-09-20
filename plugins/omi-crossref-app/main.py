@@ -1,7 +1,7 @@
 import html
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 from fastapi import FastAPI
@@ -20,6 +20,52 @@ app = FastAPI(
 
 def clamp_max_results(value: int) -> int:
     return max(1, min(10, value))
+
+
+_DOI_RE = re.compile(
+    r"^10\.\d{4,9}/[-._;()/:A-Z0-9#]+$",
+    re.IGNORECASE,
+)
+
+
+def normalize_doi(value: Any) -> str | None:
+    """Normalize a DOI identifier before using it as a Crossref path segment.
+
+    Chat callers commonly paste resolver links instead of the bare DOI.  Only
+    the two DOI resolver hosts are accepted; their query and fragment are
+    discarded before decoding the path exactly once.  A second encoded layer
+    remains invalid rather than being silently interpreted as a different DOI.
+    """
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+
+    if raw.lower().startswith("doi:"):
+        raw = raw[4:].strip()
+    elif "://" in raw or raw.lower().startswith(("http:", "https:")):
+        try:
+            parsed = urlsplit(raw)
+            host = (parsed.hostname or "").lower().rstrip(".")
+            if parsed.scheme.lower() not in {"http", "https"}:
+                return None
+            if host not in {"doi.org", "dx.doi.org"}:
+                return None
+            if parsed.username or parsed.password:
+                return None
+            # urlsplit().hostname strips the port; reject a non-default port
+            # rather than accepting a look-alike resolver endpoint.
+            if parsed.port not in (None, 80, 443):
+                return None
+        except ValueError:
+            return None
+        # Query and fragment are intentionally omitted; decode the path once.
+        raw = unquote(parsed.path.lstrip("/"))
+
+    if ".." in raw or not _DOI_RE.fullmatch(raw):
+        return None
+    return raw
 
 
 _JATS_TAG = re.compile(r"</?jats:[^>]+>")
@@ -203,11 +249,9 @@ async def search_crossref_works(payload: SearchWorksInput):
 
 @app.post("/tools/get_crossref_work", response_model=ChatToolResponse)
 async def get_crossref_work(payload: GetWorkInput):
-    normalized = payload.doi.strip()
-    if "/" not in normalized:
+    normalized = normalize_doi(payload.doi)
+    if normalized is None:
         return ChatToolResponse(error="Invalid DOI format. Example: 10.1038/nphys1170")
-    if ".." in normalized:
-        return ChatToolResponse(error="Invalid DOI value.")
 
     try:
         payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})

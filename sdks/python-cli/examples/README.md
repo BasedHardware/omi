@@ -6,15 +6,21 @@
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
   omi-cli 指南 (Traditional Chinese agent guide).
+* [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
+  omi-cli ガイド (Japanese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
+  JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
+* [`quickstart.id.md`](quickstart.id.md) — panduan mulai cepat omi-cli dalam
+  bahasa Indonesia (Indonesian Quickstart).
 * [`quickstart.da.md`](quickstart.da.md) — dansk hurtigstartguide til omi-cli (Danish Quickstart).
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
@@ -83,3 +89,4 @@
 * [`quickstart.zu.md`](quickstart.zu.md) — Izinyathelo Zokuqala nge-omi-cli (Zulu Quickstart).
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
+* [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).

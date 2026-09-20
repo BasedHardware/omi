@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -54,6 +55,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @visibleForTesting
   set testDevice(BtDevice? device) => _device = device;
+
+  DeviceConnection? _testConnection;
+
+  @visibleForTesting
+  set testConnection(DeviceConnection? connection) => _testConnection = connection;
 
   bool _supportsTimestampMarkers() {
     if (_device == null) return false;
@@ -209,7 +215,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<bool> _writeToStorage(String deviceId, int numFile, int command, int offset) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(false);
     }
@@ -220,7 +226,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     String deviceId, {
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(null);
     }
@@ -389,8 +395,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           await callback(file, chunkOffset, timerStart, chunk.length);
         } catch (e) {
           Logger.debug('Error in callback during chunking: $e');
-          hasError = true;
-          break;
+          rethrow;
         }
         timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
       }
@@ -625,6 +630,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       throw Exception('Local sync service not available. Cannot safely download SD card data.');
     }
 
+    final admittedGeneration = _localSync!.sessionGeneration;
+
     int chunksDownloaded = 0;
     int lastOffset = wal.storageOffset;
     int totalBytesToDownload = wal.storageTotalBytes - wal.storageOffset;
@@ -649,7 +656,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         int bytesInChunk = offset - lastOffset;
         _updateSpeed(bytesInChunk);
-        await _registerSingleChunk(wal, file, timerStart, chunkFrames);
+        await _registerSingleChunk(wal, file, timerStart, chunkFrames, admittedGeneration);
         chunksDownloaded++;
         lastOffset = offset;
 
@@ -690,7 +697,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
 
-  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames) async {
+  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
       return;
@@ -714,7 +721,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       originalStorage: WalStorage.sdcard,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug(
       "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}",
     );

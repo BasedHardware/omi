@@ -53,7 +53,7 @@ def test_recovers_a_taught_person_whose_embedding_was_lost(monkeypatch):
 
     persisted: dict[str, list] = {}
 
-    def _persist(uid, person_id, embedding):
+    def _persist(uid, person_id, embedding, *, expected_updated_at):
         persisted[person_id] = embedding
         return True
 

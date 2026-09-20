@@ -429,6 +429,41 @@ sequenceDiagram
 2. **No Startup Delay**: Transcription begins immediately (no profile audio prepending)
 3. **Single Socket**: One selected-provider connection per session
 
+### Teaching another person's voice
+
+Diarization numbers such as `SPEAKER_00` are local to a conversation. Owner
+enrollment writes the user's own profile; naming another speaker writes a stable
+person identity under the authenticated user's people collection.
+
+The mobile client sends selected segment IDs to
+`PATCH /v1/conversations/{conversation_id}/segments/assign-bulk`. The label is
+saved immediately. Background teaching requires retained audio chunks and a
+ten-second window of speech belonging to that person. Adjacent segments may
+extend the window, but both their identity and their text must participate in
+verification. Sample transcription uses the conversation language, falling back
+to the user's language preference; it is not restricted to English.
+
+A quality-verified sample, transcript, v3 embedding, and source conversation and
+segment IDs are published in one person-document transaction. Valid re-teaching
+replaces the previous profile only after extraction succeeds. A person version
+check rejects work that outlived a correction, replacement, or deletion. New live
+sessions load stored profiles; offline sync accepts only v3 profiles with samples
+and an embedding. The returned `person_id` resolves to the person's name in the
+mobile people cache.
+
+Correcting a source label invalidates the profile learned from it. Profiles from
+other conversations remain intact. Historical profiles without source metadata
+cannot be attributed to a corrected label: delete their sample in People settings
+and teach again. Sample deletion clears its embedding, and missing-embedding
+recovery is fenced against concurrent deletion. A label saved without sufficient
+retained, verified speech is not proof of successful voice enrollment.
+
+Private Cloud Sync controls retaining the audio needed to teach another person.
+Live matching is admitted when cloud sync or an owner speech profile is enabled,
+unless custom STT is selected. Recognition accuracy and an already-running
+session's cached assignments require separate device qualification; persistence
+tests do not establish acoustic accuracy or immediate cache invalidation.
+
 ## Transcription Flow
 
 <Steps>
