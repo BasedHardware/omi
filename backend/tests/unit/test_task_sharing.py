@@ -104,6 +104,12 @@ clients_mod.llm_large = MagicMock()
 
 # Stub other utils that import heavy dependencies
 _stub_module("utils.llm.notifications")
+# routers/action_items.py imports product_metrics (#15099); its real import
+# chain reaches database.read_boundary, unresolvable under the stubbed
+# "database" package, so stub it before the router import.
+product_metrics_mod = _stub_module("utils.product_metrics")
+product_metrics_mod.record_product_event = MagicMock()
+product_metrics_mod.extract_app_build = MagicMock(return_value='unknown')
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
