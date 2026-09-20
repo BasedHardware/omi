@@ -18,6 +18,7 @@ COPY --from=builder /root/.local /root/.local
 
 # Copy application code
 COPY main.py .
+COPY hume_tools_auth.py .
 COPY app.py .
 COPY emotion_config.json .
 COPY templates/ templates/

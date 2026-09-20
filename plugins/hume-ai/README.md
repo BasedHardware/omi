@@ -215,6 +215,7 @@ docker run -d -p 8080:8080 \
   -e HUME_API_KEY=your_key \
   -e OMI_APP_ID=your_app_id \
   -e OMI_API_KEY=your_api_key \
+  -e HUME_TOOLS_SECRET=change-me \
   --name omi-emotion \
   omi-emotion-ai
 
@@ -633,6 +634,7 @@ docker run -p 8080:8080 \
   -e HUME_API_KEY=... \
   -e OMI_APP_ID=... \
   -e OMI_API_KEY=... \
+  -e HUME_TOOLS_SECRET=... \
   omi-emotion-ai
 ```
 
