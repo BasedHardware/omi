@@ -155,7 +155,10 @@ export const MemoryCard = memo(function MemoryCard({
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    await onDelete(memory.id);
+    const deleted = await onDelete(memory.id);
+    // A rejected delete leaves the card on screen: clear the pending state so it
+    // is not stuck dimmed with the delete button disabled until a reload.
+    if (!deleted) setIsDeleting(false);
   };
 
   const handleToggleVisibility = async () => {
