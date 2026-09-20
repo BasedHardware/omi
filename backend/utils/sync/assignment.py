@@ -56,7 +56,7 @@ def interval_matches(row: dict, incoming: dict) -> bool:
 def auto_mergeable(row: dict) -> bool:
     """Only unattended sync rows may donate content or change visible identity.
 
-    Explicit targets with content retain their identity. Shared/curated/photo-bearing records
+    Explicit live targets retain their identity. Shared/curated/photo-bearing records
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
@@ -118,21 +118,16 @@ def assign_in_transaction(
     # Check retry lineage independently of client hints: changing a target must
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'])
-    target_id, target = resolve(target_id)
+    target = load(target_id) if target_id else None
     target_hint = target_id
-    if target and not target.get('deleted') and not auto_mergeable(target):
-        # Encoded [] is truthy. Decode before deciding whether live has content.
-        # Reconnect IDs and empty live stubs convey no capture boundary; keep the
-        # stub untouched and let ordinary temporal sync assignment decide.
-        live = decode(target)
-        if live.get('transcript_segments') or live.get('has_photos') or live.get('photos'):
-            if not compatible_capture(target, incoming):
-                raise SyncAssignmentConflict('sync target provenance mismatch')
-        else:
-            target_id, target = None, None
+    if target and not target.get('deleted'):
+        # Explicit capture proof is authoritative even before live STT produced
+        # words. Only timestamp hints must exclude live-owned rows.
+        if not compatible_capture(target, incoming):
+            raise SyncAssignmentConflict('sync target provenance mismatch')
     else:
-        # Missing/deleted targets and unattended sync rows do not pin identity
-        # or bypass continuity. An existing sync target remains a lookup hint.
+        # Missing/tombstoned explicit targets fall back to temporal assignment.
+        # The independent retry-lineage check above still fences user deletion.
         target_id, target = None, None
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
         raise SyncAssignmentSuperseded('sync anchor is user managed')

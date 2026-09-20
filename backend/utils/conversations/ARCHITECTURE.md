@@ -80,7 +80,11 @@ This package receives persisted conversation data only. Request-scoped BYOK
 context may be propagated by a live Pusher caller into `finalizer.py`, but it
 must never be written here, passed to durable task payloads, or logged.
 
-Sync lifecycle intake computes speech components transactionally. The pipeline
+Sync lifecycle intake computes unattended speech components transactionally. A
+compatible, non-deleted explicit target keeps its ID even when empty; timestamp
+hints never adopt live rows. Explicit live targets remain excluded from automatic
+bridges after sync appends. Different existing reconnect targets may therefore
+remain separate until realtime reuses its in-progress conversation on reconnect. The pipeline
 replays bridge effects once, after audio persistence, through existing merge
 retraction/copy helpers; tombstone revision receipts skip completed cleanup. Retained donor
 redirects preserve late audio. `merge_conversations.delete_conversation_with_sync_sources`

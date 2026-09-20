@@ -89,8 +89,9 @@ week. Tribal “no” becomes written law.
 
 ## Proposed offline fragment policy
 
-Offline speech follows the same default silence boundary as realtime: a speech gap
-of at least 120 seconds starts a new conversation; shorter gaps stay connected.
+Without an existing explicit target, offline speech follows the same default
+silence boundary as realtime: a speech gap of at least 120 seconds starts a new
+conversation; shorter gaps stay connected.
 Speaker enrollment and own-voice attribution are not prerequisites. Short,
 filler-only fragments remain visible with their original transcript and a minimal
 title, without automatic summarization; later meaningful content promotes the
@@ -99,21 +100,25 @@ evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
 
 Silence-only audio creates nothing and cannot bridge conversations.
-New sync intake groups connected speech intervals independently of arrival order within
-the same source/device/lock partition. Reconnect conversation IDs do not split
-a continuous capture. Unknown device identity is not a
+Without an existing explicit target, sync intake groups connected speech intervals
+independently of arrival order within the same source/device/lock partition. Missing
+client target IDs do not partition that intake. Unknown device identity is not a
 wildcard. Late bridges retain redirects and fence stale enrichment. The shared
 boundary predicate applies to speech silence on both paths. The remaining policy
 difference is that realtime can configure its timeout per session; WALs do not
-carry that setting, so sync uses the default. Shared, photo-bearing and user-curated records remain separate
-from automatic bridges. This change neither uses own-voice labels nor debounces LLM work.
+carry that setting, so sync uses the default. Shared, photo-bearing and user-curated
+records remain separate from automatic bridges. This change neither uses own-voice
+labels nor debounces LLM work.
 
 The 2026-09-19 fragmentation mechanism was sync adopting empty live-flap stubs:
 STT failures caused reconnects about every 35 seconds, and legacy lookup chose a
 different stub per WAL. Cross-job assignment races are a separate, older class.
-Sync leaves these stubs untouched, including when the client explicitly targets
-them; missing targets also use ordinary temporal assignment. Only targets with
-real live transcript or photo content retain legacy live attachment. Appending
-chunks keeps the existing sync conversation ID; genuine bridges retain redirects.
-Follow-up outside this change: realtime should reuse a conversation on reconnect
-inside the continuity window and reap empty stubs.
+Timestamp hints never adopt live rows. A provenance-compatible, non-deleted explicit
+target is honored and keeps its ID even when empty: fresh admission can verify
+server capture proof before live STT produces words. Missing or tombstoned targets
+use ordinary temporal assignment; retry-lineage deletion fences remain intact.
+Appending chunks keeps the existing sync conversation ID; genuine bridges retain redirects.
+Known limitation: different existing live target IDs can still split one continuous
+recording. Sync cannot bridge live-owned targets while sockets may write to them.
+The realtime follow-up must reuse the in-progress conversation on reconnect inside
+the continuity window, so clients keep one ID, and reap abandoned empty stubs.

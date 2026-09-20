@@ -13,7 +13,7 @@ from datetime import timedelta
 
 import pytest
 
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_capture_continuity import arrival_order, capture, signature
@@ -80,7 +80,7 @@ def realtime_reference(rows):
     ]
 
 
-def replay(order, rows, *, reconnect_targets=False):
+def replay(order, rows, *, reconnect_targets=False, existing_targets=False):
     store = StrictFirestore()
     stubs = [
         live_stub(f'live-{i:03}', 1000 + i * 35, i % 3)
@@ -88,16 +88,33 @@ def replay(order, rows, *, reconnect_targets=False):
     ]
     originals = {('users', 'u', 'conversations', row['id']): row for row in stubs}
     store.rows.update(deepcopy(originals))
+    targeted = {}
     for i in order:
         row = deepcopy(rows[i])
         nearest = min(stubs, key=lambda stub: abs((stub['started_at'] - row['started_at']).total_seconds()))
         group = i // 5
-        target = (f'live-{group * 8:03}' if group % 2 else f'missing-{group}') if reconnect_targets else None
+        target = (
+            (f'live-{group * 10:03}' if existing_targets and group % 2 else f'missing-{group}')
+            if reconnect_targets
+            else None
+        )
         if reconnect_targets:
             row['sync_capture_id'] = target
         result, _, _ = intake(store, row, candidate_id=nearest['id'], target_id=target)
-        assert not result['sync_live_target']
-    assert {key: store.rows[key] for key in originals} == originals
+        if target and target.startswith('live-'):
+            assert result['id'] == target and result['sync_live_target']
+            targeted.setdefault(target, set()).add(row['transcript_segments'][0]['text'])
+        else:
+            assert not result['sync_live_target']
+    for key, original in originals.items():
+        if key[-1] not in targeted:
+            assert store.rows[key] == original
+        else:
+            persisted = store.rows[key]
+            assert not persisted.get('deleted') and persisted['sync_live_target']
+            texts = {seg['text'] for seg in persisted['transcript_segments']}
+            assert texts >= targeted[key[-1]]
+            assert not any(texts & other for cid, other in targeted.items() if cid != key[-1])
     assert not any(key[-1].startswith('missing-') for key in store.rows)
     active = [row for row in conversations(store) if row.get('sync_content_revision')]
     assert sum(len(row['transcript_segments']) for row in active) == 45
@@ -111,16 +128,26 @@ def replay(order, rows, *, reconnect_targets=False):
 @pytest.mark.parametrize('reconnect_targets', [False, True])
 @pytest.mark.parametrize('with_boundaries', [False, True])
 def test_sync_speech_partition_equals_realtime_reference(seed, reconnect_targets, with_boundaries):
-    """Headline parity: 119s joins, 120s/180s split, despite stubs and job order."""
+    """119s joins, 120s/180s split with hint-only stubs and optional missing targets."""
     rows = speech_timeline(with_boundaries)
     expected = realtime_reference(rows)
     assert len(expected) == (3 if with_boundaries else 1)
     assert replay(arrival_order(seed), rows, reconnect_targets=reconnect_targets) == expected
 
 
+@pytest.mark.parametrize('seed', range(12))
+def test_nine_reconnect_ids_honor_existing_targets_and_leave_hint_stubs_untouched(seed):
+    # Four existing IDs keep live lifecycle authority; five missing IDs carry no
+    # identity. The latter's temporal convergence is also proven by the headline
+    # test. Live targets can absorb sync donors, but never each other, so this
+    # mixed partial-flap case intentionally does not promise partition parity.
+    result = replay(arrival_order(seed), speech_timeline(False), reconnect_targets=True, existing_targets=True)
+    assert len(result) >= 4
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 @pytest.mark.parametrize('content', ['empty', 'speech', 'photo'])
-def test_explicit_target_requires_real_content_through_storage_codecs(monkeypatch, level, content):
+def test_explicit_target_preserves_identity_through_storage_codecs(monkeypatch, level, content):
     from database import conversations as db
 
     store = StrictFirestore()
@@ -132,27 +159,55 @@ def test_explicit_target_requires_real_content_through_storage_codecs(monkeypatc
         stub['has_photos'] = True
     encoded = db._prepare_conversation_for_write(stub, 'u', level)
     store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(encoded)
-    # Large gap proves only a real live target can override temporal assignment.
+    # Fresh admission can prove capture before any live words exist. Explicit
+    # identity overrides the temporal gap regardless of encrypted empty content.
     row, created, _ = db.assign_sync_conversation('u', capture(44), target_id='live', firestore_client=store)
-    if content == 'empty':
-        assert created and row['id'] == 'chunk-044' and not row['sync_live_target']
-        assert store.rows[('users', 'u', 'conversations', 'live')] == encoded
-    else:
-        assert not created and row['id'] == 'live' and row['sync_live_target']
-        assert len(row['transcript_segments']) == (2 if content == 'speech' else 1)
-        assert row['has_photos'] == (content == 'photo')
+    assert not created and row['id'] == 'live' and row['sync_live_target']
+    assert len(row['transcript_segments']) == (2 if content == 'speech' else 1)
+    assert row['has_photos'] == (content == 'photo')
+    persisted = deepcopy(store.rows[('users', 'u', 'conversations', 'live')])
+    # After sync content/revision is added it is still live-owned, not a donor.
+    other, created, _ = db.assign_sync_conversation('u', capture(43), candidate_id='live', firestore_client=store)
+    assert created and other['id'] != 'live'
+    assert store.rows[('users', 'u', 'conversations', 'live')] == persisted
 
 
-def test_existing_sync_target_is_only_a_temporal_hint():
+def test_existing_sync_target_preserves_explicit_identity():
     store = StrictFirestore()
     first, _, _ = intake(store, capture(0))
     far, created, _ = intake(store, capture(44), target_id=first['id'])
-    assert created and far['id'] != first['id'] and not far['sync_live_target']
-    # The target does not override the survivor rule in a real bridge either.
+    assert not created and far['id'] == first['id'] and not far['sync_live_target']
+    store = StrictFirestore()
+    intake(store, capture(0))
     intake(store, capture(4))
     joined, created, _ = intake(store, capture(2), target_id='chunk-004')
-    assert not created and joined['id'] == first['id']
-    assert joined['sync_merged_from'] == ['chunk-004']
+    assert not created and joined['id'] == 'chunk-004'
+    assert joined['sync_merged_from'] == ['chunk-000']
+
+
+@pytest.mark.parametrize('field,value', [('source', 'desktop'), ('client_device_id', 'other'), ('is_locked', True)])
+def test_empty_explicit_target_rejects_provenance_mismatch(field, value):
+    store = StrictFirestore()
+    target = live_stub('live', 1000)
+    target[field] = value
+    store.rows[('users', 'u', 'conversations', 'live')] = target
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentConflict, match='provenance mismatch'):
+        intake(store, capture(0), target_id='live')
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('redirect', [False, True])
+def test_tombstoned_explicit_target_falls_back_without_overriding_temporal_assignment(redirect):
+    store = StrictFirestore()
+    target = dict(live_stub('live', 1000), deleted=True)
+    if redirect:
+        target['sync_merged_into'] = 'other-live'
+        store.rows[('users', 'u', 'conversations', 'other-live')] = live_stub('other-live', 1000)
+    store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(target)
+    row, created, _ = intake(store, capture(0), target_id='live')
+    assert created and row['id'] == 'chunk-000' and not row['sync_live_target']
+    assert store.rows[('users', 'u', 'conversations', 'live')] == target
 
 
 @pytest.mark.parametrize('target_id', [None, 'new-reconnect'])
