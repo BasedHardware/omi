@@ -122,10 +122,20 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return True
 
 
+def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
+    """Admit a visible deterministic sync row and atomically append later chunks.
+
+    Enrichment follows persistence; uncertain filler remains visible for review.
+    Existing lifecycle fields are preserved by the transactional append.
+    """
+    _require_status(incoming, ConversationStatus.completed)
+    return conversations_db.assign_sync_conversation(uid, incoming, candidate_id=candidate_id, target_id=target_id)
+
+
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
-    ``False`` means its owner deleted it.  Callers must stop before emitting
+    ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
     derived side effects such as webhooks or integration fanout.
     """
     _require_status(

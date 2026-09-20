@@ -1381,6 +1381,55 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # New conversation-assignment seam: pipeline imports the pure
+        # deterministic minimum and the lifecycle intake. The former is
+        # dependency-free production code (exec the real module); the latter
+        # drags in the real database stack, so it stays a stub whose
+        # ingest_sync_conversation attribute auto-mocks per call.
+        import importlib.util as _il
+
+        from testing.import_isolation import AutoMockModule
+
+        _lifecycle_name = 'utils.conversations.lifecycle'
+        saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
+        sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
+
+        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
+        # models.structured.Structured at module scope; both would otherwise be
+        # MagicMocks here. Register a minimal real pydantic Structured and the real
+        # enum member BEFORE the exec — the module is pure, so its title logic
+        # then runs for real.
+        from pydantic import BaseModel as _BaseModel
+
+        class _Structured(_BaseModel):
+            title: str = ''
+            overview: str = ''
+            category: str = 'other'
+            sections: list = []
+            action_items: list = []
+            events: list = []
+
+        class _CategoryEnum(str, __import__('enum').Enum):
+            other = 'other'
+
+        _enums_mod = sys.modules['models.conversation_enums']
+        _enums_mod.CategoryEnum = _CategoryEnum
+        _structured_mod = MagicMock()
+        _structured_mod.Structured = _Structured
+        _structured_name = 'models.structured'
+        saved_modules[_structured_name] = sys.modules.get(_structured_name)
+        sys.modules[_structured_name] = _structured_mod
+
+        _dmin_name = 'utils.conversations.deterministic_minimum'
+        _dmin_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'deterministic_minimum.py'
+        )
+        saved_modules[_dmin_name] = sys.modules.get(_dmin_name)
+        _dmin_spec = _il.spec_from_file_location(_dmin_name, _dmin_path)
+        _dmin_mod = _il.module_from_spec(_dmin_spec)
+        sys.modules[_dmin_name] = _dmin_mod
+        _dmin_spec.loader.exec_module(_dmin_mod)
+
         class _Geolocation:
             def model_dump(self):
                 return {}
@@ -1606,6 +1655,9 @@ class TestAsyncCoordinatorBehavioral:
             'new_memories': set(),
         }
         assert checkpointed_fences == [{'fenced': {'replaced-conversation'}, 'updated': {'current-conversation'}}]
+        # `_merged` reprocessing runs for every conversation that gained segments;
+        # created rows enrich through the same update path (the intake already
+        # persisted the deterministic minimum, so the processor must not re-create).
         assert pipeline._reprocess_conversation_after_update.call_args_list == [
             unittest.mock.call('uid', 'replaced-conversation', 'en'),
             unittest.mock.call('uid', 'current-conversation', 'fr'),
@@ -3130,6 +3182,55 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # New conversation-assignment seam: pipeline imports the pure
+        # deterministic minimum and the lifecycle intake. The former is
+        # dependency-free production code (exec the real module); the latter
+        # drags in the real database stack, so it stays a stub whose
+        # ingest_sync_conversation attribute auto-mocks per call.
+        import importlib.util as _il
+
+        from testing.import_isolation import AutoMockModule
+
+        _lifecycle_name = 'utils.conversations.lifecycle'
+        saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
+        sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
+
+        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
+        # models.structured.Structured at module scope; both would otherwise be
+        # MagicMocks here. Register a minimal real pydantic Structured and the real
+        # enum member BEFORE the exec — the module is pure, so its title logic
+        # then runs for real.
+        from pydantic import BaseModel as _BaseModel
+
+        class _Structured(_BaseModel):
+            title: str = ''
+            overview: str = ''
+            category: str = 'other'
+            sections: list = []
+            action_items: list = []
+            events: list = []
+
+        class _CategoryEnum(str, __import__('enum').Enum):
+            other = 'other'
+
+        _enums_mod = sys.modules['models.conversation_enums']
+        _enums_mod.CategoryEnum = _CategoryEnum
+        _structured_mod = MagicMock()
+        _structured_mod.Structured = _Structured
+        _structured_name = 'models.structured'
+        saved_modules[_structured_name] = sys.modules.get(_structured_name)
+        sys.modules[_structured_name] = _structured_mod
+
+        _dmin_name = 'utils.conversations.deterministic_minimum'
+        _dmin_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'deterministic_minimum.py'
+        )
+        saved_modules[_dmin_name] = sys.modules.get(_dmin_name)
+        _dmin_spec = _il.spec_from_file_location(_dmin_name, _dmin_path)
+        _dmin_mod = _il.module_from_spec(_dmin_spec)
+        sys.modules[_dmin_name] = _dmin_mod
+        _dmin_spec.loader.exec_module(_dmin_mod)
 
         class _Geolocation:
             def model_dump(self):

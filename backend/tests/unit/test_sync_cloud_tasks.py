@@ -1049,6 +1049,18 @@ def _load_sync_router_for_fast_path():
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
 
+    # utils.conversations is a namespace package on disk (no __init__.py), so the
+    # sync pipeline's submodule imports resolve only through a real __path__.
+    # Replace the heavy_deps MagicMock parent with a real-path package and keep
+    # the existing submodule stubs on top of it — otherwise a new module-level
+    # import like utils.conversations.deterministic_minimum fails with
+    # "'utils.conversations' is not a package" during the file-path re-exec below.
+    conv_pkg = types.ModuleType('utils.conversations')
+    conv_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'conversations')]
+    saved_modules['utils.conversations'] = sys.modules.get('utils.conversations')
+    sys.modules['utils.conversations'] = conv_pkg
+    sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
+
     sys.modules['utils'].__path__ = []
     # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
     # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
