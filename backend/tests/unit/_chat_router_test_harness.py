@@ -103,6 +103,13 @@ def wire_common_stubs(install) -> SimpleNamespace:
     # the duplicate descriptor registration, so stub it like its siblings.
     feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
     feedback_utils.record_chat_message_feedback = MagicMock()
+    # product_metrics reaches Firestore through its account-cutover/journeys
+    # import chain. Importing it inside a process that has stubbed
+    # google.cloud.firestore_v1 makes protobuf reject the duplicate descriptor
+    # registration (document.proto), so stub it like utils.feedback above.
+    product_metrics = install('utils.product_metrics', ModuleType('utils.product_metrics'))
+    product_metrics.extract_app_build = MagicMock(return_value='unknown')
+    product_metrics.record_product_event = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
