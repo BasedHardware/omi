@@ -91,6 +91,7 @@ from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     MAX_SESSION_DURATION_S,
@@ -413,6 +414,12 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event(
+            'chat_message_sent',
+            request=request,
+            uid=uid,
+            outcome='quota_exceeded',
+        )
         return StreamingResponse(_quota_exceeded_stream(), media_type="text/event-stream")
 
     compat_app_id = app_id or plugin_id
@@ -473,6 +480,7 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event('chat_message_sent', request=request, uid=uid, outcome='error')
         return StreamingResponse(_quota_accounting_unavailable_stream(), media_type="text/event-stream")
 
     if chat_session:
@@ -586,6 +594,7 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
+        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -726,6 +735,7 @@ def send_message(
         failure_class='provider_error',
         missing_success_class='empty_answer',
     )
+    record_product_event('chat_message_sent', request=request, uid=uid, outcome='ok')
     return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 

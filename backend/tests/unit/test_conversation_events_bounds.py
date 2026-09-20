@@ -159,6 +159,12 @@ def router():
         "database.mem_db": _pkg("database.mem_db"),
         "database.firestore_read_metrics": _pkg("database.firestore_read_metrics"),
         "utils.apps": _pkg("utils.apps"),
+        # routers.conversations also imports utils.product_metrics (#15099). Its
+        # real import chain reaches utils.account_cutover -> database.read_boundary,
+        # which cannot resolve under the faked "database" parent; the fake keeps
+        # the suite hermetic and its teardown from evicting real firestore modules
+        # that later files in the same shard process re-import (duplicate protos).
+        "utils.product_metrics": _pkg("utils.product_metrics"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         "services.conversation_frame_evidence": _pkg("services.conversation_frame_evidence"),

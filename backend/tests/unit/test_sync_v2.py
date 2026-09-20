@@ -1315,6 +1315,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_sync_lanes = sys.modules.get('utils.sync.lanes')
+        from utils.sync import lanes as actual_sync_lanes
+
         heavy_deps = [
             'redis',
             'database',
@@ -1362,6 +1365,12 @@ class TestAsyncCoordinatorBehavioral:
             'utils.observability.fallback',
             'utils.observability.transcription',
             'utils.metrics',
+            'utils.product_metrics',
+            'utils.journey_metrics_contract',
+            'utils.sync.rate_limit',
+            'utils.sync.lanes',
+            'utils.sync.provenance',
+            'utils.sync.capture_manifest',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.multipart',
@@ -1451,6 +1460,10 @@ class TestAsyncCoordinatorBehavioral:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.sync.lanes'] = prior_sync_lanes
+        # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
+        # MagicMock lane fails response validation. lanes.py is stdlib-only.
+        sys.modules['utils.sync.lanes'] = actual_sync_lanes
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -3117,6 +3130,9 @@ class TestV2EndpointExecution:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_sync_lanes = sys.modules.get('utils.sync.lanes')
+        from utils.sync import lanes as actual_sync_lanes
+
         heavy_deps = [
             'redis',
             'database',
@@ -3164,6 +3180,12 @@ class TestV2EndpointExecution:
             'utils.observability.fallback',
             'utils.observability.transcription',
             'utils.metrics',
+            'utils.product_metrics',
+            'utils.journey_metrics_contract',
+            'utils.sync.rate_limit',
+            'utils.sync.lanes',
+            'utils.sync.provenance',
+            'utils.sync.capture_manifest',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.multipart',
@@ -3251,6 +3273,10 @@ class TestV2EndpointExecution:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.sync.lanes'] = prior_sync_lanes
+        # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
+        # MagicMock lane fails response validation. lanes.py is stdlib-only.
+        sys.modules['utils.sync.lanes'] = actual_sync_lanes
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

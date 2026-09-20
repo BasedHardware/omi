@@ -649,6 +649,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         extra_updates=None,
         require_cloud_tasks=True,
         client_kind='mobile_ios',
+        app_build='unknown',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()
