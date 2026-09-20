@@ -52,7 +52,7 @@ from utils.observability.transcription import LiveSTTAttempt, record_live_stt_au
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
-from utils.stt.live_rollout import managed_chain_enabled
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -374,7 +374,7 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
-            **({'window_uid': request.uid} if managed_chain_enabled(self) else {}),  # legacy call shape while dark
+            **window_selection_kwargs(self, request.uid),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:

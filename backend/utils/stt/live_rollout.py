@@ -3,6 +3,7 @@
 
 import hashlib
 import os
+from typing import TypedDict
 
 from config.stt_provider_policy import STTServingSurface, normalized_stt_language, parakeet_supports_language
 
@@ -33,3 +34,12 @@ def managed_chain_enabled(host: object) -> bool:
         and not getattr(host, 'use_custom_stt', False)
         and not get_byok_keys()
     )
+
+
+class WindowSelection(TypedDict, total=False):
+    window_uid: str
+
+
+def window_selection_kwargs(host: object, uid: str) -> WindowSelection:
+    """Selector kwargs for managed sessions; empty keeps the legacy call shape while dark."""
+    return {'window_uid': uid} if managed_chain_enabled(host) else {}

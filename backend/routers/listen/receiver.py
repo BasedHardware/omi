@@ -51,7 +51,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_session,
 )
 from config.stt_provider_policy import provider_for_service
-from utils.stt.live_rollout import managed_chain_enabled
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
@@ -580,7 +580,7 @@ class ListenReceiver:
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
             exclude=frozenset(self._stt_failed_providers),
-            **({'window_uid': self.host.request.uid} if managed_chain_enabled(self.host) else {}),
+            **window_selection_kwargs(self.host, self.host.request.uid),
         )
         if service is None:
             return False
