@@ -35,6 +35,28 @@ void main() {
     SharedPreferencesUtil().cachedPeople = [alice, bob];
   });
 
+  test('accepted rename preserves verified sample metadata in provider and cache', () async {
+    final person = Person(
+        id: 'voice',
+        name: 'Old',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+        speechSamples: ['sample.wav'],
+        speechSampleTranscripts: ['Synthetic sample'],
+        speechSamplesVersion: 3,
+        colorIdx: 2);
+    SharedPreferencesUtil().cachedPeople = [person];
+    final provider = PeopleProvider(renamePerson: (id, name) async => true);
+    await provider.updatePersonProvider(person, 'New');
+    for (final saved in [provider.people.single, SharedPreferencesUtil().cachedPeople.single]) {
+      expect(saved.name, 'New');
+      expect(saved.speechSamples, ['sample.wav']);
+      expect(saved.speechSampleTranscripts, ['Synthetic sample']);
+      expect(saved.speechSamplesVersion, 3);
+      expect(saved.colorIdx, 2);
+    }
+  });
+
   test('a rename the server did not accept keeps the old name', () async {
     final provider = PeopleProvider();
 

@@ -7,6 +7,9 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/logger.dart';
 
 class PeopleProvider extends BaseProvider {
+  PeopleProvider({Future<bool> Function(String, String)? renamePerson})
+      : _renamePerson = renamePerson ?? updatePersonName;
+  final Future<bool> Function(String, String) _renamePerson;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   Map<String, List<String>> samplesUrl = {};
 
@@ -100,7 +103,7 @@ class PeopleProvider extends BaseProvider {
     loading = true;
     notifyListeners();
 
-    final updated = await updatePersonName(person.id, name);
+    final updated = await _renamePerson(person.id, name);
     final index = people.indexWhere((p) => p.id == person.id);
     if (updated && index != -1) {
       people[index] = Person(
@@ -109,6 +112,9 @@ class PeopleProvider extends BaseProvider {
         createdAt: person.createdAt,
         updatedAt: DateTime.now(),
         speechSamples: person.speechSamples,
+        speechSampleTranscripts: person.speechSampleTranscripts,
+        speechSamplesVersion: person.speechSamplesVersion,
+        colorIdx: person.colorIdx,
       );
       people.sort((a, b) => a.name.compareTo(b.name));
       SharedPreferencesUtil().cachedPeople = people;
