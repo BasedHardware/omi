@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -209,14 +210,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return [];
+  if (response == null) return null;
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
@@ -229,12 +230,16 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
     people.sort((a, b) => a.name.compareTo(b.name));
     return people;
   }
-  return [];
+  return null;
 }
+
+@visibleForTesting
+String personNamePath(String personId, String newName) =>
+    'v1/users/people/$personId/name?value=${Uri.encodeQueryComponent(newName)}';
 
 Future<bool> updatePersonName(String personId, String newName) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people/$personId/name?value=$newName',
+    url: '${Env.apiBaseUrl}${personNamePath(personId, newName)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -270,9 +275,18 @@ Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
 
 /*Analytics*/
 
+@visibleForTesting
+String conversationSummaryRatingPath(String conversationId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value';
+  if (reason != null && reason.isNotEmpty) {
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
+  }
+  return path;
+}
+
 Future<bool> setConversationSummaryRating(String conversationId, int value, {String? reason}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value&reason=$reason',
+    url: '${Env.apiBaseUrl}${conversationSummaryRatingPath(conversationId, value, reason: reason)}',
     headers: {},
     method: 'POST',
     body: '',
@@ -284,16 +298,22 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   return data.status == 'ok';
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
-  // Build URL with required params
-  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
-
-  // Add reason param if provided (for thumbs down feedback)
+@visibleForTesting
+String chatMessageRatingPath(String messageId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/chat_message?message_id=$messageId&value=$value';
   if (reason != null && reason.isNotEmpty) {
-    url += '&reason=$reason';
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
   }
+  return path;
+}
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${chatMessageRatingPath(messageId, value, reason: reason)}',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
   if (response.statusCode != 200) return false;

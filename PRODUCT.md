@@ -86,3 +86,13 @@ describes the capture, memory consent, and quality boundaries.
 When declining a PR for direction or taste, either cite an existing invariant
 by ID or open a `proposed` invariant in `product/invariants/` the same
 week. Tribal “no” becomes written law.
+
+## Proposed offline fragment policy
+
+Offline chunks from a temporally continuous capture should form one conversation.
+Speaker enrollment and own-voice attribution are not prerequisites. Short,
+filler-only fragments remain visible with their original transcript and a minimal
+title, without automatic summarization; later meaningful content promotes the
+merged recording. Uncertain content stays kept. Long narration is not reliable
+evidence of irrelevance, so it remains one retained recording rather than being
+silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.

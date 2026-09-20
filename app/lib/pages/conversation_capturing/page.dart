@@ -40,7 +40,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
-  bool _isMuted = false;
+  bool _mutePending = false;
 
   @override
   void initState() {
@@ -57,38 +57,29 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_isMuted) {
-      // Unmute - resume recording
+    if (_mutePending) return;
+    setState(() => _mutePending = true);
+    try {
       HapticFeedback.mediumImpact();
-      setState(() {
-        _isMuted = false;
-      });
-
-      if (provider.havingRecordingDevice) {
-        // Device recording (Omi device)
-        await provider.resumeDeviceRecording();
-      } else {
-        // Phone mic
-        await provider.streamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStarted();
-      }
-    } else {
-      // Mute - pause recording with interesting haptic
-      HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 80));
-      HapticFeedback.lightImpact();
-      setState(() {
-        _isMuted = true;
-      });
-
-      if (provider.havingRecordingDevice) {
-        // Device recording (Omi device)
+      if (provider.isPaused) {
+        if (provider.havingRecordingDevice) {
+          await provider.resumeDeviceRecording();
+        } else {
+          await provider.streamRecording();
+          PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        }
+      } else if (provider.havingRecordingDevice) {
         await provider.pauseDeviceRecording();
       } else {
-        // Phone mic
         await provider.stopStreamRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.somethingWentWrong)));
+      }
+    } finally {
+      if (mounted) setState(() => _mutePending = false);
     }
   }
 
@@ -182,7 +173,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        final effectivelyMuted = _isMuted || provider.isCallActive;
+        final effectivelyMuted = provider.isPaused || provider.isCallActive;
         final connectivity = context.watch<ConnectivityProvider>();
         final usage = context.watch<UsageProvider>();
         final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);

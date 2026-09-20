@@ -1071,8 +1071,10 @@ class HistoricalMemoryAdapter:
         """
         failures: List[str] = []
         if delete_vector:
-            if required and getattr(vector_db, "index", None) is None:
-                raise HTTPException(status_code=503, detail="Historical memory privacy cleanup unavailable")
+            # The legacy vector helper no-ops when no vector store is
+            # configured; a configured store that fails still records a
+            # failure below. Deletion must stay available on deployments
+            # that never had a vector store (#10446 regression class).
             try:
                 delete_memory_vector(uid, memory_id)
             except Exception:

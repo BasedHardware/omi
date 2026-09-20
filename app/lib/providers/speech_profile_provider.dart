@@ -463,7 +463,7 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
 
   bool _isTooShortUploadError(Object error) {
-    final text = error.toString().toLowerCase();
+    final text = (error is SpeechProfileUploadException ? error.detail ?? '' : error.toString()).toLowerCase();
     return text.contains('audio duration is invalid') || text.contains('audio is empty');
   }
 

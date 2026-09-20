@@ -987,18 +987,23 @@ async def _async_result(value):
 @pytest.mark.anyio
 async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     """#7690: a custom-STT session's speech reaches the fair-use meter under
-    the custom_stt lane — and nothing else: no transcription usage recording,
-    no realtime-lane write that live enforcement would read."""
+    the custom_stt lane and speech_seconds accounting — never transcription
+    billing, and never a realtime-lane write that live enforcement would read."""
     import routers.listen.runtime as runtime_module
 
     recorded = []
+    usage_calls = []
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
     monkeypatch.setattr(
         runtime_module, 'record_speech_ms', lambda uid, ms, source='realtime': recorded.append((uid, ms, source))
     )
-    monkeypatch.setattr(
-        runtime_module, 'record_usage', lambda *a, **k: (_ for _ in ()).throw(AssertionError('billed custom STT'))
-    )
+
+    def _record_usage(uid, **kwargs):
+        if kwargs.get('transcription_seconds', 0):
+            raise AssertionError('billed custom STT')
+        usage_calls.append((uid, kwargs))
+
+    monkeypatch.setattr(runtime_module, 'record_usage', _record_usage)
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='custom-stt-user')
@@ -1015,11 +1020,13 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
     assert await runtime._flush_usage(final=False) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
 
     # No speech delta → no meter write either.
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
 
 
 @pytest.mark.anyio

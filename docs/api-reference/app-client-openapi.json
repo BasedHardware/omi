@@ -7476,6 +7476,32 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
+          },
           "transcript_segments": {
             "default": [],
             "items": {
@@ -8578,6 +8604,32 @@
             },
             "title": "Suggested Summarization Apps",
             "type": "array"
+          },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
           },
           "transcript_segments": {
             "default": [],

@@ -226,9 +226,9 @@ Future<Goal?> getCurrentGoal() async {
 }
 
 /// Get all active goals (up to 4)
-Future<List<Goal>> getAllGoals() async {
+Future<List<Goal>?> getAllGoals() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/all', headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return null;
   Logger.debug('getAllGoals response: ${response.body}');
   if (response.statusCode == 200) {
     final goals = <Goal>[];
@@ -245,7 +245,7 @@ Future<List<Goal>> getAllGoals() async {
     }
     return goals;
   }
-  return [];
+  return null;
 }
 
 /// Create a new goal
@@ -297,7 +297,9 @@ Future<Goal?> createIntroductionGoal({
     timeout: const Duration(seconds: 30),
   );
   if (response?.statusCode != 200) return null;
-  return Goal.fromJson(json.decode(response!.body) as Map<String, dynamic>);
+  return Goal.fromGenerated(
+    wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response!.body) as Map<String, dynamic>)),
+  );
 }
 
 /// Update an existing goal

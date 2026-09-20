@@ -23,7 +23,6 @@ void main() {
 
   for (final queued in [false, true]) {
     contractTest('C7 registered emission payload excludes user content (pre-init queue: $queued)', () async {
-      pendingContract('C7');
       final adapter = RecordingAdapter();
       AnalyticsManager.configure(adapter);
       if (!queued) await AnalyticsManager.init();

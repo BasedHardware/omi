@@ -81,8 +81,10 @@ class TestAcquire:
 
     def test_duplicate_name_is_refused_with_owner_hint(self, tmp_path: Path, env: dict) -> None:
         ms.acquire(REPO_ROOT, env, name="dup", listeners=_no_listeners)
-        with pytest.raises(ms.SessionError, match="already exists"):
+        with pytest.raises(ms.SessionError, match=rf"session oms-dup held by live pid {os.getpid()}") as err:
             ms.acquire(REPO_ROOT, env, name="dup", listeners=_no_listeners)
+        assert "do not release a live foreign lease" in str(err.value)
+        assert "method not available" not in str(err.value)
 
     def test_failed_acquire_leaves_no_half_state(self, tmp_path: Path, env: dict) -> None:
         root = ms.sessions_root(REPO_ROOT, env)
@@ -299,6 +301,17 @@ class TestEvidence:
         # Round-trips through the strict validator on read-back.
         path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
         assert se.read_evidence(path)["session_id"] == lease["session_id"]
+
+    def test_ready_binds_an_ios_app_bundle_directory(self, tmp_path: Path, env: dict) -> None:
+        lease = ms.acquire(REPO_ROOT, env, name="iosapp", platform_name="ios-simulator", listeners=_no_listeners)
+        bundle = tmp_path / "Runner.app"
+        bundle.mkdir()
+        (bundle / "Info.plist").write_bytes(b"ios-bundle")
+        document = ms.evidence(REPO_ROOT, lease["session_id"], env, state="ready", artifact_path=bundle)
+        assert document["artifact"]["kind"] == "ios-app-bundle"
+        assert document["artifact"]["sha256"] == se.file_sha256(bundle)
+        path = ms.session_dir(REPO_ROOT, lease["session_id"], env) / "evidence.json"
+        assert se.validate_evidence(se.read_evidence(path)) == []
 
     def test_stale_source_cannot_report_ready(self, tmp_path: Path, env: dict, monkeypatch: pytest.MonkeyPatch) -> None:
         lease = ms.acquire(REPO_ROOT, env, name="stale", listeners=_no_listeners)

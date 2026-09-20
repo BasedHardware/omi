@@ -79,6 +79,48 @@ class ParakeetConnectionError(RuntimeError):
         super().__init__(detail or reason)
 
 
+class DeepgramConnectionRejection(RuntimeError):
+    """Deepgram refused the WebSocket upgrade with a typed HTTP answer.
+
+    ``status_code`` carries the refusal status (401 invalid key, 402
+    billing/quota, 403 forbidden). The SDK's ``websockets`` transport raises
+    ``websockets.exceptions.InvalidStatus`` for these; this wrapper keeps the
+    answer typed instead of letting it collapse into a generic 'could not open
+    socket' string or a ``start() returned False`` retry (2026-09-18 prod: a
+    hosted key answered HTTP 402 for 12+h and every session logged the refusal
+    three times under four signatures, none naming 402).
+    """
+
+    def __init__(self, detail: str, status_code: Optional[int] = None) -> None:
+        self.status_code = status_code
+        super().__init__(detail)
+
+
+# Account-state answers: no retry of the same connect can change them. 429 is
+# deliberately absent — a rate limit can clear between attempts.
+_TERMINAL_REJECTION_STATUSES: Final[frozenset] = frozenset({401, 402, 403})
+
+
+def deepgram_rejection_status(error: BaseException) -> Optional[int]:
+    """Return the HTTP status of a terminal Deepgram WebSocket-upgrade refusal.
+
+    The Deepgram SDK (4.8.1) raises ``websockets.exceptions.InvalidStatus``
+    (or the legacy ``InvalidStatusCode``) from ``start`` when the endpoint
+    refuses the upgrade. Only account-state rejections are terminal:
+    401/402/403 answer deterministically for every attempt, so retrying the
+    same connect cannot succeed and only delays failover. Timeouts and
+    transient statuses (429, 5xx) stay unclassified — those same-call retries
+    have historically recovered.
+    """
+
+    status = getattr(getattr(error, 'response', None), 'status_code', None)
+    if not isinstance(status, int):
+        status = getattr(error, 'status_code', None)
+    if isinstance(status, int) and status in _TERMINAL_REJECTION_STATUSES:
+        return status
+    return None
+
+
 _parakeet_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
@@ -265,6 +307,14 @@ async def connect_stt_socket_with_fallback(
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
+        except DeepgramConnectionRejection:
+            # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
+            # its class for the fallback legs and the circuit: mapping it to
+            # the generic 'provider_5xx' made the true cause unrecoverable
+            # from stt_selection telemetry (the 2026-09-18 HTTP 402 incident
+            # was only diagnosable from the raw SDK error lines).
+            reason = 'auth'
+            circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
             if reason in EXPECTED_REJECTIONS:
@@ -694,8 +744,18 @@ def _deepgram_options(endpoint: str) -> DeepgramClientOptions:
     """Build options per client, pinned to an endpoint, never the SDK default.
 
     DeepgramClient.__init__ writes its key into what it is handed, so a shared
-    object strands the managed client on whichever BYOK key came last."""
-    options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+    object strands the managed client on whichever BYOK key came last.
+
+    The option value MUST be the boolean ``True``: the SDK checks it two ways
+    on the same connect (deepgram-sdk 4.8.1) — the shared websocket base class
+    tests truthiness (``options.get(..., False)``) and raises, but the
+    ``ListenWebSocketClient.start`` wrapper that actually serves sessions
+    re-tests with an identity comparison (``... is True``) and silently
+    swallows the exception back into ``start() is False`` when handed the
+    string ``"true"``. That swallow is what made a deterministic HTTP 402
+    account refusal look like a retryable 'start returned False' (three
+    identical attempts per session, ~4.2k log errors per 30m, 2026-09-18)."""
+    options = DeepgramClientOptions(options={"termination_exception_connect": True})
     options.url = endpoint
     return options
 
@@ -869,6 +929,17 @@ async def connect_to_deepgram_with_backoff(
                 logger.error('Deepgram start() returned False on all %d attempts — giving up', retries)
                 return None
             logger.warning('Deepgram start() returned False (attempt %d/%d), retrying...', attempt + 1, retries)
+        except DeepgramConnectionRejection as error:
+            # A typed provider answer that no same-call retry can change
+            # (HTTP 401/402/403 auth or billing refusal): retrying inside
+            # this call only multiplies the log volume and delays failover
+            # by the full backoff ladder. Surface the terminal rejection
+            # immediately so the caller's provider chain moves on (2026-09-18
+            # prod: the account's hosted key answered HTTP 402 for 12+h and
+            # this loop tripled every rejection into both SDK error lines
+            # plus a start()-returned-False line per session).
+            logger.error('Deepgram connect rejected terminally after %d attempt(s): %s', attempt + 1, error)
+            raise
         except Exception as error:
             logger.error(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -976,6 +1047,13 @@ def connect_to_deepgram(
             return None
         return dg_connection
     except websockets.exceptions.WebSocketException as e:
+        status = deepgram_rejection_status(e)
+        if status is not None:
+            # The endpoint answered the upgrade with a deterministic
+            # account-state refusal (401 invalid key, 402 billing, 403
+            # forbidden). Keep it typed so the retry loop can stop wasting
+            # its budget and the fallback chain can name the reason.
+            raise DeepgramConnectionRejection(f'Could not open socket: HTTP {status} {e}', status_code=status) from e
         raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')

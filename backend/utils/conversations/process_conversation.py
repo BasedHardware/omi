@@ -65,15 +65,8 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-from utils.conversations.duplicate_capture import (
-    CANDIDATE_PAGE_LIMIT,
-    DuplicateCaptureMatch,
-    MIN_CANDIDATE_WORDS,
-    capture_record,
-    find_duplicate_capture,
-    mark_duplicate_capture,
-)
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -98,7 +91,11 @@ from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.subscription import (
+    is_trial_paywalled,
+    should_defer_desktop_processing,
+    should_skip_omi_paid_postprocessing,
+)
 from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
 from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
@@ -383,48 +380,6 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
-def _detect_duplicate_capture(
-    uid: str, conversation: Union[Conversation, CreateConversation]
-) -> Optional[DuplicateCaptureMatch]:
-    """Another capture client's conversation that already carries this one (#3244).
-
-    Fails open: a candidate-read failure keeps this conversation on the ordinary
-    path, the pre-fix outcome of two visible conversations, never a lost one.
-    """
-    candidate = capture_record(conversation)
-    if candidate is None or len(candidate.words) < MIN_CANDIDATE_WORDS:
-        return None
-    try:
-        rows = [
-            row
-            for status in (ConversationStatus.completed.value, ConversationStatus.processing.value)
-            for row in conversations_db.get_conversations_finished_after(
-                uid, status=status, finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
-            )
-        ]
-    except Exception:
-        record_fallback(
-            component='conversation_finalization',
-            from_mode='duplicate_capture_check',
-            to_mode='keep_both_captures',
-            reason='other',
-            outcome='degraded',
-            log=logger,
-        )
-        return None
-    match = find_duplicate_capture(candidate, [record for record in map(capture_record, rows) if record is not None])
-    if match is not None:
-        logger.info(
-            'duplicate capture folded uid=%s conversation=%s primary=%s coverage=%.2f containment=%.2f',
-            uid,
-            getattr(conversation, 'id', None),
-            match.primary_conversation_id,
-            match.window_coverage,
-            match.transcript_containment,
-        )
-    return match
-
-
 def _get_structured(
     uid: str,
     language_code: str,
@@ -602,17 +557,6 @@ def _get_structured(
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
-
-        # A second capture client already carrying this speech (#3244: Omi device
-        # on the phone + macOS microphone in the same room) is folded away here,
-        # before any LLM spend. It takes the same discard exit as a scrap, so the
-        # transcript and audio stay on the row and the primary is recorded in
-        # external_data. Deliberately ahead of the calendar override: the primary
-        # already holds that meeting.
-        duplicate_capture = _detect_duplicate_capture(uid, main_conv)
-        if duplicate_capture is not None:
-            mark_duplicate_capture(main_conv, duplicate_capture)
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Transcript span, not the wall window: `started_at` is the streaming-session
         # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
@@ -2575,12 +2519,17 @@ def process_conversation(
     def report_persistence(
         current: bool,
         *,
+        completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(derived_effects)
+        # Sync/REST callers finalize here; leased jobs defer this metadata work
+        # to finalizer.py after the fanout fence, including completed replays.
+        if current and completed is not None and not defer_derived_effects:
+            link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
     # Trial paywall: skip ALL post-processing (summaries, memories, action
@@ -2666,6 +2615,7 @@ def process_conversation(
             )
             report_persistence(
                 persisted,
+                completed=stored,
                 derived_effects=(
                     DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
                     if persisted
@@ -2721,6 +2671,7 @@ def process_conversation(
             )
             report_persistence(
                 persisted,
+                completed=stored,
                 derived_effects=(
                     DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
                     if persisted
@@ -2728,6 +2679,39 @@ def process_conversation(
                 ),
             )
             return stored
+
+    # Custom-STT skips managed-STT credits at listen connect. The LLM work that
+    # follows (structure / summary / memory) still consults the processing
+    # budget so those sessions cannot run uncapped on Omi's bill (#7690).
+    # Paid unlimited plans and LLM BYOK stay allowed — this is not the
+    # #10962 blanket skip that removed summaries for every custom-STT user.
+    #
+    # After the unpaid desktop path (#14513): store_projection /
+    # deterministic_minimum already returned above. Consulting this gate
+    # earlier would complete a desktop custom-STT session without the
+    # on-device summary it would otherwise persist. Regular conversations
+    # never consult this gate — they are already bounded by STT credits at
+    # listen connect. Keep that contract at the call site so a stubbed/truthy
+    # helper cannot abort memory/task/goal fan-out.
+    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
+    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
+    if custom_stt and should_skip_omi_paid_postprocessing(
+        uid,
+        uses_custom_stt=custom_stt,
+        source=source_token if isinstance(source_token, str) else None,
+    ):
+        logger.info(
+            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
+        if isinstance(conversation, Conversation):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        report_persistence(False)
+        return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
 
@@ -2764,7 +2748,7 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(persisted)
+    report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id

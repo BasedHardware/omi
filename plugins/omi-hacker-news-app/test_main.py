@@ -35,6 +35,7 @@ def load_app():
     httpx.HTTPError = HTTPError
     fastapi = ModuleType("fastapi")
     fastapi.FastAPI = FastAPI
+    fastapi.Body = lambda *args, **kwargs: None
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = str
     pydantic = ModuleType("pydantic")
@@ -142,6 +143,76 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
                 response = await app.get_discussion({"item_id": bad_id})
                 self.assertIsNotNone(response.error)
 
+    async def test_deleted_comments_do_not_inflate_the_count(self):
+        # Algolia returns deleted/dead children with a null text. The handler
+        # sliced children before dropping those, so the header counted
+        # comments it never printed.
+        item = {
+            "title": "Story",
+            "author": "alice",
+            "children": [
+                {"author": "gone", "text": None},
+                {"author": "bob", "text": "<p>real comment</p>"},
+                {"author": "alsogone", "text": "   "},
+            ],
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1, "comment_limit": 10})
+
+        self.assertIsNone(response.error)
+        self.assertIn("Top 1 comments:", response.result)
+        self.assertIn("1. bob: real comment", response.result)
+        self.assertNotIn("gone", response.result)
+
+    async def test_comment_limit_counts_printable_comments(self):
+        # A limit of 2 must yield 2 printable comments, not 2 raw children of
+        # which some are dropped.
+        children = [{"author": "gone", "text": None} for _ in range(5)]
+        children += [{"author": f"u{i}", "text": f"comment {i}"} for i in range(3)]
+        item = {"title": "Story", "author": "alice", "children": children}
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1, "comment_limit": 2})
+
+        self.assertIsNone(response.error)
+        self.assertIn("Top 2 comments:", response.result)
+        self.assertIn("1. u0: comment 0", response.result)
+        self.assertIn("2. u1: comment 1", response.result)
+        self.assertNotIn("u2", response.result)
+
+    async def test_all_deleted_comments_reports_none_rather_than_an_empty_list(self):
+        item = {
+            "title": "Story",
+            "author": "alice",
+            "children": [{"author": "gone", "text": None}, {"author": "x", "text": ""}],
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=item)):
+            response = await app.get_discussion({"item_id": 1})
+
+        self.assertIsNone(response.error)
+        self.assertIn("No top-level comments returned.", response.result)
+        self.assertNotIn("comments:", response.result.lower().split("no top-level")[0])
+
+    async def test_null_children_is_not_reported_as_a_bad_item_id(self):
+        # children arrives as an explicit null for items with no replies. The
+        # resulting TypeError was caught by the item_id handler and surfaced
+        # as "item_id must be an integer", which is misleading.
+        for payload in ({"title": "S", "author": "a", "children": None},
+                        {"title": "S", "author": "a"},
+                        {"title": "S", "author": "a", "children": "oops"}):
+            with self.subTest(children=payload.get("children")):
+                with patch.object(app, "_request_json", AsyncMock(return_value=payload)):
+                    response = await app.get_discussion({"item_id": 1})
+                self.assertIsNone(response.error)
+                self.assertIn("No top-level comments returned.", response.result)
+
+    async def test_non_dict_item_payload_does_not_crash(self):
+        for bad in ([], "nope", None, 5):
+            with self.subTest(item=bad):
+                with patch.object(app, "_request_json", AsyncMock(return_value=bad)):
+                    response = await app.get_discussion({"item_id": 1})
+                self.assertIsNotNone(response)
+                self.assertNotIn("must be an integer", response.error or "")
+
     async def test_handles_non_dict_payload_gracefully(self):
         with patch.object(app, "_request_json", AsyncMock(return_value={"hits": []})):
             response = await app.get_front_page(None)
@@ -152,6 +223,42 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         response_discussion = await app.get_discussion(None)
         self.assertEqual(response_discussion.error, "Missing required field: item_id")
+
+
+class NonStringQueryTests(unittest.IsolatedAsyncioTestCase):
+    """A string-typed tool argument can still arrive as any JSON type."""
+
+    async def test_non_string_query_returns_a_tool_error(self):
+        # (payload.get("query") or "").strip() ran outside the handler's try
+        # block, so a non-string query raised AttributeError and surfaced as
+        # HTTP 500 instead of the documented tool error.
+        for value in (2026, 3.5, ["ai"], {"q": "ai"}, True):
+            with self.subTest(query=value):
+                response = await app.search_stories({"query": value})
+                self.assertEqual(response.error, "Missing required field: query")
+
+    async def test_non_string_query_never_reaches_the_network(self):
+        request = AsyncMock(return_value={"hits": []})
+        with patch.object(app, "_request_json", request):
+            await app.search_stories({"query": 2026})
+        request.assert_not_awaited()
+
+    async def test_whitespace_only_query_is_still_rejected(self):
+        response = await app.search_stories({"query": "   "})
+        self.assertEqual(response.error, "Missing required field: query")
+
+    async def test_valid_query_still_searches(self):
+        request = AsyncMock(return_value={"hits": []})
+        with patch.object(app, "_request_json", request):
+            response = await app.search_stories({"query": "  rust  "})
+        self.assertIn("rust", response.result)
+        self.assertEqual(request.await_args.args[1]["query"], "rust")
+
+    def test_safe_text_helper(self):
+        self.assertEqual(app._safe_text("  hi  "), "hi")
+        for value in (1, 1.5, True, None, [], {}, b"hi"):
+            with self.subTest(value=value):
+                self.assertEqual(app._safe_text(value), "")
 
 
 if __name__ == "__main__":

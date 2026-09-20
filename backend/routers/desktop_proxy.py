@@ -35,6 +35,7 @@ from utils.llm.desktop_llm_stub import (
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build
 from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.other.endpoints import get_current_user_uid
@@ -1349,7 +1350,11 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
     if action not in {'generateContent', 'streamGenerateContent'}:
         return await _proxy_unobserved(request, path, streaming, uid)
 
-    attempt = ClientJourneyAttempt('desktop_proactivity', _proxy_client_kind(request))
+    attempt = ClientJourneyAttempt(
+        'desktop_proactivity',
+        _proxy_client_kind(request),
+        app_build=extract_app_build(request),
+    )
     try:
         response = await _proxy_unobserved(request, path, streaming, uid)
     except asyncio.CancelledError:
