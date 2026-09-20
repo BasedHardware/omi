@@ -21,8 +21,11 @@ def system(monkeypatch):
     from database import conversations as db
     from utils.conversations import lifecycle
     from utils.sync import bridge
+    from database import sync_bridges
 
     store = StrictFirestore()
+    mark = sync_bridges.mark_sync_bridge_cleaned
+    monkeypatch.setattr(bridge, 'mark_sync_bridge_cleaned', lambda *a: mark(*a, firestore_client=store))
     assign = db.assign_sync_conversation
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
     monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
@@ -40,7 +43,10 @@ def system(monkeypatch):
     def ingest(i):
         row = capture(i)
         row.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
-        return lifecycle.ingest_sync_conversation('u', row)
+        result = lifecycle.ingest_sync_conversation('u', row)
+        if result[0].get('sync_merged_from'):
+            bridge.finish_sync_bridges('u', result[0]['id'])
+        return result
 
     return store, ingest, retract, copy
 
@@ -92,7 +98,7 @@ def test_cleanup_follows_bridge_that_wins_during_audio_copy(system):
             ingest(2)
 
     copy.side_effect = copy_then_bridge
-    assert bridge.finish_sync_bridges('u', 'chunk-004') == 'chunk-000'
+    assert bridge.finish_sync_bridges('u', 'chunk-004', audio_source_id='chunk-008') == 'chunk-000'
     assert store.rows[('users', 'u', 'conversations', 'chunk-000')]['sync_merged_from'] == ['chunk-004', 'chunk-008']
 
 
@@ -116,3 +122,67 @@ def test_shared_cleanup_retains_capture_and_propagates_task_failure(monkeypatch)
     merge._delete_conversation_and_related_data('u', 'donor', retain_capture=True)
     audio.assert_not_called()
     delete.assert_not_called()
+
+
+def test_cleanup_receipt_skips_later_appends_and_retries_failed_cleanup(system):
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    retract.side_effect = RuntimeError('cleanup failed')
+    with pytest.raises(RuntimeError, match='cleanup failed'):
+        ingest(2)
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    assert 'sync_bridge_cleaned_revision' not in donor
+    retract.side_effect = None
+    ingest(3)  # a different append recovers the interrupted cleanup
+    assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+    retract.reset_mock()
+    copy.reset_mock()
+    ingest(5)
+    retract.assert_not_called()
+    copy.assert_not_called()
+    donor['sync_content_revision'] += 1
+    ingest(6)
+    retract.assert_called_once_with('u', 'chunk-004', retain_capture=True)
+
+
+def test_late_audio_copies_without_retracting_completed_ancestor(system):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    ingest(2)
+    retract.reset_mock()
+    copy.reset_mock()
+    assert bridge.finish_sync_bridges('u', 'chunk-004', audio_source_id='chunk-004') == 'chunk-000'
+    retract.assert_not_called()
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+
+
+def test_receipt_does_not_mark_a_newer_tombstone_revision(system):
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+
+    def advance_revision(*a, **kw):
+        store.rows[('users', 'u', 'conversations', 'chunk-004')]['sync_content_revision'] += 1
+
+    retract.side_effect = advance_revision
+    with pytest.raises(RuntimeError, match='completion revision changed'):
+        ingest(2)
+    assert 'sync_bridge_cleaned_revision' not in store.rows[('users', 'u', 'conversations', 'chunk-004')]
+
+
+def test_transactional_ingest_does_not_run_external_cleanup(system):
+    from utils.conversations import lifecycle
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    row = capture(2)
+    row['status'] = 'completed'
+    result = lifecycle.ingest_sync_conversation('u', row)
+    assert result[0]['sync_merged_from'] == ['chunk-004']
+    retract.assert_not_called()
+    copy.assert_not_called()

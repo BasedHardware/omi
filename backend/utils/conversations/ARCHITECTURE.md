@@ -80,8 +80,9 @@ This package receives persisted conversation data only. Request-scoped BYOK
 context may be propagated by a live Pusher caller into `finalizer.py`, but it
 must never be written here, passed to durable task payloads, or logged.
 
-Sync lifecycle intake computes capture components transactionally, then replays
-bridge effects through the existing merge retraction/copy helpers. Retained donor
+Sync lifecycle intake computes speech components transactionally. The pipeline
+replays bridge effects once, after audio persistence, through existing merge
+retraction/copy helpers; tombstone revision receipts skip completed cleanup. Retained donor
 redirects preserve late audio; deletion cascades to those sources. The shared gap
 predicate lives in `utils/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.

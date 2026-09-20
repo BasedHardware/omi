@@ -124,6 +124,7 @@ from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
+from utils.sync.bridge import finish_sync_segment
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -1213,17 +1214,14 @@ def process_segment(
                     data_protection_level=data_protection_level,
                     survivors=survivors,
                 )
-        if assigned.get('sync_merged_from') or private_cloud_sync_enabled:
-            from utils.sync.bridge import finish_sync_bridges
-
-            canonical_id = finish_sync_bridges(uid, conversation_id)
-            if canonical_id != conversation_id:
-                with lock:
-                    response['new_memories'].discard(conversation_id)
-                    response['updated_memories'].discard(conversation_id)
-                    response['updated_memories'].add(canonical_id)
-                    response.setdefault('_merged', {}).pop(conversation_id, None)
-                    response['_merged'][canonical_id] = language
+        finish_sync_segment(
+            uid,
+            assigned,
+            response,
+            lock,
+            language,
+            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
+        )
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=TranscriptionOutcome.SUCCESS,

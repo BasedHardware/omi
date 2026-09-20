@@ -18,6 +18,7 @@ def pipeline():
     from models import conversation, conversation_enums, transcript_segment
     from pydub import AudioSegment
     from utils.conversations import deterministic_minimum
+    from utils.sync import bridge as real_bridge
 
     fakes = _build_pipeline_fakes()
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
@@ -37,6 +38,7 @@ def pipeline():
         module = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
+        module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
         module.get_syncing_file_temporal_signed_url = lambda path: path
@@ -96,3 +98,16 @@ def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_w
     assert not store.rows and not errors
     assert response == {'new_memories': set(), 'updated_memories': set()}
     assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
+
+
+def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatch):
+    module, store = pipeline
+    bridge = module.real_bridge
+    module.finish_sync_segment = bridge.finish_sync_segment
+    finish = MagicMock(side_effect=lambda uid, cid, **kw: cid)
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    for timestamp in (1000, 1240, 1120):
+        assert module.process_segment(f'{timestamp}.wav', 'u', response, threading.Lock(), [])
+    assert len(conversations(store)) == 1
+    finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)

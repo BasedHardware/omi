@@ -130,12 +130,7 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
-    result = conversations_db.assign_sync_conversation(uid, incoming, candidate_id=candidate_id, target_id=target_id)
-    if result[0].get('sync_merged_from'):
-        from utils.sync.bridge import finish_sync_bridges
-
-        finish_sync_bridges(uid, result[0]['id'])
-    return result
+    return conversations_db.assign_sync_conversation(uid, incoming, candidate_id=candidate_id, target_id=target_id)
 
 
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
