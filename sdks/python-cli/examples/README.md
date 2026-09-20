@@ -8,18 +8,10 @@
   omi-cli 指南 (Traditional Chinese agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
-* [`agent_quickstart.hr.md`](agent_quickstart.hr.md) — omi-cli za agente
-  (Croatian agent guide).
 * [`agent_quickstart.lt.md`](agent_quickstart.lt.md) — omi-cli agentams
   (Lithuanian agent guide).
 * [`agent_quickstart.sl.md`](agent_quickstart.sl.md) — omi-cli za agente
   (Slovenian agent guide).
-* [`agent_quickstart.et.md`](agent_quickstart.et.md) — omi-cli agentidele
-  (Estonian agent guide).
-* [`agent_quickstart.tl.md`](agent_quickstart.tl.md) — omi-cli para sa mga ahente
-  (Tagalog agent guide).
-* [`agent_quickstart.is.md`](agent_quickstart.is.md) — omi-cli fyrir gervigreindarforrit
-  (Icelandic agent guide).
 * [`agent_quickstart.eu.md`](agent_quickstart.eu.md) — omi-cli agenteentzat
   (Basque agent guide).
 * [`agent_quickstart.gl.md`](agent_quickstart.gl.md) — omi-cli para axentes
