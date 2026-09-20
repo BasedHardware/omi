@@ -1655,11 +1655,12 @@ class TestAsyncCoordinatorBehavioral:
             'new_memories': set(),
         }
         assert checkpointed_fences == [{'fenced': {'replaced-conversation'}, 'updated': {'current-conversation'}}]
-        # `_merged` reprocessing now skips brand-new conversations: a fresh
-        # deterministic row needs its first real summary, not a reprocess.
+        # `_merged` reprocessing runs for every conversation that gained segments;
+        # created rows enrich through the same update path (the intake already
+        # persisted the deterministic minimum, so the processor must not re-create).
         assert pipeline._reprocess_conversation_after_update.call_args_list == [
-            unittest.mock.call('uid', 'replaced-conversation', 'en', is_new=True),
-            unittest.mock.call('uid', 'current-conversation', 'fr', is_new=False),
+            unittest.mock.call('uid', 'replaced-conversation', 'en'),
+            unittest.mock.call('uid', 'current-conversation', 'fr'),
         ]
         pipeline.logger.info.assert_called_once_with(
             'event=sync_conversation_reprocess outcome=fenced conversation_id=%s',
@@ -1695,12 +1696,12 @@ class TestAsyncCoordinatorBehavioral:
         pipeline._run_conversation_created_webhook = MagicMock()
         pipeline.submit_with_context = MagicMock(side_effect=lambda _executor, fn, *args: fn(*args))
 
-        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en', is_new=False)
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
 
         pipeline._run_conversation_created_webhook.assert_called_once_with('uid-1', recovered)
 
         original.discarded = False
-        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en', is_new=False)
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
         pipeline._run_conversation_created_webhook.assert_called_once()
 
     @pytest.mark.asyncio

@@ -128,7 +128,7 @@ def _patch_sync_pipeline(
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
         return conversation_obj.dict(), target_id is None, list(incoming["transcript_segments"])
 
-    def fake_reprocess_after_update(uid, conversation_id, language, is_new=False):
+    def fake_reprocess_after_update(uid, conversation_id, language):
         reprocessed.append(conversation_id)
         conversation = read_conversation(uid, conversation_id)
         assert conversation is not None
@@ -194,16 +194,16 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
     persisted = client.get("/v1/conversations/sync-created-conversation", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
     body = persisted.json()
-    # Created keep rows are enriched at batch-end (is_new=True); the user-visible
-    # structured data is the enrichment pass's output, not the intake minimum.
+    # Created keep rows are enriched once at batch-end through the update path
+    # (the intake already persisted the row); the visible title is the enrichment
+    # output, not the intake minimum.
     assert body["structured"]["title"] == "Hermetic Sync Conversation Reprocessed"
     assert body["status"] == "completed"
     assert [segment["text"] for segment in body["transcript_segments"]] == [
         "Hermetic sync transcript from a fake prerecorded STT boundary."
     ]
     assert read_conversation("123", "sync-created-conversation") is not None
-    # New architecture: created keep rows are enriched once at batch-end (is_new=True),
-    # so the reprocess pass runs for the created conversation too.
+    # Created keep rows get exactly one batch-end enrichment pass.
     assert reprocessed == ["sync-created-conversation"]
 
 

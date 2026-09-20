@@ -203,7 +203,7 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         pipeline._reprocess_conversation_after_update = MagicMock()
         pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
         calls = pipeline._reprocess_conversation_after_update.call_args_list
-        assert [call.kwargs['is_new'] for call in calls] == [True, False]
+        assert [tuple(call.args) for call in calls] == [('u', 'new', 'en'), ('u', 'old', 'en')]
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])

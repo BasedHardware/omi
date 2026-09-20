@@ -766,7 +766,7 @@ def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> N
     asyncio.run(conversation_created_webhook(uid, conversation))
 
 
-def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str, *, is_new: bool = False):
+def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
     This checks if the conversation should still be discarded and regenerates
@@ -794,7 +794,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         force_process=True,
-        is_reprocess=not is_new,
+        is_reprocess=True,
         bypass_jit_first_open=True,
         persistence_observer=_require_current_conversation_persistence,
     )
@@ -1272,12 +1272,12 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
     same batch.
     """
     merged = response.pop('_merged', {})
+    fenced_ids = set()
     for conversation_id, language in merged.items():
         try:
-            _reprocess_conversation_after_update(
-                uid, conversation_id, language, is_new=conversation_id in response.get('new_memories', set())
-            )
+            _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
+            fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
             response.get('updated_memories', set()).discard(conversation_id)
             response.get('new_memories', set()).discard(conversation_id)
@@ -1286,6 +1286,17 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+    # A task-mode worker whose every conversation was superseded by a newer
+    # ingest must not publish an empty success: re-raise so the Cloud Tasks
+    # lane terminally ACKs the delivery as superseded (never retried). The
+    # v1 inline lane keeps the absorb behavior (no on_fenced checkpoint there).
+    if (
+        fenced_ids
+        and on_fenced is not None
+        and not response.get('new_memories')
+        and not response.get('updated_memories')
+    ):
+        raise SyncConversationPersistenceFenced('all merged conversations fenced')
 
 
 async def _checkpoint_fenced_conversations_for_run(
