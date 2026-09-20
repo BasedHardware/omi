@@ -9,6 +9,7 @@ Framework-only stubs (fastapi, dotenv, requests, db, models, dropbox_client);
 the real `get_home_page_html` is exercised. No network, no third-party packages.
 """
 
+import asyncio
 import html
 import sys
 import types
@@ -56,8 +57,12 @@ def _load_main():
     sys.modules["fastapi"] = fastapi
 
     responses = types.ModuleType("fastapi.responses")
+
+    def _resp_init(self, content=None, *a, **k):
+        self.content = content
+
     for name in ("HTMLResponse", "RedirectResponse", "JSONResponse"):
-        setattr(responses, name, type(name, (), {"__init__": lambda self, *a, **k: None}))
+        setattr(responses, name, type(name, (), {"__init__": _resp_init}))
     fastapi.responses = responses
     sys.modules["fastapi.responses"] = responses
 
@@ -143,6 +148,44 @@ class UidReflectionTest(unittest.TestCase):
     def test_ordinary_uid_still_renders(self) -> None:
         page = MAIN.get_home_page_html(uid="abc123", connected=False)
         self.assertIn("/auth/dropbox?uid=abc123", page)
+
+
+class OAuthCallbackEscapingTest(unittest.TestCase):
+    """The unauthenticated /auth/dropbox/callback branch reflects Dropbox's
+    `error`/`error_description` params and the token-exchange response body."""
+
+    def test_error_description_is_escaped(self) -> None:
+        resp = asyncio.run(
+            MAIN.auth_callback(
+                code=None, state=None,
+                error="access_denied", error_description=BREAKOUT,
+            )
+        )
+        self.assertNotIn(BREAKOUT, resp.content)
+        self.assertNotIn("<script>alert(1)</script>", resp.content)
+
+    def test_error_param_is_escaped(self) -> None:
+        resp = asyncio.run(
+            MAIN.auth_callback(
+                code=None, state=None,
+                error=BREAKOUT, error_description=None,
+            )
+        )
+        self.assertNotIn(BREAKOUT, resp.content)
+
+    def test_token_exchange_failure_body_is_escaped(self) -> None:
+        class _Resp:
+            status_code = 400
+            text = BREAKOUT
+
+        MAIN.requests.post = lambda *a, **k: _Resp()
+        MAIN.get_oauth_state = lambda uid: "u:s"
+        MAIN.delete_oauth_state = lambda uid: None
+        resp = asyncio.run(
+            MAIN.auth_callback(code="c", state="u:s", error=None, error_description=None)
+        )
+        self.assertNotIn(BREAKOUT, resp.content)
+        self.assertNotIn("<script>alert(1)</script>", resp.content)
 
 
 if __name__ == "__main__":

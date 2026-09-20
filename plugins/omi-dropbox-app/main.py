@@ -433,7 +433,7 @@ async def auth_callback(
 <head><title>Authorization Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #dc3545;">Authorization Failed</h1>
-    <p>{html.escape(error_description or error, quote=True)}</p>
+    <p>{html.escape(str(error_description or error), quote=True)}</p>
 </body>
 </html>
 """,
@@ -471,7 +471,10 @@ async def auth_callback(
         )
 
         if response.status_code != 200:
-            return HTMLResponse(f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(
+                f"Token exchange failed: {html.escape(response.text, quote=True)}",
+                status_code=400,
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
