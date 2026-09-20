@@ -97,5 +97,11 @@
 * [`quickstart.zu.md`](quickstart.zu.md) — Izinyathelo Zokuqala nge-omi-cli (Zulu Quickstart).
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
+* [`quickstart.sg.md`](quickstart.sg.md) — kua ti kôzo tî omi-cli (Sango Quickstart).
+* [`quickstart.aa.md`](quickstart.aa.md) — qimbisa taamáy omi-cli (Afar Quickstart).
+* [`quickstart.tvl.md`](quickstart.tvl.md) — nga laasaga muamua ki omi-cli (Tuvaluan Quickstart).
+* [`quickstart.niu.md`](quickstart.niu.md) — tau hala fakamua mo omi-cli (Niuean Quickstart).
+* [`quickstart.tkl.md`](quickstart.tkl.md) — nā lau muamua ma omi-cli (Tokelauan Quickstart).
+* [`quickstart.ty.md`](quickstart.ty.md) — te mau taahiraa matamua ma omi-cli (Tahitian Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
 * [`quickstart.bs.md`](quickstart.bs.md) — vodič za brzi početak rada s omi-cli (Bosnian Quickstart).
