@@ -747,13 +747,13 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 undetected",
+    "v2Undetected": "Offline Sync unavailable",
     "@v2Undetected": {
-        "description": "V2 device undeteced dialog title"
+        "description": "Dialog title when the connected device has no SD-card offline sync"
     },
-    "v2UndetectedMessage": "We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.",
+    "v2UndetectedMessage": "Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn't support it.",
     "@v2UndetectedMessage": {
-        "description": "V2 device undeteced dialog message"
+        "description": "Dialog message when the connected device has no SD-card offline sync"
     },
     "endConversation": "End Conversation",
     "@endConversation": {
@@ -2065,6 +2065,18 @@
     "@memoryHistoryPartial": {
         "description": "Notice shown when the memory history response is truncated"
     },
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "memoryAllowUse": "Allow use",
+    "@memoryAllowUse": {
+        "description": "Button that clears suppression so this memory may be used"
+    },
+    "memoryDontUse": "Don't use",
+    "@memoryDontUse": {
+        "description": "Button that suppresses this memory from future use"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -2986,10 +2998,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "Start capturing conversations with your Omi device to see them here.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "Use your mobile app to capture audio",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -3648,10 +3656,6 @@
     "@transcribing": {
         "description": "Loading message while transcribing audio"
     },
-    "transcriptionFailed": "Transcription failed",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
-    },
     "discardedConversation": "Discarded Conversation",
     "@discardedConversation": {
         "description": "Label for a discarded conversation"
@@ -4107,10 +4111,6 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "Click the button to capture audio for live transcripts, AI insights, and automatic saving.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
     "reconnecting": "Reconnecting...",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
@@ -4178,10 +4178,6 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "Start recording to see live transcript",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "Paused",
     "@paused": {
         "description": "Recording status: paused"
@@ -4210,10 +4206,6 @@
     "settingUpSystemAudioCapture": "Setting up system audio capture",
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
-    },
-    "capturingAudioAndGeneratingTranscript": "Capturing audio and generating transcript",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
     },
     "clickToBeginRecordingSystemAudio": "Click to begin recording system audio",
     "@clickToBeginRecordingSystemAudio": {
@@ -6730,7 +6722,7 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "Uploading your voice profile....",
+    "uploadingVoiceProfile": "Uploading your voice profile...",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
@@ -10440,6 +10432,62 @@
             }
         }
     },
+    "uploadingAudioForTranscription": "Uploading {duration} of audio for transcription...",
+    "@uploadingAudioForTranscription": {
+        "description": "Live-capture WAL indicator while unsynced audio is uploading",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "audioUploadRetrying": "Retrying upload... {duration} of audio kept on your phone",
+    "@audioUploadRetrying": {
+        "description": "Live-capture WAL indicator after a failed upload attempt that will be retried automatically",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "audioUploadFailedTapRetry": "Upload failed — {duration} of audio kept on your phone. Tap to retry.",
+    "@audioUploadFailedTapRetry": {
+        "description": "Live-capture WAL indicator when auto-retries are exhausted and a manual retry is available",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "audioUploadFailedKeptLocal": "Upload failed — {duration} of audio kept on your phone.",
+    "@audioUploadFailedKeptLocal": {
+        "description": "Live-capture WAL indicator when the recording can no longer be uploaded (corrupted or past the recovery window)",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "listeningTranscriptWillAppear": "Listening… a transcript will appear here.",
+    "@listeningTranscriptWillAppear": {
+        "description": "Live-capture empty state on audio-only setups (no photo capture source)"
+    },
+    "recordingOfflineTranscriptWillCatchUp": "Recording offline — the transcript will catch up when you're back online.",
+    "@recordingOfflineTranscriptWillCatchUp": {
+        "description": "Live-capture empty state while the device has no internet connection"
+    },
+    "transcriptionUnavailableRecordingSaved": "Transcription is unavailable — recording continues and your audio is saved.",
+    "@transcriptionUnavailableRecordingSaved": {
+        "description": "Live-capture empty state when the plan is out of transcription credits"
+    },
+    "capturing": "Capturing",
+    "@capturing": {
+        "description": "Live-capture app bar title while both audio and photos are being captured"
+    },
+    "capturingPhotos": "Capturing photos",
+    "@capturingPhotos": {
+        "description": "Live-capture app bar title while only photos are being captured"
+    },
     "willSyncAutomatically": "will sync automatically",
     "enableLocationTitle": "Enable Location",
     "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
@@ -11033,7 +11081,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11825,5 +11873,46 @@
     "speechToTextUnavailableDesc": "Speech-to-text isn't available right now. Check your internet connection and your device's speech recognition settings, then try again.",
     "@speechToTextUnavailableDesc": {
         "description": "Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording"
+    },
+    "processingTakingLonger": "Still working — this is taking longer than usual.",
+    "@processingTakingLonger": {
+        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
+    },
+    "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
+    "@speechProfileEnrollmentPrompt": {
+        "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
+    },
+    "home": "Home",
+    "@home": {
+        "description": "Screen-reader label for the Home tab in the bottom navigation bar."
+    },
+    "failedToUpdateBaselineStatus": "Failed to update baseline status",
+    "@failedToUpdateBaselineStatus": {
+        "description": "Snackbar when toggling a memory's baseline flag fails"
+    },
+    "unstarConversation": "Unstar conversation",
+    "@unstarConversation": {
+        "description": "Accessible name for the conversation-detail star button when the conversation is already starred"
+    },
+    "moreOptions": "More options",
+    "@moreOptions": {
+        "description": "Accessible name for the conversation-detail overflow menu"
+    },
+    "filterByDate": "Filter by date",
+    "@filterByDate": {
+        "description": "Accessible name for the conversations calendar filter button"
+    },
+    "memoryGraph": "Memory graph",
+    "@memoryGraph": {
+        "description": "Accessible name for the memories graph button"
+    },
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "@voiceIntroduction": {
+        "description": "Guided voice introduction copy. English source fallback pending translation review.",
+        "placeholders": {
+            "part": {
+                "type": "String"
+            }
+        }
     }
 }

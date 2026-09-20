@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -25,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
@@ -44,11 +46,12 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -74,6 +77,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
@@ -149,6 +153,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey,
       isAppInForeground: false,
     );
+  } else if (ChatAnswerNotificationHandler.isChatAnswerData(data)) {
+    // Click-to-talk / chat answers: local BigText + navigate_to (#4375).
+    // Must live in this single background entrypoint — do not re-register a
+    // second onBackgroundMessage handler from NotificationService.
+    await ChatAnswerNotificationHandler.handle(data, channelKey, isAppInForeground: false);
   }
 }
 
@@ -248,6 +257,11 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
+        // Typed semantic controls for the seeded-journey lane: same debug VM
+        // service transport as Marionette, installed only in eligible
+        // local-dev test builds (inert everywhere else, including
+        // production-flavor debug builds).
+        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
@@ -353,7 +367,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       providers: [
         ListenableProvider(create: (context) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-        ChangeNotifierProvider(create: (context) => ConversationProvider()),
+        ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
@@ -364,7 +378,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
+          create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -373,7 +387,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(
+                composeProductionCaptureProvider(
                   externalActions: externalActions,
                   localSegmentStore: LocalSegmentStore.appSupport(),
                 );
@@ -416,7 +430,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
         ),
         ChangeNotifierProvider(create: (context) => UserProvider()),
-        ChangeNotifierProvider(lazy: true, create: (context) => ActionItemsProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => createProductionActionItemsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => GoalsProvider()..init()),
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),

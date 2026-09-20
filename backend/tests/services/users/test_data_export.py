@@ -498,6 +498,37 @@ def test_json_default_raises_type_error_for_unsupported_types():
         data_export._json_default(set())
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_dumps_aborts_instead_of_emitting_invalid_json_token(value):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="non-finite numeric value"):
+        data_export._dumps({"score": value})
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_dump_aborts_instead_of_emitting_invalid_json_token(value):
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="non-finite numeric value"):
+        data_export._dump({"score": value}, StringIO())
+
+
+def test_iter_user_data_export_aborts_before_streaming_on_non_finite_conversation_field(monkeypatch):
+    """A NaN/Infinity value anywhere in exported data must fail the export before
+    any bytes are returned, not silently produce a corrupt JSON download."""
+    monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
+    monkeypatch.setattr(
+        data_export,
+        "MemoryService",
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(
+        data_export.conversations_db,
+        "iter_all_conversations",
+        MagicMock(return_value=iter([{"id": "conv1", "score": float("nan")}])),
+    )
+
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="non-finite numeric value"):
+        data_export.iter_user_data_export("uid1")
+
+
 def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
     """Large-account export must use the portability stream, not list materialization."""
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))

@@ -796,6 +796,9 @@ struct MessageMetadataPopover: View {
         if !metadata.modelsSummary.isEmpty {
           metadataRow(label: "Model", value: metadata.modelsSummary)
         }
+        if !metadata.providersSummary.isEmpty {
+          metadataRow(label: "Provider", value: metadata.providersSummary)
+        }
         metadataRow(label: "History", value: metadata.historySummary)
         metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
         if !metadata.pathSummary.isEmpty {

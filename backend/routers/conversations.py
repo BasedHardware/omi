@@ -13,7 +13,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -73,6 +73,7 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -91,6 +92,7 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
@@ -180,13 +182,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -199,15 +209,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:
@@ -572,6 +590,7 @@ def process_in_progress_conversation(
 def finalize_conversation(
     conversation_id: str,
     request: ProcessConversationRequest = None,
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
@@ -638,8 +657,14 @@ def finalize_conversation(
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
+            app_build=extract_app_build(http_request),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
 
     if finalization['route'] == 'noop':
@@ -650,6 +675,11 @@ def finalize_conversation(
     # The only accepted outcomes are an enqueued task or an outbox row retained
     # for reconciler retry after an uncertain task-create acknowledgement.
     if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
@@ -1150,6 +1180,10 @@ def patch_conversation_summary(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if result == 'app_result_not_found':
         raise HTTPException(status_code=404, detail="App summary not found for this conversation")
+    if result == 'app_result_ambiguous':
+        raise HTTPException(
+            status_code=409, detail="Multiple summaries share this app ID; edit cannot be targeted safely"
+        )
     return {'status': 'Ok'}
 
 
@@ -1199,6 +1233,7 @@ def delete_conversation(
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
     # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
@@ -1230,7 +1265,15 @@ def delete_conversation(
 
                 raise account_gate_busy_http_exception() from error
 
+        from utils.notifications import sync_action_item_reminder
+
+        armed = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        for item in armed:
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
+                )
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1248,6 +1291,7 @@ def delete_conversation(
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
+    record_product_event('conversation_deleted', request=http_request)
     return {"status": "Ok"}
 
 
@@ -1320,14 +1364,16 @@ def set_action_item_status(
 
     # Mirror status updates to the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Map descriptions to item IDs for quick lookup
-        description_to_ids = {}
+        # Map descriptions to items for quick lookup
+        description_to_items = {}
         for ai in existing_items:
             desc = ai.get('description')
             if not desc:
                 continue
-            description_to_ids.setdefault(desc, []).append(ai['id'])
+            description_to_items.setdefault(desc, []).append(ai)
 
         for i, action_item_idx in enumerate(data.items_idx):
             if not (0 <= action_item_idx < len(action_items)):
@@ -1335,9 +1381,15 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            ids = description_to_ids.get(action_item.description, [])
-            for action_item_id in ids:
-                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+            for ai in description_to_items.get(action_item.description, []):
+                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=ai['id'],
+                    description=ai.get('description', ''),
+                    completed=bool(new_completed_status),
+                    due_at=ai.get('due_at'),
+                )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
         logger.error(f'Failed to mirror action item status update: {e}')
@@ -1610,9 +1662,18 @@ def assign_segments_bulk(
     if value == 'null':
         value = None
 
+    if data.assign_type == 'person_id' and value and not users_db.get_person(uid, value):
+        raise HTTPException(status_code=404, detail='Person not found')
+
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
     before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
+    previous_people = {
+        conversation.transcript_segments[index].person_id
+        for index in segment_indices
+        if conversation.transcript_segments[index].person_id
+        and (data.assign_type != 'person_id' or conversation.transcript_segments[index].person_id != value)
+    }
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1636,6 +1697,15 @@ def assign_segments_bulk(
         before=before,
         after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
+
+    # Invalidate only profiles taught from these corrected segments, and fence
+    # any older extraction still in flight. Other conversations' teaching survives.
+    for previous_person_id in previous_people:
+        removed = users_db.invalidate_person_speech_profile(
+            uid, previous_person_id, conversation_id, resolved_segment_ids
+        )
+        for sample_path in removed:
+            background_tasks.add_task(delete_speech_profile_blob, sample_path)
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:
@@ -2052,7 +2122,8 @@ def search_conversations_endpoint(
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
+    has_more = len(conversations) >= effective_per_page or len(typesense_ids) >= effective_per_page
+    search_results['total_pages'] = effective_page + 1 if has_more else effective_page
     return search_results
 
 

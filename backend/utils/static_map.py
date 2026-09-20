@@ -32,8 +32,11 @@ _MAX_AXIS_PX = 640
 _PIN_PRECISION = 4
 _MAX_PINS = 50
 # Rendered images are immutable for a given URL shape; version the cache key so
-# a style bump invalidates old entries without a flush.
-_CACHE_VERSION = 1
+# a style bump — or a one-off invalidation — drops old entries without a flush.
+# Bumped 1->2 to evict provider "degraded render" watermarks (served as HTTP 200
+# image/png under launch-load authorization degradation) that were cached and
+# shared to every user for the full TTL before the reject below existed.
+_CACHE_VERSION = 2
 _CACHE_TTL_SECONDS = 604800  # 7 days
 # Stampede dedup: per-key render lock TTL (bounds how long a crashed holder can
 # wedge waiters), how often waiters poll the cache, and how long they wait
@@ -99,12 +102,14 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
         if len(parts) != 2:
             raise MalformedPinsError('each pin must be lat,lng')
         try:
-            latitude = round(float(parts[0].strip()), _PIN_PRECISION)
-            longitude = round(float(parts[1].strip()), _PIN_PRECISION)
+            raw_lat = float(parts[0].strip())
+            raw_lng = float(parts[1].strip())
         except (ValueError, TypeError):
             raise MalformedPinsError('each pin must be numeric lat,lng')
-        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        if not -90 <= raw_lat <= 90 or not -180 <= raw_lng <= 180:
             raise MalformedPinsError('pin coordinates out of bounds')
+        latitude = round(raw_lat, _PIN_PRECISION)
+        longitude = round(raw_lng, _PIN_PRECISION)
         if (latitude, longitude) in seen:
             continue
         seen.add((latitude, longitude))
@@ -204,6 +209,20 @@ async def _render_from_provider(pins: List[Tuple[float, float]], width: int, hei
             response.status_code,
             content_type.split(';')[0],
             len(pins),
+        )
+        return None
+    # Google serves degraded/error renders (e.g. the authorization "key
+    # required" / "for development purposes only" watermark that surfaced under
+    # launch-load) as a normal HTTP 200 image/png, flagged only by this header.
+    # A valid styled render never sets it, so treat its presence as a failure
+    # and never cache it — otherwise one poisoned render is served to every user
+    # for the whole cache TTL (the incident this reject fixes).
+    warning = response.headers.get('X-Staticmap-API-Warning')
+    if warning:
+        logger.error(
+            'static map render degraded (provider warning); not caching pin_count=%d warning=%s',
+            len(pins),
+            warning[:120],
         )
         return None
     return response.content

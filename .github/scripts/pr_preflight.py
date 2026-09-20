@@ -93,6 +93,7 @@ def configure_output_streams() -> None:
 
 
 def changed_files(root: Path, base: str, head: str, *, include_worktree: bool = False) -> list[str]:
+    """PR file list: three-dot *base*...*head*. Never first-parent or HEAD~."""
     output = run_git(
         root,
         "diff",
@@ -297,8 +298,10 @@ def main() -> int:
             invariants = run_python_capture(
                 root,
                 ".github/scripts/check_product_invariants.py",
-                "--changed-files",
-                str(files_path),
+                "--base",
+                args.base,
+                "--head",
+                args.head,
                 "--suggest",
                 errors="backslashreplace",
             )

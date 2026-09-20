@@ -958,6 +958,9 @@ extension AppState {
 
   /// Trigger accessibility permission prompt
   func triggerAccessibilityPermission() {
+    // A fresh Grant action supersedes the onboarding skip. If the user later
+    // revokes access, the sidebar must report the missing grant again.
+    UserDefaults.standard.set(false, forKey: .onboardingAccessibilitySkipped)
     let osVersion = ProcessInfo.processInfo.operatingSystemVersion
     let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
     log(

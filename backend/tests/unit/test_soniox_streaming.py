@@ -21,7 +21,7 @@ from config.stt_provider_policy import (
     default_models_for_surface,
     provider_is_enabled,
 )
-from utils.stt.streaming import SafeSonioxSocket, process_audio_soniox
+from utils.stt.streaming import SafeSonioxSocket, process_audio_soniox, validate_streaming_stt_env
 
 
 class FakeWebSocket:
@@ -206,7 +206,7 @@ def _empty_stream():
 
 
 def test_soniox_serves_streaming_only_and_backs_velma_there():
-    """Soniox was opt-in while it was being trialled; it is now the streaming fallback.
+    """Soniox is the streaming failover hop directly behind Velma.
 
     The batch path still has no Soniox client, so it must stay absent from the
     non-streaming surfaces however the streaming chain is ordered.
@@ -219,3 +219,20 @@ def test_soniox_serves_streaming_only_and_backs_velma_there():
     assert streaming.index('soniox') == streaming.index('modulate-velma-2') + 1
     for surface in (STTServingSurface.PRERECORDED, STTServingSurface.PTT):
         assert 'soniox' not in default_models_for_surface(surface)
+
+
+def test_soniox_listed_without_key_is_rejected_at_config_check():
+    with pytest.raises(RuntimeError, match='SONIOX_API_KEY is empty'):
+        validate_streaming_stt_env(
+            {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': ''}
+        )
+
+
+def test_soniox_listed_with_key_is_accepted_at_config_check():
+    validate_streaming_stt_env(
+        {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': 'k'}
+    )
+
+
+def test_default_chain_without_soniox_is_accepted_at_config_check():
+    validate_streaming_stt_env({'STT_SERVICE_MODELS': 'modulate-velma-2,dg-nova-3,parakeet'})

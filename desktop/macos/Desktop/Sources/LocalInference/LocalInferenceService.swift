@@ -2,9 +2,10 @@ import Foundation
 
 /// Engine identifiers the runtime knows how to select.
 ///
-/// AFM is named so `forceLocalInferenceEngine=afm` fails closed in this shard
-/// (S12 lands the adapter). There is no cloud case: a missing or failed local
-/// engine becomes the deterministic minimum, never luna.
+/// `makeDefault` selects `.afm` when this Mac can run Apple Foundation Models
+/// and `.localServer` otherwise. `forceLocalInferenceEngine` still pins either
+/// id. There is no cloud case: a missing or failed local engine becomes the
+/// deterministic minimum, never luna.
 enum LocalInferenceEngineID: String, Sendable, Equatable, CaseIterable {
   case localServer = "local-server"
   case afm = "afm"

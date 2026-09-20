@@ -944,7 +944,9 @@ import XCTest
     // semantic animated transition.
     XCTAssertTrue(body.contains("if notchModeEnabled {"))
     XCTAssertTrue(body.contains("notchHoverMenuSurfaceSize(agentCount:"))
-    XCTAssertTrue(body.contains(": notchCollapsedSize"))
+    // The collapse lands on the composed closed surface (the single closed
+    // sizing authority), not a bare lobe size derived at the call site.
+    XCTAssertTrue(body.contains(": closedSurfaceSize(usesNotchIsland: true)"))
     XCTAssertTrue(body.contains("animated: false"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))

@@ -6,7 +6,7 @@ was the #3 error signature (×11/30m) with ``Unable to complete the request.
 Please try again.`` at #10 (×5/30m); over the following day the sensor
 recorded 62 and ~5 more per 6h window while every session was rescued by
 mid-session failover. Modulate-Velma-2 is the streaming PRIMARY
-(``modulate-velma-2,soniox,dg-nova-3,parakeet``), so during such an outage
+(``modulate-velma-2,dg-nova-3,parakeet``), so during such an outage
 every new session is handed to Velma, serves briefly, takes the error frame,
 and fails over — the session survives, which is exactly why nothing ever
 paged beyond the log line:
@@ -525,18 +525,34 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
 
 
 def test_the_circuit_recovers_through_the_half_open_probe():
-    """Benching Velma must not brick it: after the cooldown exactly one probe
-    is offered, and a probe that serves closes the circuit again."""
+    """Benching Velma must not brick it: after the serve-error cooldown a
+    probe is offered, and enough consecutive probe successes close it again.
+    A single half-open connect is not recovery during a 5xx storm
+    (first transcript succeeds, then teardown fails)."""
     now = [0.0]
-    circuit = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30.0, clock=lambda: now[0])
+    circuit = ProviderCircuitBreaker(
+        failure_threshold=3,
+        cooldown_seconds=30.0,
+        clock=lambda: now[0],
+        serve_error_cooldown_seconds=180.0,
+        serve_error_successes_to_close=3,
+    )
 
     circuit.record_serve_failure()
     assert circuit.state == 'open'
     assert circuit.allow_request() is False
 
     now[0] = 31.0
+    assert circuit.allow_request() is False
+    now[0] = 181.0
     assert circuit.allow_request() is True  # the single half-open probe
     assert circuit.allow_request() is False
 
+    circuit.record_success()
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success()
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
     circuit.record_success()
     assert circuit.state == 'closed'

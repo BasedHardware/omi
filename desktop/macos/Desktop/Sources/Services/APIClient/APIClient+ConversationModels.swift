@@ -101,10 +101,20 @@ enum TranscriptPresenceState: Equatable {
 struct CaptureAudioFile: Codable, Equatable, Identifiable {
   let id: String
   let duration: TimeInterval
+  /// Unix time of the part's earliest chunk: where its media timeline starts
+  /// on the wall clock. Nil for a part the device never stamped.
+  let firstChunkTimestamp: TimeInterval?
 
   init(_ wire: OmiAPI.AudioFile) {
     id = wire.id
     duration = wire.duration
+    firstChunkTimestamp = wire.chunkTimestamps.min()
+  }
+
+  init(id: String, duration: TimeInterval, firstChunkTimestamp: TimeInterval?) {
+    self.id = id
+    self.duration = duration
+    self.firstChunkTimestamp = firstChunkTimestamp
   }
 }
 
@@ -145,6 +155,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+      && lhs.localSummary == rhs.localSummary
   }
 
   let id: String
@@ -155,6 +166,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let finishedAt: Date?
 
   var structured: Structured
+  /// Attribution for the selected display-only on-device summary.
+  var localSummary: ConversationLocalSummary?
   var transcriptSegments: [TranscriptSegment]
   var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
@@ -188,6 +201,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
+    case localSummary = "local_summary"
     case transcriptSegments = "transcript_segments"
     case geolocation
     case photos
@@ -209,7 +223,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // The domain model adapts wire string-dates into Date via the APIClient
     // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
     // whether transcript_segments was present in the response.
-    let wire = try OmiAPI.Conversation(from: decoder)
+    let wire = try ConversationProjectionRendering.decodeWire(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
     id = wire.id
@@ -217,7 +231,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured)
+    let rendered = ConversationProjectionRendering.resolve(
+      wire, transcriptIncluded: container.contains(.transcriptSegments))
+    structured = rendered.structured
+    localSummary =
+      try rendered.localSummary ?? container.decodeIfPresent(ConversationLocalSummary.self, forKey: .localSummary)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -286,7 +304,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
-    deferred: Bool = false
+    deferred: Bool = false,
+    localSummary: ConversationLocalSummary? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -294,6 +313,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured
+    self.localSummary = localSummary
     self.transcriptSegments = transcriptSegments
     self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
@@ -482,13 +502,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
-/// One headed block of the conversation's written summary.
-///
-/// The backend moved the substance of a summary out of `overview` and into these when the notes
-/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
-/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
-/// has carried them since; this domain model did not, so every desktop surface was rendering the
-/// compatibility paragraph and calling it the summary.
+/// One headed block of the conversation's written summary. The overview may be a compatibility
+/// projection of these sections or an explicit legacy/user-edited body; the selection policy owns
+/// which representation is displayed.
 struct SummarySection: Codable, Equatable, Identifiable {
   var id: String { heading }
   let heading: String
@@ -515,8 +531,7 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
-  /// The headed blocks the backend writes the real summary into. Empty for captures processed
-  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  /// Headed summary blocks. Older captures may omit them; the selection policy then uses overview.
   let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {

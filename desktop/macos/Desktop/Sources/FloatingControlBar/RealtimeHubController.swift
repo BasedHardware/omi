@@ -92,6 +92,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var audioReceivedThisTurn = false
   /// Stable per-turn key for kernel idempotent voice-turn persistence.
   var turnIdempotencyKey = ""
+  /// The one continuity key whose transcript must never reach the journal, even
+  /// through interrupted-turn recovery. Armed at the start of a turn while
+  /// Silent Type is on, and re-asserted when the dictation is delivered. Holds
+  /// at most the most recent such turn: only `turnIdempotencyKey` is ever
+  /// compared against it, and minting a different key clears it — as does
+  /// committing a turn as a question, whose continuity depends on recovery.
+  var journalSuppressedContinuityKey: String?
   /// (a) Pure cache of the typed kernel voice-context snapshot. Rebuild via
   /// `refreshVoiceContextSnapshot` / `fetchVoiceContextSnapshot` on relaunch.
   var prefetchedVoiceContext = ""
@@ -131,6 +138,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
   /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
+  /// Process-local OCR obligations keyed by the exact authenticated owner and
+  /// voice turn. Durable truth remains the kernel journal; this ledger only
+  /// bridges capture completion to the existing journal persistence fence.
+  let turnEvidenceLedger = RealtimeTurnEvidenceLedger()
   let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
   var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
   /// Assistant rows this process sealed `.completed` at provider-response-finish
@@ -445,6 +456,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    _ = turnEvidenceLedger.revokeAll()
     sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1
@@ -484,6 +496,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = ""
+    journalSuppressedContinuityKey = nil
     turnAudio16k.removeAll()
     turnEarlyVerdictCode = nil
     lastTurnDiagnostics.removeAll()
@@ -619,6 +632,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let binding = ExternalSurfaceRunBinding(
         ownerID: ownerID,
         sessionID: "owner-boundary-session",
+        surfaceKind: "floating_chat",
         turnID: turnID.rawValue.uuidString.lowercased(),
         runID: "owner-boundary-run",
         attemptID: "owner-boundary-attempt",

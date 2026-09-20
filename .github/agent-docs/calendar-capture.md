@@ -30,7 +30,8 @@ both auto-link and the discard override: overlap ≥ `MIN_OVERLAP_SECONDS` (10s)
 (≥ `MIN_OVERLAP_PERCENTAGE` (50%) of the event **or** of the conversation). The OR is a
 product decision — a 25s scrap wholly inside a 30m meeting matches through conversation
 coverage. `require_accepted=False` (auto-link) keeps the linker's historical behavior of
-matching any overlapping event.
+matching any overlapping timed event. Events without `start.dateTime` (all-day blocks) are
+skipped before the overlap math on both paths.
 
 ## Auto-link gating
 

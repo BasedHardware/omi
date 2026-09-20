@@ -10,7 +10,24 @@ and background processing.
   request authentication and response shaping.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
-  named executor lanes.
+  named executor lanes. Custom-STT conversations skip managed-STT credits but
+  still consult `should_skip_omi_paid_postprocessing` before Omi-paid
+  structuring, summary, and memory work (#7690). That gate sits after the
+  unpaid desktop on-device / `store_projection` path (#14513) so it cannot
+  strip a local summary.
+- `owner_attribution.py` owns typed source-cluster evidence for memory writes.
+  A passive memory may be attributed to the account owner only when the
+  transcript identifies exactly one owner speaker cluster, keyed by
+  `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
+  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  cannot override that evidence, including for quote promotion. Legacy
+  transcripts without cluster IDs fail closed: a `TranscriptSegment` that
+  only materialized `speaker_id` from the SPEAKER_00 default is not
+  cluster evidence.
+  `transcript_for_llm.memory_transcript_from_segments` is the memory-only
+  renderer: when owner evidence is untrusted it suppresses owner names and
+  prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
+  their existing presentation.
 - `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
   prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
   independent invocation classifier lives in `utils/llm/`; task-intelligence
@@ -19,6 +36,10 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
+- `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
+  After durable finalization, it links the shorter completed capture using
+  `external_data.duplicate_capture_of` plus structured overlap evidence. The
+  database transaction rechecks both captures; discard and content stay independent.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.

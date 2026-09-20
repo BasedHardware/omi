@@ -166,6 +166,17 @@ struct ChatResource: Identifiable, Equatable {
     attachments.map(ChatResource.attachment) + references.map(ChatResource.conversation)
   }
 
+  /// Re-attach in-memory image bytes, matched by resource id, from rows the
+  /// journal cannot carry them through (see `carryingImageData(from:)`).
+  static func carryingImageData(_ resources: [ChatResource], from local: [ChatResource]) -> [ChatResource] {
+    guard !resources.isEmpty, !local.isEmpty else { return resources }
+    // omi-collection-safety: explicit-non-trapping-merge -- duplicate local ids
+    // (a legacy row echoed twice) keep the first entry; ids are otherwise unique.
+    let localByID = Dictionary(
+      local.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    return resources.map { $0.carryingImageData(from: localByID[$0.id]) }
+  }
+
   static func artifact(_ artifact: AgentArtifactProjection) -> ChatResource {
     ChatResource(
       id: "artifact:\(artifact.artifactId)",
@@ -254,6 +265,37 @@ struct ChatResource: Identifiable, Equatable {
       return refreshed
     }
     return markingUnavailableOnDisk()
+  }
+
+  /// Returns `self` with in-memory image bytes that this (replayed) resource
+  /// lost at the persistence boundary re-attached from a same-id local row.
+  ///
+  /// The journal and message metadata persist resource metadata only —
+  /// `imageData` is never encoded — so every replayed row arrives with nil
+  /// bytes even when the row it replaces was rendering its thumbnail from
+  /// memory. Without those bytes the tile falls back to the original file path
+  /// (which for a temp export may already be gone) or the server thumbnail,
+  /// and a sent attachment can go blank mid-session. The replay stays the
+  /// authority for every field it does carry; only the bytes come back.
+  func carryingImageData(from local: ChatResource?) -> ChatResource {
+    guard imageData == nil, let local, local.id == id, let bytes = local.imageData else {
+      return self
+    }
+    return ChatResource(
+      id: id,
+      origin: origin,
+      title: title,
+      subtitle: subtitle,
+      mimeType: mimeType,
+      thumbnailURL: thumbnailURL,
+      imageData: bytes,
+      uri: uri,
+      artifactId: artifactId,
+      sessionId: sessionId,
+      runId: runId,
+      state: state,
+      conversationReference: conversationReference
+    )
   }
 
   func markingUnavailableOnDisk() -> ChatResource {

@@ -52,11 +52,14 @@ configured right behind it.
   `connection`) and `_CIRCUIT_OPENING_REASONS`, so both the failover seam
   (`note_typed_provider_death`) and the terminal funnel
   (`terminate_live_stt_session`) open `_modulate_circuit`.
-- Recovery is unchanged: one `record_serve_failure` opens the circuit for
-  one cooldown window (default 30s, `MODULATE_CIRCUIT_COOLDOWN_SECONDS`);
-  the half-open probe restores Velma as soon as one stream serves again.
-  Sessions already running fail over as before — close codes, client-visible
-  events, and the fallback chain are untouched.
+- Recovery: one `record_serve_failure` opens the circuit for the serve-error
+  cooldown (default 180s, `MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS`),
+  distinct from the connect-path 30s window. Re-admission requires three
+  consecutive half-open successes (`MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE`)
+  so a 5xx storm that still accepts connects cannot flap every 30s. Connect-path
+  failures still close on the first probe success. Sessions already running fail
+  over as before — close codes, client-visible events, and the fallback chain
+  are untouched.
 
 ## Signals after the fix
 

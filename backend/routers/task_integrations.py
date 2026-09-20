@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, List, Optional
+from google.cloud import firestore
 from pydantic import BaseModel, Field
 from models.shared import StatusResponse
 import os
@@ -155,6 +156,22 @@ class TaskIntegrationData(BaseModel):
     list_name: Optional[str] = None
 
 
+CLEARABLE_SELECTION_FIELDS = (
+    'workspace_gid',
+    'workspace_name',
+    'project_gid',
+    'project_name',
+    'default_list_id',
+    'default_list_title',
+    'team_id',
+    'team_name',
+    'space_id',
+    'space_name',
+    'list_id',
+    'list_name',
+)
+
+
 class TaskIntegrationsResponse(BaseModel):
     """Response containing all task integrations"""
 
@@ -234,6 +251,9 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
+    for field in CLEARABLE_SELECTION_FIELDS:
+        if field in data.model_fields_set and getattr(data, field) is None:
+            integration_data[field] = firestore.DELETE_FIELD
 
     users_db.set_task_integration(uid, app_key, integration_data)
 
@@ -468,22 +488,34 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
+        projects = []
+        params = {'workspace': workspace_gid, 'archived': 'false', 'opt_fields': 'name,gid,owner', 'limit': 100}
+        seen_offsets = set()
 
         async def _request(client, token):
             return await client.get(
-                f'https://app.asana.com/api/1.0/projects?workspace={workspace_gid}&archived=false&opt_fields=name,gid,owner',
+                'https://app.asana.com/api/1.0/projects',
+                params=params,
                 headers={'Authorization': f'Bearer {token}'},
             )
 
-        response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
-        if err:
-            raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+        while True:
+            response, data, err = await perform_request_with_token_retry(uid, 'asana', data, _request)
+            if err:
+                raise HTTPException(status_code=401, detail="Asana authentication expired. Please reconnect.")
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
 
-        if response.status_code == 200:
             result = response.json()
-            return {'projects': result.get('data', [])}
-        else:
-            raise HTTPException(status_code=response.status_code, detail="Failed to fetch Asana projects")
+            projects.extend(result.get('data', []))
+            next_page = result.get('next_page')
+            if not next_page:
+                return {'projects': projects}
+            offset = next_page.get('offset')
+            if not isinstance(offset, str) or not offset or offset in seen_offsets:
+                raise HTTPException(status_code=502, detail="Invalid Asana project pagination cursor")
+            seen_offsets.add(offset)
+            params['offset'] = offset
     except HTTPException:
         raise
     except Exception as e:

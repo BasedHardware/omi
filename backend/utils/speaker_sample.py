@@ -9,6 +9,7 @@ Provides functions for:
 
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from config.stt_provider_policy import normalized_stt_language
 from utils.executors import sync_executor, run_blocking
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
 from utils.stt.pre_recorded import prerecorded_from_bytes as deepgram_prerecorded_from_bytes
@@ -17,6 +18,13 @@ from utils.text_utils import compute_text_containment
 MIN_WORDS = 5
 MIN_CONTAINMENT = 0.9
 MIN_DOMINANT_SPEAKER_RATIO = 0.7
+
+# Chinese, Japanese and Thai don't put spaces between words, so `.split()` treats a whole
+# segment-granular entry (Parakeet, Modulate) as a single "word" no matter how long it is.
+# Counting characters instead keeps the same gate meaningful for these languages. 12 chars is
+# a rough parity with MIN_WORDS=5 English words' worth of speech content.
+NON_SPACE_DELIMITED_LANGUAGES = frozenset({'zh', 'ja', 'th'})
+MIN_CJK_CHARS = 12
 
 
 async def verify_and_transcribe_sample(
@@ -29,7 +37,8 @@ async def verify_and_transcribe_sample(
     Transcribe audio and verify quality using PR #4291 rules.
 
     Checks:
-    1. Transcription has at least MIN_WORDS words
+    1. Transcription has at least MIN_WORDS words (MIN_CJK_CHARS characters for
+       non-space-delimited languages, see NON_SPACE_DELIMITED_LANGUAGES)
     2. Dominant speaker accounts for >= MIN_DOMINANT_SPEAKER_RATIO of words (via diarization)
     3. Transcribed text has >= MIN_CONTAINMENT containment in expected text (if provided)
 
@@ -71,13 +80,20 @@ async def verify_and_transcribe_sample(
     # sample was rejected as `insufficient_words` no matter what it contained. The same miscount
     # made the multi-speaker guard inert rather than strict — one entry means ratio 1.0, so a
     # sample carrying two voices passed. Both are unchanged for a word-granular provider.
+    #
+    # For CJK/Thai, `.split()` undercounts even on a word-granular provider, since those
+    # languages don't use whitespace between words at all — count characters instead.
+    count_chars = normalized_stt_language(language) in NON_SPACE_DELIMITED_LANGUAGES
+
     def _words_in(entry: Dict[str, Any]) -> int:
-        return len((entry.get('text') or '').split())
+        text = entry.get('text') or ''
+        return len(text.strip()) if count_chars else len(text.split())
 
     total_words = sum(_words_in(word) for word in words)
+    min_required = MIN_CJK_CHARS if count_chars else MIN_WORDS
 
-    if total_words < MIN_WORDS:
-        return None, False, f"insufficient_words: {total_words}/{MIN_WORDS}"
+    if total_words < min_required:
+        return None, False, f"insufficient_words: {total_words}/{min_required}"
 
     speaker_counts: Dict[str, int] = {}
     for word in words:

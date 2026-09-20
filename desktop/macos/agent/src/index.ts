@@ -1,3 +1,4 @@
+import { ModelCredentialRelay } from "./runtime/model-credentials.js";
 /**
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
@@ -73,7 +74,7 @@ import type {
   ChatFirstHarnessExecutorBeginMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
-  RefreshTokenMessage,
+  ModelHeadersResultMessage,
   AuthMethod,
 } from "./protocol.js";
 import {
@@ -167,7 +168,6 @@ import {
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
 import {
-  authorizeRuntimeTokenRefresh,
   establishRuntimeOwner,
   requireActiveRuntimeOwner,
   runRuntimeOwnerRevocationBarrier,
@@ -181,6 +181,10 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import {
+  conversationEvidenceRelayDiagnostic,
+  type ConversationEvidence,
+} from "./runtime/conversation-evidence.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
 import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
@@ -894,6 +898,18 @@ function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
 }
 
+function journalLocalReadToolRelayFailure(
+  canonicalToolName: string,
+): { code: string; message: string } {
+  if (canonicalToolName === "search_chat_history") {
+    return { code: "chat_history_search_failed", message: "Chat history search could not be completed" };
+  }
+  if (canonicalToolName === "read_conversation_evidence") {
+    return conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+  }
+  return conversationEvidenceRelayDiagnostic("search_conversation_evidence");
+}
+
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
   return finalizedToolResultOutcome(result);
 }
@@ -917,6 +933,15 @@ function writeFinalizedRelayToolResult(client: Socket, callId: string, result: s
     logErr(`Failed to write relay tool result: ${error}`);
   }
 }
+
+const modelCredentialRelay = new ModelCredentialRelay(
+  (capabilityRef, ownerId) => {
+    if (!runtimeKernel) throw new Error("runtime unavailable");
+    const capability = runtimeKernel.assertLiveRunToolCapability({ capabilityRef, activeOwnerId: ownerId });
+    if (capability.adapterId !== "pi-mono") throw new Error("model credentials require pi-mono");
+  },
+  request => send(request),
+);
 
 /** Start Unix socket server for omi-tools stdio processes to connect to */
 function startOmiToolsRelay(): Promise<string> {
@@ -950,8 +975,13 @@ function startOmiToolsRelay(): Promise<string> {
               name: string;
               input: Record<string, unknown>;
               capabilityRef?: string;
+              forceRefresh?: boolean;
             };
 
+            if (msg.type === "model_headers") {
+              modelCredentialRelay.request(client, msg.callId, msg.capabilityRef ?? "", currentOwnerId, msg.forceRefresh === true);
+              continue;
+            }
             if (msg.type === "tool_use") {
               const capabilityRef = msg.capabilityRef?.trim();
               const invocationId = msg.invocationId?.trim() || msg.callId?.trim();
@@ -1083,24 +1113,41 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              if (authorized.canonicalToolName === "search_chat_history") {
+              if (
+                authorized.canonicalToolName === "search_chat_history" ||
+                authorized.canonicalToolName === "read_conversation_evidence" ||
+                authorized.canonicalToolName === "search_conversation_evidence"
+              ) {
                 void (async () => {
                   let result: string;
                   let outcome: "succeeded" | "failed" = "succeeded";
                   try {
                     if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
                     runtimeKernel.markRunToolInvocationDispatched(authorized);
-                    const search = runtimeKernel.searchAuthorizedChatHistory({
-                      invocation: authorized,
-                      toolInput: routedProposal.toolInput,
-                      activeOwnerId: () => currentOwnerId,
-                    });
-                    result = JSON.stringify(search);
+                    const value = authorized.canonicalToolName === "search_chat_history"
+                      ? runtimeKernel.searchAuthorizedChatHistory({
+                        invocation: authorized,
+                        toolInput: routedProposal.toolInput,
+                        activeOwnerId: () => currentOwnerId,
+                      })
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? runtimeKernel.readAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        })
+                        : runtimeKernel.searchAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        });
+                    result = JSON.stringify(value);
                   } catch {
                     outcome = "failed";
                     // Search results and journal details are transcript data.
                     // Keep relay diagnostics shape-only even on malformed input.
-                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                    const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+                    result = relayError(failure.code, failure.message);
                   }
                   const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
                   const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
@@ -1206,6 +1253,7 @@ function startOmiToolsRelay(): Promise<string> {
       });
 
       client.on("close", () => {
+        modelCredentialRelay.disconnect(client);
         omiToolsClients = omiToolsClients.filter((c) => c !== client);
         resolveClientToolCalls(client, "Error: omi-tools relay client disconnected");
       });
@@ -1661,21 +1709,18 @@ async function main(): Promise<void> {
   }));
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
-  let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
   const localAcpAdapters = new Set<RuntimeAdapter>();
   const stopLocalAcpAdapters = async (): Promise<void> => {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
-  const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (!authToken) return false;
-    piMonoAuthToken = authToken;
+  const ensurePiMonoAdapter = async (): Promise<boolean> => {
+    if (process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
       registry.register("pi-mono", () => {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-          authToken: piMonoAuthToken,
           onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
@@ -1686,7 +1731,7 @@ async function main(): Promise<void> {
     return true;
   };
 
-  const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const piMonoAvailable = await ensurePiMonoAdapter();
   const ensureHermesAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
@@ -1712,7 +1757,7 @@ async function main(): Promise<void> {
   const openClawAvailable = await ensureOpenClawAdapter();
   const codexAvailable = await ensureCodexAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    const msg = "pi-mono mode requires on-demand model credentials; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -1955,7 +2000,7 @@ async function main(): Promise<void> {
             await startAcpProcess();
             await initializeAcp();
           } else if (adapterId === "pi-mono") {
-            if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
+            if (!(await ensurePiMonoAdapter())) {
               throw new Error(adapterActivationError("pi-mono"));
             }
           } else if (adapterId === "hermes") {
@@ -2273,6 +2318,7 @@ async function main(): Promise<void> {
             clientId,
             ownerId,
             sessionId: result.sessionId,
+            surfaceKind: result.surfaceKind,
             turnId: result.turnId,
             ok: true,
             runId: result.runId,
@@ -2409,6 +2455,65 @@ async function main(): Promise<void> {
               // `ok` means the correlated external protocol request was
               // processed. A failed tool result is carried in its canonical
               // envelope so Swift can return it to the provider unchanged.
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
+          if (
+            authorized.canonicalToolName === "read_conversation_evidence" ||
+            authorized.canonicalToolName === "search_conversation_evidence"
+          ) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            try {
+              const value = authorized.canonicalToolName === "read_conversation_evidence"
+                ? kernel.readAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                })
+                : kernel.searchAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                });
+              result = JSON.stringify(value);
+            } catch {
+              outcome = "failed";
+              const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+              result = relayError(failure.code, failure.message);
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
               ok: true,
               result: finalizedResult,
             });
@@ -2791,6 +2896,9 @@ async function main(): Promise<void> {
               : undefined,
             appendResources: Array.isArray(update.appendResources)
               ? update.appendResources as ConversationResource[]
+              : undefined,
+            appendEvidence: Array.isArray(update.appendEvidence)
+              ? update.appendEvidence as ConversationEvidence[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
             terminalRevision: update.terminalRevision === true,
@@ -3911,36 +4019,9 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "refresh_token": {
-        const rtm = msg as RefreshTokenMessage;
-        const transition = authorizeRuntimeTokenRefresh(
-          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
-          rtm.ownerId,
-          () => { process.env.OMI_AUTH_TOKEN = rtm.token; },
-        );
-        if (transition.changed) {
-          directControlExecutions.transitionOwner(transition.previousOwnerId, transition.ownerId);
-          kernel.revokeRunToolCapabilitiesForOwner(transition.previousOwnerId, "owner_changed");
-          rejectPendingToolCallsForOwner(transition.previousOwnerId);
-        }
-        currentOwnerId = transition.ownerId;
-        ownerAuthorityEstablished = true;
-        lastOwnerRuntimeRevocation = null;
-        if (transition.changed || transition.firstEstablishment) {
-          triggerBackendReconcile({ ownerId: currentOwnerId });
-          pumpJournalOutbox();
-        }
-        try {
-          await ensurePiMonoAdapter(rtm.token);
-          for (const adapter of piMonoAdapters) {
-            const restarted = await adapter.updateAuthToken(rtm.token);
-            if (restarted) {
-              logErr("Pi-mono: token refresh restarted subprocess");
-            }
-          }
-        } catch (err) {
-          logErr(`Pi-mono token refresh error: ${err}`);
-        }
+      case "model_headers_result": {
+        const result = msg as ModelHeadersResultMessage;
+        modelCredentialRelay.receive(result.requestId, result.result, currentOwnerId);
         break;
       }
 

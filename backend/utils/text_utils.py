@@ -1,9 +1,10 @@
+import unicodedata
 from typing import Set
 
 
 def _normalize_text(text: str) -> str:
-    """Normalize text: lowercase and collapse whitespace."""
-    return ' '.join(text.lower().split())
+    """Normalize text: canonical NFC composition, lowercase, and collapse whitespace."""
+    return ' '.join(unicodedata.normalize('NFC', text).lower().split())
 
 
 def _get_trigrams(text: str) -> Set[str]:

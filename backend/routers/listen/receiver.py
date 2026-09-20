@@ -82,6 +82,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import (
     record_listen_audio_outcome,
     record_listen_unknown_channel_prefix,
+    record_live_stt_failover_accepted,
 )
 from utils.product_telemetry import emit_product_event
 
@@ -379,6 +380,10 @@ class ListenReceiver:
                 )
 
             if not modulate_is_configured_fallback(self.host.stt_language):
+                # No leg to walk: Deepgram's own typed connection errors
+                # surface after a single attempt instead of a three-attempt
+                # ladder, and initialize_stt's terminal path handles them
+                # exactly like the exhaustion raise it replaces.
                 return await connect_deepgram()
 
             def connect_parakeet() -> Any:
@@ -598,6 +603,7 @@ class ListenReceiver:
             reason='connection_lost',
             outcome='recovered',
         )
+        record_live_stt_failover_accepted(provider=service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {service.value}')
         if previous is not None:
             try:

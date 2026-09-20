@@ -4,11 +4,152 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: hive-limit-coercion-tests
+    command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the hive chat tools read the caller limit with a raw body.get('limit', 10); dict.get returns None - not the default - when the backend sends an explicit null for an omitted optional parameter, and items[:None] silently returned every row instead of the documented page size, while a string limit raised TypeError and surfaced as a tool error; all three handlers must coerce the limit to a bounded int"
+  - id: iq-rating-score-parsing-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
+  - id: omi-frankfurter-tests
+    command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
+    triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
+  - id: open-meteo-app-tests
+    command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
+    triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open-Meteo app must safely handle partial daily arrays, null unit metrics, and empty forecasts without IndexError or TypeError"
+  - id: open-meteo-null-params-tests
+    command: ["python3", "plugins/omi-open-meteo-app/test_null_optionals.py"]
+    triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: linear-exact-issue-lookup-tests
+    command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
+  - id: github-app-coerce-tests
+    command: ["python3", "plugins/omi-github-app/test_main.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "issue numbers/limits arriving as JSON null or formatted strings must be coerced cleanly, while repo parameter resolution disambiguates short names, sanitizes URLs, and catches dirty types"
+  - id: github-app-tools-auth-tests
+    command: ["python3", "plugins/omi-github-app/test_github_tools_auth.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "all eight /tools/* chat-tool routes in omi-github-app read uid from request bodies and act on stored OAuth credentials; the shared-secret guard must fail closed when unconfigured, reject invalid tokens, and guard every tool route"
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: whoop-measurements-tests
+    command: ["python3", "plugins/omi-whoop-app/test_main.py"]
+    triggers: ["plugins/omi-whoop-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
+  - id: whoop-weekly-summary-hardening-tests
+    command: ["python3", "plugins/omi-whoop-app/test_measurements_and_summary_hardening.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
+  - id: gcal-null-params-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13937: the Omi backend sends JSON null for omitted optional tool params and body.get(key, default) only applies defaults to absent keys, so min(None, 30) crashed list_events and sibling handlers trusted untyped optionals; the suite executes the production tool handlers through the calendar_api_request seam"
+  - id: omi-hacker-news-tests
+    command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
+    triggers: ["plugins/omi-hacker-news-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: composio-memory-route-tests
+    command: ["python3", "plugins/composio/test_omi_api_route.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14384: Composio memory sync must post to the documented /user/memories integration route instead of the nonexistent /user/facts route"
+  - id: usgs-earthquake-tests
+    command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
+    triggers: ["plugins/omi-usgs-earthquake-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: semantic-scholar-tests
+    command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
+    triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13925: null or non-dict data/papers payloads, mixed-type year/citationCount sort keys, null authors, and unnormalized DOI/arXiv identifiers must produce clean chat-tool responses, not TypeErrors or 500s"
+  - id: arxiv-app-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
+    triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14181: arXiv paper search and detail endpoints require typed request validation, defensive Atom XML parsing, and hermetic CI coverage"
+  - id: public-holidays-app-tests
+    command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
+    triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13928: holiday API error payloads, whitespace country codes, missing lifespan clients, and malformed holiday fields must return clean chat-tool responses without uncaught exceptions"
+  - id: linear-graphql-errors-tests
+    command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
+    triggers: ["plugins/omi-linear-app/**"]
+    lanes: ["local", "ci"]
+    reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: linear-list-issues-params-tests
+    command: ["python3", "plugins/omi-linear-app/test_list_issues_params.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
+  - id: ms365-calendar-pagination-tests
+    command: ["python3", "plugins/omi-ms365-app/test_calendar_pagination.py"]
+    triggers: ["plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "list_upcoming read one calendarView page and ignored @odata.nextLink, so a window with more than 50 events silently dropped every later event"
+  - id: ms365-services-hardening-tests
+    command: ["python3", "plugins/omi-ms365-app/test_services_hardening.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: go-device-sdk-tests
+    command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
+    triggers: ["sdks/device/go/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
+  - id: typescript-device-sdk-tests
+    command: ["bun", "test", "sdks/device/typescript"]
+    triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
+  - id: api-result-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/api-result/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/api-result/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Outage-as-empty cfaaaf2fb9db and detail null conflation 06597a0757cb: prevent nullable HTTP regression after file adoption, and debt in new files"
+  - id: capture-ownership-boundaries
+    command: ["python3", "scripts/check_mobile_boundaries.py", "--config", "app/contracts/capture/boundary-baseline.json"]
+    triggers: ["app/lib/**/*.dart", "app/contracts/capture/**", "scripts/check_mobile_boundaries.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WAL wake races edc8683e80/97ec3d9cea and late timer 05c43c014d: prevent regression in adopted capture files and debt in new files"
+  - id: mobile-boundary-check-tests
+    command: ["python3", "scripts/test_check_mobile_boundaries.py"]
+    triggers: ["scripts/*mobile_boundaries.py", "app/contracts/capture/**", "app/contracts/**/boundary-baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Lexical boundary scan must ignore prose, accept existing debt, and reject reintroduced debt"
+  - id: spine-contracts
+    command: ["python3", "scripts/check_spine_contracts.py", "--base", "{base}"]
+    triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered"
+    reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
     command: ["python3", ".github/scripts/test_probe_windows_update_feed.py"]
     triggers: [".github/scripts/probe_windows_update_feed.py", ".github/scripts/test_probe_windows_update_feed.py", ".github/workflows/desktop_windows_release.yml", ".github/checks-manifest.yaml"]
@@ -39,6 +180,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/test-pre-push-backend-test-cap.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11018: the over-broad-selection fallback swapped in the diff's own changed backend test files without re-applying PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES, so a diff changing more than the cap ran unbounded while printing 'cap is 40'; the bounded push gate must never run more than the cap it advertises"
+  - id: pre-push-hook-git-env
+    command: ["bash", "scripts/test-pre-push-git-env.sh"]
+    triggers: ["scripts/pre-push", "scripts/test-pre-push-git-env.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#11183: pushing from a linked worktree passed the hook's GIT_DIR to agents-md-lean's self-test, whose git init reinitialized the real repository and wrote core.bare=true into the config every worktree shares; four earlier fixes (#11413, #11709, #11795, #12564) scrubbed it one caller at a time"
   - id: pre-push-ci-prediction-tests
     command: ["python3", ".github/scripts/test_pre_push_ci_prediction.py"]
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
@@ -99,7 +245,7 @@ checks:
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the canonical production backend deploy remains the only release authority"
+    reason: "the canonical production backend release remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
@@ -107,7 +253,7 @@ checks:
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", "app/lib/**/*.dart", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
     requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
@@ -116,6 +262,21 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: debug-apk-size-report-tests
+    command: ["python3", ".github/scripts/test_report_debug_apk_size.py"]
+    triggers: [".github/scripts/report_debug_apk_size.py", ".github/scripts/test_report_debug_apk_size.py", ".github/workflows/mobile-app-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the compile-smoke APK size report must stay a non-gating zip breakdown of the debug APK this job already builds"
+  - id: structured-string-sink-registry
+    command: ["bash", "scripts/run-structured-string-sinks.sh"]
+    triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10337 registers the three delimiter, argv, and executable workflow sinks that blocked deploys in #9986, #9947, and #9945"
+  - id: structured-string-sink-registry-tests
+    command: ["bash", "scripts/run-structured-string-sink-tests.sh"]
+    triggers: [".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/test_check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sink-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every registered sink must keep a paired historical mutation fixture proving the checker rejects the incident grammar"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -136,7 +297,6 @@ checks:
     triggers: [".github/scripts/check-desktop-beta-freshness.py", ".github/scripts/test_check_desktop_beta_freshness.py", ".github/scripts/plan-desktop-release.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_release_doctor.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue #11936: hourly freshness must age the oldest unshipped macOS update so continuous merges cannot reset and auto-close the alarm"
-
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]
@@ -205,7 +365,7 @@ checks:
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
-    command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
+    command: ["python3", ".github/scripts/check_product_invariants.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     requires_pr_body: true
@@ -253,6 +413,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: desktop-agent-credential-boundary
+    command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
+    triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Beta v0.12.356 retained an expired Firebase token in pi-mono after one offline refresh killed its timer; prevent startup credential copies and refresh-driven restarts"
   - id: desktop-flow-contract-tests
     command: ["python3", "desktop/macos/tests/test_desktop_flow_contract.py"]
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
@@ -330,9 +495,15 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-ble-pairing-policy
+    command: ["ruby", "app/ios/test/omi_ble_pairing_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBlePairingPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_pairing_policy_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
-    triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", "app/test/fixtures/capture_policy.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "c04b703719 writes each native batch frame in two calls; 370b1045a0 rereads saved phone location each append; exercise those production writers while preserving frame durability and metadata freshness"
@@ -391,6 +562,16 @@ checks:
     triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/scripts/test_check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
     lanes: ["local", "ci"]
     reason: "development WIF pilot fixtures must reject secret access, apply, and scope expansion"
+  - id: opentofu-gha-wif-notifications
+    command: ["python3", ".github/scripts/check_opentofu_gha_wif_notifications.py"]
+    triggers: ["infrastructure/opentofu/slices/gha-wif-notifications/**", ".github/scripts/check_opentofu_gha_wif_notifications.py"]
+    lanes: ["local", "ci"]
+    reason: "notifications-job development WIF stays job-scoped, GitHub-main-scoped, and outside Owner JSON keys"
+  - id: opentofu-gha-wif-notifications-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_gha_wif_notifications.py"]
+    triggers: ["infrastructure/opentofu/slices/gha-wif-notifications/**", ".github/scripts/check_opentofu_gha_wif_notifications.py", ".github/scripts/test_check_opentofu_gha_wif_notifications.py"]
+    lanes: ["local", "ci"]
+    reason: "notifications-job development WIF checker must remain executable"
   - id: public-build-contract
     command: ["python3", ".github/scripts/check_public_build_contract.py"]
     triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/public_build_acceptance_route.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx", "web/personas-open-source/src/app/api/social-profile/route.ts"]
@@ -431,6 +612,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-admin-tests
+    command: ["bash", "scripts/run-web-admin-tests.sh"]
+    triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "web/admin hermetic guards (e.g. Firestore doc-id rejection) had no CI lane; pure node --test files need no npm install"
   - id: web-llm-gateway-only-tests
     command: ["python3", ".github/scripts/test_check_web_llm_gateway_only.py"]
     triggers: [".github/scripts/check_web_llm_gateway_only.py", ".github/scripts/test_check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -451,6 +637,16 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
     lanes: ["local", "ci"]
     reason: "#9571/#9600 reject naive datetime min/max fallbacks in backend sort keys"
+  - id: notification-dispatch-boundary
+    command: ["python3", ".github/scripts/check_notification_dispatch_boundary.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9518: notification policy converges only if new producers cannot bypass the typed dispatcher and call the FCM transport directly"
+  - id: notification-dispatch-boundary-tests
+    command: ["python3", ".github/scripts/test_check_notification_dispatch_boundary.py"]
+    triggers: [".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/test_check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the staged notification-owner ratchet must resolve aliases, ignore its transport owner, and reject baseline-assisted growth"
   - id: backend-route-policy-baseline
     command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
@@ -563,9 +759,9 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", "scripts/pre-push", ".github/scripts/test_desktop_swift_ci_contract.py", "desktop/macos/ci/xcode-pin.json", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/scripts/swift-test-suites.sh", "desktop/macos/tests/test-run-swift-ci.sh", "codemagic.yaml"]
     lanes: ["local", "ci"]
-    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved; the pin (version+build+app path) lives only in desktop/macos/ci/xcode-pin.json and the workflow, runner script, and the two Codemagic desktop Swift workflows must agree with it (#12867/#13548 ship-vs-CI divergence class)"
   - id: desktop-windows-ci-contract
     command: ["python3", ".github/scripts/test_desktop_windows_ci_contract.py"]
     triggers: [".github/workflows/desktop-windows-ci.yml", ".github/scripts/test_desktop_windows_ci_contract.py", ".github/checks-manifest.yaml"]
@@ -626,6 +822,31 @@ checks:
     triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "internal mobile builds are dispatched on a cadence, so who gets an instant build and when the batch fires must stay pinned rather than drift back to build-per-merge"
+  - id: mobile-distribution-contract
+    command: ["python3", ".github/scripts/test_mobile_distribution.py"]
+    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "mobile Codemagic distribution evidence must be explicit, platform-specific, source-bound, and fail closed when post-publish state is missing or unknown"
+  - id: mobile-release-identity
+    command: ["python3", "app/scripts/mobile_release_identity_test.py"]
+    triggers: ["app/scripts/mobile_release_identity.py", "app/scripts/mobile_release_identity_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "platform-specific Codemagic tags must resolve one strict version/build/source identity before a mobile publisher or Flutter build runs"
+  - id: mobile-store-version-contract
+    command: ["python3", "app/scripts/mobile_store_version_test.py"]
+    triggers: ["app/scripts/mobile_store_version.py", "app/scripts/mobile_store_version_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "store lookup failures and malformed responses must not be treated as empty history or build zero"
+  - id: mobile-release-admission
+    command: ["python3", ".github/scripts/test_verify_mobile_release_admission.py"]
+    triggers: [".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", ".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/workflows/mobile-app-checks.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "tag admission must consume exact-SHA first-attempt Release Eligibility and the explicit Mobile Release Eligibility aggregate"
+  - id: mobile-admission-collector
+    command: ["python3", ".github/scripts/test_collect_mobile_release_admission.py"]
+    triggers: [".github/scripts/collect_mobile_release_admission.py", ".github/scripts/test_collect_mobile_release_admission.py", ".github/scripts/verify_mobile_release_admission.py", ".github/scripts/test_verify_mobile_release_admission.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "tag builds must collect authenticated GitHub proof before the hermetic mobile admission verifier is allowed to pass"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
@@ -692,6 +913,16 @@ checks:
     triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
     lanes: ["local", "ci"]
     reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
+  - id: desktop-compiler-gates
+    command: ["python3", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    lanes: ["local", "ci"]
+    reason: "#12867/#13548: `#if compiler(...)` compiled Liquid Glass APIs out of the pinned ship toolchain so CI stayed green while the shipped app silently built the system fallback; runtime `#available` with a fallback is the only sanctioned gate"
+  - id: desktop-compiler-gates-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_compiler_gates.py"]
+    triggers: ["desktop/macos/scripts/check-desktop-compiler-gates.py", ".github/scripts/test_check_desktop_compiler_gates.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "planted glass-style `#if compiler(>=6.2)` sabotage must fail the tripwire and removing it must pass; the allowlist is asserted by exact contents so it cannot silently grow"
   - id: desktop-swift-format-lint
     command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
@@ -721,10 +952,15 @@ checks:
     reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
   - id: desktop-feature-sentinels
     command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
-    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
-    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
+    reason: "#9843/#13144: semantic feature sentinels prove flags are active without compiling every unrelated Swift test target"
+  - id: desktop-feature-sentinel-scope-test
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13144: the feature sentinel must select its compile-only target and never regress to a package-wide --build-tests invocation"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
@@ -752,9 +988,9 @@ checks:
     reason: "desktop Swift production or test structure changed"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
-    triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay from the live transcript, so this narrow boundary protects the three authoritative render files"
+    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay, so this boundary protects the authoritative render files with a blanket ban and adds a repo-wide chained-modifier rule: OmiMarkdown followed by enabled native selection fails CI on any desktop surface, which is what would have caught conversation detail when its markdown gained a SwiftUI-selection ancestor"
   - id: desktop-chat-selection-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_chat_selection_boundary.py"]
     triggers: [".github/scripts/check_chat_selection_boundary.py", ".github/scripts/test_check_chat_selection_boundary.py", ".github/checks-manifest.yaml"]
@@ -865,6 +1101,11 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
+  - id: hume-ai-create-memory-route-tests
+    command: ["python3", "plugins/hume-ai/test_create_omi_memory_route.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
@@ -890,7 +1131,196 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
-
+  - id: slack-explicit-channel-search-tests
+    command: ["python3", "plugins/omi-slack-app/test_slack_search.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13156 executes the Slack client and chat handler to prevent unresolved explicit channels from widening search scope"
+  - id: slack-segments-tests
+    command: ["python3", "plugins/omi-slack-app/test_segments.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
+  - id: slack-channel-resolution-tests
+    command: ["python3", "plugins/omi-slack-app/test_channel_resolution.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the fuzzy channel match posted to the first workspace channel containing the spoken name (\"dev\" hit whichever of #dev-ops and #frontend-dev was listed first), and a named channel that did not resolve fell through to the user's default channel; resolve_channel accepts one exact or one fuzzy candidate only and process_segments refuses a named channel it could not resolve"
+  - id: slack-app-settings-page-encoding-tests
+    command: ["python3", "plugins/omi-slack-app/test_settings_page.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "escapes Slack channel and workspace names at HTML boundaries, percent-encodes reflected uid parameter to prevent attribute breakout and URL query corruption in setup and OAuth callback pages"
+  - id: notion-page-content-tests
+    command: ["python3", "plugins/omi-notion-app/test_main.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
+  - id: notion-pagination-tests
+    command: ["python3", "plugins/omi-notion-app/test_pagination.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
+  - id: hey-omi-question-extraction-tests
+    command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
+    triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+  - id: plugin-mentor-session-auth-tests
+    command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
+    triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: coingecko-null-optionals-tests
+    command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
+    triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the backend sends every optional tool parameter the model omitted as JSON null; the request models rejected null, so all four CoinGecko tools failed on the ordinary call. Provider payloads carry null too: dict.get(key, default) does not apply its default for a present-but-null key, so coin.get('symbol', '').upper() raised AttributeError and discarded the whole result list"
+  - id: github-app-client-tests
+    command: ["python3", "plugins/omi-github-app/test_github_client.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
+  - id: clickup-app-client-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: get_all_lists read only /space/{id}/list, which ClickUp v2 limits to folderless lists, so every list inside a folder was invisible to the picker and to task routing; the suite asserts folder discovery and that a failed folder request does not pass as a workspace with no folders"
+  - id: clickup-app-settings-page-tests
+    command: ["python3", "plugins/omi-clickup-app/test_settings_page.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: mcp-date-filter-tests
+    command: ["python3", "mcp/tests/test_date_filters.py"]
+    triggers: ["mcp/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
+  - id: plugin-oauth-client-log-safety-tests
+    command: ["python3", "plugins/oauth/test_client_log_safety.py"]
+    triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
+  - id: plugin-oauth-hardening-tests
+    command: ["python3", "plugins/oauth/test_oauth_hardening.py"]
+    triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
+  - id: hive-update-task-status-tests
+    command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
+  - id: hive-create-task-ambiguous-target-tests
+    command: ["python3", "plugins/omi-hive-app/test_create_task_ambiguous_target.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hive_create_task resolved project_name and parent_task_name by returning the first candidate that matched a name, so an ambiguous project name created the task under whichever project get_user_projects listed first, and a parent task name matching a task in a different project was used as a fallback instead of refused; both now require a single unambiguous candidate"
+  - id: gcal-event-id-round-trip-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "list_events printed event ids cut to 20 characters and create_event printed none, so the ids the tools handed back could not be passed to get_event, update_event or delete_event; the suite round-trips every emitted id through those handlers"
+  - id: twitter-recording-accumulator-tests
+    command: ["python3", "plugins/omi-twitter-app/test_recording_state.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
+  - id: twitter-chat-tools-max-results-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
+  - id: ms365-tool-dispatch-tests
+    command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: wikipedia-request-boundary-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
+    triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Wikipedia app interpolated caller input straight into the outbound request: str.isalpha() accepted Unicode letters that IDNA-map to a different host label, quote() defaulted to safe='/' so a title could walk out of the summary path segment, and non-string tool arguments raised AttributeError as HTTP 500; the suite pins the hostname, the encoded path segment, and the tool-error envelope"
+  - id: crossref-doi-normalization-tests
+    command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: shopify-app-limit-input-tests
+    command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
+  - id: hive-app-tests
+    command: ["python3", "plugins/omi-hive-app/test_main.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: omi-stack-overflow-tests
+    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
+    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stack Overflow search, question retrieval, and answer reading must safely parse full URLs, normalize question targets, guard against NoneType in answer owners, and handle API errors gracefully"
+  - id: gcal-uid-reflection-encoding-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_uid_reflection.py"]
+    triggers: ["plugins/omi-google-calendar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: twitter-tweet-offset-tests
+    command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14351: TweetDetector must slice content using offsets from the original transcript, not a stripped copy"
+  - id: linear-search-issues-params-tests
+    command: ["python3", "plugins/omi-linear-app/test_search_issues_params.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
+  - id: dropbox-token-refresh-and-tools-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_token_refresh_and_tools.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
+  - id: desktop-build-source-identity
+    command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13126: a healthy named bundle could be signed, authenticated, and routed correctly while exposing no source receipt, so verification from a reused E2E pool slot could not prove which revision actually ran"
+  - id: app-addressability
+    command: ["python3", "scripts/check_app_addressability.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "app/test/support/addressability_widgets.dart", "app/contracts/addressability/**", "scripts/check_app_addressability.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations, the route registry and the adopted-file protections guard catalogued navigation and control keys without a changed-file no-growth debt ratchet"
+  - id: app-addressability-check-tests
+    command: ["python3", "scripts/test_check_app_addressability.py"]
+    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Token scan must reject unknown explicit route declarations without taxing helpers or dialogs; adopted-file removal stays blocked"
+  - id: registry-conflict-resolver-tests
+    command: ["python3", "scripts/test_resolve_registry_conflict.py"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
+  - id: mobile-event-registry
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
+  - id: mobile-client-compat-catalog
+    command: ["python3", "scripts/check_client_compat.py", "--base", "{base}"]
+    triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
+  - id: composio-backend-route-auth-tests
+    command: ["python3", "plugins/composio/test_tools_auth.py"]
+    triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
+  - id: chatgpt-plugin-tests
+    command: ["python3", "plugins/chatgpt/test_main.py"]
+    triggers: ["plugins/chatgpt/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ChatGPT plugin must return timezone-aware UTC ISO timestamps in /stats and properly validate and redirect user IDs"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

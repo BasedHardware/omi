@@ -549,6 +549,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// See `ChatTranscriptDuplicateKey`.
   @State private var duplicateMessageIDs: Set<String> = []
   var body: some View {
+    #if DEBUG
+      let _ = ChatStreamingRenderProbe.hit(.transcriptBodyEvaluation)
+    #endif
     ScrollViewReader { proxy in
       // Rail first, jump-to-latest on top of it. The rail is a full-height
       // trailing strip; stacking the disc underneath it ate the click.

@@ -22,8 +22,66 @@ Cross-platform view of backend Prometheus fallbacks, desktop PostHog heals, and 
 | Real-traffic journey outcomes | `omi_journey_*`, `omi_capture_finalization_reconciliations_total`, `listen_finalization_durable_jobs`, `listen_finalization_oldest_nonterminal_age_seconds` | Traffic-gated product alerts plus separate scrape-source health — see [real-traffic-journeys.md](./real-traffic-journeys.md) |
 | LLM gateway actual fallback rate | `sum(rate(llm_gateway_requests_total{route_serving_class="actual_fallback",fallback_used="true",fallback_reason!="none",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~"success|error"}[30m])), 1e-9)` | **Ticket** — see [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 | LLM gateway ordinary LKG serving share | `sum(rate(llm_gateway_requests_total{route_serving_class="lkg",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome="success"}[30m])), 1e-9)` | Dashboard-only rollout exposure |
+| 15 — Live STT chain exhaustion ratio | `omi_fallback_total{component="stt_selection",outcome="exhausted"} / omi_listen_accepted_total` on `job=backend-listen-metrics` | **WARN** at 0.35 / **PAGE** at 0.60 — see below |
+| 16 — Live STT fallback-leg recovery by to_mode | recovered / attempts per `to_mode`, zero-filled | **WARN** — a leg with ≥50 attempts and 0 recovered in 6h |
+| 17 — Sync intake created share | `omi_sync_intake_total` created / (created+merged) | **WARN** via Cloud Logging until backend-sync is scraped |
 
 The dashboard text panel repeats paging policy: page only on exhausted outcomes, sync enqueue uncertainty, and pusher degraded ratio. Successful `outcome=recovered` heals are dashboard-only.
+
+## Live STT chain exhaustion (2026-09-19)
+
+`omi-stt-chain-exhausted-warn` / `omi-stt-chain-exhausted-page`
+
+Sessions that die in `initialize_stt()` never construct a `LiveSTTAttempt`, so
+`omi_live_stt_terminal_total{outcome="failure"} / omi_live_stt_accepted_total`
+stays at zero even while the fleet is reconnecting. The dedicated rules divide
+`omi_fallback_total{component="stt_selection",outcome="exhausted"}` by
+`omi_listen_accepted_total` (the socket-accept counter). Both are Prometheus
+Counters scraped as `job=backend-listen-metrics`; `increase()` is the correct
+function (not a Stackdriver gauge).
+
+Thresholds are from measured 2-minute fleet samples, not a remembered SLO:
+
+| window (UTC) | accepts | exhausted | ratio | vs warn 0.35 / page 0.60 |
+|---|---|---|---|---|
+| 2026-09-18 09:00 (tolerable) | 227 | 57 | 0.251 | below both |
+| 2026-09-19 04:40 (incident) | 688 | 562 | 0.817 | pages |
+| 2026-09-19 09:30 (incident) | 913 | 811 | 0.888 | pages |
+| 2026-09-20 14:30 (recovered) | 347 | 57 | 0.164 | below both |
+
+Evidence layer for those numbers is Cloud Logging counts of
+`omi_fallback_event component=stt_selection outcome=exhausted` on
+backend-listen, divided by the measured accept counts. Prometheus evaluation
+of the exact `increase()` expression is still owed by whoever can query prod
+Prometheus/Grafana read-only.
+
+The 16–25% recovered/tolerable ratio is itself standing degradation. Closing
+the `initialize_stt()` blind spot also feeds the existing 10% live-STT warning
+(`omi-journey-live-transcription-fail`) so that baseline becomes visible there.
+
+**Safe next action:** confirm panel 15, then panel 16 for which `to_mode` is
+dead, then Deepgram/Parakeet credentials or capacity. Do not rotate unrelated
+keys.
+
+## Live STT fallback-leg dead
+
+`omi-stt-fallback-leg-dead` — warning, not a page. Deepgram recovered 0
+sessions in both the 2026-09-18 tolerable window and the 6h incident window
+(handshake payment errors since 2026-09-14). A dead fallback leg is standing
+failure; paging waits for the chain-exhaustion ratio.
+
+## Sync intake fragmentation
+
+`omi-sync-intake-fragmented`
+
+`ingest_sync_conversation` increments `omi_sync_intake_total{outcome="created|merged"}`
+and logs `omi_sync_intake outcome=…`. Prometheus does not scrape Cloud Run
+`backend-sync` today (exporter allowlist is `backend` + `desktop-backend`),
+so the alert evaluates Cloud Logging counts of that line. Brand-new series:
+no production history. Expected created share ~1.0 in a per-chunk storm
+(2026-09-19: 107 shards / 121 conversations for one account) versus `1/N`
+for an N-chunk continuous recording. Assignment continuity is a separate PR;
+this alert only makes the symptom visible.
 
 ## PostHog — desktop fallback insight
 
@@ -56,6 +114,7 @@ After Phase 1 deploy, cap **new PAGE alerts** at **≤2** for the first two week
 | Alert | Tier | Runbook |
 |-------|------|---------|
 | Pusher degraded session ratio | PAGE | [pusher-degraded.md](./pusher-degraded.md) |
+| Live STT provider chain exhaustion | PAGE at 0.60 (warn at 0.35) | this runbook, panel 15 |
 | Sync dispatch enqueue uncertainty share | Paused (Cloud Run scrape gap) — use Cloud Logging | [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
 | LLM gateway fallback rate | Ticket (Slack / Linear) | [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 

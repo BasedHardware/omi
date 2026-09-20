@@ -10,7 +10,9 @@ import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/settings/widgets/profile_settings_tile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -49,73 +51,15 @@ class _ProfilePageState extends State<ProfilePage> {
     bool showBetaTag = false,
     bool showChevron = true,
   }) {
-    return GestureDetector(
+    return ProfileSettingsTile(
+      title: title,
+      subtitle: subtitle,
+      chipValue: chipValue,
+      icon: icon,
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          child: Row(
-            children: [
-              SizedBox(width: 24, height: 24, child: icon),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-                        ),
-                        if (showBetaTag) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              'BETA',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (showSubtitle && subtitle != null && chipValue == null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.w400),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (chipValue != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
-                  child: Text(
-                    chipValue,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                if (showChevron) const SizedBox(width: 8),
-              ],
-              if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-            ],
-          ),
-        ),
-      ),
+      showSubtitle: showSubtitle,
+      showBetaTag: showBetaTag,
+      showChevron: showChevron,
     );
   }
 
@@ -201,35 +145,12 @@ class _ProfilePageState extends State<ProfilePage> {
     String? chipValue,
     VoidCallback? onTap,
   }) {
-    return InkWell(
+    return ProfileSettingsTile(
+      title: title,
+      chipValue: chipValue,
+      icon: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Row(
-          children: [
-            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-              ),
-            ),
-            if (chipValue != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
-                child: Text(
-                  chipValue,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-          ],
-        ),
-      ),
+      useInkWell: true,
     );
   }
 
@@ -542,6 +463,23 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
+                  title: context.l10n.voiceIntroduction('title'),
+                  icon: const Icon(Icons.waving_hand_outlined, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (routeContext) => Scaffold(
+                              backgroundColor: Colors.black,
+                              appBar: AppBar(backgroundColor: Colors.black),
+                              body: SpeechProfileWidget(
+                                flowSource: 'settings',
+                                goNext: () => Navigator.of(routeContext).pop(),
+                                onSkip: () => Navigator.of(routeContext).pop(),
+                              ),
+                            )));
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
                   title: context.l10n.speechProfile,
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
@@ -608,7 +546,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.deleteAccountTitle,
-                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.red, size: 20),
                   onTap: () {
                     PlatformManager.instance.analytics.pageOpened('Profile Delete Account Dialog');
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));

@@ -54,6 +54,21 @@ privacy, lineage, graph, and outbox rules. The complete convergence and removal
 ledger lives in
 [`backend/docs/epics/universal_memory_task_convergence.md`](backend/docs/epics/universal_memory_task_convergence.md).
 
+## Mobile own-voice enrollment direction
+
+Keep speech-profile enrollment in first-run onboarding. Offer four optional
+sentence starters to reduce the effort of speaking, plus alternatives and Skip.
+Personal-life answers are never enrollment requirements. Prompt completion,
+audio activity, voice enrollment, and confirmed answer saving have separate
+visible states. Users review and choose which transcribed statements to keep.
+Next starts the following prompt automatically. The fourth answer is a qualitative
+goal and is saved through the goal system, separately from personal memories.
+Review uses one Save and finish action with automatic completion. Goal wording
+is conservatively cleaned before review and can be edited or restored.
+A successful upload, not navigation through All Done, is the enrollment outcome.
+The [approach and verification plan](.github/agent-docs/mobile-voice-enrollment.md)
+describes the capture, memory consent, and quality boundaries.
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue
@@ -71,3 +86,13 @@ ledger lives in
 When declining a PR for direction or taste, either cite an existing invariant
 by ID or open a `proposed` invariant in `product/invariants/` the same
 week. Tribal “no” becomes written law.
+
+## Proposed offline fragment policy
+
+Offline chunks from a temporally continuous capture should form one conversation.
+Speaker enrollment and own-voice attribution are not prerequisites. Short,
+filler-only fragments remain visible with their original transcript and a minimal
+title, without automatic summarization; later meaningful content promotes the
+merged recording. Uncertain content stays kept. Long narration is not reliable
+evidence of irrelevance, so it remains one retained recording rather than being
+silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.

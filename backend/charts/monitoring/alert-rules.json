@@ -11686,5 +11686,615 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-stt-chain-exhausted-warn",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Live STT - provider chain exhaustion standing degradation",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 0.35",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "15",
+      "summary": "More than 35% of accepted /v4/listen sessions exhaust the live-STT provider chain in 5m",
+      "threshold": "exhausted / listen-accepted > 0.35 with >= 50 accepted sockets in 5m, for 10m",
+      "user_impact": "Live transcription is failing for a large minority of sessions; clients reconnect and audio falls to offline sync. This is the standing 16-25% degradation becoming worse, not yet the 2026-09-19 outage.",
+      "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "safe_next_action": "Confirm the ratio on Resilience / Fallbacks panel 15, then inspect which to_mode is exhausting (panel 16) before changing provider credentials or capacity.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
+      "evaluated_good": "0.251 (2026-09-18 09:00Z 2m) / 0.164 (2026-09-20 14:30Z 2m)"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-chain-exhausted-warn",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-chain-exhausted-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Live STT - provider chain exhaustion outage",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 0.60",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "15",
+      "summary": "More than 60% of accepted /v4/listen sessions exhaust the live-STT provider chain in 5m",
+      "threshold": "exhausted / listen-accepted > 0.60 with >= 50 accepted sockets in 5m, for 5m",
+      "user_impact": "Most live sessions die in initialize_stt(); clients reconnect every ~35s and conversations fragment. This is the 2026-09-19 04:40Z failure class (82-89%), separated from the 16-25% standing baseline.",
+      "scope": "backend-listen live STT selection (omi_fallback_total component=stt_selection outcome=exhausted over omi_listen_accepted_total).",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection outcome=exhausted on backend-listen (job=backend-listen-metrics Counter, not a Stackdriver gauge \u2014 increase() is the correct function) divided by measured /v4/listen accepts in the same 2-minute fleet samples. 2026-09-18 09:00Z (tolerable): 57 exhausted / 227 accepts = 0.251. 2026-09-19 04:40Z (incident): 562 / 688 = 0.817. 2026-09-19 09:30Z (incident): 811 / 913 = 0.888. 2026-09-20 14:30Z (recovered): 57 / 347 = 0.164. 5m exhausted counts: tolerable 135, recovered 163, incident 1376. Prometheus evaluation of this exact increase() expression is still owed by whoever can query prod Prometheus/Grafana read-only; this agent used the log counts of the same events.",
+      "safe_next_action": "Confirm panel 15 is above 0.60, then check Deepgram/Parakeet fallback-leg health on panel 16 and the live-STT failure-ratio panel before rolling credentials or disabling a provider.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "0.817 (2026-09-19 04:40Z 2m) / 0.888 (09:30Z 2m)",
+      "evaluated_good": "0.251 (2026-09-18 09:00Z 2m) / 0.164 (2026-09-20 14:30Z 2m)"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-chain-exhausted-page",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-fallback-leg-dead",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Live STT - a fallback provider recovered zero sessions for 6h",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[6h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\"}[6h])) * 0",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B < 1",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
+      "summary": "A live-STT fallback leg (to_mode) had at least 50 selection attempts in 6h and recovered none of them",
+      "threshold": "recovered < 1 with >= 50 stt_selection attempts in 6h, per to_mode, for 30m",
+      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14.",
+      "scope": "backend-listen omi_fallback_total component=stt_selection, grouped by to_mode. job=backend-listen-metrics Counter.",
+      "verification": "Evidence layer is Cloud Logging counts of omi_fallback_event component=stt_selection to=deepgram. Recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Deepgram handshake payment errors have been 100% since 2026-09-14. Prometheus evaluation of this exact increase() expression is still owed.",
+      "safe_next_action": "Identify the to_mode on panel 16. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z",
+      "evaluated_good": "to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window \u2014 this leg has been dead through both periods, which is why the alert is the standing-failure detector"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-fallback-leg-dead",
+      "component": "live-transcription",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-intake-fragmented",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync intake - created share indicates per-chunk conversations",
+    "condition": "F",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "deuxlwt1d569sb",
+        "model": {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync\" AND (textPayload:\"omi_sync_intake outcome=created\" OR jsonPayload.message:\"omi_sync_intake outcome=created\")",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "deuxlwt1d569sb",
+        "model": {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync\" AND (textPayload:\"omi_sync_intake outcome=merged\" OR jsonPayload.message:\"omi_sync_intake outcome=merged\")",
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "count",
+          "refId": "C",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "count",
+          "refId": "D",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$C >= 100 && $C / ($C + $D + 0.001) > 0.80",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "F",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "F"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "E",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "F",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "OK",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "17",
+      "summary": "Sync intake is creating a conversation for more than 80% of chunks with at least 100 creates in 30m",
+      "threshold": "created / (created+merged) > 0.80 with >= 100 created log lines in 30m, for 10m",
+      "user_impact": "Users see one conversation per synced audio chunk instead of a continuous recording. This is the 2026-09-19 fragmentation symptom (107 shards / 121 conversations for one account), regardless of whether live STT or assignment logic caused it.",
+      "scope": "Cloud Run backend-sync ingest_sync_conversation outcomes. Prometheus scrape of this counter is not yet ingested.",
+      "verification": "Brand-new series: omi_sync_intake_total and the omi_sync_intake log line do not exist in production history. Prometheus cannot scrape backend-sync today (Cloud Run exporter allowlist is backend + desktop-backend). This rule evaluates Cloud Logging counts of the new log line after deploy. Expected values from the 2026-09-19 incident: one account received 121 conversations / 107 shards in a day, so created share approached 1.0 for that user's 60s sync chunks. A healthy continuous recording of N 60s chunks is 1 created + (N-1) merged = 1/N. Fleet-wide created/merged is unmeasured; 0.80 with >= 100 created in 30m is a provisional gap between single-chunk recordings and a per-chunk create storm. Prometheus evaluation is owed after backend-sync is added to the Cloud Run metrics exporter.",
+      "safe_next_action": "Confirm created vs merged on Cloud Logging for backend-sync omi_sync_intake. Do not change assignment logic here; the continuity fix is a separate PR. This alert only makes the condition visible.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "expected created share ~1.0 for a per-chunk storm (107 shards in the 2026-09-19 account); series has no production history yet",
+      "evaluated_good": "expected created share 1/N for an N-chunk continuous recording; fleet-wide distribution unmeasured"
+    },
+    "labels": {
+      "alert_identity": "omi-sync-intake-fragmented",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

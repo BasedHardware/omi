@@ -2,28 +2,35 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
 from models.conversation_enums import ConversationSource
+from utils.journey_metrics_contract import bounded_app_build
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
+    OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
+    OMI_SYNC_INTAKE_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
     OMI_TRANSCRIPTION_ACCEPTED_TOTAL,
+    OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL,
     OMI_TRANSCRIPTION_COMPLETED_TOTAL,
     OMI_TRANSCRIPTION_LATENCY_SECONDS,
 )
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
+
+logger = logging.getLogger(__name__)
 
 _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
 _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
@@ -34,6 +41,7 @@ _LIVE_PHASES = {'connection', 'initialization', 'send'}
 _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
 _LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
+_SYNC_INTAKE_OUTCOMES = frozenset({'created', 'merged'})
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
 
@@ -70,12 +78,24 @@ def _deployment_environment() -> str:
 class TranscriptionAttempt:
     """Records one accepted journey and at most one terminal semantic outcome."""
 
-    def __init__(self, *, route: str, provider: str | None, platform: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        route: str,
+        provider: str | None,
+        platform: str | None,
+        audio_seconds: float | None = None,
+    ) -> None:
         self.route = _bounded_route(route)
         self.provider = bounded_provider(provider)
         self.platform = _bounded_platform(platform)
         self.deployment_version = _deployment_version()
         self.started_at = monotonic()
+        # Measured audio duration (PCM byte length / WAV header), passed by
+        # callers that already compute it for the daily budget. None means
+        # the duration was unreadable: skip provider minutes rather than
+        # charging the budget's worst case into the metric.
+        self.audio_seconds = max(0.0, float(audio_seconds)) if audio_seconds is not None else None
         self._outcome: TranscriptionOutcome | None = None
         OMI_TRANSCRIPTION_ACCEPTED_TOTAL.labels(
             route=self.route,
@@ -105,6 +125,15 @@ class TranscriptionAttempt:
         }
         OMI_TRANSCRIPTION_COMPLETED_TOTAL.labels(**labels).inc()
         OMI_TRANSCRIPTION_LATENCY_SECONDS.labels(**labels).observe(max(0.0, monotonic() - self.started_at))
+        if self.audio_seconds:
+            # Provider audio minutes are recorded on every terminal outcome,
+            # including failures: the provider still processed the audio.
+            OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL.labels(
+                route=self.route,
+                provider=self.provider,
+                outcome=outcome.value,
+                client_platform=self.platform,
+            ).inc(self.audio_seconds)
 
 
 class LiveSTTAttempt:
@@ -220,6 +249,49 @@ def record_sync_transcription_outcome(
     ).inc()
 
 
+def record_live_stt_pre_audio_failure(
+    *,
+    provider: str | None,
+    platform: str | None,
+    phase: LiveSTTTerminalPhase | str,
+) -> None:
+    """Count an initialize_stt() (or other pre-audio) death as a live-STT terminal.
+
+    ``LiveSTTAttempt`` is constructed only after first audio. A session that dies
+    in ``initialize_stt()`` never builds one, so ``omi_live_stt_terminal_total``
+    and ``omi_live_stt_accepted_total`` both stay at zero and the existing
+    failure-ratio alert is structurally blind. This increments both series with
+    ``phase="initialization"`` (or the caller-supplied bounded phase) without
+    emitting product analytics for a transcript that never started.
+    """
+
+    bounded_phase: str = phase if phase in _LIVE_TERMINAL_PHASES else 'initialization'
+    labels = {
+        'provider': bounded_provider(provider),
+        'client_platform': _bounded_platform(platform),
+        'deployment_environment': _deployment_environment(),
+    }
+    OMI_LIVE_STT_ACCEPTED_TOTAL.labels(**labels).inc()
+    OMI_LIVE_STT_TERMINAL_TOTAL.labels(
+        **labels,
+        outcome='failure',
+        phase=bounded_phase,
+    ).inc()
+
+
+def record_sync_intake_outcome(*, created: bool) -> None:
+    """Count one sync intake as created or merged. Never labeled by uid."""
+
+    outcome = 'created' if created else 'merged'
+    if outcome not in _SYNC_INTAKE_OUTCOMES:
+        raise ValueError(f'unknown sync intake outcome: {outcome}')
+    OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome).inc()
+    try:
+        logger.info('omi_sync_intake outcome=%s', outcome)
+    except Exception:
+        pass
+
+
 def record_live_stt_failure(
     *,
     provider: str | None,
@@ -247,12 +319,49 @@ def record_live_stt_failure(
     ).inc()
 
 
-def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only."""
+def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None, seconds: float) -> None:
+    """Add VAD-measured speech seconds for a backend-provider live-STT session.
+
+    Called once per speech-delta consumption in the listen usage flush; the
+    delta semantics of ``consume_speech_ms_delta`` make each millisecond reach
+    this counter exactly once.
+    """
+
+    if seconds <= 0:
+        return
+    OMI_LIVE_STT_AUDIO_SECONDS_TOTAL.labels(
+        provider=bounded_provider(provider),
+        client_platform=_bounded_platform(platform),
+        deployment_environment=_deployment_environment(),
+    ).inc(seconds)
+
+
+def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
+    """Count a replacement provider that accepted a mid-session failover.
+
+    A session's ``LiveSTTAttempt`` is bound to the provider that accepted it at
+    start, so a provider that only ever serves as a failover hop would otherwise
+    read as accepted=0 while carrying real traffic (#13662).
+    """
+
+    OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
+        provider=bounded_provider(provider),
+        client_platform=_bounded_platform(platform),
+        deployment_environment=_deployment_environment(),
+    ).inc()
+
+
+def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
+    """Count one accepted /v4/listen socket with bounded labels only.
+
+    WebSocket accept paths omit app_build (unknown): the handshake does not
+    carry a trusted version contract.
+    """
 
     OMI_LISTEN_ACCEPTED_TOTAL.labels(
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
+        app_build=bounded_app_build(app_build),
     ).inc()
 
 

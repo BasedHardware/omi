@@ -28,9 +28,43 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - What the empty bar says
+
+  /// Clearing the chat left the bar saying `Ask a follow-up…` over an empty transcript — an
+  /// invitation to follow up on nothing. The composer now says `Ask Omi`, full stop: the prompt
+  /// does not depend on what the transcript holds, so there is no state for it to get wrong.
+  func testTheChatComposerAlwaysSaysAskOmi() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .answer), "Ask Omi")
+    XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
+  }
+
+  /// `chat_composer_snapshot` must expose the same placeholder/mode the composer draws, or a
+  /// harness cannot assert the Ask Omi prompt through the supported headless bridge (#13201).
+  func testChatComposerSnapshotExposesPlaceholderAndMode() {
+    let answer = ChatComposerAutomationSnapshot.detail(
+      draft: "", stagedAttachments: 0, firstAttachment: "", mode: .answer)
+    XCTAssertEqual(answer["placeholder"], "Ask Omi")
+    XCTAssertEqual(answer["mode"], "answer")
+    QueryShellComposerAutomation.publish(.answer)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, "Ask Omi")
+
+    let results = ChatComposerAutomationSnapshot.detail(
+      draft: "priya", stagedAttachments: 0, firstAttachment: "", mode: .results)
+    XCTAssertEqual(results["placeholder"], RewindSearchMetrics.placeholder)
+    XCTAssertEqual(results["mode"], "results")
+    QueryShellComposerAutomation.publish(.results)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, RewindSearchMetrics.placeholder)
+    QueryShellComposerAutomation.publish(.homeDefault)
+  }
+
+  /// The search placement keeps its own prompt; it is a different control.
+  func testSearchingKeepsTheSearchPlaceholder() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)
+  }
+
   // MARK: - What a submit leaves behind
 
-  /// A composer that keeps the message it just sent leaves `Ask a follow-up…` permanently
+  /// A composer that keeps the message it just sent leaves its placeholder permanently
   /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
   /// the field by hand before they can write the next one.
   func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {

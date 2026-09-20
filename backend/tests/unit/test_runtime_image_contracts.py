@@ -400,3 +400,25 @@ def test_load_contracts_dockerfile_filter_skips_non_matching_entries(contracts_m
     filtered = contracts_module.load_contracts(staged_registry, dockerfile_filter=backend_filter)
 
     assert [c.name for c in filtered] == ['backend']
+
+
+def _requirement_pin(requirements_text: str, package: str) -> str:
+    prefix = f'{package}=='
+    for line in requirements_text.splitlines():
+        if line.startswith(prefix):
+            return line
+    raise AssertionError(f'{package} pin missing from requirements')
+
+
+def test_pusher_installs_typesense_because_finalization_indexes_conversations():
+    """process_conversation → lifecycle → typesense_index is reachable in the pusher image.
+
+    Auto-deploy smoke failed from 2026-09-01 onward with
+    missing installed dependency modules: typesense / typesense.exceptions.ObjectNotFound
+    because the module was on backend/requirements.txt but not the pusher subset.
+    """
+    pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
+    backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
+    assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
+    pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
+    assert 'name = "typesense"' in pylock

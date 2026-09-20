@@ -283,7 +283,8 @@ final class ChatStreamingBuffer {
     let seedText = message.text
     var accumulator = rawAccumulators[message.id] ?? RawAccumulator(text: message.text)
     accumulator.text += text
-    message.text = normalizeText(message, accumulator.text)
+    let projectedText = normalizeText(message, accumulator.text)
+    message.text = projectedText
     // Watched against a raw stream this buffer does not own, so the check survives the buffer
     // losing its own. See `ChatStreamingTailProbe`.
     tailProjectionProbe?.observe(
@@ -294,10 +295,11 @@ final class ChatStreamingBuffer {
     {
       let rawBlock = (accumulator.blocks[blockId] ?? existing) + text
       accumulator.blocks[blockId] = rawBlock
-      message.contentBlocks[lastBlockIndex] = .text(
-        id: blockId,
-        text: normalizeText(message, rawBlock)
-      )
+      // The common answer is one text block, whose raw text *is* the raw
+      // message text — the projection already computed above. Projecting it a
+      // second time doubled the per-flush normalization of the whole answer.
+      let projectedBlock = rawBlock == accumulator.text ? projectedText : normalizeText(message, rawBlock)
+      message.contentBlocks[lastBlockIndex] = .text(id: blockId, text: projectedBlock)
     } else {
       let blockId = UUID().uuidString
       accumulator.blocks[blockId] = text

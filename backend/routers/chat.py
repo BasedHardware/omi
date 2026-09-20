@@ -28,6 +28,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
@@ -90,6 +91,7 @@ from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     MAX_SESSION_DURATION_S,
@@ -147,7 +149,7 @@ def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
 
 def _cleanup_temp_voice_wavs(paths: List[str], uid: str) -> None:
     for path in paths:
-        if path.startswith(f'/tmp/{uid}_'):
+        if path.startswith(f'/tmp/{uid}_') or Path(path).resolve().parent == Path('syncing', uid).resolve():
             try:
                 Path(path).unlink()
             except OSError:
@@ -412,6 +414,12 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event(
+            'chat_message_sent',
+            request=request,
+            uid=uid,
+            outcome='quota_exceeded',
+        )
         return StreamingResponse(_quota_exceeded_stream(), media_type="text/event-stream")
 
     compat_app_id = app_id or plugin_id
@@ -472,6 +480,7 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event('chat_message_sent', request=request, uid=uid, outcome='error')
         return StreamingResponse(_quota_accounting_unavailable_stream(), media_type="text/event-stream")
 
     if chat_session:
@@ -585,6 +594,7 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
+        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -592,6 +602,11 @@ def send_message(
         answered = False
         stream_exhausted = False
         streamed_terminal_error = False
+        chat_tz = None
+        if data.time_zone:
+            chat_tz = await run_blocking(
+                db_executor, notification_db.sync_user_time_zone_from_client, uid, data.time_zone
+            )
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
 
@@ -660,6 +675,7 @@ def send_message(
                 context=data.context,
                 platform=x_app_platform,
                 client_kind=mobile_journey_attempt.client_kind,
+                client_tz=chat_tz,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
@@ -719,6 +735,7 @@ def send_message(
         failure_class='provider_error',
         missing_success_class='empty_answer',
     )
+    record_product_event('chat_message_sent', request=request, uid=uid, outcome='ok')
     return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 
@@ -912,6 +929,9 @@ def create_voice_message_stream(
             route='voice_chat_sse',
             provider=stt_provider,
             platform=x_app_platform,
+            # Measured first-wav duration (the only file transcribed); None when
+            # the WAV header was unreadable, so provider minutes stay measured-only.
+            audio_seconds=duration_ms / 1000 if duration_ms is not None else None,
         )
         quota_recorded = False
         try:
@@ -1076,6 +1096,10 @@ async def transcribe_voice_message(
             route='voice_rest_pcm',
             provider=stt_provider,
             platform=x_app_platform,
+            # compute_pcm_duration_ms assumes 16-bit PCM. Compressed encodings
+            # still use that figure for the daily budget (pre-existing); do not
+            # charge provider minutes from a byte-length that is not audio time.
+            audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
             transcript, detected_language = await run_blocking(
@@ -1185,9 +1209,15 @@ async def transcribe_voice_message(
         # An unreadable duration must not skip the budget check (STT still
         # runs on it) — charge the worst case instead of charging nothing.
         total_duration_ms = 0
+        measured_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
             total_duration_ms += duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+            if duration_ms is not None:
+                # Audio-seconds metrics record measured durations only; an
+                # unreadable file still charges the budget worst case above
+                # but must not inflate provider minutes.
+                measured_duration_ms += duration_ms
         allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
         if not allowed:
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
@@ -1197,6 +1227,7 @@ async def transcribe_voice_message(
             route='voice_rest_multipart',
             provider=stt_provider,
             platform=x_app_platform,
+            audio_seconds=measured_duration_ms / 1000,
         )
         for wav_path in wav_paths:
             transcript, detected_language = await run_blocking(
@@ -1849,6 +1880,7 @@ def upload_file_chat(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
     thumbs_name = []
+    thumb_source_by_name = {}
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1865,7 +1897,10 @@ def upload_file_chat(
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
-                thumbs_name.append(thumb_name)
+                thumbnail_path = result.get("thumbnail", "")
+                if thumbnail_path:
+                    thumbs_name.append(thumbnail_path)
+                    thumb_source_by_name[thumb_name] = thumbnail_path
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1885,12 +1920,12 @@ def upload_file_chat(
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            source_path = thumb_source_by_name.get(fc.thumb_name, "")
+            thumb_path = thumbs_path.get(source_path, "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            if thumb_file.exists():
-                thumb_file.unlink()
+            if source_path:
+                Path(source_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
@@ -1917,6 +1952,7 @@ def upload_file_chat_v1(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
     thumbs_name = []
+    thumb_source_by_name = {}
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1933,7 +1969,10 @@ def upload_file_chat_v1(
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
-                thumbs_name.append(thumb_name)
+                thumbnail_path = result.get("thumbnail", "")
+                if thumbnail_path:
+                    thumbs_name.append(thumbnail_path)
+                    thumb_source_by_name[thumb_name] = thumbnail_path
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1953,11 +1992,12 @@ def upload_file_chat_v1(
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            source_path = thumb_source_by_name.get(fc.thumb_name, "")
+            thumb_path = thumbs_path.get(source_path, "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if source_path:
+                Path(source_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]

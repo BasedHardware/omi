@@ -23,6 +23,10 @@ enum RealtimeScreenEvidenceCaptureFailure: String, CaseIterable, Equatable, Send
   /// Collapsing this into `captureUnavailable` made Omi tell the user nothing actionable.
   case screenRecordingNeedsRelaunch = "screen_recording_needs_relaunch"
   case captureUnavailable = "capture_unavailable"
+  /// Headless automation skipped the compositor so `ptt_start` is not blocked on WindowServer.
+  /// A deferred capture would include Omi's own expanded overlay, so this is explicit skip
+  /// state rather than a missing image.
+  case automationBypass = "automation_bypass"
 }
 
 struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
@@ -404,7 +408,8 @@ enum RealtimeScreenGroundingPolicy {
     for evidence: RealtimeScreenEvidenceDescriptor?
   ) -> RealtimeScreenEvidenceFailureDisposition {
     switch evidence?.captureFailure {
-    case .screenRecordingPermissionRequired, .screenRecordingNeedsRelaunch, .captureUnavailable:
+    case .screenRecordingPermissionRequired, .screenRecordingNeedsRelaunch, .captureUnavailable,
+      .automationBypass:
       // Screen Recording can be granted while the compositor is still
       // initializing. That must degrade the visual tool result, never consume
       // the user's PTT turn or replace native voice with a local terminal path.
@@ -461,7 +466,7 @@ enum RealtimeScreenGroundingPolicy {
     case .screenRecordingNeedsRelaunch:
       return
         "Screen Recording was granted after Omi launched, so I still can't see your screen. Quit Omi and open it again and I'll be able to."
-    case .captureUnavailable, nil:
+    case .captureUnavailable, .automationBypass, nil:
       return "I couldn't verify the current screen."
     }
   }
@@ -571,6 +576,32 @@ enum RealtimeScreenGroundingPolicy {
 /// select the display under the mouse: that is unrelated to the window the user is speaking
 /// about on a multi-display desktop.
 enum RealtimeScreenEvidenceCapture {
+  /// Turn-keyed unavailable evidence with no compositor work. Used when automation
+  /// skips capture so a later turn cannot inherit a nil (ambiguous) evidence slot.
+  static func unavailable(
+    for turnID: VoiceTurnID,
+    failure: RealtimeScreenEvidenceCaptureFailure
+  ) -> RealtimeScreenEvidence {
+    let descriptor = RealtimeScreenEvidenceDescriptor(
+      evidenceID: UUID().uuidString.lowercased(),
+      turnID: turnID,
+      capturedAt: Date(),
+      target: .unavailable,
+      frontmostApp: nil,
+      frontmostBundleID: nil,
+      windowID: nil,
+      displayID: nil,
+      imageByteCount: 0,
+      imageDigest: nil,
+      captureFailure: failure
+    )
+    return RealtimeScreenEvidence(
+      descriptor: descriptor,
+      preOverlayImage: nil,
+      jpeg: nil,
+      encodingFinished: true)
+  }
+
   /// Performs only the unavoidable pre-overlay compositor capture. JPEG encoding and hashing
   /// run after microphone capture begins so a first PTT is not blocked on image processing.
   static func capture(for turnID: VoiceTurnID) -> RealtimeScreenEvidence {

@@ -31,6 +31,7 @@ import {
   isSafeSkillName,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
+  __requestModelHeadersForTest,
   __omiRelayCapabilityRefForTest,
   __omiPendingCallsForTest,
   __registerOmiToolsForTest,
@@ -1602,6 +1603,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     save_knowledge_graph: [],
     get_conversations: [],
     search_conversations: ["query"],
+    read_conversation_evidence: ["evidence_id", "turn_id"],
+    search_conversation_evidence: ["query"],
     get_memories: [],
     search_memories: ["query"],
     get_action_items: [],
@@ -1621,6 +1624,19 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
       `${tool.name} required fields mismatch`,
     );
   }
+});
+
+test("OMI_TOOLS: evidence retrieval keeps its required identifiers and integer cursors", () => {
+  const read = OMI_TOOLS.find((tool) => tool.name === "read_conversation_evidence") as any;
+  const search = OMI_TOOLS.find((tool) => tool.name === "search_conversation_evidence") as any;
+  assert.ok(read, "read_conversation_evidence missing from OMI_TOOLS");
+  assert.ok(search, "search_conversation_evidence missing from OMI_TOOLS");
+  assert.deepEqual([...read.parameters.required].sort(), ["evidence_id", "turn_id"]);
+  assert.deepEqual([...search.parameters.required].sort(), ["query"]);
+  assert.equal(firstTypedSchema(read.parameters.properties.offset).type, "integer");
+  assert.equal(firstTypedSchema(read.parameters.properties.max_chars).type, "integer");
+  assert.equal(firstTypedSchema(search.parameters.properties.offset).type, "integer");
+  assert.equal(firstTypedSchema(search.parameters.properties.limit).type, "integer");
 });
 
 test("OMI_TOOLS: top-level schemas keep the object contract", () => {
@@ -2991,4 +3007,155 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// Numeric HTTP status is captured before pi turns errors into opaque strings.
+import { credentialedModelFetch, type ProviderStatus } from "../agent/dist/runtime/model-fetch.js";
+
+test("model request survives aged credentials and an offline refresh without a runtime restart", async () => {
+  let now = 0;
+  let expires = 60;
+  let online = true;
+  let refreshes = 0;
+  let requests = 0;
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => {
+      if (force || now >= expires) {
+        refreshes++;
+        if (!online) return { failureCode: "transport_interruption" };
+        expires = now + 60;
+      }
+      return { headers: { Authorization: "Bearer inert-test-only" } };
+    },
+    fetch: async request => {
+      assert.ok(new Request(request).headers.has("authorization"));
+      requests++;
+      return new Response("data: ok\n\n", { headers: { "content-type": "text/event-stream" } });
+    },
+    report: status => reports.push(status),
+  });
+  const send = () => modelFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: "{}" });
+  await send(); // Runtime has already made a successful provider request.
+  now = 61;
+  online = false;
+  await assert.rejects(send(), /credentials unavailable/);
+  assert.equal(requests, 1, "failed refresh must not send stale credentials");
+  online = true;
+  reports.length = 0;
+  assert.equal(await (await send()).text(), "data: ok\n\n");
+  assert.equal(refreshes, 2);
+  assert.ok(reports.every(report => report.failureCode === undefined));
+});
+
+test("bare managed 401 refreshes once, preserves replay bytes and reports typed authentication", async () => {
+  const forces: boolean[] = [];
+  const reports: ProviderStatus[] = [];
+  const bodies: string[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => { forces.push(force); return { headers: { Authorization: "Bearer inert-test-only" } }; },
+    fetch: async request => { bodies.push(await new Request(request).text()); return new Response(null, { status: 401 }); },
+    report: status => reports.push(status),
+  });
+  const response = await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: "original bytes" });
+  assert.equal(response.status, 401);
+  assert.deepEqual(forces, [false, true]);
+  assert.deepEqual(bodies, ["original bytes", "original bytes"]);
+  assert.deepEqual(reports, [{ type: "omi_provider_status", status: 401, failureCode: "authentication" }]);
+});
+
+test("BYOK and third-party 401s never become Omi session failures", async () => {
+  const forces: boolean[] = [];
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => { forces.push(force); return { headers: { Authorization: "Bearer inert-test-only", "X-BYOK-OpenAI": "inert-test-only" } }; },
+    fetch: async () => new Response(null, { status: 401 }),
+    report: status => reports.push(status),
+  });
+  await modelFetch("http://127.0.0.1:9999/v2/chat/completions");
+  assert.deepEqual(forces, [false]);
+  assert.equal(reports[0].failureCode, "provider_setup_needed");
+  reports.length = 0;
+  await modelFetch("http://127.0.0.1:9998/v2/chat/completions");
+  assert.equal(reports.length, 0);
+  assert.deepEqual(forces, [false]);
+});
+
+test("successful 401 replay exposes only successful SSE and retains cancellation", async () => {
+  const controller = new AbortController();
+  let count = 0;
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async () => ({ headers: { Authorization: "Bearer inert-test-only" } }),
+    fetch: async request => {
+      assert.equal(new Request(request).signal.aborted, false);
+      return ++count === 1 ? new Response(null, { status: 401 }) : new Response("data: first\n\ndata: [DONE]\n\n");
+    },
+    report: status => reports.push(status),
+  });
+  const response = await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { signal: controller.signal });
+  assert.equal(await response.text(), "data: first\n\ndata: [DONE]\n\n");
+  assert.deepEqual(reports, [{ type: "omi_provider_status", status: 200, failureCode: undefined }]);
+  controller.abort();
+  await assert.rejects(modelFetch("http://127.0.0.1:9999/v2/chat/completions", { signal: controller.signal }));
+  assert.equal(count, 2);
+});
+
+test("model credentials use the active Unix-pipe capability and leave no pending reply", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const context = await installRelayCapabilityContext("cap_model_request");
+  try {
+    await new Promise<void>(resolve => server.listen(sockPath, resolve));
+    server.on("connection", socket => {
+      let buffer = "";
+      socket.on("data", data => {
+        buffer += data.toString();
+        const end = buffer.indexOf("\n");
+        if (end < 0) return;
+        const request = JSON.parse(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        assert.equal(request.type, "model_headers");
+        assert.equal(request.capabilityRef, "cap_model_request");
+        assert.equal(request.forceRefresh, true);
+        assert.equal(request.token, undefined);
+        socket.write(JSON.stringify({ type: "tool_result", callId: request.callId,
+          result: JSON.stringify({ headers: { Authorization: "Bearer inert-test-only" } }) }) + "\n");
+      });
+    });
+    await __connectOmiPipeForTest(sockPath);
+    const reply = await __requestModelHeadersForTest(true, "cap_model_request");
+    assert.ok(reply.headers?.Authorization);
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    await context.cleanup();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("request authority is captured before lookup and never leaves the machine", async () => {
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async (_force, capability) => {
+      assert.equal(capability, "cap_original_request");
+      return { headers: { Authorization: "Bearer inert-test-only" } };
+    },
+    fetch: async (request, init) => {
+      assert.equal(new Request(request, init).headers.has("x-omi-local-capability"), false);
+      return new Response(null, { status: 200 });
+    },
+    report: status => reports.push(status),
+  });
+  const headers = { "x-omi-local-capability": "cap_original_request", "x-omi-request-id": "request-original" };
+  await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { headers });
+  assert.equal(reports[0].requestId, "request-original");
+  await modelFetch("http://127.0.0.1:9998/third-party", { headers });
+  assert.equal(reports.length, 1);
 });

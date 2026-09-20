@@ -455,6 +455,40 @@ def test_the_dominant_ratio_weighs_segments_by_their_words(monkeypatch):
     assert (is_valid, reason) == (True, "ok")
 
 
+def test_cjk_segment_is_counted_by_characters_not_split_as_one_word(monkeypatch):
+    """Regression for #12899: Japanese/Chinese/Thai have no spaces between words, so a whole
+    segment-granular entry (parakeet, Modulate) reads as a single "word" under `.split()` no
+    matter how long it actually is, and gets rejected as insufficient_words regardless of content.
+    """
+    # "Today I met a friend and we had a fun talk." (16 characters, well past MIN_CJK_CHARS).
+    segments = _make_segments(["今日は友達と会って楽しく話しました"], speakers=["SPEAKER_00"])
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    transcript, is_valid, reason = asyncio.run(
+        speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="ja")
+    )
+
+    assert (is_valid, reason) == (True, "ok")
+    assert transcript == "今日は友達と会って楽しく話しました"
+
+
+def test_cjk_segment_short_of_the_char_floor_is_still_refused(monkeypatch):
+    """The character-counting fix must not remove the floor entirely: a short CJK entry still fails."""
+    monkeypatch.setattr(
+        speaker_sample,
+        "deepgram_prerecorded_from_bytes",
+        lambda *_a, **_k: _make_segments(["こんにちは"]),  # "hello" — 5 characters
+    )
+
+    transcript, is_valid, reason = asyncio.run(
+        speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="ja")
+    )
+
+    assert (transcript, is_valid) == (None, False)
+    assert reason == f"insufficient_words: 5/{speaker_sample.MIN_CJK_CHARS}"
+
+
 def test_verify_and_transcribe_sample_passes_language_to_transcriber(monkeypatch):
     """A non-English sample must be transcribed in its own language, not silently as English.
 

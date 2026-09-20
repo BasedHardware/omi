@@ -7,7 +7,7 @@ import type { AdapterRegistry } from "./adapter-registry.js";
 
 export const ADAPTER_ACTIVATION_ENV = {
   acp: undefined,
-  "pi-mono": "OMI_AUTH_TOKEN",
+  "pi-mono": "OMI_MODEL_CREDENTIALS",
   hermes: "OMI_HERMES_ADAPTER_COMMAND",
   openclaw: "OMI_OPENCLAW_ADAPTER_COMMAND",
   codex: "OMI_CODEX_ADAPTER_COMMAND",

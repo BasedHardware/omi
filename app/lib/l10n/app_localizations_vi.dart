@@ -244,7 +244,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchConversations => 'Tìm kiếm cuộc trò chuyện...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'Đã chọn $count';
   }
 
@@ -2046,6 +2046,15 @@ class AppLocalizationsVi extends AppLocalizations {
       'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
 
   @override
+  String get memoryHistory => 'Lịch sử';
+
+  @override
+  String get memoryAllowUse => 'Cho phép dùng';
+
+  @override
+  String get memoryDontUse => 'Không dùng';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -2653,10 +2662,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewAndManageConversations => 'Xem xét và quản lý các cuộc trò chuyện đã ghi âm';
 
   @override
-  String get startCapturingConversations =>
-      'Bắt đầu ghi lại các cuộc trò chuyện bằng thiết bị Omi của bạn để xem chúng ở đây.';
-
-  @override
   String get useMobileAppToCapture => 'Sử dụng ứng dụng di động của bạn để ghi âm';
 
   @override
@@ -3154,9 +3159,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribing => 'Đang phiên âm...';
-
-  @override
-  String get transcriptionFailed => 'Phiên âm thất bại';
 
   @override
   String get discardedConversation => 'Cuộc trò chuyện đã loại bỏ';
@@ -3681,10 +3683,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Đang chuẩn bị ghi âm hệ thống';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Nhấp vào nút để ghi âm cho bản ghi trực tiếp, thông tin chi tiết AI và lưu tự động.';
-
-  @override
   String get reconnecting => 'Đang kết nối lại...';
 
   @override
@@ -3730,9 +3728,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'Bắt đầu ghi âm để xem bản ghi trực tiếp';
-
-  @override
   String get paused => 'Đã tạm dừng';
 
   @override
@@ -3751,9 +3746,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'Đang thiết lập ghi âm hệ thống';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'Đang ghi âm và tạo bản ghi';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'Nhấp để bắt đầu ghi âm hệ thống';
@@ -8764,6 +8756,43 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'sẽ tự động đồng bộ';
 
   @override
@@ -9974,4 +10003,88 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
+
+  @override
+  String get home => 'Trang chủ';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'Không thể cập nhật trạng thái đường cơ sở.';
+
+  @override
+  String get unstarConversation => 'Bỏ gắn sao cuộc trò chuyện';
+
+  @override
+  String get moreOptions => 'Tùy chọn khác';
+
+  @override
+  String get filterByDate => 'Lọc theo ngày';
+
+  @override
+  String get memoryGraph => 'Đồ thị ký ức';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 }

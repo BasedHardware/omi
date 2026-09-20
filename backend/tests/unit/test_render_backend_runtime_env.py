@@ -259,6 +259,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
+    assert notifications_job['flags']['--memory'] == '2Gi'
+    assert notifications_job['flags']['--task-timeout'] == '3600s'
 
 
 def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
@@ -364,6 +366,7 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job' in text
+    assert '${{ steps.runtime-env.outputs.notifications_job_flags }}' in text
     assert 'env_vars_update_strategy: overwrite' not in text
     assert 'secrets_update_strategy: overwrite' not in text
     assert (

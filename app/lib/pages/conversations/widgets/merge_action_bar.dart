@@ -87,7 +87,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 150),
                         child: Text(
-                          context.l10n.selectedCount(count, ''),
+                          context.l10n.selectedCount(count),
                           key: ValueKey(count),
                           style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),

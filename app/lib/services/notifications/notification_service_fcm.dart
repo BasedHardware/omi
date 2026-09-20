@@ -14,6 +14,7 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
@@ -246,9 +247,20 @@ class _FCMNotificationService implements NotificationInterface {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
+
+        // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).
+        // Keep ServerMessage emission above so in-app consumers still receive it.
+        // Match the legacy foreground path: suppress shade noise while Omi speaks.
+        if (ChatAnswerNotificationHandler.isChatAnswerData(data) && !OmiVoicePlaybackService.instance.isSpeaking) {
+          ChatAnswerNotificationHandler.handle(data, channel.channelKey!, isAppInForeground: true);
+          return;
+        }
+
         if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
           if (!OmiVoicePlaybackService.instance.isSpeaking) {
-            _showForegroundNotification(noti: noti, payload: payload);
+            final route = payload['navigate_to'] ?? '';
+            final layout = route.startsWith('/chat/') ? NotificationLayout.BigText : NotificationLayout.Default;
+            _showForegroundNotification(noti: noti, layout: layout, payload: payload);
           }
         }
         return;

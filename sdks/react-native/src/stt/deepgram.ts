@@ -36,9 +36,17 @@ export function createDeepgramTranscriber(options: {
     },
     stop() {
       try {
-        ws.close();
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'CloseStream' }));
+        }
       } catch {
-        // ignore
+        // CloseStream is best-effort; still tear down the socket.
+      } finally {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
       }
     },
   };

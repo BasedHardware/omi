@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -144,6 +147,9 @@ class ConversationProvider extends ChangeNotifier {
   final DailySummariesChecker? _dailySummariesChecker;
   final ConversationSearchFetcher _conversationSearchFetcher;
   final bool Function() _isSignedIn;
+  final ConversationApi? _conversationApi;
+  ApiViewState<List<ServerConversation>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
+  final Map<String, ApiViewState<ServerConversation>> _typedDetailStates = {};
 
   @visibleForTesting
   ConversationDetailsFetcher? conversationDetailsFetcherOverride;
@@ -160,13 +166,62 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
+    ConversationApi? conversationApi,
   })  : _conversationListFetcher = conversationListFetcher,
-        _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
+        _conversationLifecycleFetcher = conversationLifecycleFetcher ??
+            (conversationApi == null
+                ? getConversationByIdResult
+                : (id) => _legacyLifecycleFromTyped(conversationApi, id)),
         _dailySummariesChecker = dailySummariesChecker,
         _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
+        _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
+  }
+
+  static Future<({ServerConversation? item, bool ok})> _legacyLifecycleFromTyped(ConversationApi api, String id) async {
+    final result = await api.byId(id);
+    return switch (result) {
+      ApiSuccess(:final data) => (item: data, ok: true),
+      ApiFailure(:final problem)
+          when problem.kind == ApiProblemKind.paymentRequired ||
+              problem.kind == ApiProblemKind.unprocessable ||
+              problem.kind == ApiProblemKind.notFound =>
+        (item: null, ok: true),
+      _ => (item: null, ok: false),
+    };
+  }
+
+  ApiViewState<List<ServerConversation>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedConversationApi => _conversationApi != null;
+
+  ApiViewState<ServerConversation> typedDetailState(String id) =>
+      _typedDetailStates[id] ?? const ApiViewState(phase: ApiViewPhase.data);
+
+  Future<void> refreshTypedDetail(String id) async {
+    final api = _conversationApi;
+    if (api == null) return;
+    final result = await api.byId(id);
+    _typedDetailStates[id] = presentApiResult(result, isEmpty: (_) => false);
+    if (result
+        case ApiFailure(
+          :final problem,
+        ) when problem.kind == ApiProblemKind.paymentRequired || problem.kind == ApiProblemKind.unprocessable) {
+      processingConversations = processingConversations.where((conversation) => conversation.id != id).toList();
+    }
+    notifyListeners();
+  }
+
+  void _projectTypedList(ApiResult<List<ServerConversation>> result) {
+    _listViewState = presentApiResult(
+      result,
+      previous: conversations.isNotEmpty ? conversations : null,
+      isEmpty: (rows) => rows.isEmpty,
+      fallback: recordFallback,
+    );
   }
 
   void _loadSettings() {
@@ -214,6 +269,8 @@ class ConversationProvider extends ChangeNotifier {
     isLoadingConversations = false;
     isFetchingConversations = false;
     conversationsLoadFailed = false;
+    _listViewState = const ApiViewState(phase: ApiViewPhase.data);
+    _typedDetailStates.clear();
     _initialFetchRetryTimer?.cancel();
     _initialFetchRetryTimer = null;
     _initialFetchRetryCount = 0;
@@ -501,6 +558,7 @@ class ConversationProvider extends ChangeNotifier {
   // Force refresh bypassing debounce (for manual refresh, connection restored, etc.)
   Future forceRefreshConversations() async {
     _refreshDebounceTimer?.cancel();
+    _cancelInitialFetchRetry();
     _lastRefreshTime = DateTime.now();
     await _fetchNewConversations();
   }
@@ -522,6 +580,7 @@ class ConversationProvider extends ChangeNotifier {
       if (_conversationLoadingRevision == fetchRevision) setLoadingConversations(false);
       return;
     }
+    if (result.typed != null) _projectTypedList(result.typed!);
     if (!_isSignedIn()) {
       setLoadingConversations(false);
       return;
@@ -532,8 +591,11 @@ class ConversationProvider extends ChangeNotifier {
     // keep the existing list untouched; the next refresh trigger will retry.
     if (!result.ok) {
       setLoadingConversations(false);
+      if (result.typed != null) notifyListeners();
       return;
     }
+    _cancelInitialFetchRetry();
+    conversationsLoadFailed = false;
 
     final rawNewConversations = result.items;
     final newConversations = _filterPendingDeletes(rawNewConversations);
@@ -626,6 +688,7 @@ class ConversationProvider extends ChangeNotifier {
       _cancelInitialFetchRetry();
       return false;
     }
+    if (result.typed != null) _projectTypedList(result.typed!);
     if (!_isSignedIn()) {
       setLoadingConversations(false);
       _cancelInitialFetchRetry();
@@ -955,22 +1018,44 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  Future<({List<ServerConversation> items, bool ok, bool truncated})> _getConversationsFromServer() async {
+  ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
+      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
+    return switch (typed) {
+      ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
+      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
+    };
+  }
+
+  Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
+      _getConversationsFromServer() async {
+    final typedApi = _conversationApi;
+    if (typedApi != null) {
+      final (startDate, endDate) = _getDateFilterRange();
+      final typed = await typedApi.list(
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      return _packTypedConversationList(typed);
+    }
     final fetcher = _conversationListFetcher;
     if (fetcher != null) {
       final result = await fetcher();
-      return (items: result.items, ok: result.ok, truncated: false);
+      return (items: result.items, ok: result.ok, truncated: false, typed: null);
     }
 
     final (startDate, endDate) = _getDateFilterRange();
 
-    return await getConversationsResult(
+    final result = await getConversationsResult(
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
+    return (items: result.items, ok: result.ok, truncated: result.truncated, typed: null);
   }
 
   bool _isActiveProcessingStatus(ConversationStatus status) {
@@ -1122,16 +1207,39 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     final pageOffset = _conversationServerOffset;
-    final pageResult = conversationPageFetcherOverride != null
-        ? await conversationPageFetcherOverride!.call()
-        : await getConversationsResult(
-            offset: pageOffset,
-            includeDiscarded: showDiscardedConversations,
-            startDate: startDate,
-            endDate: endDate,
-            folderId: selectedFolderId,
-            starred: showStarredOnly ? true : null,
-          );
+    final typedApi = _conversationApi;
+    late final ({
+      List<ServerConversation> items,
+      bool ok,
+      bool truncated,
+      ApiResult<List<ServerConversation>>? typed
+    }) pageResult;
+    if (conversationPageFetcherOverride != null) {
+      final fetched = await conversationPageFetcherOverride!.call();
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    } else if (typedApi != null) {
+      pageResult = _packTypedConversationList(
+        await typedApi.list(
+          limit: _conversationPageSize,
+          offset: pageOffset,
+          includeDiscarded: showDiscardedConversations,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: selectedFolderId,
+          starred: showStarredOnly ? true : null,
+        ),
+      );
+    } else {
+      final fetched = await getConversationsResult(
+        offset: pageOffset,
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
       return false;

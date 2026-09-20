@@ -12,6 +12,27 @@ from utils.journey_metrics_contract import (
     CLIENT_KINDS,
 )
 
+OMI_PRODUCT_EVENT_TOTAL = Counter(
+    'omi_product_event_total',
+    (
+        'Product events by bounded event, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Never labeled by uid or raw version strings.'
+    ),
+    ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+)
+
+OMI_PRODUCT_EVENT_USER_DAILY = Histogram(
+    'omi_product_event_user_daily',
+    (
+        'Per-(uid, UTC-day) product-event tallies observed into a histogram. '
+        'Labels are only event and app_build — never uid. Per-pod; alert queries '
+        'must sum() across job=backend-listen-metrics to read p10/p90.'
+    ),
+    ['event', 'app_build'],
+    buckets=(1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000),
+)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',
@@ -140,22 +161,95 @@ def record_jit_first_open(*, event: str, effect: str) -> None:
     JIT_FIRST_OPEN_TOTAL.labels(event=event, effect=effect).inc()
 
 
+# Lazy desktop deferral (the pre-JIT free-desktop cost path): a raw transcript is
+# stored at capture and the paid enrichment runs only when the user first opens
+# the conversation. `stored` vs `enrich_*` is the observed ever-opened fraction,
+# which the JIT first-open deferral for paid tiers is sized against. Bounded
+# label set; anything else collapses to `other` so a new call site cannot mint
+# an unbounded series.
+#
+# Three constraints on reading the ratio (also carried in the HELP text, because
+# whoever writes the PromQL will not read this file):
+#  1. `stored` and `fenced` are emitted by EVERY job that runs the finalizer --
+#     the backend API and the pusher (`routers/pusher.py` ->
+#     `utils/pusher_finalization.py`) -- while `enrich_*` is emitted only by the
+#     backend first-open route. The ratio must therefore be
+#     `sum by (event) (lazy_desktop_deferral_total)` across every such job, and
+#     the pusher scrape target must be live or the denominator is truncated.
+#  2. `enrich_complete / stored` is an attempt-over-persist ratio, NOT a
+#     per-conversation one: a failed enrichment re-arms `deferred`, so the next
+#     open counts a second `enrich_started`, and a retried deferred persist can
+#     count `stored` (or `fenced`) more than once for a single conversation.
+#  3. The ratio is undefined while `FREE_TIER_LOCAL_PROCESSING` is on: the
+#     deferred-store path stops emitting `stored` while the already-stored
+#     backlog keeps emitting `enrich_*`, so the ratio drifts above 100%.
+LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
+    {
+        'stored',
+        'fenced',
+        'enrich_started',
+        'enrich_lost_ownership',
+        'enrich_reacquire_error',
+        'enrich_complete',
+        'enrich_failed',
+    }
+)
+
+LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
+    'lazy_desktop_deferral_total',
+    (
+        'Lazy desktop deferral lifecycle: store at capture and first-open enrichment outcomes; '
+        'never labeled by UID. Aggregate as sum by (event) across BOTH backend and pusher: '
+        'stored/fenced are emitted by every host running the finalizer, enrich_* only by the '
+        'backend first-open route. enrich_complete/stored is an attempt/persist ratio, not a '
+        'per-conversation one (a re-armed retry counts again). The ratio is undefined while '
+        'FREE_TIER_LOCAL_PROCESSING is on: stored stops while the enrich_* backlog drains.'
+    ),
+    ['event'],
+)
+
+# Export zero-valued children so a healthy but idle process is distinguishable
+# from an absent scrape target, matching the journey-metric convention above.
+for _lazy_event in LAZY_DESKTOP_DEFERRAL_EVENTS | {'other'}:
+    LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=_lazy_event)
+
+
+def record_lazy_desktop_deferral(*, event: str) -> None:
+    """Never raises: observability must not change a persistence or enrichment outcome."""
+    try:
+        label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    except Exception:
+        # Unhashable/invalid runtime values must not escape the guard; they
+        # collapse to `other` instead of breaking the owning path.
+        label = 'other'
+    try:
+        LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
-    'Accepted client-segmented product journeys by bounded journey and client kind',
-    ['journey', 'client_kind'],
+    (
+        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build'],
 )
 
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_client_journey_terminal_total',
-    'Terminal client-segmented product journey outcomes by bounded labels',
-    ['journey', 'client_kind', 'outcome'],
+    (
+        'Terminal client-segmented product journey outcomes by bounded labels. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build', 'outcome'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
     'omi_client_journey_issues_total',
     'Bounded issue detail for failed or degraded client-segmented product journeys',
-    ['journey', 'client_kind', 'issue_class'],
+    ['journey', 'client_kind', 'app_build', 'issue_class'],
 )
 
 OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
@@ -170,19 +264,23 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # would multiply the most expensive metric without helping outcome segmentation.
 # Initialize the complete bounded product so healthy-but-idle exporters expose
 # zeros instead of making an idle process indistinguishable from a missing one.
+# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
+# the app_build axis would multiply series by every historical client build.
 for _journey in CLIENT_JOURNEYS:
     for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind)
+        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
         for _outcome in CLIENT_JOURNEY_OUTCOMES:
             OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 outcome=_outcome,
             )
         for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
             OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 issue_class=_issue_class,
             )
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
@@ -305,8 +403,12 @@ OMI_FALLBACK_TOTAL = Counter(
 
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
-    'Desktop update channel resolutions by platform, channel, and source',
-    ['platform', 'channel', 'source'],
+    (
+        'Desktop update channel resolutions by platform, channel, source, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Server-to-server emitters omit app_build (unknown).'
+    ),
+    ['platform', 'channel', 'source', 'app_build'],
 )
 
 DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
@@ -335,8 +437,11 @@ DESKTOP_UPDATE_FEED_VALID = Gauge(
 
 OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     'omi_sync_dispatch_attempts_total',
-    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
-    ['mode'],
+    (
+        'Sync v2 dispatch attempts by selected mode and app build (denominator for fallback rates). '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['mode', 'app_build'],
 )
 
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
@@ -389,6 +494,16 @@ OMI_TRANSCRIPTION_LATENCY_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
 )
 
+# Audio duration actually submitted for transcription (from PCM byte length or
+# WAV headers), not wall-clock latency: query as minutes to compare provider
+# STT volume. Skips deployment_version to keep cardinality at provider+route+
+# outcome+platform.
+OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_voice_transcription_audio_seconds_total',
+    'Audio seconds submitted for accepted prerecorded transcription journeys (measured duration, not latency)',
+    ['route', 'provider', 'outcome', 'client_platform'],
+)
+
 OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL = Counter(
     'omi_sync_transcription_segments_total',
     'Terminal semantic outcomes for sync transcription segments',
@@ -410,6 +525,15 @@ OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
 OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
     'omi_live_stt_accepted_total',
     'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# VAD-measured speech seconds for backend-provider live sessions, metered once
+# per speech-delta flush: speech sent to the provider, not wall-clock session
+# length and not fair-use transcription_seconds.
+OMI_LIVE_STT_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_live_stt_audio_seconds_total',
+    'VAD speech seconds flushed for backend-provider live-STT sessions (speech sent, not wall-clock)',
     ['provider', 'client_platform', 'deployment_environment'],
 )
 
@@ -444,8 +568,12 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
 # are closed enums; no user, call, or session identifiers appear as labels.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
-    'Accepted /v4/listen WebSocket sessions by bounded transcription source and client platform',
-    ['transcription_source', 'client_platform'],
+    (
+        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
+        'sum() across job=backend-listen-metrics.'
+    ),
+    ['transcription_source', 'client_platform', 'app_build'],
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -458,6 +586,16 @@ OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
     'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
     ['transcription_source', 'client_platform'],
+)
+
+# Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
+# backend-sync, which Prometheus does not scrape today (exporter allowlist is
+# backend + desktop-backend only). Counters are still the contract; alerts on this
+# series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
+OMI_SYNC_INTAKE_TOTAL = Counter(
+    'omi_sync_intake_total',
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
@@ -529,8 +667,11 @@ for _outcome in ('not_needed', 'committed'):
 
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
-    'Auth flow events by provider, stage, outcome, and sanitized failure class',
-    ['provider', 'stage', 'outcome', 'failure_class'],
+    (
+        'Auth flow events by provider, stage, outcome, sanitized failure class, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['provider', 'stage', 'outcome', 'failure_class', 'app_build'],
 )
 
 AUTH_FLOW_DURATION_SECONDS = Histogram(

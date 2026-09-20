@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
+from urllib.parse import quote
 from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Any
 import secrets
 import asyncio
 
@@ -90,8 +92,12 @@ async def monitor_session_timeouts():
                                 channels
                             )
                             
-                            # If no channel, use default
-                            if not channel_id:
+                            # If no channel was named, use default; a named
+                            # channel that did not resolve must not fall
+                            # through to the default and post there.
+                            if not channel_id and channel_name:
+                                print(f"⏰ Not sending: channel '{channel_name}' not found or ambiguous", flush=True)
+                            elif not channel_id:
                                 channel_id = user.get("selected_channel")
                                 if channel_id:
                                     for ch in channels:
@@ -113,7 +119,7 @@ async def monitor_session_timeouts():
                                 else:
                                     print(f"⏰ FAILED: {result.get('error') if result else 'Unknown'}", flush=True)
                             else:
-                                print(f"⏰ Insufficient content to send (message: '{message[:50] if message else 'None'}...')", flush=True)
+                                print("⏰ Insufficient content to send", flush=True)
                             
                             # Reset session
                             SimpleSessionStorage.reset_session(session_id)
@@ -164,10 +170,12 @@ async def root(uid: str = Query(None)):
     
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        uid_q = quote(uid, safe="")
+        auth_url = f"/auth?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
                     {get_mobile_css()}
@@ -238,17 +246,22 @@ async def root(uid: str = Query(None)):
     # Authenticated - show channel selection page
     channels = user.get("available_channels", [])
     selected_channel = user.get("selected_channel", "")
-    team_name = user.get("team_name", "Unknown")
+    team_name = user.get("team_name") or "Unknown"
+    team_name_escaped = html.escape(str(team_name), quote=True)
+    uid_q = quote(str(uid), safe="")
     
     channel_options = '<option value="">Select a channel...</option>'
     for channel in channels:
         selected_attr = 'selected' if channel['id'] == selected_channel else ''
         privacy = "🔒" if channel.get('is_private') else "#"
-        channel_options += f'<option value="{channel["id"]}" {selected_attr}>{privacy} {channel["name"]}</option>'
+        escaped_id = html.escape(str(channel['id']), quote=True)
+        escaped_name = html.escape(str(channel['name']), quote=True)
+        channel_options += f'<option value="{escaped_id}" {selected_attr}>{privacy} {escaped_name}</option>'
     
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Settings</title>
             <style>
@@ -260,7 +273,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>💬 Slack Settings</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Connected to <span class="username">{team_name}</span>
+                        Connected to <span class="username">{team_name_escaped}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Default channel (optional - you can specify channel in voice command):
@@ -345,7 +358,7 @@ async def root(uid: str = Query(None)):
                     const channel = select.value;
                     
                     try {{
-                        const response = await fetch('/update-channel?uid={uid}&channel=' + encodeURIComponent(channel), {{
+                        const response = await fetch('/update-channel?uid={uid_q}&channel=' + encodeURIComponent(channel), {{
                             method: 'POST'
                         }});
                         
@@ -362,7 +375,7 @@ async def root(uid: str = Query(None)):
                 }}
                 
                 function refreshChannels() {{
-                    fetch('/refresh-channels?uid={uid}', {{
+                    fetch('/refresh-channels?uid={uid_q}', {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -381,14 +394,14 @@ async def root(uid: str = Query(None)):
                 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid={uid_q}', {{
                             method: 'POST'
                         }});
                         
                         const data = await response.json();
                         
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid={uid_q}';
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -426,14 +439,39 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
 async def auth_callback(
     request: Request,
     code: str = Query(None),
-    state: str = Query(None)
+    state: str = Query(None),
+    error: str = Query(None)
 ):
     """Handle OAuth callback from Slack."""
+    if error:
+        error_escaped = html.escape(str(error), quote=True)
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>{get_mobile_css()}</style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                            <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Failed</h2>
+                            <p style="margin-bottom: 0;">Access was not granted: {error_escaped}</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """,
+            status_code=400
+        )
+
     if not code or not state:
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -457,6 +495,7 @@ async def auth_callback(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -499,10 +538,14 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
         
+        team_name_escaped = html.escape(str(team_name or "Unknown"), quote=True)
+        uid_q = quote(str(uid), safe="")
+
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <title>Connected Successfully!</title>
                     <style>
@@ -515,14 +558,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px; animation: pulse 1.5s infinite;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your Slack workspace <strong>{team_name}</strong> is now linked
+                                Your Slack workspace <strong>{team_name_escaped}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(channels)}</strong> {('channel' if len(channels) == 1 else 'channels')}
                             </p>
                         </div>
                         
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={uid_q}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
                         
@@ -544,10 +587,12 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        uid_q = quote(str(uid), safe="") if uid else ""
         return HTMLResponse(
             content=f"""
             <html>
                 <head>
+                    <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>{get_mobile_css()}</style>
                 </head>
@@ -555,8 +600,8 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
+                            <a href="/auth?uid={uid_q}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -686,10 +731,6 @@ async def webhook(
     
     # Log received data
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         return {"status": "ok"}
@@ -709,7 +750,7 @@ async def webhook(
     
     # Only send notifications for final message post
     if response_message and ("✅ Message sent" in response_message or "❌" in response_message):
-        print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
+        print("✉️  USER NOTIFICATION sent (message result)", flush=True)
         return {
             "message": response_message,
             "session_id": session_id,
@@ -717,13 +758,14 @@ async def webhook(
         }
     
     # Silent response during collection
-    print(f"🔇 Silent response: {response_message}", flush=True)
+    response_len = len(response_message or "")
+    print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 
 async def process_segments(
     session: dict,
-    segments: List[Dict[str, Any]],
+    segments: List[Any],
     user: dict
 ) -> str:
     """
@@ -737,13 +779,12 @@ async def process_segments(
     For test interface: processes the entire text immediately.
     """
     # Extract text from segments
-    segment_texts = [seg.get("text", "") for seg in segments]
+    segment_texts = [seg.get("text", "") if isinstance(seg, dict) else str(seg) for seg in segments]
     full_text = " ".join(segment_texts)
     
     session_id = session["session_id"]
     is_test_session = session_id.startswith("test_session")
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['message_mode']}, Count: {session.get('segments_count', 0)}/5", flush=True)
     
     # Check for trigger phrase (but only if not already recording)
@@ -751,7 +792,7 @@ async def process_segments(
         message_content = message_detector.extract_message_content(full_text)
         
         print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
-        print(f"   Content: '{message_content}'", flush=True)
+        print(f"   Content extracted: {'yes' if message_content else 'no'}", flush=True)
         
         # TEST MODE: Process entire text immediately
         if is_test_session and len(message_content) > 10:
@@ -779,7 +820,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:
@@ -834,8 +879,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/5: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/5 received", flush=True)
         
         # Update session with new segment
         SimpleSessionStorage.update_session(
@@ -876,7 +920,11 @@ async def process_segments(
                 channels
             )
             
-            # If no channel identified, use default
+            # If no channel was named, use default; a named channel that
+            # did not resolve (unknown or ambiguous) must not post to it.
+            if not channel_id and channel_name:
+                SimpleSessionStorage.reset_session(session_id)
+                return f"❌ No single channel matches '#{channel_name}'; say the full channel name"
             if not channel_id:
                 channel_id = user.get("selected_channel")
                 if channel_id:
@@ -934,6 +982,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         return HTMLResponse(content=f"""
         <html>
             <head>
+                <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <title>Not Found</title>
                 <style>{get_mobile_css()}</style>
@@ -951,9 +1000,11 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
         </html>
         """, status_code=404)
     
+    uid_escaped = html.escape(str(uid), quote=True)
     return HTMLResponse(content=f"""
     <html>
         <head>
+            <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Slack Messages - Test Interface</title>
             <style>
@@ -971,7 +1022,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{uid_escaped}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate Slack</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
@@ -1037,7 +1088,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
                         
                         const authStatus = document.getElementById('authStatus');
@@ -1056,7 +1107,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening Slack authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
                 
@@ -1082,7 +1133,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
                         
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1126,7 +1177,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
                         

@@ -28,9 +28,252 @@ struct BatchAudioEnergyTests {
 
     static func main() throws {
         try testFrameWrites()
+        try testCapturePolicyFixture()
+        try testCapturePolicyAdmission()
+        try testProcessMuteLatch()
+        try testRevisionRetiresQueuedBleWrites()
+        try testPhoneWriterPolicyAcrossRestart()
         try testConfigChanges()
         try testLocationSnapshot()
-        print("PASS: single writes, partial failures, config changes, and location lifecycle")
+        print("PASS: capture policy, revision retirement, single writes, partial failures, config changes, and location lifecycle")
+    }
+
+    private struct CapturePolicyFixture: Decodable {
+        let name: String
+        let policy: String?
+        let deviceMuted: Bool
+        let batchMuted: Bool
+        let expectedMuted: Bool
+        let expectedRevision: Int64
+    }
+
+    private struct CapturePolicyFixtureEnvelope: Decodable {
+        let cases: [CapturePolicyFixture]
+    }
+
+    /// The same fixture drives the native iOS parser as the Flutter and
+    /// Android implementations. The parent test harness owns the fixture at
+    /// app/test/fixtures/capture_policy.json; keep this test tolerant while a
+    /// checkout is being bootstrapped before that shared file is present.
+    static func testCapturePolicyFixture() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // ios/test
+            .deletingLastPathComponent() // ios
+            .deletingLastPathComponent() // app
+            .appendingPathComponent("test/fixtures/capture_policy.json")
+        guard FileManager.default.fileExists(atPath: fixtureURL.path) else { return }
+        let fixtures = try JSONDecoder().decode(CapturePolicyFixtureEnvelope.self, from: Data(contentsOf: fixtureURL)).cases
+        let suite = "omi.capture.policy.fixture.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for fixture in fixtures {
+            defaults.removeObject(forKey: CaptureAdmissionPolicy.defaultsKey)
+            defaults.set(fixture.deviceMuted, forKey: "flutter.deviceMuted")
+            defaults.set(fixture.batchMuted, forKey: "flutter.batchMuted")
+            if let policy = fixture.policy {
+                defaults.set(policy, forKey: CaptureAdmissionPolicy.defaultsKey)
+            }
+            let actual = CaptureAdmissionPolicy.load(from: defaults)
+            precondition(actual.muted == fixture.expectedMuted, fixture.name)
+            precondition(actual.revision == fixture.expectedRevision, fixture.name)
+        }
+    }
+
+    static func testCapturePolicyAdmission() throws {
+        let suite = "omi.capture.policy.admission.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // A missing canonical value preserves the legacy mute behavior while
+        // keeping the initial revision stable.
+        defaults.set(false, forKey: "flutter.deviceMuted")
+        defaults.set(false, forKey: "flutter.batchMuted")
+        var policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(!policy.muted && policy.revision == 0)
+        defaults.set(true, forKey: "flutter.deviceMuted")
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(policy.muted && policy.revision == 0)
+        defaults.set(false, forKey: "flutter.deviceMuted")
+        defaults.set(true, forKey: "flutter.batchMuted")
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(policy.muted && policy.revision == 0)
+
+        // Canonical state supersedes both legacy booleans. Invalid canonical
+        // state remains fail-closed even when the legacy flags are clear.
+        defaults.set("{\"version\":1,\"revision\":7,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(!policy.muted && policy.revision == 7)
+        defaults.set("{\"version\":1,\"revision\":8,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(policy.muted && policy.revision == 8)
+        defaults.set("{\"version\":2,\"revision\":9,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(policy.muted && policy.revision == 0)
+        defaults.set("{broken", forKey: CaptureAdmissionPolicy.defaultsKey)
+        policy = CaptureAdmissionPolicy.load(from: defaults)
+        precondition(policy.muted && policy.revision == 0)
+    }
+
+    static func testProcessMuteLatch() throws {
+        CaptureAdmissionPolicy.resetProcessLatchForTesting()
+        defer { CaptureAdmissionPolicy.resetProcessLatchForTesting() }
+        precondition(CaptureAdmissionPolicy.currentProcessRevision() == 0)
+        precondition(CaptureAdmissionPolicy.channelRevision(NSNumber(value: Int32(1))) == 1)
+        precondition(CaptureAdmissionPolicy.channelRevision(NSNumber(value: Int64(2))) == 2)
+        precondition(CaptureAdmissionPolicy.channelRevision(NSNumber(value: true)) == nil)
+        let suite = "omi.capture.policy.latch.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set("{\"version\":1,\"revision\":1,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        precondition(!CaptureAdmissionPolicy.load(from: defaults).muted)
+
+        // The native mute takes effect before the durable write and remains in
+        // force while the old unmuted preference is still visible.
+        precondition(CaptureAdmissionPolicy.applyProcessUpdate(muted: true, revision: 2, defaults: defaults) == .applied)
+        precondition(CaptureAdmissionPolicy.currentProcessRevision() == 2)
+        precondition(CaptureAdmissionPolicy.load(from: defaults).muted)
+        precondition(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 2, defaults: defaults) == .persistenceNotReady)
+
+        // Persisting a mute does not release the latch. Only a matching
+        // persisted unmute can do that.
+        defaults.set("{\"version\":1,\"revision\":2,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        precondition(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 2, defaults: defaults) == .persistenceNotReady)
+        defaults.set("{\"version\":1,\"revision\":2,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        precondition(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 2, defaults: defaults) == .applied)
+        precondition(!CaptureAdmissionPolicy.load(from: defaults).muted)
+        if case .stale(let currentRevision) = CaptureAdmissionPolicy.applyProcessUpdate(muted: true, revision: 1, defaults: defaults) {
+            precondition(currentRevision == 2)
+        } else {
+            preconditionFailure("stale native policy revision was accepted")
+        }
+
+        // A malformed or muted durable value still denies capture when the
+        // process latch is clear; the latch never authorizes audio by itself.
+        defaults.set("broken", forKey: CaptureAdmissionPolicy.defaultsKey)
+        precondition(CaptureAdmissionPolicy.load(from: defaults).muted)
+    }
+
+    /// Exercise the real BLE batch writer at both policy boundaries. The
+    /// second packet is queued while revision 4 is current, then retired when
+    /// revision 5 arrives before the writer queue drains.
+    static func testRevisionRetiresQueuedBleWrites() throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let suite = "omi.capture.policy.writer.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let writer = OmiBatchAudioWriter(defaults: defaults)
+        defaults.set(true, forKey: "flutter.batchModeEnabled")
+        defaults.set(dir.path, forKey: "flutter.batchAudioDir")
+        defaults.set("{\"deviceId\":\"device\",\"serviceUuid\":\"service\",\"characteristicUuid\":\"char\"}", forKey: "flutter.nativeBleStreamConfig")
+
+        func policy(_ revision: Int, muted: Bool) {
+            defaults.set(
+                "{\"version\":1,\"revision\":\(revision),\"muted\":\(muted ? "true" : "false")}",
+                forKey: CaptureAdmissionPolicy.defaultsKey
+            )
+        }
+        func enqueue(_ byte: UInt8) {
+            precondition(writer.handle(
+                peripheralUuid: "device", serviceUuid: "service", characteristicUuid: "char",
+                value: Data([0, 0, 0, byte])
+            ))
+        }
+
+        // Work admitted under revision 1 must be retired after mute revision 2
+        // arrives, even though the BLE callback already returned to its caller.
+        policy(1, muted: false)
+        enqueue(0x11)
+        policy(2, muted: true)
+        writer.queue.sync {}
+        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
+        defaults.set(false, forKey: "flutter.batchModeEnabled")
+        precondition(!writer.handle(
+            peripheralUuid: "device", serviceUuid: "service", characteristicUuid: "char", value: Data([0, 0, 0, 0x12])
+        ))
+        writer.queue.sync {}
+        defaults.set(true, forKey: "flutter.batchModeEnabled")
+        // Re-enabling batch mode while muted remains safe: the native writer
+        // consumes the configured characteristic but creates no file.
+        enqueue(0x13)
+        writer.queue.sync {}
+        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
+
+        // An unmuted packet writes normally. A revision-only transition retires
+        // queued work too, while the current revision remains unmuted.
+        policy(3, muted: false)
+        enqueue(0x22)
+        writer.queue.sync {}
+        policy(4, muted: false)
+        enqueue(0x33)
+        policy(5, muted: false)
+        writer.queue.sync {}
+        policy(5, muted: false)
+        enqueue(0x44)
+        writer.queue.sync {}
+
+        // Mute remains authoritative while batch mode is alive; unmute under a
+        // new revision resumes the same open file without admitting 0x55.
+        policy(6, muted: true)
+        enqueue(0x55)
+        writer.queue.sync {}
+        policy(7, muted: false)
+        enqueue(0x66)
+        writer.queue.sync {}
+        defaults.set(false, forKey: "flutter.batchModeEnabled")
+        precondition(!writer.handle(
+            peripheralUuid: "device", serviceUuid: "service", characteristicUuid: "char", value: Data([0, 0, 0, 0x77])
+        ))
+        writer.queue.sync {}
+
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        let finalized = files.filter { $0.path.hasSuffix(".bin") }
+        precondition(finalized.count == 1)
+        let actual = try Data(contentsOf: finalized[0])
+        check(actual == Data([
+            1, 0, 0, 0, 0x22,
+            1, 0, 0, 0, 0x44,
+            1, 0, 0, 0, 0x66,
+        ]))
+    }
+
+    static func testPhoneWriterPolicyAcrossRestart() throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let suite = "omi.capture.policy.phone.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let queue = DispatchQueue(label: "test.phone.policy")
+        let packets = [Data([0x01, 0x02])]
+
+        // Generic device mute is honored by the phone batch sink while the
+        // canonical policy has not yet been introduced.
+        defaults.set(true, forKey: "flutter.deviceMuted")
+        let firstWriter = PhoneMicBatchAudioWriter(dir: dir.path, queue: queue, defaults: defaults)
+        queue.sync {
+            firstWriter.append(opusPackets: packets, marker: "omibatchphone")
+        }
+        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
+
+        // A canonical mute survives construction of a replacement writer (the
+        // app-restart boundary) and blocks already-produced opus packets.
+        defaults.set("{\"version\":1,\"revision\":9,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        let restartedWriter = PhoneMicBatchAudioWriter(dir: dir.path, queue: queue, defaults: defaults)
+        queue.sync {
+            restartedWriter.append(opusPackets: packets, marker: "omibatchphone")
+        }
+        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
+
+        defaults.set("{\"version\":1,\"revision\":10,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        queue.sync {
+            restartedWriter.append(opusPackets: packets, marker: "omibatchphone")
+            restartedWriter.closeNowLocked("test")
+        }
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        let finalized = files.filter { $0.path.hasSuffix(".bin") }
+        precondition(finalized.count == 1)
+        check(try Data(contentsOf: finalized[0]) == Data([2, 0, 0, 0, 0x01, 0x02]))
     }
 
     static func testFrameWrites() throws {
