@@ -1,6 +1,6 @@
 # Na istepu taumada kei omi-cli
 
-E vakaraitaka na iVolaqatiqati qo na istepu taumada (commands) ni omi-cli ena vosa vakaViti. Na yaca ni veiqaravi kei na itukutuku ni porokaramu era tiko ena vosa vakavalagi. Na ivakaraitaki ni vaqaqa e vakaraitaki eke ena sega ni veisautaki na nomu nanuma (memories), na nomu veivosaki (conversations), na nomu itavi (action items) se na nomu inaki (goals).
+E vakaraitaka na ivolaqatiqati qo na istepu taumada (commands) ni omi-cli ena vosa vakaViti. Na yaca ni veiqaravi kei na itukutuku ni porokaramu era tiko ena vosa vakavalagi. Na ivakaraitaki ni vaqaqa e vakaraitaki eke ena sega ni veisautaki na nomu nanuma (memories), na nomu veivosaki (conversations), na nomu itavi (action items) se na nomu inaki (goals).
 
 ## Vakadidike
 
