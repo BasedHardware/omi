@@ -50,6 +50,7 @@
 * [`quickstart.af.md`](quickstart.af.md) — Begin met omi-cli (Afrikaans Quickstart).
 * [`quickstart.az.md`](quickstart.az.md) — omi-cli ilə İlk Addımlar (Azerbaijani Quickstart).
 * [`quickstart.be.md`](quickstart.be.md) — omi-cli Кіраўніцтва па хуткім старце (Belarusian Quickstart).
+* [`quickstart.bi.md`](quickstart.bi.md) — Fes stef wetem omi-cli (Bislama Quickstart).
 * [`quickstart.cy.md`](quickstart.cy.md) — Canllaw Cychwyn Cyflym omi-cli (Welsh Quickstart).
 * [`quickstart.doi.md`](quickstart.doi.md) — omi-cli डोगरी शुरूआती मार्गदर्शिका (Dogri Quickstart).
 * [`quickstart.el.md`](quickstart.el.md) — Πρώτα βήματα με το omi-cli (Greek Quickstart).
