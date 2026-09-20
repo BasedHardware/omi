@@ -516,6 +516,24 @@ def _coerce_int(
     return max(minimum, min(parsed, maximum))
 
 
+def _money(value: Any, default: float = 0.0) -> float:
+    """Coerce a Shopify money field to float, tolerating null and blanks.
+
+    Shopify sends money fields as strings, but several (``total_tax``,
+    ``subtotal_price``, a refund ``amount``, a line-item ``price``) can be
+    ``null`` or absent on some order states. ``dict.get(key, 0)`` does not
+    apply its default for a present-but-null key, so ``float(None)`` raised
+    TypeError; because the analytics handler sums these inside one broad
+    ``try``, a single null order discarded the entire financial report.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_analytics(request: Request):
     """
@@ -635,10 +653,10 @@ async def tool_get_analytics(request: Request):
         total_orders = len(orders)
         
         # Shopify subtotal_price is already after line-item discounts.
-        post_discount_subtotal = sum(float(o.get("subtotal_price", 0)) for o in orders)
+        post_discount_subtotal = sum(_money(o.get("subtotal_price")) for o in orders)
         
         # Total discounts applied
-        total_discounts = sum(float(o.get("total_discounts", 0)) for o in orders)
+        total_discounts = sum(_money(o.get("total_discounts")) for o in orders)
         
         # Calculate refunds
         total_refunds = 0
@@ -649,7 +667,7 @@ async def tool_get_analytics(request: Request):
                 refunded_orders += 1
                 for refund in refunds:
                     for transaction in refund.get("transactions", []):
-                        total_refunds += float(transaction.get("amount", 0))
+                        total_refunds += _money(transaction.get("amount"))
         
         # Present a true pre-discount gross so the Discounts row reconciles:
         # gross_sales - total_discounts - total_refunds == net_sales
@@ -657,12 +675,12 @@ async def tool_get_analytics(request: Request):
         net_sales = post_discount_subtotal - total_refunds
         
         # Total collected (what was actually charged - includes tax & shipping)
-        total_collected = sum(float(o.get("total_price", 0)) for o in orders)
+        total_collected = sum(_money(o.get("total_price")) for o in orders)
         
         # Taxes and shipping
-        total_tax = sum(float(o.get("total_tax", 0)) for o in orders)
+        total_tax = sum(_money(o.get("total_tax")) for o in orders)
         total_shipping = sum(
-            float(o.get("total_shipping_price_set", {}).get("shop_money", {}).get("amount", 0))
+            _money(o.get("total_shipping_price_set", {}).get("shop_money", {}).get("amount"))
             for o in orders
         )
         
@@ -743,7 +761,7 @@ async def tool_get_analytics(request: Request):
                         # Find matching variant
                         for var_id, iid in inventory_item_ids:
                             if iid == inv_id and cost:
-                                variant_costs[var_id] = float(cost)
+                                variant_costs[var_id] = _money(cost)
         
         # Calculate total COGS
         items_with_cost = 0
@@ -814,7 +832,7 @@ async def tool_get_analytics(request: Request):
                 for item in order.get("line_items", []):
                     title = item.get("title", "Unknown")
                     qty = item.get("quantity", 0)
-                    price = float(item.get("price", 0)) * qty
+                    price = _money(item.get("price")) * _coerce_int(qty, default=0, minimum=0, maximum=1000000)
                     product_sales[title] = product_sales.get(title, 0) + qty
                     product_revenue[title] = product_revenue.get(title, 0) + price
             

@@ -1228,6 +1228,11 @@ checks:
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: shopify-analytics-money-tests
+    command: ["python3", "plugins/omi-shopify-app/test_analytics_money.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_analytics summed money with float(o.get(field, 0)); Shopify sends money as strings but total_tax, subtotal_price, a refund amount and a line-item price can be present-but-null, and dict.get does not apply its default for a null value, so float(None) raised TypeError inside the one broad try and a single null order discarded the entire financial report"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
