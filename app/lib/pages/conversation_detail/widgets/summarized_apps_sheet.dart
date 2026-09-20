@@ -488,11 +488,15 @@ class _AppListItemState extends State<_AppListItem> {
         if (confirmed == true) {
           // Set as preferred app
           if (widget.provider != null) {
-            widget.provider!.setPreferredSummarizationApp(widget.app.id);
+            final saved = await widget.provider!.setPreferredSummarizationApp(widget.app.id);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)),
+                  content: Text(
+                    saved
+                        ? context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)
+                        : context.l10n.failedToSaveCheckConnection,
+                  ),
                   duration: const Duration(seconds: 2),
                 ),
               );
