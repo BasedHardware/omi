@@ -57,6 +57,7 @@ ALLOWED_COMPONENTS = frozenset(
         'sync_dispatch',
         'pusher',
         'stt_selection',
+        'stt_live_session',
         'vad',
         'audio_merge',
         'webhook',

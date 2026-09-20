@@ -23,8 +23,9 @@ Cross-platform view of backend Prometheus fallbacks, desktop PostHog heals, and 
 | LLM gateway actual fallback rate | `sum(rate(llm_gateway_requests_total{route_serving_class="actual_fallback",fallback_used="true",fallback_reason!="none",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~"success|error"}[30m])), 1e-9)` | **Ticket** — see [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 | LLM gateway ordinary LKG serving share | `sum(rate(llm_gateway_requests_total{route_serving_class="lkg",outcome="success"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome="success"}[30m])), 1e-9)` | Dashboard-only rollout exposure |
 | 15 — Live STT chain exhaustion ratio | `omi_fallback_total{component="stt_selection",outcome="exhausted"} / omi_listen_accepted_total` on `job=backend-listen-metrics` | **WARN** at 0.35 / **PAGE** at 0.60 — see below |
-| 16 — Live STT fallback-leg recovery by to_mode | recovered / attempts per `to_mode`, zero-filled | **WARN** — a leg with ≥50 attempts and 0 recovered in 6h |
+| 16 — Live STT fallback-leg recovery by to_mode | recovered / attempts per `to_mode`, zero-filled, `stt_selection` + `stt_live_session` | **WARN** — a leg with ≥50 attempts and 0 recovered in 6h |
 | 17 — Sync intake created share | `omi_sync_intake_total` created / (created+merged) | **WARN** via Cloud Logging until backend-sync is scraped |
+| 18 — Live STT provider stream closes | `omi_stt_stream_close_total` by provider, reason | **PAGE** at ≥5 `provider_budget_exhausted` closes in 5m |
 
 The dashboard text panel repeats paging policy: page only on exhausted outcomes, sync enqueue uncertainty, and pusher degraded ratio. Successful `outcome=recovered` heals are dashboard-only.
 
@@ -65,10 +66,37 @@ keys.
 
 ## Live STT fallback-leg dead
 
-`omi-stt-fallback-leg-dead` — warning, not a page. Deepgram recovered 0
-sessions in both the 2026-09-18 tolerable window and the 6h incident window
-(handshake payment errors since 2026-09-14). A dead fallback leg is standing
-failure; paging waits for the chain-exhaustion ratio.
+`omi-stt-fallback-leg-dead` — warning, not a page. Watches
+`component=~"stt_selection|stt_live_session"` grouped by `to_mode`. Deepgram
+recovered 0 sessions in both the 2026-09-18 tolerable window and the 6h
+incident window (handshake payment errors since 2026-09-14). Soniox recovered
+at connect during 2026-09-19/20 monthly-budget exhaustion, so a 100% dead
+mid-session hop looked healthy; recovered now waits for the first transcript.
+A dead fallback leg is standing failure; paging waits for the chain-exhaustion
+ratio or for provider-budget PAGE.
+
+## Provider budget exhausted
+
+`omi-stt-provider-budget` — **PAGE**. A vendor closing streams for
+budget/quota/payment is never transient. It needs a human with a credit card
+(or console access to raise a monthly cap). The cap is monthly and can trip
+again before month end.
+
+| What it looks like | Where |
+|---|---|
+| `Soniox stream closed: … organization_monthly_budget_exhausted` / `organization_balance_exhausted` / HTTP 402 | Soniox Console → organization or project limits (`monthly_budget_usd`). Resets at UTC month start. |
+| Deepgram WebSocket upgrade HTTP 402 | Deepgram Console billing / project balances. |
+| Velma `Monthly usage limit reached.` | Modulate Usage dashboard / Organization settings (monthly usage quota is set by Modulate support; optional monthly credit limit is admin-controlled). |
+
+Evidence layer for the first evaluation is Cloud Logging counts of the Soniox
+budget-close line on `backend-listen` (the incident logged that WARNING
+because monthly budget was untyped as `connection_lost`). 5-minute samples:
+2026-09-19 03:00Z=64, 04:40Z=87, 16:00Z=106 vs 2026-09-18 09:00Z=0 and
+2026-09-20 07:30Z=0. Series `omi_stt_stream_close_total` is new: Prometheus
+evaluation of the exact `increase()` expression is still owed.
+
+**Safe next action:** confirm panel 18, raise the vendor cap, then confirm
+panel 16 that `to_mode` recovered share is no longer zero.
 
 ## Sync intake fragmentation
 
@@ -115,6 +143,7 @@ After Phase 1 deploy, cap **new PAGE alerts** at **≤2** for the first two week
 |-------|------|---------|
 | Pusher degraded session ratio | PAGE | [pusher-degraded.md](./pusher-degraded.md) |
 | Live STT provider chain exhaustion | PAGE at 0.60 (warn at 0.35) | this runbook, panel 15 |
+| Live STT provider budget exhausted | PAGE at ≥5 closes / 5m | this runbook, panel 18 |
 | Sync dispatch enqueue uncertainty share | Paused (Cloud Run scrape gap) — use Cloud Logging | [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
 | LLM gateway fallback rate | Ticket (Slack / Linear) | [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 

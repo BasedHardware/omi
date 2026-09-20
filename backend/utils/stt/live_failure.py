@@ -14,6 +14,8 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
+from utils.observability.fallback import record_fallback
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ _KNOWN_FAILURE_REASONS = frozenset(
         # provider failed to serve the stream it had accepted
         # (utils.stt.streaming.modulate_death_reason).
         'modulate_serve_error',
-        'soniox_account_state',
+        PROVIDER_BUDGET_EXHAUSTED,
         'soniox_idle_timeout',
         'soniox_rotation',
         'soniox_invalid_hint',
@@ -53,7 +55,7 @@ _FAILURE_PHASE_BY_REASON = {
     # accepted. The bounded phase vocabulary has no 'serve' bucket, and 'send'
     # would claim our send failed, so 'connection' is the truthful bucket.
     'modulate_serve_error': 'connection',
-    'soniox_account_state': 'connection',
+    PROVIDER_BUDGET_EXHAUSTED: 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
@@ -62,15 +64,16 @@ _FAILURE_PHASE_BY_REASON = {
 }
 _CIRCUIT_OPENING_REASONS = frozenset(
     {
-        # 402 organization_balance_exhausted: the provider still ACCEPTS the
-        # WebSocket upgrade but refuses to serve ANY stream, so the
-        # connect-time failure counter provably never accumulates under
-        # reconnect load (each dying session's replacement connects fine and
-        # calls record_success). Same mechanism record_serve_failure exists
-        # for. The other typed shapes are session-scoped — an idle-timeout is
-        # this session's VAD pattern and a 413 rotation serves fine on a fresh
-        # connection — so they must not bench the provider for everyone.
-        'soniox_account_state',
+        # 402 organization_balance_exhausted / organization_monthly_budget_exhausted:
+        # the provider still ACCEPTS the WebSocket upgrade but refuses to serve
+        # ANY stream, so the connect-time failure counter provably never
+        # accumulates under reconnect load (each dying session's replacement
+        # connects fine and calls record_success). Same mechanism
+        # record_serve_failure exists for. The other typed shapes are
+        # session-scoped — an idle-timeout is this session's VAD pattern and a
+        # 413 rotation serves fine on a fresh connection — so they must not
+        # bench the provider for everyone.
+        PROVIDER_BUDGET_EXHAUSTED,
         # Velma's mid-session "Internal server error" / "Unable to complete
         # the request" frames: the provider accepted the stream, served audio,
         # and then failed. This is the dominant live-STT outage shape
@@ -93,6 +96,67 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
+
+
+def fallback_reason_for_typed_death(typed_reason: str | None) -> str:
+    """Map a bounded death reason onto ``record_fallback``'s closed reason set."""
+
+    if typed_reason == PROVIDER_BUDGET_EXHAUSTED:
+        return 'quota'
+    return 'other'
+
+
+def _segments_have_transcript(segments: object) -> bool:
+    if not isinstance(segments, list):
+        return False
+    for segment in segments:
+        if isinstance(segment, dict) and str(segment.get('text') or '').strip():
+            return True
+    return False
+
+
+class PendingLiveFailover:
+    """A mid-session hop that is not recovered until the new provider transcribes.
+
+    Connect-time ``record_fallback(..., outcome='recovered')`` counted a Soniox
+    socket that the vendor then closed for monthly budget exhaustion as a heal,
+    so a 100% dead failover leg looked 100% healthy for 27.5h.
+    """
+
+    def __init__(self, *, from_mode: str, to_mode: str) -> None:
+        self.from_mode = from_mode
+        self.to_mode = to_mode
+        self._settled = False
+
+    @property
+    def settled(self) -> bool:
+        return self._settled
+
+    def note_transcript(self, segments: object | None = None) -> None:
+        if self._settled:
+            return
+        if segments is not None and not _segments_have_transcript(segments):
+            return
+        self._settled = True
+        record_fallback(
+            component='stt_live_session',
+            from_mode=self.from_mode,
+            to_mode=self.to_mode,
+            reason='connection_lost',
+            outcome='recovered',
+        )
+
+    def note_failure(self, typed_reason: str | None) -> None:
+        if self._settled:
+            return
+        self._settled = True
+        record_fallback(
+            component='stt_live_session',
+            from_mode=self.from_mode,
+            to_mode=self.to_mode,
+            reason=fallback_reason_for_typed_death(typed_reason),
+            outcome='exhausted',
+        )
 
 
 class LiveSTTSession(Protocol):
