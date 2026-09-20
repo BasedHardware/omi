@@ -1,4 +1,4 @@
-"""Behavioral regression for the 2026-09-19 45-WAL capture fragmentation.
+"""Behavioral regression for the 2026-09-19 45-WAL speech fragmentation.
 
 The strict store checks transaction read ordering; randomized schedules model
 successful serial commit orders, not emulator contention or external services.
@@ -22,17 +22,16 @@ def dependencies():
     from tests.unit.test_conversation_discard_revival import _persist
 
 
-def capture(i, *, silent=False):
+def capture(i):
     row = chunk(f'chunk-{i:03}', 1000 + i * 70)
     row['finished_at'] = chunk('end', 1000 + (i + 1) * 70)['started_at']
-    row['transcript_segments'] = [] if silent else [dict(row['transcript_segments'][0], end=3)]
+    row['transcript_segments'] = [dict(row['transcript_segments'][0], end=70)]
     return row
 
 
 def signature(store):
     return sorted(
         (
-            row.get('created_at'),
             row['started_at'],
             row['finished_at'],
             [
@@ -77,7 +76,7 @@ def arrival_order(seed):
 def test_capture_partition_and_content_are_permutation_invariant(seed):
     expected = StrictFirestore()
     actual = StrictFirestore()
-    rows = [capture(i, silent=i % 3 != 0) for i in range(45)]
+    rows = [capture(i) for i in range(45)]
     for row in rows:
         intake(expected, row)
     order = arrival_order(seed)
@@ -85,7 +84,7 @@ def test_capture_partition_and_content_are_permutation_invariant(seed):
         intake(actual, rows[i])
     assert signature(actual) == signature(expected)
     assert len(conversations(actual)) == 1
-    assert len(conversations(actual)[0]['transcript_segments']) == 15
+    assert len(conversations(actual)[0]['transcript_segments']) == 45
     before = signature(actual)
     for i in order:
         intake(actual, rows[i])
@@ -206,9 +205,9 @@ def test_retry_of_absorbed_chunk_cannot_resurrect_deleted_survivor():
     assert not conversations(store)
 
 
-def test_discarded_quiet_capture_is_visibly_demoted():
+def test_discarded_filler_is_visibly_demoted():
     store = StrictFirestore()
-    row = capture(0, silent=True)
+    row = chunk('filler', 1000, text='Hmm.')
     row['discarded'] = True
     result, _, _ = intake(store, row)
     assert not result['discarded'] and result['sync_relevance'] == 'review'

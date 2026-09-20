@@ -89,7 +89,8 @@ week. Tribal “no” becomes written law.
 
 ## Proposed offline fragment policy
 
-Offline chunks from a temporally continuous capture should form one conversation.
+Offline speech follows the same default silence boundary as realtime: a speech gap
+of at least 120 seconds starts a new conversation; shorter gaps stay connected.
 Speaker enrollment and own-voice attribution are not prerequisites. Short,
 filler-only fragments remain visible with their original transcript and a minimal
 title, without automatic summarization; later meaningful content promotes the
@@ -97,15 +98,14 @@ merged recording. Uncertain content stays kept. Long narration is not reliable
 evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
 
-Capture coverage includes quiet decoded audio, not only the last transcribed word.
-New sync intake groups connected intervals independently of arrival order within
+Silence-only audio creates nothing and cannot bridge conversations.
+New sync intake groups connected speech intervals independently of arrival order within
 the same source/device/lock partition. Reconnect conversation IDs do not split
 a continuous capture. Unknown device identity is not a
 wildcard. Late bridges retain redirects and fence stale enrichment. The shared
-boundary predicate splits at a gap of at least 120 seconds; realtime still applies
-it to speech silence and configurable timeouts, while sync applies it to capture
-coverage. Those inputs differ, so complete offline/realtime parity is not yet a
-product guarantee. Shared, photo-bearing and user-curated records remain separate
+boundary predicate applies to speech silence on both paths. The remaining policy
+difference is that realtime can configure its timeout per session; WALs do not
+carry that setting, so sync uses the default. Shared, photo-bearing and user-curated records remain separate
 from automatic bridges. This change neither uses own-voice labels nor debounces LLM work.
 
 The 2026-09-19 fragmentation mechanism was sync adopting empty live-flap stubs:

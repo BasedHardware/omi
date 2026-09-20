@@ -1030,9 +1030,9 @@ class TestProcessSegmentReal:
                 '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
             )
 
-        assert result is True  # durable quiet capture, not billable speech
+        assert result is False  # valid silence creates no conversation
         assert errors == []
-        assert len(response['new_memories']) == 1
+        assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
         assert not response.get('_merged')
 
@@ -1057,9 +1057,9 @@ class TestProcessSegmentReal:
                 '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
             )
 
-        assert result is True  # durable quiet capture, not billable speech
+        assert result is False  # valid silence creates no conversation
         assert errors == []
-        assert len(response['new_memories']) == 1
+        assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
         assert not response.get('_merged')
 

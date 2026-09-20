@@ -15,6 +15,7 @@ import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_capture_continuity import arrival_order, capture, signature
+from utils.transcribe_decisions import decide_existing_conversation_action, ConversationLifecycleAction
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
 
 
@@ -37,19 +38,59 @@ def live_stub(cid, timestamp, state=0):
     return row
 
 
-def replay(order, *, reconnect_targets=False):
+def speech_timeline(with_boundaries):
+    rows = []
+    timestamp = 1000
+    for i in range(45):
+        if i:
+            gap = (120 if i == 15 else 180) if with_boundaries and i in (15, 30) else (119 if i % 5 == 0 else 57)
+            timestamp = rows[-1]['finished_at'].timestamp() + gap
+        row = chunk(f'wal-{i:03}', timestamp, text=f'Speech interval {i}.')
+        row['finished_at'] = row['started_at'] + timedelta(seconds=3)
+        row['transcript_segments'][0]['end'] = 3
+        rows.append(row)
+    return rows
+
+
+def realtime_reference(rows):
+    groups = []
+    for row in rows:
+        if (
+            not groups
+            or decide_existing_conversation_action(
+                seconds_since_last_segment=(row['started_at'] - groups[-1][-1]['finished_at']).total_seconds(),
+                conversation_creation_timeout=120,
+            )
+            == ConversationLifecycleAction.process_and_create_new
+        ):
+            groups.append([])
+        groups[-1].append(row)
+    return [
+        (
+            group[0]['started_at'],
+            group[-1]['finished_at'],
+            [
+                (row['started_at'].timestamp(), row['finished_at'].timestamp(), row['transcript_segments'][0]['text'])
+                for row in group
+            ],
+        )
+        for group in groups
+    ]
+
+
+def replay(order, rows, *, reconnect_targets=False):
     store = StrictFirestore()
-    stubs = [live_stub(f'live-{i:03}', 1000 + i * 35, i % 3) for i in range(78)]
+    stubs = [
+        live_stub(f'live-{i:03}', 1000 + i * 35, i % 3)
+        for i in range(int((rows[-1]['finished_at'].timestamp() - 1000) / 35) + 1)
+    ]
     originals = {('users', 'u', 'conversations', row['id']): row for row in stubs}
     store.rows.update(deepcopy(originals))
     for i in order:
-        row = chunk(f'wal-{i:03}', 1000 + i * 60)
-        row['finished_at'] = row['started_at'] + timedelta(seconds=60)
-        row['transcript_segments'] = [] if i % 3 else [dict(row['transcript_segments'][0], end=3)]
+        row = deepcopy(rows[i])
         nearest = min(stubs, key=lambda stub: abs((stub['started_at'] - row['started_at']).total_seconds()))
         group = i // 5
         target = (f'live-{group * 8:03}' if group % 2 else f'missing-{group}') if reconnect_targets else None
-        # Old metadata may contain this field; it is provenance, not membership.
         if reconnect_targets:
             row['sync_capture_id'] = target
         result, _, _ = intake(store, row, candidate_id=nearest['id'], target_id=target)
@@ -57,19 +98,22 @@ def replay(order, *, reconnect_targets=False):
     assert {key: store.rows[key] for key in originals} == originals
     assert not any(key[-1].startswith('missing-') for key in store.rows)
     active = [row for row in conversations(store) if row.get('sync_content_revision')]
-    assert len(active) == 1 and len(active[0]['transcript_segments']) == 15
-    # Stubs are independently asserted unchanged; compare sync partition/content.
+    assert sum(len(row['transcript_segments']) for row in active) == 45
     sync_only = StrictFirestore()
-    sync_only.rows[('users', 'u', 'conversations', active[0]['id'])] = active[0]
+    for row in active:
+        sync_only.rows[('users', 'u', 'conversations', row['id'])] = row
     return signature(sync_only)
 
 
 @pytest.mark.parametrize('seed', range(12))
 @pytest.mark.parametrize('reconnect_targets', [False, True])
-def test_live_flap_replay_converges_without_mutating_stubs(seed, reconnect_targets):
-    assert replay(arrival_order(seed), reconnect_targets=reconnect_targets) == replay(
-        range(45), reconnect_targets=reconnect_targets
-    )
+@pytest.mark.parametrize('with_boundaries', [False, True])
+def test_sync_speech_partition_equals_realtime_reference(seed, reconnect_targets, with_boundaries):
+    """Headline parity: 119s joins, 120s/180s split, despite stubs and job order."""
+    rows = speech_timeline(with_boundaries)
+    expected = realtime_reference(rows)
+    assert len(expected) == (3 if with_boundaries else 1)
+    assert replay(arrival_order(seed), rows, reconnect_targets=reconnect_targets) == expected
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])

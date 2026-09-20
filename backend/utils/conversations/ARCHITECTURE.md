@@ -83,5 +83,5 @@ must never be written here, passed to durable task payloads, or logged.
 Sync lifecycle intake computes capture components transactionally, then replays
 bridge effects through the existing merge retraction/copy helpers. Retained donor
 redirects preserve late audio; deletion cascades to those sources. The shared gap
-predicate lives in `utils/conversation_continuity.py`; sync and realtime supply
-capture coverage and speech silence respectively. See `utils/sync/ARCHITECTURE.md`.
+predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.

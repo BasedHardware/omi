@@ -981,7 +981,7 @@ class TestAsyncCoordinatorStructure:
     def test_async_coordinator_sets_byok_uid_from_context(self):
         """Async coordinator must attach uid when inherited BYOK keys are present."""
         body = self._get_bg_func_body()
-        setup_section = body[body.index('concurrency_gate =') : body.index('segmented_paths = CaptureSegments()')]
+        setup_section = body[body.index('concurrency_gate =') : body.index('segmented_paths = set()')]
         assert 'set_byok_uid(uid if get_byok_keys() else None)' in setup_section
 
     def test_async_coordinator_rejects_empty_decode(self):
@@ -1134,7 +1134,7 @@ class TestAsyncCoordinatorScenarios:
         """On VAD failure, segmented_paths must be cleared after cleanup."""
         body = self._get_bg_func_body()
         vad_error_section = body[body.index('if vad_errors:') : body.index('Phase 3')]
-        assert 'segmented_paths = CaptureSegments()' in vad_error_section
+        assert 'segmented_paths = set()' in vad_error_section
 
     # --- Zero segments after VAD ---
 
@@ -2369,20 +2369,6 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
 
-            # Quiet audio now persists capture coverage through the same intake
-            # seam. Keep real coordinator accounting, with concrete model leaves.
-            def payload(**values):
-                return types.SimpleNamespace(**values, model_dump=lambda: values)
-
-            stubs['pipeline'].CreateConversation = payload
-            stubs['pipeline'].Conversation = payload
-            stubs['pipeline'].ConversationSource = lambda value: value
-            stubs['pipeline'].get_timestamp_from_path = lambda path: 1700000001.0
-            sys.modules['utils.conversations.lifecycle'].ingest_sync_conversation = lambda uid, row, **kw: (
-                {**row, 'sync_relevance': 'review'},
-                True,
-                [],
-            )
             terminal_events = []
             stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
                 terminal_events.append('content_completed') or True

@@ -103,7 +103,6 @@ from utils.sync.files import (
     get_wav_duration,
     retrieve_file_paths,
 )
-from utils.sync.capture import CaptureSegments
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
@@ -591,7 +590,7 @@ async def sync_local_files(
 
     paths = []
     wav_paths = []
-    segmented_paths = CaptureSegments()
+    segmented_paths = set()
     backfill_slot_token: Optional[str] = None
     if lane_decision.lane == SyncLane.BACKFILL:
         backfill_slot_token = f'v1-{_uuid.uuid4()}'
@@ -644,7 +643,7 @@ async def sync_local_files(
 
         # Fair-use speech tracking from raw VAD segments (#5854)
         # Compute duration from raw segments BEFORE merging (silence gaps not counted)
-        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths if p not in segmented_paths.silent)
+        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
         total_speech_ms = int(total_speech_seconds * 1000)
         logger.info(
             f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}'
@@ -766,8 +765,6 @@ async def sync_local_files(
                     data_protection_level=data_protection_level,
                     client_device_id=client_device_context.client_device_id,
                     client_platform=client_device_context.platform,
-                    capture_window=segmented_paths.windows.get(path),
-                    capture_only=path in segmented_paths.silent,
                 )
                 for path in ordered_paths
             ]

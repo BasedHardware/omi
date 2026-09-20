@@ -765,25 +765,24 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
 
-## Offline capture continuity
+## Offline speech continuity
 
-Sync now preserves the decoded WAV window through VAD and persists quiet coverage
-without billing it as speech. Transactional intake joins all connected sync-owned
-components, preserving existing IDs on append and using redirect tombstones for
-real bridges. Reconnect conversation IDs do not partition capture membership.
-Missing explicit targets and empty live stubs use ordinary temporal assignment;
-stubs remain untouched. Only explicit targets with real live transcript or photo
-content retain legacy live attachment and ID. Source, device and lock state isolate
-components; unknown device IDs are their own partition. No client or wire-schema change is required.
+Sync uses the same default speech-gap boundary as realtime: silence of at least
+120 seconds splits conversations. VAD-segment timestamps and last-word ends define
+incoming intervals. Empty VAD or STT creates nothing and cannot bridge records.
+Transactional intake joins connected sync-owned speech components independent of
+arrival order, keeping existing IDs on append and redirects for genuine bridges.
+Reconnect IDs do not partition membership. Missing explicit targets and empty live
+stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
+with real live transcript or photo content retain live attachment and identity.
+Source, device and lock state isolate components; unknown device is its own partition.
 
-`utils/conversation_continuity.py` supplies the shared gap predicate (split at
-120 seconds by default). Listen still supplies speech silence and its configured
-timeout; sync supplies capture coverage. Continuous silent capture can therefore
-remain one sync conversation even when listen would split it. Job leases,
-persistence fences, encryption codecs, and sync revision fencing remain in force.
-Bridge cleanup is retryable through existing merge/delete helpers; original donor
-audio is retained for late uploads and cascaded when the visible capture is deleted.
-The September 19 incident arose from legacy sync lookups adopting a different
-empty live-flap stub per WAL. Realtime conversation reuse across reconnects and
-empty-stub reaping remain explicit follow-ups outside this change.
-See `utils/sync/ARCHITECTURE.md` for indexing, migration, and recovery limits.
+`utils/conversation_continuity.py` owns the shared predicate. The remaining policy
+input difference is that realtime can configure its timeout per session, while WALs
+do not carry this setting and sync uses the default. Job leases, persistence fences,
+encryption codecs and revision fencing remain in force. Bridge effects use existing
+merge/delete helpers; original donor audio remains available for late uploads.
+
+The September 19 incident arose from legacy sync adopting a different empty
+live-flap stub per WAL. Realtime reconnect reuse and empty-stub reaping remain
+explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing limits.

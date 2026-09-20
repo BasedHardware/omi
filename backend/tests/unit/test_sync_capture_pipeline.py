@@ -1,4 +1,4 @@
-"""Real VAD export and process_segment keep decoded capture coverage."""
+"""Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
 from pathlib import Path
 import threading
@@ -10,7 +10,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake, conversations
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
-from utils.sync.capture import CaptureSegments
+from utils.sync.capture import chunk_identity
 
 
 @pytest.fixture
@@ -54,38 +54,45 @@ def pipeline():
 
 
 @pytest.mark.parametrize('quiet', [False, True])
-def test_vad_exports_coverage_and_quiet_capture_is_persisted_without_stt(pipeline, tmp_path, quiet):
+def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, tmp_path, quiet):
     module, store = pipeline
     original = tmp_path / '1700000000.wav'
     module.AudioSegment.silent(duration=70000).export(original, format='wav')
     module.vad_is_empty = lambda *a, **kw: [] if quiet else [{'start': 20, 'end': 23}]
-    paths = CaptureSegments()
+    paths = set()
     module.retrieve_vad_segments(str(original), paths, [])
+    if quiet:
+        assert paths == set() and not conversations(store)
+        module.prerecorded.assert_not_called()
+        assert list(tmp_path.iterdir()) == [original]
+        return
     path = next(iter(paths))
-    assert paths.windows[path] == (1700000000, 1700000070)
-    assert (path in paths.silent) == quiet
+    assert Path(path).stem == '1700000020.0'
     response = {'new_memories': set(), 'updated_memories': set()}
-    errors = []
-    outcome = {}
-    assert module.process_segment(
-        path,
-        'u',
-        response,
-        threading.Lock(),
-        errors,
-        capture_window=paths.windows[path],
-        capture_only=quiet,
-        deferred_outcome=outcome,
-    )
+    errors, outcome = [], {}
+    assert module.process_segment(path, 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
     assert errors == []
     row = conversations(store)[0]
-    assert row['finished_at'].timestamp() == 1700000070
-    assert row['started_at'].timestamp() == 1700000000
-    if quiet:
-        module.prerecorded.assert_not_called()
-        assert row['sync_relevance'] == 'review'
-        assert outcome['outcome'].value == 'expected_silence'
-        assert not response.get('_merged')
+    assert row['finished_at'].timestamp() == 1700000023
+    assert row['started_at'].timestamp() == 1700000020
+    assert row['transcript_segments'][0]['start'] == 0
+    assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
+    assert outcome['outcome'].value == 'success'
+
+
+@pytest.mark.parametrize('empty_words', [True, False])
+def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_words):
+    module, store = pipeline
+    if empty_words:
+        module.prerecorded.return_value = ([], 'en')
     else:
-        assert row['transcript_segments'][0]['start'] == 20
-        assert outcome['outcome'].value == 'success'
+        module.postprocess_words = lambda *a: []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert (
+        module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
+        is False
+    )
+    assert not store.rows and not errors
+    assert response == {'new_memories': set(), 'updated_memories': set()}
+    assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
