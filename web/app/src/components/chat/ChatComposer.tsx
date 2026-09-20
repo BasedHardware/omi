@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
+import { composerIconButton, composerSendButton } from './composer-button';
 import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
 import { uploadChatFiles } from '@/lib/api';
 import type { MessageFile } from '@/types/conversation';
@@ -199,12 +200,6 @@ export function ChatComposer({
     !isStreaming &&
     !isUploading;
 
-  const iconButton = cn(
-    'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
-    'text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary',
-    'disabled:cursor-not-allowed disabled:opacity-40',
-  );
-
   return (
     <div
       className={cn(
@@ -249,7 +244,7 @@ export function ChatComposer({
           disabled={
             disabled || isStreaming || isUploading || selectedFiles.length >= MAX_FILES
           }
-          className={iconButton}
+          className={composerIconButton}
           title={
             selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'
           }
@@ -282,7 +277,7 @@ export function ChatComposer({
             onClick={recording.isActive ? recording.onStop : recording.onStart}
             disabled={disabled || recording.disabled}
             className={cn(
-              iconButton,
+              composerIconButton,
               recording.isActive &&
                 'bg-white/[0.10] text-text-primary hover:bg-white/[0.16]',
             )}
@@ -304,11 +299,7 @@ export function ChatComposer({
         <button
           onClick={() => void handleSend()}
           disabled={!canSend}
-          className={cn(
-            'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
-            'bg-text-primary text-bg-primary transition-opacity hover:opacity-90',
-            'disabled:cursor-not-allowed disabled:opacity-25',
-          )}
+          className={composerSendButton}
           aria-label="Send message"
         >
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
