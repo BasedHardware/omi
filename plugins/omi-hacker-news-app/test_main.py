@@ -224,6 +224,14 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
         response_discussion = await app.get_discussion(None)
         self.assertEqual(response_discussion.error, "Missing required field: item_id")
 
+    async def test_search_stories_rejects_non_string_and_empty_queries(self):
+        cases = [2026, 3.5, ["ai"], {"q": "ai"}, True, False, None, "", "   "]
+        for bad_query in cases:
+            with self.subTest(query=bad_query):
+                response = await app.search_stories({"query": bad_query})
+                self.assertEqual(response.error, "Missing required field: query")
+                self.assertIsNone(response.result)
+
 
 if __name__ == "__main__":
     unittest.main()

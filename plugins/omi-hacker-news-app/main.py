@@ -211,9 +211,10 @@ async def get_front_page(payload: Annotated[Any, Body()] = None):
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
 async def search_stories(payload: Annotated[Any, Body()] = None):
     payload = _safe_payload(payload)
-    query = (payload.get("query") or "").strip()
-    if not query:
+    query = payload.get("query")
+    if not isinstance(query, str) or not query.strip():
         return ChatToolResponse(error="Missing required field: query")
+    query = query.strip()
 
     try:
         limit = _safe_limit(payload.get("limit"))

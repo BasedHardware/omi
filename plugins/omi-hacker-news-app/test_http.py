@@ -189,6 +189,15 @@ class HTTPContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.requests[0].url.path, "/api/v1/search")
         self.assertEqual(self.requests[0].url.params["hitsPerPage"], "10")
 
+    async def test_search_stories_non_string_query_returns_documented_error(self):
+        cases = [2026, 3.5, ["ai"], {"q": "ai"}, True, False]
+        for bad_query in cases:
+            with self.subTest(query=bad_query):
+                self.requests.clear()
+                body = await self.post("search_stories", json={"query": bad_query})
+                self.assertEqual(body, {"result": None, "error": "Missing required field: query"})
+                self.assertEqual(self.requests, [])
+
     async def test_invalid_json_is_rejected_before_provider_request(self):
         for route, _, _ in _ROUTES:
             with self.subTest(route=route):
