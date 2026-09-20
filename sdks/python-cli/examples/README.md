@@ -39,6 +39,7 @@
 * [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
 * [`quickstart.ru.md`](quickstart.ru.md) — быстрый старт с omi-cli на
   русском (Russian Quickstart).
+* [`quickstart.rue.md`](quickstart.rue.md) — Першы крокы з omi-cli (Rusyn Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
 * [`quickstart.crh.md`](quickstart.crh.md) — omi-cli ile ilk adımlar (Crimean Tatar Quickstart).
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
