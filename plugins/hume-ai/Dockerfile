@@ -19,6 +19,7 @@ COPY --from=builder /root/.local /root/.local
 # Copy application code
 COPY main.py .
 COPY app.py .
+COPY tools_auth.py .
 COPY emotion_config.json .
 COPY templates/ templates/
 
