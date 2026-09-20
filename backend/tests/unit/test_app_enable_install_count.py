@@ -8,10 +8,15 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
 os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key-not-real")
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import database.redis_db as redis_db
 import routers.apps as apps
+
+
+def _request() -> SimpleNamespace:
+    return SimpleNamespace(headers={})
 
 
 def _public_app() -> dict:
@@ -48,8 +53,8 @@ def _install(monkeypatch):
 def test_enabling_an_installed_app_again_counts_one_install(monkeypatch):
     enabled, counted = _install(monkeypatch)
 
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', request=_request(), uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', request=_request(), uid='user-1'))
 
     assert enabled == {('user-1', 'app-1')}
     assert counted == ['app-1']
@@ -58,8 +63,8 @@ def test_enabling_an_installed_app_again_counts_one_install(monkeypatch):
 def test_each_new_user_still_counts_an_install(monkeypatch):
     _enabled, counted = _install(monkeypatch)
 
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-2'))
+    asyncio.run(apps.enable_app_endpoint('app-1', request=_request(), uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', request=_request(), uid='user-2'))
 
     assert counted == ['app-1', 'app-1']
 
