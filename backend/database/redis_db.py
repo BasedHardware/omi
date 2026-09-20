@@ -1463,16 +1463,23 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
         return True
 
 
-def set_persona_update_timestamp(uid: str) -> None:
-    """Mark that user has updated personas (expires at 00:00 UTC)"""
-    now = datetime.now(timezone.utc)
-    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ttl = int((tomorrow - now).total_seconds())
+def set_persona_update_timestamp(uid: str, tz: Optional[Any] = None) -> None:
+    """Mark that user has updated personas (expires at the user's next midnight).
+
+    A UTC expiry frees the gate mid-afternoon west of UTC, which hands the user a
+    second persona regeneration inside one of their days.
+    """
+    from datetime import time as _time
+
+    zone = tz or timezone.utc
+    now = datetime.now(zone)
+    tomorrow = datetime.combine(now.date() + timedelta(days=1), _time.min, tzinfo=zone)
+    ttl = max(1, int((tomorrow - now).total_seconds()))
     r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
 
 
 def can_update_persona(uid: str) -> bool:
-    """Check if user can update personas (not updated since last 00:00 UTC)"""
+    """Check if user can update personas (not updated since their last midnight)"""
     return not r.exists(f'users:{uid}:persona_updated')
 
 
