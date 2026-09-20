@@ -48,7 +48,7 @@ from database.users import (
     get_user_profile,
 )
 from utils import stripe as stripe_utils
-from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
+from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
@@ -1503,10 +1503,6 @@ def set_default_payment_method_endpoint(
 def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get user's subscription for a specific app"""
     try:
-
-        paid_app_check = get_is_user_paid_app(app_id, uid)
-        if not paid_app_check:
-            return {"subscription": None}
 
         latest_subscription = find_app_subscription(app_id, uid, status_filter='all')
 
