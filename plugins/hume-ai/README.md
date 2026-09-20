@@ -155,7 +155,15 @@ Add your keys to `.env`:
 HUME_API_KEY=your_hume_api_key_here
 OMI_APP_ID=your_omi_app_id_here
 OMI_API_KEY=your_omi_api_key_here
+HUME_TOOLS_SECRET=change-me
 ```
+
+`HUME_TOOLS_SECRET` guards the uid-keyed routes (`/audio`,
+`/save-emotion-memory`, `/force-send-notification`): they write memories into
+and push notifications to the user named by the caller, so the caller must
+present the shared secret as an `Authorization: Bearer *** header or a
+`hume_tools_token` query parameter. When the variable is unset the routes
+fail closed with `503`; a missing or wrong secret returns `401`.
 
 **Step 3: Start the Server**
 
@@ -641,6 +649,9 @@ docker run -p 8080:8080 \
 Run tests to verify your setup:
 
 ```bash
+# Auth guard on the uid-keyed routes (stdlib only, no network)
+python3 test_hume_tools_auth.py
+
 # Test notification sending
 python tests/test_notification.py
 

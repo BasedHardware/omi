@@ -1092,6 +1092,11 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15089: /audio, /save-emotion-memory and /force-send-notification took uid from the query string with no caller authentication, so anyone could write memories into any Omi account with the app's OMI_API_KEY and push notifications to any user; each uid-keyed route must keep the HUME_TOOLS_SECRET guard (503 when unset, 401 when missing or wrong) while the read-only routes stay public"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
