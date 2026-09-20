@@ -5067,7 +5067,7 @@
           "root_selector": "users",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5186,7 +5186,7 @@
           "root_selector": "revenue",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5305,7 +5305,7 @@
           "root_selector": "cost",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5424,7 +5424,7 @@
           "root_selector": "costPerUser",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5543,7 +5543,7 @@
           "root_selector": "conversion",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -8247,7 +8247,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=users&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -8284,7 +8284,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=revenue&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -8321,7 +8321,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=cost&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=cost&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -8358,7 +8358,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=costPerUser&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=costPerUser&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -8395,7 +8395,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=conversion&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=conversion&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"

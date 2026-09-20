@@ -637,6 +637,14 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'meeting_treatment_reason',
         'meeting_duration_s',
         'meeting_dedup_speech_s',
+        # Server-authored sync intake metadata (FC-split-mutation-authority).
+        # `sync_content_revision` fences stale processors against newer
+        # transcripts; `sync_relevance` is the deterministic keep/review
+        # decision. Neither carries client-authored text, so the integration
+        # redactor must NOT strip them (same §1.7 precedent as
+        # processing_state) — they are pinned here as non-projection-family.
+        'sync_relevance',
+        'sync_content_revision',
     }
 )
 

@@ -289,6 +289,8 @@ class TranscriptMatchSnippet(BaseModel):
 
 
 class Conversation(BaseModel):
+    sync_content_revision: Optional[int] = None
+    sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
     created_at: datetime
     # Firestore's document update time, attached by the database read layer.

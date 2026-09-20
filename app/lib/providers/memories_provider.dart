@@ -1401,9 +1401,9 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  void deleteAllMemories() async {
+  Future<bool> deleteAllMemories() async {
     final int countBeforeDeletion = _memories.length;
-    await deleteAllMemoriesServer();
+    if (!await deleteAllMemoriesServer()) return false;
     _memories.clear();
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(
@@ -1411,6 +1411,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
     }
     _setCategories();
+    return true;
   }
 
   /// Create a memory - works offline by saving locally first, then syncing
@@ -1470,11 +1471,11 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> updateMemoryVisibility(
+  Future<bool> updateMemoryVisibility(
     Memory memory,
     MemoryVisibility visibility,
   ) async {
-    await updateMemoryVisibilityServer(memory.id, visibility.name);
+    if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) return false;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -1488,6 +1489,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
       _setCategories();
     }
+    return true;
   }
 
   Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
@@ -1561,15 +1563,19 @@ class MemoriesProvider extends ChangeNotifier {
     return result.persisted;
   }
 
-  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+  Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
+    var allUpdated = true;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) {
+            allUpdated = false;
+            continue;
+          }
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1577,6 +1583,7 @@ class MemoriesProvider extends ChangeNotifier {
             updatedCount++;
           }
         } catch (e) {
+          allUpdated = false;
           print('Failed to update visibility for memory ${memory.id}: $e');
         }
       }
@@ -1590,5 +1597,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     _setCategories();
+    return allUpdated;
   }
 }

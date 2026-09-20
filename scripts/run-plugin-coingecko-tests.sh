@@ -7,11 +7,13 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 python_version="$(tr -d '[:space:]' < "$repo_root/backend/.python-version")"
-# Both suites drive the real FastAPI app: null optionals (request models) and
-# malformed provider payloads (response parsing guards).
+# All three suites drive the real FastAPI app: null optionals (request models),
+# malformed provider payloads (response parsing guards), and null text fields
+# (a present-but-null string still has to render).
 test_files=(
   "$repo_root/plugins/omi-coingecko-crypto-app/test_null_optionals.py"
   "$repo_root/plugins/omi-coingecko-crypto-app/test_malformed_payloads.py"
+  "$repo_root/plugins/omi-coingecko-crypto-app/test_null_text_fields.py"
 )
 
 pinned_deps=(

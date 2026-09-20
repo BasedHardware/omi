@@ -179,12 +179,95 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
       XCTAssertEqual(local.generateCallCount, 2)
     }
 
+    /// red-proof: return `assembled` unconditionally and this stores a projection
+    /// whose model_id is the engine's, with nothing in it.
+    func testTitleOnlyDraftFailsClosedToTheMinimumInsteadOfImpersonatingASummary() async throws {
+      // Schema-valid and content-free. `LocalSummaryDraft` decodes every field
+      // through `decodeIfPresent ?? ""` / `?? []`, so this is what a fail-open
+      // constrained-decoding path produces.
+      let engine = DraftEngine(
+        contextWindowTokens: 2048,
+        generateResults: [.success(LocalSummaryDraft(title: "Team Sync"))]
+      )
+      let store = MemoryLocalProjectionStore()
+      let runtime = LocalInferenceRuntime(
+        engines: [engine],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .localServer
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: store,
+        now: { Date(timeIntervalSince1970: 1_704_140_040) },
+        deviceClass: "macos",
+        sourceLabel: "Recording",
+        timeZone: TimeZone.gmt
+      )
+      let segments = [TranscriptHash.Segment(text: "We decided to ship the local runtime today. Extra sentence.")]
+
+      let stored = try await summarizer.summarize(sessionId: 21, segments: segments, startedAt: startedAt)
+      let payload = try ClientProcessingContract.decode(stored.json)
+
+      // The deterministic minimum, not the model's empty draft. Attribution is
+      // the point: a projection stamped with an engine id outranks the minimum
+      // for display, so an empty one must not claim to be the engine's work.
+      XCTAssertEqual(payload.provenance.modelId, ClientProcessingContract.deterministicModelID)
+      XCTAssertEqual(payload.provenance.runtime, "deterministic")
+      XCTAssertNotEqual(payload.structure.title, "Team Sync")
+
+      let snapshot = try latestFallbackSnapshot()
+      XCTAssertEqual(snapshot["reason"] as? String, "contentless_projection")
+    }
+
+    /// The gate must not swallow a thin but real summary. One action item and
+    /// nothing else is still something the user did not have before.
+    func testASingleActionItemIsEnoughContentToKeepTheProjection() async throws {
+      let engine = DraftEngine(
+        contextWindowTokens: 2048,
+        generateResults: [
+          .success(
+            LocalSummaryDraft(
+              title: "Team Sync",
+              actionItems: [LocalActionItemDraft(description: "Send the notes", completed: false)]
+            ))
+        ]
+      )
+      let store = MemoryLocalProjectionStore()
+      let runtime = LocalInferenceRuntime(
+        engines: [engine],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .localServer
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: store,
+        now: { Date(timeIntervalSince1970: 1_704_140_040) },
+        deviceClass: "macos",
+        sourceLabel: "Recording",
+        timeZone: TimeZone.gmt
+      )
+      let segments = [TranscriptHash.Segment(text: "We decided to ship the local runtime today. Extra sentence.")]
+
+      let stored = try await summarizer.summarize(sessionId: 22, segments: segments, startedAt: startedAt)
+      let payload = try ClientProcessingContract.decode(stored.json)
+
+      XCTAssertEqual(payload.provenance.modelId, LocalInferenceEngineID.localServer.rawValue)
+      XCTAssertEqual(payload.structure.title, "Team Sync")
+      XCTAssertEqual(payload.actionItems?.count, 1)
+    }
+
     func testHashChangeRegeneratesAndKeepsTheNewStoredBlob() async throws {
+      // Overviews carry the content. This test is about regeneration on a hash
+      // change, so its drafts must survive the contentless gate on their own
+      // merits; a title-only draft now fails closed to the minimum and would
+      // make this assert the wrong thing.
       let engine = DraftEngine(
         contextWindowTokens: 8192,
         generateResults: [
-          .success(LocalSummaryDraft(title: "Original")),
-          .success(LocalSummaryDraft(title: "Edited")),
+          .success(LocalSummaryDraft(title: "Original", overview: "First pass")),
+          .success(LocalSummaryDraft(title: "Edited", overview: "Second pass")),
         ]
       )
       let store = MemoryLocalProjectionStore()

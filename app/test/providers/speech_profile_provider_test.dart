@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -157,6 +158,19 @@ class _FlakyUploadProvider extends SpeechProfileProvider {
       throw Exception('Failed to upload sample (500): boom');
     }
     return true;
+  }
+}
+
+class _RejectedUploadProvider extends SpeechProfileProvider {
+  _RejectedUploadProvider(this.detail);
+
+  final String detail;
+  int uploadAttempts = 0;
+
+  @override
+  Future<bool> uploadSpeechProfile(File file) async {
+    uploadAttempts++;
+    throw SpeechProfileUploadException(400, detail: detail);
   }
 }
 
@@ -628,6 +642,21 @@ void main() {
         provider.dispose();
       });
     });
+  });
+
+  group('backend rejects the recording as too short', () {
+    for (final detail in ['Audio duration is invalid (must be 5-180 seconds)', 'Audio is empty']) {
+      test('"$detail" is reported as too short without retrying', () async {
+        final provider = _RejectedUploadProvider(detail);
+        final result = await provider.uploadProfileWithRetry(File('speaker_profile.wav'));
+
+        expect(result.success, isFalse);
+        expect(result.tooShort, isTrue);
+        expect(provider.uploadAttempts, 1);
+
+        provider.dispose();
+      });
+    }
   });
 
   group('speech-profile upload retries transient failures', () {

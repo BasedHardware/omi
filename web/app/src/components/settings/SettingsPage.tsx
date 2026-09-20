@@ -634,7 +634,11 @@ function PrivacySection({
           label="Training Data"
           description="Help improve Omi by contributing anonymous usage data"
         >
-          <Toggle enabled={trainingDataOptIn} onChange={onTrainingDataChange} />
+          <Toggle
+            enabled={trainingDataOptIn}
+            onChange={onTrainingDataChange}
+            disabled={trainingDataOptIn}
+          />
         </SettingRow>
       </Card>
 
@@ -3226,6 +3230,7 @@ export function SettingsPage() {
   };
 
   const handleTrainingDataChange = async (optIn: boolean) => {
+    if (!optIn) return;
     const oldValue = trainingDataOptIn;
     setTrainingDataOptInState(optIn);
     try {

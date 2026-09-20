@@ -17,6 +17,7 @@ import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.shared import EmptyResponse
+from utils.product_metrics import record_product_event
 from models.conversation import SearchRequest
 from models.app import App
 from models.geolocation import Geolocation
@@ -196,6 +197,12 @@ def create_memories_via_integration(
     # Process and save the memory using the utility function
     process_external_integration_memory(uid, fact_data, app_id)
 
+    record_product_event(
+        'memory_created',
+        client_kind='unknown',
+        source='integration',
+        uid=uid,
+    )
     # Empty response
     return {}
 
