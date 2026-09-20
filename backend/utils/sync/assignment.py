@@ -38,7 +38,7 @@ def needs_fragment_review(segments: list[dict]) -> bool:
 
 def compatible_capture(left: dict, right: dict) -> bool:
     # Unknown is a partition, not a wildcard: wildcard equality is non-transitive.
-    return all(left.get(key) == right.get(key) for key in ('source', 'client_device_id', 'sync_capture_id')) and bool(
+    return all(left.get(key) == right.get(key) for key in ('source', 'client_device_id')) and bool(
         left.get('is_locked')
     ) == bool(right.get('is_locked'))
 
@@ -55,7 +55,7 @@ def interval_matches(row: dict, incoming: dict) -> bool:
 def auto_mergeable(row: dict) -> bool:
     """Only unattended sync rows may donate content or change visible identity.
 
-    Explicit targets retain their identity. Shared/curated/photo-bearing records
+    Explicit targets with content retain their identity. Shared/curated/photo-bearing records
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
@@ -100,31 +100,41 @@ def assign_in_transaction(
     own = load(incoming['id'])
     if own and own.get('deleted') and not own.get('sync_merged_into'):
         raise ValueError('sync anchor was deleted')
-    if own and not own.get('deleted') and not auto_mergeable(own) and not target_id:
-        raise ValueError('sync anchor is user managed')
-    # A retry of an absorbed chunk follows its lineage. Otherwise deleting the
-    # survivor and replaying a donor could recreate that donor's tombstone.
-    if own and own.get('sync_merged_into') and not target_id:
-        target_id = own['id']
-    target = load(target_id) if target_id else None
-    seen = set()
-    while target and target.get('sync_merged_into'):
-        if target['id'] in seen:
-            raise ValueError('sync redirect cycle')
-        seen.add(target['id'])
-        target_id = target['sync_merged_into']
-        target = load(target_id)
-    if seen and (not target or target.get('deleted')):
-        raise ValueError('sync capture lineage was deleted')
-    if target_id and not target:
-        incoming['id'] = target_id
-        incoming['sync_capture_id'] = target_id
-    elif target and not target.get('deleted'):
-        incoming['sync_capture_id'] = target.get('sync_capture_id')
-        if not compatible_capture(target, incoming):
-            raise ValueError('sync target provenance mismatch')
+
+    def resolve(cid):
+        row = load(cid) if cid else None
+        seen = set()
+        while row and row.get('sync_merged_into'):
+            if row['id'] in seen:
+                raise ValueError('sync redirect cycle')
+            seen.add(row['id'])
+            cid = row['sync_merged_into']
+            row = load(cid)
+        if seen and (not row or row.get('deleted')):
+            raise ValueError('sync capture lineage was deleted')
+        return cid, row
+
+    # Check retry lineage independently of client hints: changing a target must
+    # never allow an absorbed chunk to resurrect its user-deleted survivor.
+    own_id, own_anchor = resolve(incoming['id'])
+    target_id, target = resolve(target_id)
+    target_hint = target_id
+    if target and not target.get('deleted') and not auto_mergeable(target):
+        # Encoded [] is truthy. Decode before deciding whether live has content.
+        # Reconnect IDs and empty live stubs convey no capture boundary; keep the
+        # stub untouched and let ordinary temporal sync assignment decide.
+        live = decode(target)
+        if live.get('transcript_segments') or live.get('has_photos') or live.get('photos'):
+            if not compatible_capture(target, incoming):
+                raise ValueError('sync target provenance mismatch')
+        else:
+            target_id, target = None, None
     else:
-        target_id = None
+        # Missing/deleted targets and unattended sync rows do not pin identity
+        # or bypass continuity. An existing sync target remains a lookup hint.
+        target_id, target = None, None
+    if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
+        raise ValueError('sync anchor is user managed')
 
     matched = {}
     extent = deepcopy(incoming)
@@ -134,7 +144,7 @@ def assign_in_transaction(
         extent['finished_at'] = max(extent['finished_at'], target['finished_at'])
     while True:
         ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
-        ids.update(cid for cid in (candidate_id, incoming['id']) if cid)
+        ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
         before = len(matched)
         for cid in sorted(ids - matched.keys()):
             raw = load(cid)
@@ -157,7 +167,6 @@ def assign_in_transaction(
     records = [decode(raw) for _, raw in sorted(matched.items())]
     result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
     result['id'] = canonical
-    result['sync_capture_id'] = incoming.get('sync_capture_id')
     result['sync_live_target'] = bool(
         target and (target.get('sync_live_target') or not target.get('sync_content_revision'))
     )

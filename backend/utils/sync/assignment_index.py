@@ -32,7 +32,7 @@ class AssignmentIndex:
         return {row['id']: row for rows in [self.recent, *self.buckets.values()] for row in rows}.values()
 
     def write(self, result, replaced):
-        keys = ('id', 'started_at', 'finished_at', 'source', 'client_device_id', 'is_locked', 'sync_capture_id')
+        keys = ('id', 'started_at', 'finished_at', 'source', 'client_device_id', 'is_locked')
         entry = {key: result.get(key) for key in keys}
         occupied = set(days_for(result))
         for day, rows in self.buckets.items():

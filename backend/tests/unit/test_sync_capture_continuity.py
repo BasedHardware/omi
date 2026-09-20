@@ -48,13 +48,7 @@ def signature(store):
     )
 
 
-@pytest.mark.parametrize('seed', range(12))
-def test_capture_partition_and_content_are_permutation_invariant(seed):
-    expected = StrictFirestore()
-    actual = StrictFirestore()
-    rows = [capture(i, silent=i % 3 != 0) for i in range(45)]
-    for row in rows:
-        intake(expected, row)
+def arrival_order(seed):
     order = list(range(45))
     if seed == 0:
         # Newest-first batches, each independently ascending within a server job.
@@ -76,6 +70,17 @@ def test_capture_partition_and_content_are_permutation_invariant(seed):
     else:
         # Arbitrary cross-job arrival, including timed-out ordering optimizations.
         random.Random(seed).shuffle(order)
+    return order
+
+
+@pytest.mark.parametrize('seed', range(12))
+def test_capture_partition_and_content_are_permutation_invariant(seed):
+    expected = StrictFirestore()
+    actual = StrictFirestore()
+    rows = [capture(i, silent=i % 3 != 0) for i in range(45)]
+    for row in rows:
+        intake(expected, row)
+    order = arrival_order(seed)
     for i in order:
         intake(actual, rows[i])
     assert signature(actual) == signature(expected)
@@ -150,16 +155,18 @@ def test_historical_index_and_midnight_bridge_do_not_depend_on_recent_cache():
     assert len(conversations(store)[0]['transcript_segments']) == 3
 
 
-def test_missing_capture_target_binds_far_apart_chunks_but_never_revives_deletion():
+def test_missing_capture_target_does_not_bind_far_apart_chunks_or_revive_deletion():
     store = StrictFirestore()
     first, _, _ = intake(store, capture(0), target_id='client-capture')
     later, _, _ = intake(store, capture(44), target_id='client-capture')
-    assert first['id'] == later['id'] == 'client-capture'
-    assert len(later['transcript_segments']) == 2
-    store.rows[('users', 'u', 'conversations', 'client-capture')]['deleted'] = True
+    assert first['id'] != later['id']
+    assert len(conversations(store)) == 2
+    assert ('users', 'u', 'conversations', 'client-capture') not in store.rows
+    deleted = dict(capture(20), id='client-capture', deleted=True)
+    store.rows[('users', 'u', 'conversations', 'client-capture')] = deepcopy(deleted)
     result, _, _ = intake(store, capture(20), target_id='client-capture')
     assert result['id'] != 'client-capture'
-    assert store.rows[('users', 'u', 'conversations', 'client-capture')]['deleted']
+    assert store.rows[('users', 'u', 'conversations', 'client-capture')] == deleted
 
 
 @pytest.mark.parametrize('gap', [0, 119.99, 120, 120.01, 121])

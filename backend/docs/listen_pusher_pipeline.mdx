@@ -769,10 +769,12 @@ After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) befor
 
 Sync now preserves the decoded WAV window through VAD and persists quiet coverage
 without billing it as speech. Transactional intake joins all connected sync-owned
-components, with deterministic chunk anchors and redirect tombstones for late
-bridges. Explicit capture IDs survive a missing server conversation. Source,
-device, lock state, and capture identity isolate components; unknown device IDs
-are their own partition. No client or wire-schema change is required.
+components, preserving existing IDs on append and using redirect tombstones for
+real bridges. Reconnect conversation IDs do not partition capture membership.
+Missing explicit targets and empty live stubs use ordinary temporal assignment;
+stubs remain untouched. Only explicit targets with real live transcript or photo
+content retain legacy live attachment and ID. Source, device and lock state isolate
+components; unknown device IDs are their own partition. No client or wire-schema change is required.
 
 `utils/conversation_continuity.py` supplies the shared gap predicate (split at
 120 seconds by default). Listen still supplies speech silence and its configured
@@ -781,4 +783,7 @@ remain one sync conversation even when listen would split it. Job leases,
 persistence fences, encryption codecs, and sync revision fencing remain in force.
 Bridge cleanup is retryable through existing merge/delete helpers; original donor
 audio is retained for late uploads and cascaded when the visible capture is deleted.
+The September 19 incident arose from legacy sync lookups adopting a different
+empty live-flap stub per WAL. Realtime conversation reuse across reconnects and
+empty-stub reaping remain explicit follow-ups outside this change.
 See `utils/sync/ARCHITECTURE.md` for indexing, migration, and recovery limits.

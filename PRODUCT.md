@@ -99,10 +99,21 @@ silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.
 
 Capture coverage includes quiet decoded audio, not only the last transcribed word.
 New sync intake groups connected intervals independently of arrival order within
-the same source/device/lock/capture partition. Unknown device identity is not a
+the same source/device/lock partition. Reconnect conversation IDs do not split
+a continuous capture. Unknown device identity is not a
 wildcard. Late bridges retain redirects and fence stale enrichment. The shared
 boundary predicate splits at a gap of at least 120 seconds; realtime still applies
 it to speech silence and configurable timeouts, while sync applies it to capture
 coverage. Those inputs differ, so complete offline/realtime parity is not yet a
 product guarantee. Shared, photo-bearing and user-curated records remain separate
 from automatic bridges. This change neither uses own-voice labels nor debounces LLM work.
+
+The 2026-09-19 fragmentation mechanism was sync adopting empty live-flap stubs:
+STT failures caused reconnects about every 35 seconds, and legacy lookup chose a
+different stub per WAL. Cross-job assignment races are a separate, older class.
+Sync leaves these stubs untouched, including when the client explicitly targets
+them; missing targets also use ordinary temporal assignment. Only targets with
+real live transcript or photo content retain legacy live attachment. Appending
+chunks keeps the existing sync conversation ID; genuine bridges retain redirects.
+Follow-up outside this change: realtime should reuse a conversation on reconnect
+inside the continuity window and reap empty stubs.
