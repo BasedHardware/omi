@@ -315,6 +315,31 @@ class ClickUpClientEndpointTests(unittest.TestCase):
             self.assertEqual(self.client.get_workspaces("token"), [])
 
 
+
+class _FakeIndiaTz:
+    """Minimal pytz stand-in: production installs pytz==2023.3, the manifest lane does not.
+
+    localize() mirrors pytz: it attaches the zone to a naive datetime and refuses one that
+    already carries an offset, which is the behaviour this regression is about.
+    """
+
+    _offset = timedelta(hours=5, minutes=30)
+
+    def localize(self, value):
+        if value.tzinfo is not None:
+            raise ValueError("Not naive datetime (tzinfo is already set)")
+        return value.replace(tzinfo=timezone(self._offset))
+
+
+class _FakePytz(types.ModuleType):
+    def __init__(self):
+        super().__init__("pytz")
+
+    @staticmethod
+    def timezone(name):
+        return _FakeIndiaTz()
+
+
 class CreateTaskTests(unittest.TestCase):
     def setUp(self):
         self.client = clickup_client.ClickUpClient()
@@ -386,6 +411,49 @@ class CreateTaskTests(unittest.TestCase):
 
         self.assertTrue(result.get("success"))
         self.assertEqual(captured_data.get("due_date"), 1730000000000)
+
+    def _due_date_for(self, due_date, timezone="Asia/Kolkata"):
+        captured_data = {}
+
+        def fake_post(url, headers=None, json=None):
+            captured_data.update(json)
+            return FakeResponse({"id": "task_z", "name": json.get("name"), "status": "to do"})
+
+        with patch.object(clickup_client.requests, "post", side_effect=fake_post), patch.dict(
+            sys.modules, {"pytz": _FakePytz()}
+        ):
+            asyncio.run(
+                self.client.create_task(
+                    access_token="tok",
+                    list_id="l1",
+                    name="Due Date Offsets",
+                    due_date=due_date,
+                    timezone=timezone,
+                )
+            )
+        return captured_data
+
+    def test_a_utc_due_date_keeps_the_instant_the_caller_asked_for(self):
+        captured = self._due_date_for("2026-09-21T17:00:00Z")
+
+        expected = int(datetime(2026, 9, 21, 17, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        self.assertEqual(captured.get("due_date"), expected)
+        self.assertTrue(captured.get("due_date_time"))
+
+    def test_an_offset_due_date_is_kept_instead_of_being_dropped(self):
+        captured = self._due_date_for("2026-09-21T17:00:00+05:30")
+
+        expected = int(
+            datetime(2026, 9, 21, 17, 0, tzinfo=timezone(timedelta(hours=5, minutes=30))).timestamp() * 1000
+        )
+        self.assertEqual(captured.get("due_date"), expected)
+        self.assertTrue(captured.get("due_date_time"))
+
+    def test_a_naive_due_date_still_reaches_clickup(self):
+        captured = self._due_date_for("2026-09-21T17:00:00")
+
+        self.assertIsInstance(captured.get("due_date"), int)
+        self.assertTrue(captured.get("due_date_time"))
 
     def test_create_task_parses_iso_due_dates(self):
         captured_data = {}

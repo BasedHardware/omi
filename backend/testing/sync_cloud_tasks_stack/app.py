@@ -316,6 +316,10 @@ else:
             is_locked=bool(getattr(conversation, 'is_locked', False)),
             client_device_id=getattr(conversation, 'client_device_id', None),
             client_platform=getattr(conversation, 'client_platform', None),
+            # Preserve the ingest-owned revision the processor read, exactly as a
+            # real processor payload must: persist_processing_result_with_lifecycle
+            # fences writes whose revision no longer matches the stored transcript.
+            sync_content_revision=getattr(conversation, 'sync_content_revision', None),
         )
         persisted = (
             False

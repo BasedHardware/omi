@@ -22,8 +22,8 @@ its provider-local labels enter the resumed conversation.
 
 ## Speaker boundaries
 
-`speaker_embedding.py` owns enrolled voiceprint verification. Its `0.45`
-threshold is not a clustering control. `speaker_clustering.py` owns the more
+`speaker_embedding.py` owns enrolled voiceprint extraction; `speaker_match.py`
+owns verification threshold and margin. They are not clustering controls. `speaker_clustering.py` owns the more
 permissive short-clip clustering threshold and the eight-centroid cap used by
 backend Parakeet paths. Once full, clustering merges a miss into the nearest
 centroid and keeps the transcript: the forced merge is reported through the
@@ -42,8 +42,11 @@ changes cannot reuse another numbering space.
   clustering policy when Parakeet has no server-side labels.
 - `provider_resilience.py`, `safe_socket.py`, `socket.py`, and
   `live_failure.py` own provider health and terminal socket contracts.
-- `speech_profile.py` and `speaker_embedding.py` own voiceprint extraction and
-  verification; they do not assign in-session cluster identities.
+- `routers/speech_profile.py` owns owner enrollment. `utils/speaker_identification.py`
+  teaches other people from explicitly labeled speech; `database/users.py` atomically
+  publishes sample, embedding and source identity and fences correction/deletion.
+  These profiles do not assign in-session cluster identities. See the
+  [teaching contract](../../../docs/doc/developer/backend/transcription.mdx).
 - `vad.py` and `vad_gate.py` own speech admission; `outcomes.py` owns bounded
   transcription failure values.
 

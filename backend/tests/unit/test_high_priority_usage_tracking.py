@@ -350,9 +350,11 @@ class TestGoalsTracking:
             'current_value': 5,
             'target_value': 20,
             'goal_type': 'numeric',
+            'is_active': True,
         }
         sys.modules["database.goals"].get_user_goal = MagicMock(return_value=_goal)
         sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[_goal])
+        sys.modules["database.goals"].get_goal_by_id = MagicMock(return_value=_goal)
         try:
             from utils.llm.goals import get_goal_advice
 

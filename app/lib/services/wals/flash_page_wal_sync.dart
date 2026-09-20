@@ -333,6 +333,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   Future<bool> _syncWal(Wal wal, IWalSyncProgressListener? progress, {int? globalStartPage, int? globalEndPage}) async {
     if (_device == null) return false;
 
+    final admittedGeneration = _localSync?.sessionGeneration ?? -1;
+
     String deviceId = _device!.id;
 
     try {
@@ -471,6 +473,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             accumulatedFrames,
             batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
             wal,
+            admittedGeneration,
           );
 
           if (filePath != null) {
@@ -523,6 +526,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
               accumulatedFrames,
               batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
               wal,
+              admittedGeneration,
             );
             if (filePath != null) {
               filesSaved++;
@@ -572,6 +576,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           accumulatedFrames,
           batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
           wal,
+          admittedGeneration,
         );
         if (filePath != null) {
           filesSaved++;
@@ -680,7 +685,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   /// Saves a batch of frames to disk and registers with LocalWalSync for later upload.
-  Future<String?> _saveBatchToFile(List<List<int>> frames, int timestampMs, Wal sourceWal) async {
+  Future<String?> _saveBatchToFile(
+    List<List<int>> frames,
+    int timestampMs,
+    Wal sourceWal,
+    int admittedGeneration,
+  ) async {
     if (frames.isEmpty) return null;
 
     try {
@@ -702,7 +712,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       }
       await sink.close();
 
-      await _registerChunkWithLocalSync(fileName, timestampMs, frames.length, sourceWal);
+      await _registerChunkWithLocalSync(fileName, timestampMs, frames.length, sourceWal, admittedGeneration);
 
       return filePath;
     } catch (e) {
@@ -711,7 +721,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     }
   }
 
-  Future<void> _registerChunkWithLocalSync(String fileName, int timestampMs, int frameCount, Wal sourceWal) async {
+  Future<void> _registerChunkWithLocalSync(
+    String fileName,
+    int timestampMs,
+    int frameCount,
+    Wal sourceWal,
+    int admittedGeneration,
+  ) async {
     if (_localSync == null) {
       Logger.debug("FlashPageSync: WARNING - Cannot register chunk, LocalWalSync not available");
       return;
@@ -736,7 +752,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       originalStorage: WalStorage.flashPage,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug("FlashPageSync: Registered chunk (ts: $timestampMs, ${seconds}s) with LocalWalSync");
   }
 

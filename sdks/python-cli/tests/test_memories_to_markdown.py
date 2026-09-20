@@ -138,6 +138,75 @@ class TestMemoriesToMarkdown(unittest.TestCase):
         self.assertEqual(len(items), 3)
         self.assertEqual(items[0]["id"], "mem_01_work")
 
+    def test_colliding_category_filenames_preserve_every_group(self):
+        """#14927: two categories sanitizing to one slug must not overwrite each other."""
+        items = [
+            {"id": "first", "category": "work/life", "content": "First category memory"},
+            {"id": "second", "category": "work?life", "content": "Second category memory"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(items, output_dir)
+
+            # Two groups -> two distinct files, and both groups survive on disk.
+            self.assertEqual(len(written), 2)
+            self.assertEqual(len(set(written)), 2)
+            self.assertEqual(len(list(output_dir.glob("*.md"))), 2)
+            for item in items:
+                matching = [path for path in written if item["content"] in path.read_text(encoding="utf-8")]
+                self.assertEqual(len(matching), 1, item["id"])
+
+            # The first group keeps the natural filename, the second is suffixed.
+            self.assertIn("First category memory", (output_dir / "work_life_memories.md").read_text(encoding="utf-8"))
+            self.assertIn(
+                "Second category memory", (output_dir / "work_life_2_memories.md").read_text(encoding="utf-8")
+            )
+
+    def test_disambiguated_name_does_not_steal_natural_category_name(self):
+        items = [
+            {"id": "a", "category": "work/life", "content": "Slash category"},
+            {"id": "b", "category": "work?life", "content": "Question mark category"},
+            {"id": "c", "category": "work_life_2", "content": "Literal suffix category"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(items, output_dir)
+
+            self.assertEqual(len(written), 3)
+            self.assertEqual(len({path.name for path in written}), 3)
+            self.assertIn(
+                "Literal suffix category", (output_dir / "work_life_2_memories.md").read_text(encoding="utf-8")
+            )
+            for item in items:
+                self.assertEqual(
+                    sum(item["content"] in path.read_text(encoding="utf-8") for path in written),
+                    1,
+                    item["id"],
+                )
+
+    def test_collision_free_categories_keep_natural_filenames(self):
+        """No collisions: filenames must stay exactly as before the fix."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(self.sample_memories, output_dir)
+            self.assertEqual(
+                {path.name for path in written},
+                {"work_memories.md", "skills_memories.md", "learnings_memories.md"},
+            )
+
+    def test_colliding_export_is_stable_across_repeated_runs(self):
+        items = [
+            {"id": "first", "category": "work/life", "content": "First category memory"},
+            {"id": "second", "category": "work?life", "content": "Second category memory"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            first_run = m2m.write_grouped_directory(items, output_dir)
+            second_run = m2m.write_grouped_directory(list(reversed(items)), output_dir)
+
+            self.assertEqual(first_run, second_run)
+            self.assertEqual(len(list(output_dir.glob("*.md"))), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

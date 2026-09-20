@@ -122,6 +122,26 @@ def get_graphql_error(result: Dict) -> Optional[str]:
     return None
 
 
+def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
+    """Return a message when the payload carries an error, else None.
+
+    Hive's own failures come back as [{"message": ...}], but a 2xx body can carry
+    any shape under "errors", including an empty list on a successful write, so
+    presence of the key is not on its own an error.
+    """
+    errors = result.get("errors")
+    if not errors:
+        return None
+    if isinstance(errors, list):
+        first = errors[0]
+        if isinstance(first, dict):
+            return first.get("message", "Unknown error")
+        return str(first)
+    if isinstance(errors, dict):
+        return errors.get("message", "Unknown error")
+    return str(errors)
+
+
 def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
     """Make authenticated REST request for a user."""
     credentials = get_hive_credentials(uid)
@@ -607,6 +627,30 @@ async def disconnect_hive(uid: str):
 # Chat Tool Endpoints
 # ============================================
 
+
+def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
+    """Coerce a caller-supplied limit to an int clamped between min_val and max_val.
+
+    Chat tool parameters arrive as loosely-typed JSON: the Omi backend sends an
+    explicit null for an omitted optional parameter, and LLM callers send strings
+    like "10". ``dict.get(key, default)`` returns None - not the default - when
+    the key is present with a null, and ``items[:None]`` is a legal slice that
+    silently returns *every* row instead of the documented page size. Anything
+    non-numeric falls back to the default instead of reaching a slice.
+    """
+    if value is None:
+        return default
+    try:
+        val = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+    if val < min_val:
+        return min_val
+    if val > max_val:
+        return max_val
+    return val
+
+
 @app.post("/tools/hive_get_projects", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_hive_get_projects(request: Request):
     """
@@ -616,7 +660,7 @@ async def tool_hive_get_projects(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -653,7 +697,7 @@ async def tool_hive_get_tasks(request: Request):
         uid = body.get("uid")
         project_name = body.get("project_name")
         project_id = body.get("project_id")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -793,8 +837,8 @@ async def tool_hive_create_task(request: Request):
 
         result = hive_rest_request(uid, "POST", "actions/create", data=create_data)
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to create task: {error_msg}")
 
         success_msg = f"✅ Created task **{task_name}** in project **{target_project.name}**!"
@@ -817,7 +861,7 @@ async def tool_hive_search(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query", "")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -917,8 +961,8 @@ async def tool_hive_update_task_status(request: Request):
         # Hive usually uses PUT /actions/{id}
         result = hive_rest_request(uid, "PUT", f"actions/{task_id}", data={"status": hive_status})
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
 
         task_display = f"**{task_name}**" if task_name else f"`{task_id}`"

@@ -348,7 +348,7 @@ def perform_merge_async(
 
         # Store photos in subcollection if any
         if merged_photos:
-            conversations_db.store_conversation_photos(uid, new_conversation_id, merged_photos)
+            conversations_db.store_conversation_photos(uid, new_conversation_id, new_conversation.photos)
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         if reprocess:

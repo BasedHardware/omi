@@ -6,8 +6,12 @@ import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
 import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.ble.OmiCompanionManager
+import com.friend.ios.batch.CaptureAdmissionPolicy
 import com.friend.ios.batch.OmiBackgroundAudioStreamer
+import com.friend.ios.batch.CaptureAdmissionLatch
 import com.friend.ios.phonemic.*
+import com.friend.ios.sync.SyncTransferForegroundService
+import com.friend.ios.sync.SyncTransferPlugin
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
@@ -47,6 +51,7 @@ class MainActivity: FlutterActivity() {
         PhoneMicController.initialize(application)
         PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
+        SyncTransferPlugin.register(flutterEngine, this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
@@ -54,6 +59,47 @@ class MainActivity: FlutterActivity() {
             } else {
                 result.notImplemented()
             }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/capture_policy").setMethodCallHandler {
+            call, result ->
+            if (call.method == "getRevision") {
+                result.success(CaptureAdmissionLatch.highWaterRevision())
+                return@setMethodCallHandler
+            }
+            if (call.method != "setMuted") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val muted = call.argument<Boolean>("muted")
+            val revision = when (val raw = call.argument<Any>("revision")) {
+                is Int -> raw.toLong()
+                is Long -> raw
+                else -> null
+            }
+            if (muted == null || revision == null || revision < 0) {
+                result.error("invalid_capture_policy", "muted must be bool and revision must be nonnegative", null)
+                return@setMethodCallHandler
+            }
+            val persisted = runCatching {
+                getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                    .getString("flutter.capturePolicy", null)
+            }.getOrNull()?.let(CaptureAdmissionPolicy::parse)
+            if (revision < (persisted?.revision ?: 0L)) {
+                result.error("stale_capture_policy", "capture policy revision is older than durable state", null)
+                return@setMethodCallHandler
+            }
+            // Release only after the canonical unmuted revision is visible.
+            // Mute does not depend on storage succeeding.
+            if (!muted && (persisted == null || persisted.muted || persisted.revision != revision)) {
+                result.error("capture_policy_not_durable", "unmuted policy is not durably persisted", null)
+                return@setMethodCallHandler
+            }
+            if (!CaptureAdmissionLatch.apply(muted, revision)) {
+                result.error("stale_capture_policy", "capture policy revision is older or conflicts", null)
+                return@setMethodCallHandler
+            }
+            result.success(true)
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
@@ -102,6 +148,9 @@ class MainActivity: FlutterActivity() {
         // leaves native deferring audio to an engine that is gone (issue #10847).
         // configureFlutterEngine re-arms both on the next attach.
         OmiBleManager.isFlutterAlive = false
+        // Dart owns transfer lifetime; once the engine is gone the FGS cannot
+        // finish a sync and must not keep the notification/wake lock.
+        SyncTransferForegroundService.stop(this)
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
             .putBoolean("flutter.nativeBleForegroundReady", false)
