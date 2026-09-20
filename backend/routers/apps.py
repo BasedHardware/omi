@@ -1270,14 +1270,20 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
+    existing_review = get_specific_user_review(app_id, uid)
+    now_iso = datetime.now(timezone.utc).isoformat()
     review_data = {
         'score': data.score,
         'review': data.review or '',
-        'username': data.username or '',
-        'response': data.response or '',
-        'rated_at': datetime.now(timezone.utc).isoformat(),
+        'username': data.username or (existing_review.get('username', '') if existing_review else ''),
+        'response': existing_review.get('response', '') if existing_review else '',
+        'rated_at': existing_review['rated_at'] if existing_review and 'rated_at' in existing_review else now_iso,
         'uid': uid,
     }
+    if existing_review:
+        review_data['updated_at'] = now_iso
+        if 'responded_at' in existing_review:
+            review_data['responded_at'] = existing_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
