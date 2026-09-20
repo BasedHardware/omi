@@ -427,6 +427,7 @@ async def test_prepare_stale_pointer_rolls_over_under_maxmemory():
     stale = {
         'id': 'conv-old',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc) - timedelta(seconds=600),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=stale)
@@ -444,6 +445,7 @@ async def test_prepare_attach_existing_never_writes_pointer():
     fresh = {
         'id': 'conv-1',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=fresh)

@@ -5,6 +5,14 @@ and background processing.
 
 ## Boundaries
 
+- `live_continuation.py` coordinates durable reconnect admission through
+  `database/listen_continuations.py`. The original recording binding remains
+  immutable; its continuation metadata is adopted transactionally. Resume
+  requires the same source/device and an unlocked, nondeleted in-progress row
+  inside the shared continuity window. Expired empty and unexposed losing
+  generations use lifecycle's codec-aware transactional deletion; content,
+  lock, tombstone and sync revision prevent deletion.
+
 - `factory.py`, `location.py`, `search.py`, and `transcript_chunks.py` provide
   serialization, lookup, and read-model helpers; callers retain ownership of
   request authentication and response shaping.

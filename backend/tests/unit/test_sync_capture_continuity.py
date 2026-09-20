@@ -231,3 +231,33 @@ def test_auto_bridge_preserves_user_managed_and_live_donors(field, value):
     assert len(conversations(store)) == 2
     with pytest.raises(SyncAssignmentSuperseded, match='user managed'):
         intake(store, capture(4))
+
+
+@pytest.mark.parametrize('seed', [0, 1, 9])
+def test_nearest_empty_stubs_never_split_unbound_newest_first_or_interleaved_wals(seed):
+    store = StrictFirestore()
+    for i in range(45):
+        stub = capture(i)
+        stub.update(id=f'stub-{i}', status='in_progress', transcript_segments=[])
+        store.rows[('users', 'u', 'conversations', stub['id'])] = stub
+    for i in arrival_order(seed):
+        intake(store, capture(i), candidate_id=f'stub-{i}')
+    with_content = [row for row in conversations(store) if row.get('transcript_segments')]
+    assert len(with_content) == 1
+    assert len(with_content[0]['transcript_segments']) == 45
+
+
+def test_partial_flap_explicit_existing_targets_remain_separate_documented_limit():
+    store = StrictFirestore()
+    for i in range(3):
+        stub = capture(i)
+        stub.update(id=f'stub-{i}', status='in_progress', transcript_segments=[])
+        store.rows[('users', 'u', 'conversations', stub['id'])] = stub
+    for i in (2, 0, 1):
+        intake(store, capture(i), target_id=f'stub-{i}')
+    with_content = [row for row in conversations(store) if row.get('transcript_segments')]
+    # This deliberately proves the remaining limitation; it does not bless it
+    # as the desired product contract. Historical distinct live targets need a
+    # recording-lineage migration, not an unsafe timestamp-based merge.
+    assert len(with_content) == 3
+    assert all(row.get('sync_live_target') for row in with_content)
