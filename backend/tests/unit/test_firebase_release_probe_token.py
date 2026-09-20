@@ -327,12 +327,14 @@ def test_remote_signing_permission_denial_has_bounded_classification(monkeypatch
 
 
 def test_remote_signing_permission_denial_names_the_exact_iam_grant_on_stderr(monkeypatch, tmp_path, capsys):
-    """Every development Pusher run since the named-signer cutover fails at
-    custom_token_signing/permission_denied: the lane's deploy identity has no
-    roles/iam.serviceAccountTokenCreator grant on the Firebase project signer,
-    and the report gave the operator no command to run. The remediation goes to
-    stderr so the stdout JSON report stays machine-parsable, and it must not
-    echo the upstream body or the access token."""
+    """Every development Pusher run from the named-signer cutover (2026-09-13)
+    to the secret re-rotation (2026-09-20) failed at
+    custom_token_signing/permission_denied -- the TokenCreator grant existed
+    all along, but the GCP_CREDENTIALS key had been rotated to another service
+    account. The remediation goes to stderr so the stdout JSON report stays
+    machine-parsable; it must name the resolved caller identity, present a
+    rotated credential as a cause equal to a missing grant, and never echo the
+    upstream body or the access token."""
     module = _load_module()
     upstream_body = io.BytesIO(b'credential and request details that must not be read or printed')
     monkeypatch.setattr(
@@ -374,6 +376,8 @@ def test_remote_signing_permission_denial_names_the_exact_iam_grant_on_stderr(mo
         'status': 'FAIL',
     }
     assert not output.exists()
+    assert '(active identity: deploy-identity@based-hardware-dev.iam.gserviceaccount.com)' in captured.err
+    assert 'rotated' in captured.err
     assert 'roles/iam.serviceAccountTokenCreator' in captured.err
     assert (
         "gcloud iam service-accounts add-iam-policy-binding "

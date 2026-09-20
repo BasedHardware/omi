@@ -445,10 +445,13 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def _print_signing_permission_remediation(signer: str, firebase_project: str) -> None:
-    """Name the missing IAM grant for a permission-denied signJwt (stderr only).
+    """Name the active identity and both denial causes for a 403 signJwt (stderr only).
 
     The machine-readable FAIL report on stdout stays exactly as it was; this
     guidance goes to stderr and never includes a credential or upstream body.
+    A rotated credential for the wrong service account produces the same 403
+    as a missing grant, so the remediation must name the resolved caller and
+    not prescribe a grant unconditionally.
     """
     if not signer:
         print(
@@ -460,12 +463,18 @@ def _print_signing_permission_remediation(signer: str, firebase_project: str) ->
         caller = _active_service_account()
     except (ProbeTokenError, OSError):
         caller = ''
+    caller_label = caller if caller else '<unresolved deploy identity>'
     print(
-        'IAM denied custom-token signing: the active deploy identity does not hold'
-        f' roles/iam.serviceAccountTokenCreator on the Firebase signer {signer}.',
+        'IAM denied custom-token signing as the Firebase project signer '
+        f'{signer} (active identity: {caller_label}).',
         file=sys.stderr,
     )
-    print('One-time operator action (project owner) to unblock the lane:', file=sys.stderr)
+    print(
+        'Either the active credential is not this lane\'s deploy identity (a rotated'
+        ' GCP_CREDENTIALS key for another service account produces this same denial),'
+        ' or the identity lacks the one-time token-creator grant:',
+        file=sys.stderr,
+    )
     member = f'serviceAccount:{caller}' if caller else 'serviceAccount:<this deploy identity>'
     print(
         '  gcloud iam service-accounts add-iam-policy-binding '
