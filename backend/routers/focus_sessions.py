@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -10,6 +11,7 @@ from models.focus_session import FocusSession, FocusStats
 from models.screen_activity import ScreenActivityCoverage
 from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
+from database.notifications import resolve_user_timezone
 import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
@@ -58,7 +60,9 @@ def get_focus_sessions(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
+    return focus_sessions_db.get_focus_sessions(
+        uid, limit=limit, offset=offset, date=date, tz=ZoneInfo(resolve_user_timezone(uid))
+    )
 
 
 @router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
@@ -76,7 +80,7 @@ def get_focus_stats(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_stats(uid, date=date)
+    return focus_sessions_db.get_focus_stats(uid, date=date, tz=ZoneInfo(resolve_user_timezone(uid)))
 
 
 class ScreenActivityRow(BaseModel):
