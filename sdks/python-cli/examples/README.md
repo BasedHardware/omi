@@ -72,6 +72,7 @@
 * [`quickstart.kok.md`](quickstart.kok.md) — omi-cli कोंकणी मार्गदर्शक (Konkani Quickstart).
 * [`quickstart.ku.md`](quickstart.ku.md) — Gavên Yekem bi omi-cli re (Kurdish Quickstart).
 * [`quickstart.ky.md`](quickstart.ky.md) — omi-cli менен баштоо (Kyrgyz Quickstart).
+* [`quickstart.iu.md`](quickstart.iu.md) — ᓯᕗᓪᓕᖅᐹ omi-cli (Inuktitut Quickstart).
 * [`quickstart.la.md`](quickstart.la.md) — Initia cum omi-cli (Latin Quickstart).
 * [`quickstart.lt.md`](quickstart.lt.md) — Pirmieji žingsniai su omi-cli (Lithuanian Quickstart).
 * [`quickstart.lv.md`](quickstart.lv.md) — Pirmie soļi ar omi-cli (Latvian Quickstart).
