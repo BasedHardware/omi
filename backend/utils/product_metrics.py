@@ -199,7 +199,7 @@ def observe_per_user_daily(event: str, uid: str, app_build: str | None = None, *
     in-memory grouping key and is never exported. Fail-open.
     """
     try:
-        if not isinstance(uid, str) or not uid or increment <= 0:
+        if not uid or increment <= 0:
             return
         event_label = _closed(event, EVENTS, 'unknown')
         if event_label not in PER_USER_DAILY_EVENTS:
