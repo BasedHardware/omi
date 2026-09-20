@@ -11,7 +11,6 @@ from models.focus_session import FocusSession, FocusStats
 from models.screen_activity import ScreenActivityCoverage
 from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
-from database.notifications import resolve_user_timezone
 import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
@@ -35,6 +34,16 @@ class CreateFocusSessionRequest(BaseModel):
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
+
+
+def _user_zone(uid: str) -> ZoneInfo:
+    """Resolve lazily: database.notifications pulls Firestore symbols at import time."""
+    from database.notifications import resolve_user_timezone
+
+    try:
+        return ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        return ZoneInfo("UTC")
 
 
 @router.post('/v1/focus-sessions', tags=['focus-sessions'], response_model=FocusSession)
@@ -61,7 +70,7 @@ def get_focus_sessions(
 ):
     date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_sessions(
-        uid, limit=limit, offset=offset, date=date, tz=ZoneInfo(resolve_user_timezone(uid))
+        uid, limit=limit, offset=offset, date=date, tz=_user_zone(uid)
     )
 
 
@@ -80,7 +89,7 @@ def get_focus_stats(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_stats(uid, date=date, tz=ZoneInfo(resolve_user_timezone(uid)))
+    return focus_sessions_db.get_focus_stats(uid, date=date, tz=_user_zone(uid))
 
 
 class ScreenActivityRow(BaseModel):
