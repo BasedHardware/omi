@@ -1,0 +1,3 @@
+{
+  "change": "Improved on-device conversation summaries by having the model write the title and overview before the details"
+}
