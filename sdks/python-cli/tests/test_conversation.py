@@ -150,3 +150,64 @@ def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_m
     err = json.loads(output.err)
     assert "Cannot read file" in err["error"]
     assert not respx_mock.calls
+
+
+def test_conversation_export_srt(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    route = respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={
+            "id": "c1",
+            "transcript_segments": [
+                {"text": "Hello world", "start": 0.0, "end": 1.25},
+                {"text": "Café 日本語 🙂", "start": 61.5, "end": 62.75},
+            ],
+        }
+    )
+    output = tmp_path / "nested" / "transcript.srt"
+
+    result = cli_runner.invoke(app, ["conversation", "export", "c1", "--format", "srt", "--output", str(output)])
+
+    assert result.exit_code == 0, result.output
+    assert route.calls.last.request.url.params["include_transcript"] == "true"
+    assert output.read_text(encoding="utf-8") == (
+        "1\n00:00:00,000 --> 00:00:01,250\nHello world\n\n"
+        "2\n00:01:01,500 --> 00:01:02,750\nCafé 日本語 🙂\n"
+    )
+
+
+def test_conversation_export_refuses_overwrite_before_api_call(
+    authed_profile, respx_mock, cli_runner, tmp_path
+) -> None:
+    output = tmp_path / "transcript.srt"
+    output.write_text("keep me", encoding="utf-8")
+
+    result = cli_runner.invoke(app, ["conversation", "export", "c1", "--output", str(output)])
+
+    assert result.exit_code == 1
+    assert "already exists" in result.stderr.lower()
+    assert output.read_text(encoding="utf-8") == "keep me"
+    assert not respx_mock.calls
+
+
+@pytest.mark.parametrize(
+    "segment",
+    [
+        {"text": "missing end", "start": 0.0},
+        {"text": "backwards", "start": 2.0, "end": 1.0},
+        {"text": "negative", "start": -1.0, "end": 1.0},
+        {"text": "empty", "start": 0.0, "end": 1.0},
+    ],
+)
+def test_conversation_export_rejects_invalid_segments(
+    authed_profile, respx_mock, cli_runner, tmp_path, segment
+) -> None:
+    if segment["text"] == "empty":
+        segment["text"] = "   "
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={"id": "c1", "transcript_segments": [segment]}
+    )
+    output = tmp_path / "transcript.srt"
+
+    result = cli_runner.invoke(app, ["conversation", "export", "c1", "--output", str(output)])
+
+    assert result.exit_code == 1
+    assert not output.exists()
