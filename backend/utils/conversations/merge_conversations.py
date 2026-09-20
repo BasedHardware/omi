@@ -610,6 +610,15 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
+    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
+    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    for source_id in row.get('sync_merged_from', []):
+        if source_id != conversation_id:
+            _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
+    conversations_db.delete_conversation(uid, conversation_id)
+
+
 def _delete_conversation_and_related_data(
     uid: str,
     conversation_id: str,
@@ -617,6 +626,7 @@ def _delete_conversation_and_related_data(
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
     historical_source_ids: Optional[Set[str]] = None,
     retain_capture: bool = False,
+    purge_sync_sources: bool = True,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -696,8 +706,12 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting vector for {conversation_id}: {e}")
 
     try:
-        # Delete conversation document
-        conversations_db.delete_conversation(uid, conversation_id)
+        # Purge retained bridge sources only for a real source/user deletion.
+        # Rollback of a newly created merge target still uses raw DB deletion.
+        if purge_sync_sources:
+            delete_conversation_with_sync_sources(uid, conversation_id)
+        else:
+            conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 

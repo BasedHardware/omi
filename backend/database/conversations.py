@@ -1285,13 +1285,6 @@ def delete_conversation(uid, conversation_id):
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    # Sync bridge ancestors remain as redirects while uploads can still finish.
-    # Deleting the visible capture must also purge those retained source copies.
-    snapshot = conversation_ref.get().to_dict() or {}
-    for source_id in snapshot.get('sync_merged_from', []):
-        from utils.conversations.merge_conversations import _delete_conversation_and_related_data
-
-        _delete_conversation_and_related_data(uid, source_id)
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()

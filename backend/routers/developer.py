@@ -63,6 +63,7 @@ from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 from utils.conversations.projection_payload import (
     client_processing_mutation,
     omit_null_processing_state,
@@ -2235,7 +2236,7 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
 

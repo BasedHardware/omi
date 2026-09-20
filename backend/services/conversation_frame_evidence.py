@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import database.conversations as conversations_db
 import database.frame_requests as frame_requests_db
+from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 from utils.retrieval.frame_request_storage import (
     delete_frame_request_pixels_for_user,
     download_frame_request_pixels,
@@ -34,7 +35,7 @@ def delete_conversation_and_frame_evidence(
     uid: str,
     conversation_id: str,
     *,
-    delete_conversation: Callable[[str, str], object] = conversations_db.delete_conversation,
+    delete_conversation: Callable[[str, str], object] = delete_conversation_with_sync_sources,
 ) -> None:
     """Outbox objects before metadata deletion, then converge best-effort."""
 

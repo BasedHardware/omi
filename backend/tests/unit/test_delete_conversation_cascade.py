@@ -178,8 +178,35 @@ def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
     conversation.data['sync_merged_from'] = ['donor-a', 'donor-b']
     removed = []
     monkeypatch.setattr(
-        merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid: removed.append(cid)
+        merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: removed.append(cid)
     )
-    conversations_db.delete_conversation('uid-1', 'conv-1')
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: conversation.data)
+    merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
     assert removed == ['donor-a', 'donor-b']
     assert not conversation.exists
+
+
+def test_database_hard_delete_does_not_read_or_orchestrate_ancestors(store):
+    conversation = _seed_conversation(store)
+
+    def unexpected_read():
+        raise AssertionError('DB hard delete must not inspect ancestor metadata')
+
+    conversation.get = unexpected_read
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert not conversation.exists
+
+
+def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
+    from utils.conversations import merge_conversations
+
+    conversation = _seed_conversation(store)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a: {'sync_merged_from': ['donor']})
+
+    def fail(*a, **kw):
+        raise RuntimeError('retraction unavailable')
+
+    monkeypatch.setattr(merge_conversations, '_delete_conversation_and_related_data', fail)
+    with pytest.raises(RuntimeError, match='retraction unavailable'):
+        merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert conversation.exists
