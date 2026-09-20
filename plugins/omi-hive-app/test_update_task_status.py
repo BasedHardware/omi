@@ -228,5 +228,53 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
         self.assertIn("ID: `act_77`", get_res.result)
 
 
+class ErrorPayloadShapeTests(unittest.TestCase):
+    """A 2xx body can carry any shape under "errors"; only a real error may fail the call."""
+
+    def setUp(self):
+        self.uid = "test_user_123"
+
+    def _update(self, put_result):
+        with patch.object(main, "is_connected", return_value=True), patch.object(
+            main, "get_hive_credentials", return_value={"workspace_id": "ws_1"}
+        ), patch.object(main, "hive_rest_request") as mock_rest:
+            mock_rest.side_effect = [
+                [{"_id": "act_2", "title": "Deploy", "status": "todo"}],
+                put_result,
+            ]
+            req = FakeRequest({"uid": self.uid, "task_name": "Deploy", "status": "done"})
+            return asyncio.run(main.tool_hive_update_task_status(req))
+
+    def test_an_empty_errors_list_is_not_a_failure(self):
+        res = self._update({"_id": "act_2", "status": "completed", "errors": []})
+
+        self.assertIsNone(res.error)
+        self.assertIn("Updated task", res.result)
+
+    def test_a_null_errors_field_is_not_a_failure(self):
+        res = self._update({"_id": "act_2", "status": "completed", "errors": None})
+
+        self.assertIsNone(res.error)
+        self.assertIn("Updated task", res.result)
+
+    def test_a_real_error_list_still_reports_its_message(self):
+        res = self._update({"errors": [{"message": "Action is archived"}]})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("Action is archived", res.error)
+
+    def test_a_string_error_is_reported_instead_of_crashing(self):
+        res = self._update({"errors": "action_locked"})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("action_locked", res.error)
+
+    def test_a_dict_error_is_reported_instead_of_crashing(self):
+        res = self._update({"errors": {"message": "rate limited"}})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("rate limited", res.error)
+
+
 if __name__ == "__main__":
     unittest.main()
