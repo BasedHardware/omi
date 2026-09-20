@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
 from typing import Any, Dict, Optional, List, Tuple, cast
@@ -25,12 +26,23 @@ def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi/conversations/{conversation_id}/transcript-segments/{index}'))
 
 
-class _RemovedSegmentIds(list):
-    __slots__ = ('into',)
+@dataclass(frozen=True)
+class CombineSegmentsResult:
+    """3-tuple unpack for existing callers, plus an explicit absorbed-id map.
 
-    def __init__(self, ids: List[str], into: Dict[str, str]):
-        super().__init__(ids)
-        self.into = into
+    ``list(removed_ids)`` (or JSON / executor copies) must not be how the remap
+    travels — pass ``absorbed_into`` as its own value.
+    """
+
+    segments: List['TranscriptSegment']
+    joined: List['TranscriptSegment']
+    removed_ids: List[str]
+    absorbed_into: Dict[str, str]
+
+    def __iter__(self):
+        yield self.segments
+        yield self.joined
+        yield self.removed_ids
 
 
 class Translation(BaseModel):
@@ -132,9 +144,9 @@ class TranscriptSegment(BaseModel):
     @staticmethod
     def combine_segments(
         segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment'], delta_seconds: int = 0
-    ) -> Tuple[List['TranscriptSegment'], List['TranscriptSegment'], List[str]]:
+    ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
-            return segments, [], []
+            return CombineSegmentsResult(segments, [], [], {})
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
             text = text.strip()
@@ -289,7 +301,7 @@ class TranscriptSegment(BaseModel):
                 segment.text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
-        return segments, joined_similar_segments, _RemovedSegmentIds(removed_ids, absorbed_into)
+        return CombineSegmentsResult(segments, joined_similar_segments, removed_ids, absorbed_into)
 
 
 class ImprovedTranscriptSegment(BaseModel):

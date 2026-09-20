@@ -193,10 +193,11 @@ class TranscriptProcessor:
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
+        absorbed_into: Dict[str, str] = {}
         if segments:
-            conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
-                conversation.transcript_segments, segments
-            )
+            combined = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
+            conversation.transcript_segments, updated, removed = combined
+            absorbed_into = combined.absorbed_into
             sort_transcript_segments_in_place(conversation.transcript_segments)
             speaker = self.host.speakers
             targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
@@ -218,6 +219,7 @@ class TranscriptProcessor:
                 preserve_unseen=True,
                 return_segments=True,
                 removed_segment_ids=removed,
+                absorbed_into=absorbed_into,
             )
             if not written:
                 return None
@@ -282,7 +284,7 @@ class TranscriptProcessor:
             return_segments=True,
         )
         if not written:
-            failures = getattr(self, '_flush_failures', 0) + 1
+            failures = self._flush_failures + 1
             self._flush_failures = min(failures, 4)
             self._flush_backoff_until = time.monotonic() + min(5.0, 0.6 * (2 ** (self._flush_failures - 1)))
             return
@@ -343,7 +345,7 @@ class TranscriptProcessor:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
             if not self.segment_buffer and not self.photo_buffer:
-                if self.host.state.speaker_map_dirty and time.monotonic() >= getattr(self, '_flush_backoff_until', 0):
+                if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
                     await self.flush_speaker_assignments(self.host.state.current_conversation_id)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))

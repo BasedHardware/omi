@@ -115,11 +115,11 @@ class SpeakerMatcher:
             state.speaker_id_done.set()
             return
         # prepare() may already have loaded the first conversation's profiles.
+        # Keep the loop alive even with zero enrolled people so a later
+        # refresh_for_conversation can load a newly taught profile and still
+        # consume the queue in this socket session.
         if self._profile_conversation_id is None:
             await self._load_profiles()
-        if not self.person_embeddings:
-            state.speaker_id_done.set()
-            return
         while True:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)

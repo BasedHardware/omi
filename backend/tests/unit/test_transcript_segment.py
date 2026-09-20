@@ -56,13 +56,14 @@ def test_merge_same_speaker_with_small_gap():
     b = _segment("world.", speaker="SPEAKER_00", start=1.1, end=2.0)
     input_concat = _concat_texts([a.text, b.text])
 
-    segments, _, removed_ids = TranscriptSegment.combine_segments([], [a, b])
+    result = TranscriptSegment.combine_segments([], [a, b])
+    segments, _, removed_ids = result
 
     assert len(segments) == 1
     assert segments[0].text == "Hello world."
     assert a.id not in removed_ids
     assert b.id in removed_ids
-    assert getattr(removed_ids, 'into', {}).get(b.id) == a.id
+    assert result.absorbed_into.get(b.id) == a.id
     assert _concat_segments(segments) == input_concat
 
 

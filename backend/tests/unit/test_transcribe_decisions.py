@@ -602,6 +602,17 @@ def test_speaker_detection_gates():
         )
         is False
     )
+    assert (
+        should_queue_speaker_embedding(
+            speaker_id=1,
+            person_id='',
+            is_user=False,
+            speaker_id_enabled=True,
+            has_person_embeddings=False,
+            speaker_already_mapped=False,
+        )
+        is False
+    )
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=2.0, min_audio_seconds=2.0) is True
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=1.99, min_audio_seconds=2.0) is False
     assert should_spawn_speaker_match(speaker_already_mapped=True, duration=4.0, min_audio_seconds=2.0) is False

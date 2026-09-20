@@ -19,7 +19,8 @@ from types import SimpleNamespace  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
-from models.transcript_segment import SpeakerIdentityStatus  # noqa: E402
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment  # noqa: E402
+from routers.listen.transcripts import TranscriptProcessor  # noqa: E402
 from utils.stt.speaker_match import (  # noqa: E402
     SPEAKER_MATCH_MARGIN,
     SPEAKER_MATCH_MAX_CLIPS,
@@ -325,18 +326,102 @@ def test_in_flight_match_does_not_paint_the_next_conversation(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_empty_profile_session_sets_speaker_id_done_without_queueing(monkeypatch):
-    import routers.listen.speakers as speakers_mod
-
+def test_empty_profile_session_keeps_matcher_loop_until_refresh_queues_match(monkeypatch):
     async def scenario():
         matcher, host, _ = _live_matcher(monkeypatch, [])
         host.state.speaker_id_enabled = True
         host.state.speaker_id_done = asyncio.Event()
         host.state.active = True
-        matcher._profile_conversation_id = 'c'
+        matcher._profile_conversation_id = 'c1'
         matcher.person_embeddings = {}
-        await matcher.load_and_run()
-        assert host.state.speaker_id_done.is_set()
-        assert not matcher.tasks
+        spawned = []
+
+        def spawn(coro, *, name):
+            spawned.append(name)
+            task = asyncio.create_task(coro)
+            task.cancel()
+            return task
+
+        host.spawn = spawn
+
+        async def load_profiles():
+            matcher.person_embeddings = {'p1': {'embedding': np.array([[1.0, 0.0]], dtype=np.float32), 'name': 'Alex'}}
+
+        monkeypatch.setattr(matcher, '_load_profiles', load_profiles)
+        runner = asyncio.create_task(matcher.load_and_run())
+        try:
+            for _ in range(20):
+                if not host.state.speaker_id_done.is_set():
+                    break
+                await asyncio.sleep(0.01)
+            assert not host.state.speaker_id_done.is_set()
+            await matcher.refresh_for_conversation('c2')
+            assert 'p1' in matcher.person_embeddings
+            matcher.queue.put_nowait(
+                {
+                    'id': 's1',
+                    'conversation_id': 'c2',
+                    'speaker_id': 1,
+                    'abs_start': 0.0,
+                    'abs_end': 5.0,
+                    'duration': 5.0,
+                }
+            )
+            for _ in range(50):
+                if spawned:
+                    break
+                await asyncio.sleep(0.02)
+            assert spawned == ['speaker_match']
+        finally:
+            host.state.active = False
+            runner.cancel()
+            try:
+                await runner
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(scenario())
+
+
+def test_speaker_detection_reads_person_embeddings_live():
+    from unittest.mock import patch
+
+    async def scenario():
+        queue = asyncio.Queue()
+        speakers = SimpleNamespace(
+            speaker_to_person={},
+            person_embeddings={},
+            queue=queue,
+        )
+        processor = object.__new__(TranscriptProcessor)
+        processor.host = SimpleNamespace(
+            speakers=speakers,
+            state=SimpleNamespace(
+                speaker_id_enabled=True,
+                current_conversation_id='c2',
+                first_audio_byte_timestamp=0.0,
+            ),
+            language='en',
+            persistence=SimpleNamespace(call=lambda *a, **k: None),
+            request=SimpleNamespace(uid='u', create_speakers=False),
+        )
+        processor.suggested_segments = set()
+        segment = TranscriptSegment(
+            id='s1',
+            speaker='SPEAKER_00',
+            speaker_id=1,
+            text='synthetic speech',
+            start=0.0,
+            end=3.0,
+            is_user=False,
+        )
+        with patch('routers.listen.transcripts.detect_speaker_from_text', return_value=None):
+            await processor._speaker_detection([segment], 0.0)
+            assert queue.empty()
+            speakers.person_embeddings = {'p1': {'name': 'Alex'}}
+            await processor._speaker_detection([segment], 0.0)
+        item = queue.get_nowait()
+        assert item['conversation_id'] == 'c2'
+        assert item['speaker_id'] == 1
 
     asyncio.run(scenario())

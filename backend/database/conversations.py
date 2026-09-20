@@ -2145,6 +2145,7 @@ def update_conversation_segments(
     return_segments: bool = False,
     preserve_unseen: bool = False,
     removed_segment_ids: Optional[List[str]] = None,
+    absorbed_into: Optional[Dict[str, str]] = None,
 ):
     """Replace a conversation's transcript segments.
 
@@ -2173,9 +2174,9 @@ def update_conversation_segments(
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
-        absorbed_into = getattr(removed_segment_ids, 'into', None) or {}
-        if absorbed_into:
-            receipt = remap_absorbed_receipt(receipt, absorbed_into)
+        remap = dict(absorbed_into or {})
+        if remap:
+            receipt = remap_absorbed_receipt(receipt, remap)
         incoming = list(segments)
         if preserve_unseen:
             known = {s.get('id') for s in incoming} | set(removed_segment_ids or [])
@@ -2191,7 +2192,7 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(segments),
         }
-        if absorbed_into:
+        if remap:
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
             update_payload['finished_at'] = finished_at

@@ -14,6 +14,15 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 
+def _flush_processor(host):
+    from types import SimpleNamespace
+    from routers.listen.transcripts import TranscriptProcessor
+
+    host.limits = SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8)
+    host.translation_language = None
+    return TranscriptProcessor(host)
+
+
 @pytest.fixture
 def world(monkeypatch):
     store = StrictFirestore()
@@ -128,7 +137,6 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
-    from routers.listen.transcripts import TranscriptProcessor
     from models.transcript_segment import TranscriptSegment
     from routers.listen import transcripts
     from unittest.mock import patch
@@ -138,22 +146,21 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
             id='c',
             transcript_segments=[dict(segment, person_id=None) for segment in deepcopy(world[2])],
         )
-        processor = object.__new__(TranscriptProcessor)
-        processor._flush_failures = 0
-        processor._flush_backoff_until = 0.0
         calls = []
 
         async def persist(fn, *args, **kwargs):
             calls.append(True)
             return False if len(calls) == 1 else args[2]
 
-        processor.host = SimpleNamespace(
-            request=SimpleNamespace(uid='u'),
-            state=SimpleNamespace(active=True, speaker_map_dirty=True),
-            persistence=SimpleNamespace(call=persist),
-            speakers=SimpleNamespace(
-                speaker_to_person={}, segment_assignments={'s1': 'new'}, segment_identity_status={}
-            ),
+        processor = _flush_processor(
+            SimpleNamespace(
+                request=SimpleNamespace(uid='u'),
+                state=SimpleNamespace(active=True, speaker_map_dirty=True),
+                persistence=SimpleNamespace(call=persist),
+                speakers=SimpleNamespace(
+                    speaker_to_person={}, segment_assignments={'s1': 'new'}, segment_identity_status={}
+                ),
+            )
         )
         processor.cache = SimpleNamespace(
             get=AsyncMock(return_value=snapshot), protection_level='standard', update_segments=lambda segments: None
@@ -184,7 +191,6 @@ def test_silence_flush_payload_is_proportional_to_changed_identities():
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, patch
-    from routers.listen.transcripts import TranscriptProcessor
     from models.transcript_segment import TranscriptSegment
     from routers.listen import transcripts
 
@@ -203,20 +209,19 @@ def test_silence_flush_payload_is_proportional_to_changed_identities():
             for i in range(500)
         ]
         raw = dict(id='c', transcript_segments=segments)
-        processor = object.__new__(TranscriptProcessor)
-        processor._flush_failures = 0
-        processor._flush_backoff_until = 0.0
 
         async def persist(fn, *args, **kwargs):
             return args[2]
 
-        processor.host = SimpleNamespace(
-            request=SimpleNamespace(uid='u'),
-            state=SimpleNamespace(active=True, speaker_map_dirty=True),
-            persistence=SimpleNamespace(call=persist),
-            speakers=SimpleNamespace(
-                speaker_to_person={}, segment_assignments={'s7': 'new'}, segment_identity_status={}
-            ),
+        processor = _flush_processor(
+            SimpleNamespace(
+                request=SimpleNamespace(uid='u'),
+                state=SimpleNamespace(active=True, speaker_map_dirty=True),
+                persistence=SimpleNamespace(call=persist),
+                speakers=SimpleNamespace(
+                    speaker_to_person={}, segment_assignments={'s7': 'new'}, segment_identity_status={}
+                ),
+            )
         )
         processor.cache = SimpleNamespace(
             get=AsyncMock(return_value=raw), protection_level='standard', update_segments=lambda items: None
@@ -387,9 +392,8 @@ def test_absorbed_labeled_segment_moves_receipt_and_is_not_resurrected(world):
     )
     store.rows[path]['transcript_segments'] = [keep, continuation]
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['cont'])
-    combined, _, removed = TranscriptSegment.combine_segments(
-        [TranscriptSegment(**keep)], [TranscriptSegment(**continuation)]
-    )
+    result = TranscriptSegment.combine_segments([TranscriptSegment(**keep)], [TranscriptSegment(**continuation)])
+    combined, _, removed = result
     assert 'cont' in removed
     db.update_conversation_segments(
         'u',
@@ -397,6 +401,37 @@ def test_absorbed_labeled_segment_moves_receipt_and_is_not_resurrected(world):
         [segment.model_dump() for segment in combined],
         preserve_unseen=True,
         removed_segment_ids=removed,
+        absorbed_into=result.absorbed_into,
+    )
+    saved = read(world)
+    assert [segment['id'] for segment in saved['transcript_segments']] == ['keep']
+    assert saved['transcript_segments'][0]['person_id'] == 'new'
+    assert 'cont' not in (saved['manual_speaker_assignments'].get('segments') or {})
+    assert saved['manual_speaker_assignments']['segments']['keep']['person_id'] == 'new'
+
+
+def test_absorbed_remap_survives_list_copy_of_removed_ids(world):
+    from models.transcript_segment import TranscriptSegment
+
+    store, path, _ = world
+    keep = dict(
+        id='keep', speaker='SPEAKER_00', speaker_id=4, text='Hello', start=0, end=1, is_user=False, person_id=None
+    )
+    continuation = dict(
+        id='cont', speaker='SPEAKER_00', speaker_id=4, text='world.', start=1.1, end=2, is_user=False, person_id=None
+    )
+    store.rows[path]['transcript_segments'] = [keep, continuation]
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['cont'])
+    result = TranscriptSegment.combine_segments([TranscriptSegment(**keep)], [TranscriptSegment(**continuation)])
+    copied_ids = list(result.removed_ids)
+    assert not hasattr(copied_ids, 'into')
+    db.update_conversation_segments(
+        'u',
+        'c',
+        [segment.model_dump() for segment in result.segments],
+        preserve_unseen=True,
+        removed_segment_ids=copied_ids,
+        absorbed_into=result.absorbed_into,
     )
     saved = read(world)
     assert [segment['id'] for segment in saved['transcript_segments']] == ['keep']
