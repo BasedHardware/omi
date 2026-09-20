@@ -5,8 +5,9 @@
   "canonical_prevention": "Classify each derived-data cleanup step's 'dependency not configured' state as the trivially-confirmed desired absence (nothing to purge, log and continue) distinct from a configured dependency that raised (fail closed, retryable). Write the regression test by stubbing the dependency handle to its unconfigured state — not by removing it — so a future hardening that re-adds the gate fails the suite instead of shipping.",
   "canonical_prevention_artifact": [
     "backend/database/vector_db.py",
+    "backend/utils/memory/memory_service.py",
     "backend/tests/unit/test_canonical_memory_vectors.py",
-    "backend/tests/unit/test_conversation_delete_wire_contract.py",
+    "backend/tests/unit/test_universal_memory_service.py",
     "backend/tests/unit/test_ws_j_delete_privacy.py"
   ],
   "evidence_prs": [],
