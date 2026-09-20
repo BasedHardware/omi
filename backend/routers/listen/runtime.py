@@ -51,8 +51,9 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
-from utils.stt.streaming import get_stt_service_for_language
+from routers.listen.provider_routing import routing_for_listen
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.streaming import STTService, get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -370,12 +371,19 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
-        self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
-            self.language,
-            multi_lang_enabled=self.multi_lang_enabled,
-            preferred_service=request.stt_service,
-            **window_selection_kwargs(self, request.uid),
-        )
+        self.provider_routing = routing_for_listen(self)
+        if self.provider_routing is None:
+            self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
+                self.language,
+                multi_lang_enabled=self.multi_lang_enabled,
+                preferred_service=request.stt_service,
+                **window_selection_kwargs(self, request.uid),
+            )
+        else:
+            first = self.provider_routing.route.next_candidate()
+            self.stt_service = STTService(first.service) if first else None
+            self.stt_language = self.provider_routing.route.language
+            self.stt_model = first.model if first else None
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
         # the serving one has to be read at use time (#11306).

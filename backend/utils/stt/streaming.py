@@ -29,6 +29,7 @@ from config.stt_provider_policy import (
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
+from config.stt_routing import deepgram_nova3_languages, deepgram_nova3_multi_languages
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
@@ -376,117 +377,6 @@ async def drain_stt_socket(socket: STTSocket) -> None:
     socket.finish()
 
 
-deepgram_nova3_multi_languages = {
-    "multi",
-    "en",
-    "en-US",
-    "en-AU",
-    "en-GB",
-    "en-IN",
-    "en-NZ",
-    "es",
-    "es-419",
-    "fr",
-    "fr-CA",
-    "de",
-    "hi",
-    "ru",
-    "pt",
-    "pt-BR",
-    "pt-PT",
-    "ja",
-    "it",
-    "nl",
-}
-deepgram_nova3_languages = {
-    "ar",
-    "ar-AE",
-    "ar-SA",
-    "ar-QA",
-    "ar-KW",
-    "ar-SY",
-    "ar-LB",
-    "ar-PS",
-    "ar-JO",
-    "ar-EG",
-    "ar-SD",
-    "ar-TD",
-    "ar-MA",
-    "ar-DZ",
-    "ar-TN",
-    "ar-IQ",
-    "ar-IR",
-    "be",
-    "bg",
-    "bn",
-    "bs",
-    "ca",
-    "cs",
-    "da",
-    "da-DK",
-    "de",
-    "de-CH",
-    "el",
-    "en",
-    "en-US",
-    "en-AU",
-    "en-GB",
-    "en-IN",
-    "en-NZ",
-    "es",
-    "es-419",
-    "et",
-    "fa",
-    "fi",
-    "fr",
-    "fr-CA",
-    "he",
-    "hi",
-    "hr",
-    "hu",
-    "id",
-    "it",
-    "ja",
-    "kn",
-    "ko",
-    "ko-KR",
-    "lt",
-    "lv",
-    "mk",
-    "mr",
-    "ms",
-    "nl",
-    "nl-BE",
-    "no",
-    "pl",
-    "pt",
-    "pt-BR",
-    "pt-PT",
-    "ro",
-    "ru",
-    "sk",
-    "sl",
-    "sr",
-    "sv",
-    "sv-SE",
-    "ta",
-    "te",
-    "th",
-    "th-TH",
-    "tl",
-    "tr",
-    "uk",
-    "ur",
-    "vi",
-    "zh",
-    "zh-CN",
-    "zh-Hans",
-    "zh-HK",
-    "zh-Hant",
-    "zh-TW",
-}
-
-
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
@@ -561,7 +451,7 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
-def _requested_stt_language(
+def requested_stt_language(
     language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
 ) -> str:
     """Resolve the provider language while retaining PTT's explicit input language.
@@ -605,7 +495,7 @@ def get_stt_service_for_language(
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
-    requested_language = _requested_stt_language(
+    requested_language = requested_stt_language(
         language,
         base_lang,
         multi_lang_enabled=multi_lang_enabled,
