@@ -106,7 +106,7 @@ async def tts_synthesize(
         logger.warning(f"tts_synthesize: daily character limit exceeded uid={uid}")
         raise HTTPException(
             status_code=429,
-            detail="Daily TTS character limit exceeded. Resets at midnight UTC.",
+            detail="Daily TTS character limit exceeded. Resets at midnight in your time zone.",
             headers={"Retry-After": str(retry_after or 3600)},
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
