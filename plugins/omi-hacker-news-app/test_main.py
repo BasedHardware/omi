@@ -225,5 +225,46 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_discussion.error, "Missing required field: item_id")
 
 
+class SafeTextTests(unittest.TestCase):
+    def test_safe_text_valid_strings(self):
+        self.assertEqual(app._safe_text("  hello world  "), "hello world")
+        self.assertEqual(app._safe_text("python"), "python")
+
+    def test_safe_text_coerces_non_strings_to_empty(self):
+        non_strings = [None, 2026, 3.14, True, False, ["ai"], {"q": "ai"}]
+        for val in non_strings:
+            with self.subTest(val=val):
+                self.assertEqual(app._safe_text(val), "")
+
+
+class SearchStoriesHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_stories_rejects_non_string_queries(self):
+        bad_queries = [2026, 3.5, ["ai"], {"q": "ai"}, None, "", "   "]
+        for q in bad_queries:
+            with self.subTest(query=q):
+                response = await app.search_stories({"query": q})
+                self.assertEqual(response.error, "Missing required field: query")
+                self.assertIsNone(response.result)
+
+    async def test_search_stories_valid_query(self):
+        mock_data = {
+            "hits": [
+                {
+                    "title": "Show HN: Fast Vector Search",
+                    "author": "engineer",
+                    "points": 120,
+                    "num_comments": 45,
+                    "objectID": "12345",
+                    "url": "https://news.ycombinator.com/item?id=12345",
+                }
+            ]
+        }
+        with patch.object(app, "_request_json", AsyncMock(return_value=mock_data)):
+            response = await app.search_stories({"query": "fast vector search", "limit": 5})
+            self.assertIsNone(response.error)
+            self.assertIn("Hacker News stories for 'fast vector search':", response.result)
+            self.assertIn("Show HN: Fast Vector Search", response.result)
+
+
 if __name__ == "__main__":
     unittest.main()
