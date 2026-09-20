@@ -54,7 +54,6 @@ from models.app import App
 from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
-from models.shared import StatusResponse
 
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -1212,7 +1211,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
@@ -1269,7 +1268,12 @@ def delete_conversation(
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
-    return {"status": "Ok"}
+    # Released clients (mobile app/lib/backend/http/api/conversations.dart) gate
+    # delete success on HTTP 204. The 2026-07-04 response_model backfill briefly
+    # turned this into a 200-with-body, which the released app reads as a failed
+    # DELETE: tombstone clearing and server-cursor bookkeeping regress and any
+    # transient server failure resurfaces the deleted conversation on refresh.
+    # 204 No Content restores the released contract (folders/mcp convention).
 
 
 @router.get(

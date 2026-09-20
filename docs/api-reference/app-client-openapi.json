@@ -24589,21 +24589,6 @@
         "title": "SpeechProfileUploadResponse",
         "type": "object"
       },
-      "StatusResponse": {
-        "description": "Canonical ack response for `{'status': str}` endpoints (deletes, mutations, bulk ops).\n\nPrefer this over hand-built `{'status': 'ok'}` dicts. Domain-specific status\nresponses (e.g. `IntegrationNotificationResponse`) may stay in their domain\nmodule, but generic acks should use this.",
-        "properties": {
-          "status": {
-            "description": "Human-readable status message, e.g. \"ok\".",
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "StatusResponse",
-        "type": "object"
-      },
       "StoreMeetingRequest": {
         "description": "Request to store/update a calendar meeting",
         "properties": {
@@ -39218,14 +39203,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {
