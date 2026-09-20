@@ -19,7 +19,9 @@ import 'package:omi/utils/logger.dart';
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
-typedef DailySummariesChecker = Future<bool> Function();
+/// Returns null when the check could not be made, so the caller keeps the
+/// last known answer instead of reading a failure as "no recaps".
+typedef DailySummariesChecker = Future<bool?> Function();
 typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
   String query, {
   int? page,
@@ -503,8 +505,9 @@ class ConversationProvider extends ChangeNotifier {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
     final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+        getDailySummaries(limit: 1, offset: 0).then((result) => result.ok ? result.items.isNotEmpty : null));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
+    if (hasSummaries == null) return true;
     hasDailySummaries = hasSummaries;
     notifyListeners();
     return true;

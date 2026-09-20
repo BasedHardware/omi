@@ -569,21 +569,23 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
 
 // Daily Summaries API
 
-Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+/// `ok` is false when the recaps could not be read (no response / non-200 /
+/// unparsable body). Callers must not treat that as the user having no recaps.
+Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null || response.statusCode != 200) return [];
+  if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaries?.map(DailySummary.fromGenerated).toList() ?? [];
+    return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
-    return [];
+    return (items: const <DailySummary>[], ok: false);
   }
 }
 
