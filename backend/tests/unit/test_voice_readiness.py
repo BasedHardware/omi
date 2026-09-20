@@ -45,3 +45,18 @@ def test_people_response_readiness_is_independent_of_playback_url_availability(m
     single = users.get_single_person('p', include_speech_samples=True, uid='u')
     assert listed[0].voice_readiness == single.voice_readiness == 'ready'
     assert listed[0].speech_samples == single.speech_samples == []
+    assert Person(**listed[0].model_dump()).voice_readiness == 'ready'
+
+
+def test_get_all_people_skips_malformed_row(monkeypatch):
+    monkeypatch.setattr(
+        users,
+        'get_people',
+        lambda uid: [
+            {'id': 'p1', 'name': 'Alex', 'speech_samples': [], 'speech_samples_version': 3},
+            {'id': 'bad'},
+        ],
+    )
+    monkeypatch.setattr(users, 'get_speech_sample_signed_urls', lambda paths: [])
+    listed = users.get_all_people(uid='u', include_speech_samples=False)
+    assert [person.id for person in listed] == ['p1']

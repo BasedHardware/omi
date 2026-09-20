@@ -630,7 +630,7 @@ def get_single_person(
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_all_people {include_speech_samples}')
-    people = [Person(**person) for person in get_people(uid)]
+    people = Person.deserialize_many_safe(get_people(uid))
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):

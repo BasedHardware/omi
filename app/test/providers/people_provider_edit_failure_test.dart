@@ -75,4 +75,91 @@ void main() {
     expect(provider.people.map((person) => person.id), [alice.id, bob.id]);
     expect(SharedPreferencesUtil().cachedPeople.map((person) => person.id), [alice.id, bob.id]);
   });
+
+  test('deleting one of several samples keeps readiness until refresh', () async {
+    final person = Person(
+      id: 'voice',
+      name: 'Alice',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      speechSamples: ['a.wav', 'b.wav'],
+      speechSamplesVersion: 3,
+      voiceReadiness: 'ready',
+    );
+    SharedPreferencesUtil().cachedPeople = [person];
+    final provider = PeopleProvider(
+      deleteSample: (id, idx) async => true,
+      loadPeople: () async => [
+        Person(
+          id: 'voice',
+          name: 'Alice',
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+          speechSamples: ['b.wav'],
+          speechSamplesVersion: 3,
+          voiceReadiness: 'ready',
+        ),
+      ],
+    );
+    provider.people = [
+      Person(
+        id: person.id,
+        name: person.name,
+        createdAt: person.createdAt,
+        updatedAt: person.updatedAt,
+        speechSamples: ['a.wav', 'b.wav'],
+        speechSamplesVersion: 3,
+        voiceReadiness: 'ready',
+      ),
+    ];
+    await provider.deletePersonSample(0, 0);
+    expect(provider.people.single.voiceReadiness, 'ready');
+    expect(provider.people.single.speechSamples, ['b.wav']);
+  });
+
+  test('deleting the last sample paints not_learned then refreshes', () async {
+    final person = Person(
+      id: 'voice',
+      name: 'Alice',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      speechSamples: ['a.wav'],
+      speechSamplesVersion: 3,
+      voiceReadiness: 'ready',
+    );
+    SharedPreferencesUtil().cachedPeople = [person];
+    Person? optimistic;
+    final provider = PeopleProvider(
+      deleteSample: (id, idx) async => true,
+      loadPeople: () async {
+        optimistic = SharedPreferencesUtil().cachedPeople.single;
+        return [
+          Person(
+            id: 'voice',
+            name: 'Alice',
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+            speechSamples: const [],
+            speechSamplesVersion: 3,
+            voiceReadiness: 'not_learned',
+          ),
+        ];
+      },
+    );
+    provider.people = [
+      Person(
+        id: person.id,
+        name: person.name,
+        createdAt: person.createdAt,
+        updatedAt: person.updatedAt,
+        speechSamples: ['a.wav'],
+        speechSamplesVersion: 3,
+        voiceReadiness: 'ready',
+      ),
+    ];
+    await provider.deletePersonSample(0, 0);
+    expect(optimistic?.voiceReadiness, 'not_learned');
+    expect(provider.people.single.voiceReadiness, 'not_learned');
+    expect(provider.people.single.speechSamples, isEmpty);
+  });
 }

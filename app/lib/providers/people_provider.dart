@@ -7,11 +7,16 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/logger.dart';
 
 class PeopleProvider extends BaseProvider {
-  PeopleProvider({Future<bool> Function(String, String)? renamePerson, Future<List<Person>?> Function()? loadPeople})
-      : _renamePerson = renamePerson ?? updatePersonName,
-        _loadPeople = loadPeople ?? getAllPeople;
+  PeopleProvider({
+    Future<bool> Function(String, String)? renamePerson,
+    Future<List<Person>?> Function()? loadPeople,
+    Future<bool> Function(String, int)? deleteSample,
+  })  : _renamePerson = renamePerson ?? updatePersonName,
+        _loadPeople = loadPeople ?? getAllPeople,
+        _deleteSample = deleteSample ?? deletePersonSpeechSample;
   final Future<List<Person>?> Function() _loadPeople;
   final Future<bool> Function(String, String) _renamePerson;
+  final Future<bool> Function(String, int) _deleteSample;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   Map<String, List<String>> samplesUrl = {};
 
@@ -130,13 +135,15 @@ class PeopleProvider extends BaseProvider {
   Future<void> deletePersonSample(int personIdx, int sampleIdx) async {
     String personId = people[personIdx].id;
 
-    bool success = await deletePersonSpeechSample(personId, sampleIdx);
+    bool success = await _deleteSample(personId, sampleIdx);
     if (success) {
       people[personIdx].speechSamples!.removeAt(sampleIdx);
-      people[personIdx] = Person.fromJson({
-        ...people[personIdx].toJson(),
-        'voice_readiness': people[personIdx].speechSamples!.isEmpty ? 'not_learned' : 'unknown',
-      });
+      if (people[personIdx].speechSamples!.isEmpty) {
+        people[personIdx] = Person.fromJson({
+          ...people[personIdx].toJson(),
+          'voice_readiness': 'not_learned',
+        });
+      }
       SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
       await setPeople();
       notifyListeners();

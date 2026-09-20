@@ -103,6 +103,14 @@ class Person(BaseModel):
     @classmethod
     def derive_voice_readiness(cls, data):
         if isinstance(data, Mapping):
+            claimed = data.get('voice_readiness')
+            try:
+                VoiceReadiness(claimed)
+                claimed_valid = True
+            except (ValueError, TypeError):
+                claimed_valid = False
+            if claimed_valid and 'speaker_embedding' not in data:
+                return data
             data = {**data, 'voice_readiness': voice_readiness(data)}
         return data
 
