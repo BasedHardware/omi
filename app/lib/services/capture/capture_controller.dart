@@ -1235,17 +1235,17 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _streamButtonTaps(String deviceId) async {
     final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null || (await connection.getFeatures() & OmiFeatures.buttonTaps) == 0) return;
+    final supportsTaps = connection != null && (await connection.getFeatures() & OmiFeatures.buttonTaps) != 0;
+    _buttonTapsActive = supportsTaps;
+    if (!supportsTaps) return;
     _bleButtonTapsStream = lifetime.takeSubscription(
       _bleButtonTapsStream,
       await connection.getBleButtonTapsListener(onTapsReceived: (value) => _onButtonTaps(deviceId, value)),
     );
-    _buttonTapsActive = _bleButtonTapsStream != null;
   }
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
-    _buttonTapsActive = false;
     _bleButtonTapsStream = lifetime.takeSubscription(_bleButtonTapsStream, null);
     _bleButtonStream = lifetime.takeSubscription(
       _bleButtonStream,

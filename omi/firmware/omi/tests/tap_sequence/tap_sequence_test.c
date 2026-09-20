@@ -29,7 +29,7 @@ static void reset(uint32_t start_ms)
 
 static void hold(bool pressed, uint32_t duration_ms)
 {
-    uint32_t end = now_ms + duration_ms;
+    uint32_t start = now_ms;
     do {
         uint8_t count = 0;
         enum tap_sequence_event event = tap_sequence_update(&seq, pressed, now_ms, &count);
@@ -40,7 +40,7 @@ static void hold(bool pressed, uint32_t duration_ms)
             event_count++;
         }
         now_ms += POLL_MS;
-    } while (now_ms < end);
+    } while ((uint32_t) (now_ms - start) < duration_ms);
 }
 
 static void expect_events(const char *name, const int *expected, int pairs)

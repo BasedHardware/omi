@@ -40,18 +40,21 @@ class ButtonTapDispatcher {
 
   final ButtonAction Function(int count) _actionForCount;
   bool _dispatched = false;
+  bool _sawTaps = false;
 
   ButtonAction? onTap(int count) {
     if (count <= 1) _dispatched = false;
+    _sawTaps = true;
     if (_dispatched || _waitsForMoreTaps(count)) return null;
     _dispatched = true;
     return _mapped(count);
   }
 
   ButtonAction? onSequenceEnd(int count) {
-    final dispatched = _dispatched;
+    final handled = _dispatched || !_sawTaps;
     _dispatched = false;
-    return dispatched ? null : _mapped(count);
+    _sawTaps = false;
+    return handled ? null : _mapped(count);
   }
 
   bool _waitsForMoreTaps(int count) {

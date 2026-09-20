@@ -1782,6 +1782,15 @@ void main() {
       expect(provider.isConversationMarkedForStarring, isTrue);
     });
 
+    test('a sequence end that arrives without its taps runs nothing', () {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [2, 2]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+
     test('a triple tap runs on the third tap and the sequence end does not repeat it', () {
       SharedPreferencesUtil().singleTapAction = 1;
       SharedPreferencesUtil().tripleTapAction = 2;

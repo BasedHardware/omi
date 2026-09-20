@@ -119,6 +119,21 @@ void main() {
       expect(d.onSequenceEnd(2), ButtonAction.toggleMute);
     });
 
+    test('a sequence end whose taps were never seen runs nothing', () {
+      final d = dispatcher(double: ButtonAction.toggleMute);
+
+      expect(d.onSequenceEnd(2), isNull);
+    });
+
+    test('a missed sequence does not stop the next one from working', () {
+      final d = dispatcher(double: ButtonAction.toggleMute);
+
+      expect(d.onSequenceEnd(2), isNull);
+      expect(d.onTap(1), isNull);
+      expect(d.onTap(2), isNull);
+      expect(d.onSequenceEnd(2), ButtonAction.toggleMute);
+    });
+
     test('the highest mapped count fires on the tap itself', () {
       final d = dispatcher();
       expect(d.onTap(1), isNull);
