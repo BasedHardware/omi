@@ -58,6 +58,12 @@ def _safe_payload(payload: Any) -> dict[str, Any]:
     return {}
 
 
+def _safe_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
 def _safe_limit(limit: Any) -> int:
     if limit is None or limit == "" or isinstance(limit, bool):
         return 10
@@ -211,7 +217,7 @@ async def get_front_page(payload: Annotated[Any, Body()] = None):
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
 async def search_stories(payload: Annotated[Any, Body()] = None):
     payload = _safe_payload(payload)
-    query = (payload.get("query") or "").strip()
+    query = _safe_text(payload.get("query"))
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
