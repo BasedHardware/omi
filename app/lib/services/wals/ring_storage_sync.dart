@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -55,6 +58,14 @@ class RingStorageSyncImpl implements RingStorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   RingStorageSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
+  DeviceConnection? _testConnection;
+
+  @visibleForTesting
+  set testConnection(DeviceConnection? connection) => _testConnection = connection;
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -218,7 +229,9 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// wipe data the user didn't intend to delete.
   ///
   /// The ring is a single logical stream; deleting our virtual wal maps to
-  /// clearing the entire ring on the device.
+  /// clearing the entire ring on the device. The wal is removed only after
+  /// the device confirms the clear — an unconfirmed clear keeps the wal so
+  /// the audio cannot resurrect as a "new" recording on the next sync.
   @override
   Future deleteWal(Wal wal) async {
     if (!_wals.any((w) => w.id == wal.id)) return;
@@ -226,7 +239,11 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.deleteWal: skipping — sync in progress');
       return;
     }
-    await _clearRingOnDevice();
+    final cleared = await _clearRingOnDevice();
+    if (!cleared) {
+      Logger.debug('RingStorageSync.deleteWal: ring clear not confirmed, keeping WAL');
+      return;
+    }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }
@@ -247,20 +264,29 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.deleteAllPendingWals: skipping — sync in progress');
       return;
     }
-    await _clearRingOnDevice();
+    final cleared = await _clearRingOnDevice();
+    if (!cleared) {
+      Logger.debug('RingStorageSync.deleteAllPendingWals: ring clear not confirmed, keeping WALs');
+      return;
+    }
     _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
     listener.onWalUpdated();
   }
 
-  Future<void> _clearRingOnDevice() async {
-    if (_device == null) return;
+  /// Clear the ring on the device. Returns true only when the device
+  /// confirmed the clear; absent device, missing connection, BLE errors, and
+  /// a rejected command all return false (fail-closed).
+  Future<bool> _clearRingOnDevice() async {
+    if (_device == null) return false;
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-      if (connection == null) return;
+      final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
+      if (connection == null) return false;
       final ok = await connection.clearRing();
       Logger.debug('RingStorageSync._clearRingOnDevice: ok=$ok');
+      return ok;
     } catch (e) {
       Logger.debug('RingStorageSync._clearRingOnDevice: error: $e');
+      return false;
     }
   }
 
