@@ -24,6 +24,7 @@ events ones below since they share the fixture and the same failure class.
 import hashlib
 import os
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -446,3 +447,59 @@ def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
     assert segments[0].person_id == "old-person"
     assert update.call_count == 0
     assert background_tasks.tasks == []
+
+
+class _FakeActionItem:
+    def __init__(self, description):
+        self.description = description
+        self.completed = False
+        self.created_at = None
+        self.completed_at = None
+
+    def model_dump(self):
+        return {"description": self.description, "completed": self.completed}
+
+
+def _set_action_item_status(router, mirrored, values):
+    convo = SimpleNamespace(
+        structured=SimpleNamespace(action_items=[_FakeActionItem("Send the budget")]),
+        created_at=None,
+    )
+    notifications = ModuleType("utils.notifications")
+    notifications.sync_action_item_reminder = MagicMock()
+    data = router.conv.SetConversationActionItemsStateRequest(items_idx=[0], values=values)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
+        router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
+    ), patch.object(
+        router.conv.action_items_db, "mark_action_item_completed"
+    ) as mark, patch.dict(
+        "sys.modules", {"utils.notifications": notifications}
+    ):
+        router.conv.set_action_item_status(data, "c1", uid="u1")
+    return mark, notifications.sync_action_item_reminder
+
+
+def test_checking_off_a_conversation_task_cancels_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due}]
+
+    mark, reminder = _set_action_item_status(router, mirrored, [True])
+
+    mark.assert_called_once_with("u1", "task-1", True)
+    reminder.assert_called_once_with(
+        user_id="u1", action_item_id="task-1", description="Send the budget", completed=True, due_at=due
+    )
+
+
+def test_unchecking_a_conversation_task_rearms_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due}]
+
+    mark, reminder = _set_action_item_status(router, mirrored, [False])
+
+    mark.assert_called_once_with("u1", "task-1", False)
+    reminder.assert_called_once_with(
+        user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
+    )
