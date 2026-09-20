@@ -61,6 +61,7 @@ from utils.stt.live_failure import (
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 from utils.stt.provider_resilience import ProviderCircuitBreaker
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 from utils.stt.streaming import (
     MODULATE_DEATH_SERVE_ERROR,
     STTService,
@@ -181,9 +182,11 @@ def test_matching_tolerates_provider_casing_and_punctuation():
     assert modulate_death_reason('  INTERNAL SERVER ERROR ') == MODULATE_DEATH_SERVE_ERROR
 
 
-def test_account_state_refusals_are_serve_errors():
-    """Velma's connect-time over-quota answer: no stream can be served."""
-    assert modulate_death_reason('Monthly usage limit reached.') == MODULATE_DEATH_SERVE_ERROR
+def test_account_state_refusals_are_budget_exhausted():
+    """Velma's over-quota answer is the same class as Soniox monthly budget."""
+    assert modulate_death_reason('Monthly usage limit reached.') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('usage limit reached') == PROVIDER_BUDGET_EXHAUSTED
+    assert modulate_death_reason('quota exceeded') == PROVIDER_BUDGET_EXHAUSTED
 
 
 def test_session_scoped_shapes_stay_untyped():
@@ -305,6 +308,7 @@ def test_the_serve_error_is_circuit_opening_but_connection_lost_is_not():
     """Only the typed serve error benches the provider at the seam; the generic
     observer vantage point (connection_lost) must keep passing through."""
     assert MODULATE_DEATH_SERVE_ERROR in live_failure._CIRCUIT_OPENING_REASONS
+    assert PROVIDER_BUDGET_EXHAUSTED in live_failure._CIRCUIT_OPENING_REASONS
     assert 'connection_lost' not in live_failure._CIRCUIT_OPENING_REASONS
     assert 'soniox_idle_timeout' not in live_failure._CIRCUIT_OPENING_REASONS
 

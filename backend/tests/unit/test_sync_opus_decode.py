@@ -46,6 +46,7 @@ _stub_modules = [
     'models.conversation_enums',
     'models.transcript_segment',
     'utils.conversations.process_conversation',
+    'utils.sync.bridge',
     'utils.conversations.factory',
     'utils.other',
     'utils.other.endpoints',

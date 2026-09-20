@@ -58,7 +58,7 @@ def test_flag_off_legacy_composition_validates_all_summary_evidence(monkeypatch)
     monkeypatch.setattr(process_module.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
     monkeypatch.setattr(process_module.users_db, 'get_user_language_preference', lambda *_args: None)
     monkeypatch.setattr(process_module, '_proposes_task_candidates', lambda *_args: False)
-    monkeypatch.setattr(process_module, '_detect_duplicate_capture', lambda *_args: None)
+    monkeypatch.setattr(process_module, 'link_duplicate_captures', lambda *_args: None)
     monkeypatch.setattr(process_module, 'track_usage', lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(process_module, 'should_discard_conversation', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(

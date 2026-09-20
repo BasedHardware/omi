@@ -40,6 +40,7 @@ from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
     MAX_STT_FAILOVERS,
+    PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
@@ -135,6 +136,7 @@ class ListenReceiver:
         self._stt_failed_providers: set[str] = set()
         self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self._pending_live_failover: Optional[PendingLiveFailover] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -203,9 +205,23 @@ class ListenReceiver:
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
+        pending = self._pending_live_failover
+        if pending is not None:
+            pending.note_transcript(segments)
+            if pending.settled:
+                self._pending_live_failover = None
         self._capture('capture_inbound_stt', segments)
         self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
+
+    def _settle_pending_live_failover_failure(self, socket: Any = None) -> None:
+        pending = self._pending_live_failover
+        if pending is None:
+            return
+        self._pending_live_failover = None
+        target = socket if socket is not None else self.stt_socket
+        typed = getattr(target, 'typed_death_reason', None) if target is not None else None
+        pending.note_failure(typed if isinstance(typed, str) else None)
 
     def _telemetry_platform(self) -> Any:
         """Platform label for listen funnel counters; never part of the audio failure domain."""
@@ -380,6 +396,10 @@ class ListenReceiver:
                 )
 
             if not modulate_is_configured_fallback(self.host.stt_language):
+                # No leg to walk: Deepgram's own typed connection errors
+                # surface after a single attempt instead of a three-attempt
+                # ladder, and initialize_stt's terminal path handles them
+                # exactly like the exhaustion raise it replaces.
                 return await connect_deepgram()
 
             def connect_parakeet() -> Any:
@@ -547,6 +567,12 @@ class ListenReceiver:
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
+        # The hop we adopted last has now died without a transcript (or is
+        # about to be replaced). Settle it as a failed failover before the
+        # next provider is tried, otherwise connect-time recovered hid a
+        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        self._settle_pending_live_failover_failure()
+
         dead_provider = provider_for_service(self.host.stt_service)
         if dead_provider:
             self._stt_failed_providers.add(dead_provider)
@@ -570,6 +596,7 @@ class ListenReceiver:
         parakeet_callback, modulate_callback, sample_rate = rebuild
         previous = self.stt_socket
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
@@ -578,13 +605,17 @@ class ListenReceiver:
             )
         except Exception:
             logger.exception('STT failover connect raised')
+            hop.note_failure(None)
             return False
         if raw is None:
+            hop.note_failure(None)
             return False
         # A provider can accept the upgrade and reject the stream ~150ms later;
         # treating that as a heal would report recovery for a session that is
         # already dead again.
         if not await fallback_socket_is_serving(raw):
+            raw_typed = getattr(raw, 'typed_death_reason', None)
+            hop.note_failure(raw_typed if isinstance(raw_typed, str) else None)
             close_rejected_socket(raw)
             return False
 
@@ -592,13 +623,7 @@ class ListenReceiver:
         self.stt_socket = (
             GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
         )
-        record_fallback(
-            component='stt_live_session',
-            from_mode=dead_provider or 'unknown',
-            to_mode=service.value,
-            reason='connection_lost',
-            outcome='recovered',
-        )
+        self._pending_live_failover = hop
         record_live_stt_failover_accepted(provider=service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {service.value}')
         if previous is not None:

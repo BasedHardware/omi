@@ -478,6 +478,59 @@ def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments
     assert [item['id'] for item in resp.json()['items']] == ['conv-match']
 
 
+@pytest.mark.parametrize('query', ['', 'hi'])
+def test_speaker_filter_keeps_paging_while_typesense_has_more(query):
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    ids = [f'conv-{index}' for index in range(10)]
+    hydrated = [
+        _conversation_dict(conversation_id, [_segment(person_id='person-1' if index < 2 else 'someone-else')])
+        for index, conversation_id in enumerate(ids)
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': conversation_id} for conversation_id in ids],
+                'total_pages': 2,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': query, 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-0', 'conv-1']
+    assert resp.json()['total_pages'] == 2
+
+
+def test_speaker_filter_stops_paging_on_the_last_typesense_page():
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [_conversation_dict('conv-0', [_segment(person_id='person-1')])]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [{'id': 'conv-0'}], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert resp.json()['total_pages'] == 1
+
+
 def test_search_without_speaker_keeps_every_hydrated_conversation():
     from utils.conversations.search import conversation_matches_speaker as real_matcher
 
@@ -649,6 +702,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         extra_updates=None,
         require_cloud_tasks=True,
         client_kind='mobile_ios',
+        app_build='unknown',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()

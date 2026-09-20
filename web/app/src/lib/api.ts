@@ -31,6 +31,7 @@ import type {
   CreateConversationResponse,
   ActionItemsResponse,
   FairUseStatusResponse,
+  StoreRecordingPermissionResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -1598,16 +1599,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
@@ -1808,7 +1806,10 @@ export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  const response = await fetchWithAuth<StoreRecordingPermissionResponse>(
+    '/v1/users/store-recording-permission',
+  );
+  return { enabled: response.store_recording_permission };
 }
 
 /**
@@ -2022,10 +2023,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**

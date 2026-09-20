@@ -35,8 +35,10 @@ class PeopleProvider extends BaseProvider {
   setPeople() async {
     final value = await getAllPeople();
     loading = false;
-    people = value;
-    SharedPreferencesUtil().cachedPeople = people;
+    if (value != null) {
+      people = value;
+      SharedPreferencesUtil().cachedPeople = people;
+    }
     Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
     notifyListeners();
   }
@@ -93,14 +95,14 @@ class PeopleProvider extends BaseProvider {
     return newPerson;
   }
 
-  void updatePersonProvider(Person person, String name) async {
+  Future<void> updatePersonProvider(Person person, String name) async {
     if (loading) return;
     loading = true;
     notifyListeners();
 
-    await updatePersonName(person.id, name);
+    final updated = await updatePersonName(person.id, name);
     final index = people.indexWhere((p) => p.id == person.id);
-    if (index != -1) {
+    if (updated && index != -1) {
       people[index] = Person(
         id: person.id,
         name: name,
@@ -129,11 +131,18 @@ class PeopleProvider extends BaseProvider {
     }
   }
 
-  void deletePersonProvider(Person person) {
-    deletePerson(person.id);
+  Future<void> deletePersonProvider(Person person) async {
     people.remove(person);
     SharedPreferencesUtil().cachedPeople = people;
     notifyListeners();
+
+    if (await deletePerson(person.id)) return;
+    if (!people.any((p) => p.id == person.id)) {
+      people.add(person);
+      people.sort((a, b) => a.name.compareTo(b.name));
+      SharedPreferencesUtil().cachedPeople = people;
+      notifyListeners();
+    }
   }
 
   @override

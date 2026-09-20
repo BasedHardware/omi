@@ -2,6 +2,79 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.370",
+      "date": "2026-09-20",
+      "changes": [
+        "Conversations summarized on your Mac now say so",
+        "A conversation with no summary explains why instead of showing a blank space"
+      ]
+    },
+    {
+      "version": "0.12.369",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.368",
+      "date": "2026-09-20",
+      "changes": [
+        "A local summary that came back empty no longer replaces the basic conversation details with a blank page",
+        "Summaries of long conversations no longer lose the detail extracted from each part"
+      ]
+    },
+    {
+      "version": "0.12.367",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.366",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.365",
+      "date": "2026-09-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.364",
+      "date": "2026-09-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.363",
+      "date": "2026-09-18",
+      "changes": [
+        "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+        "Fixed on-device conversation summaries not appearing after sync"
+      ]
+    },
+    {
+      "version": "0.12.362",
+      "date": "2026-09-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.361",
+      "date": "2026-09-17",
+      "changes": [
+        "Live notes no longer retry on every sentence when your plan doesn't include AI notes"
+      ]
+    },
+    {
       "version": "0.12.360",
       "date": "2026-09-17",
       "changes": [

@@ -190,6 +190,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     put(subscription, 'is_trial_paywalled', MagicMock(return_value=False))
     put(subscription, 'should_defer_desktop_processing', MagicMock(return_value=False))
     put(subscription, 'request_has_llm_byok_key', MagicMock(return_value=False))
+    put(subscription, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False))
 
     byok = ModuleType('utils.byok')
     put(byok, 'get_byok_key', lambda _provider: None)
@@ -877,7 +878,7 @@ def test_entrypoint_matrix(
     monkeypatch: Any, pc: Any, row_id: str, entry: dict[str, Any], cell: str, flag_on: bool
 ) -> None:
     del row_id
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: flag_on)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: flag_on)
     monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     kwargs = _effective_kwargs(entry, cell)
@@ -953,7 +954,7 @@ def test_entrypoint_matrix(
 
 # red-proof (1): apply `plan.mode = process_normally` after resolve → basic desktop calls _get_structured
 def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -974,7 +975,7 @@ def test_red_proof_flag_on_ignoring_plan_makes_basic_desktop_call_structured(mon
 
 # red-proof (2): flag OFF, legacy elif gone (should_defer always False) → basic desktop no-force calls _get_structured
 def test_red_proof_flag_off_legacy_removed_makes_basic_desktop_call_structured(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
     entry = next(e for e in _ENTRIES if e['id'] == 'listen_157_via_finalizer_137')
@@ -984,7 +985,7 @@ def test_red_proof_flag_off_legacy_removed_makes_basic_desktop_call_structured(m
 
 # red-proof (3): coordinator reporting persistence False on the minimum → basic rows fail
 def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -1003,7 +1004,7 @@ def test_red_proof_minimum_must_report_actual_persistence(monkeypatch: Any, pc: 
 # S6 policy, whose identified-basic answer is now the eager deny: no managed
 # call, terminal minimum (the S14 proactivity half).
 def test_red_proof_reprocess_force_overlay_hits_the_eager_deny(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = True
@@ -1022,7 +1023,7 @@ def test_red_proof_reprocess_force_overlay_hits_the_eager_deny(monkeypatch: Any,
 
 # red-proof (5): desktop-sourced merge left on the legacy path → force bypasses deferral, _get_structured called
 def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
         managed_compute,
@@ -1043,7 +1044,7 @@ def test_red_proof_desktop_merge_flag_on_basic_is_minimum_not_legacy(monkeypatch
 # builder regresses to a bare `conversation.dict()`, the key is present and
 # this goes red.
 def test_red_proof_null_processing_state_default_stamped_on_persist(monkeypatch: Any, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
     # create_351 passes force_process=True on a desktop conversation, so the

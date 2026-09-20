@@ -10,7 +10,11 @@ and background processing.
   request authentication and response shaping.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
-  named executor lanes.
+  named executor lanes. Custom-STT conversations skip managed-STT credits but
+  still consult `should_skip_omi_paid_postprocessing` before Omi-paid
+  structuring, summary, and memory work (#7690). That gate sits after the
+  unpaid desktop on-device / `store_projection` path (#14513) so it cannot
+  strip a local summary.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -32,11 +36,10 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
-- `duplicate_capture.py` is the pure cross-device duplicate policy (#3244): at
-  finalization, a conversation whose wall window and word bigrams are already
-  carried by another capture client's conversation takes the discard exit and
-  records its primary in `external_data.duplicate_capture_of`. Callers load the
-  candidate rows and persist the verdict; the module holds no I/O.
+- `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
+  After durable finalization, it links the shorter completed capture using
+  `external_data.duplicate_capture_of` plus structured overlap evidence. The
+  database transaction rechecks both captures; discard and content stay independent.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
@@ -76,3 +79,17 @@ and background processing.
 This package receives persisted conversation data only. Request-scoped BYOK
 context may be propagated by a live Pusher caller into `finalizer.py`, but it
 must never be written here, passed to durable task payloads, or logged.
+
+Sync lifecycle intake computes unattended speech components transactionally. A
+compatible, non-deleted explicit target keeps its ID even when empty; timestamp
+hints never adopt live rows. Explicit live targets remain excluded from automatic
+bridges after sync appends. Different existing reconnect targets may therefore
+remain separate until realtime reuses its in-progress conversation on reconnect. The pipeline
+replays bridge effects once, after audio persistence, through existing merge
+retraction/copy helpers; tombstone revision receipts skip completed cleanup. Retained donor
+redirects preserve late audio. `merge_conversations.delete_conversation_with_sync_sources`
+owns retained-source purging for user/source deletion, called by the frame-evidence
+service and developer delete endpoint. Raw DB deletion and new-target rollback do
+not orchestrate external cleanup. The shared gap
+predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.

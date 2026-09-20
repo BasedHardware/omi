@@ -151,9 +151,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -320,8 +322,8 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     return val.decode()
 
 
-def enable_app(uid: str, app_id: str) -> None:
-    r.sadd(f'users:{uid}:enabled_plugins', app_id)
+def enable_app(uid: str, app_id: str) -> bool:
+    return bool(r.sadd(f'users:{uid}:enabled_plugins', app_id))
 
 
 def disable_app(uid: str, app_id: str) -> None:
@@ -394,8 +396,7 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
 def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
     """Best-effort cache write. Redis maxmemory must not 500 product requests."""
     try:
-        r.set(key, value)
-        r.expire(key, ttl)
+        r.set(key, value, ex=ttl)
     except Exception as exc:
         # redis-py types omit ``exceptions``; match the live maxmemory class by name.
         if type(exc).__name__ != 'OutOfMemoryError':
@@ -422,8 +423,7 @@ def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -1621,6 +1621,24 @@ def release_notifications_job_run_lock(token: str) -> None:
         _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
+
+
+def try_acquire_x_sync_window_lock(date: str, window: int, ttl: int = 6 * 60 * 60 + 10 * 60) -> bool:
+    """At most one X-connector sweep per 6-hour window across job executions.
+
+    Cloud Scheduler fires every minute, so a whole sync hour of executions can
+    otherwise start overlapping full-registry sweeps. The key carries the UTC
+    date and window index (``hour // 6``); the TTL is one window plus a margin
+    so a crashed holder cannot black out the next window for long and stale
+    keys reap themselves. Fail-open on Redis errors: losing the lock degrades
+    to the previous always-run behavior instead of silently skipping syncs.
+    """
+    try:
+        result = r.set(f'notifications_job:x_sync_lock:{date}:{window}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception as error:
+        logger.warning('notifications-job x-sync window lock unavailable, running sweep without dedupe: %s', error)
+        return True
 
 
 @try_catch_decorator

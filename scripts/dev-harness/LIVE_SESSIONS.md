@@ -57,33 +57,44 @@ fresh semantic readiness is success. Nonzero code is rejected (exit 1), missing
 code/error is blocked (2); never infer success from compilation/progress/logs.
 Do not automatically restart on rejection. Native/assets/dependency/defines/SDK
 input changes require a **cold live stop/start** (restart-required, exit 2),
-not a hot restart. All other source changes must be loaded and rechecked before
-readiness advances. A change during the operation blocks evidence attribution.
+not a hot restart. Pin requested source and the child's generation before any
+work, including the initial compile; recheck those pins after daemon completion
+and after readiness **before publication**. A source-hash recheck is not a
+generation recheck: a completion whose lease or child generation moved must be
+blocked, keep the original operation generation, and leave the last proven
+loaded identity and sequence unchanged. A recovered lease's new generation must
+not adopt the old child. A change during the operation blocks evidence attribution and does not
+advance loaded identity. One monotonic operation deadline owns every receive;
+progress events consume remaining budget instead of resetting timeout. Measure
+`elapsed_ms` from that clock, not from receipt serialization.
 
 `controls` accepts only capabilities/state/wait_ready/navigate/fault, with the
 existing v1 parameters; calls `app.callServiceExtension` for **`ext.omi.controls.*`**.
 B0's registration repair is a prerequisite for real readiness; never fall back
 to invalid names. Restart's `result` is `{code,message}`; callServiceExtension's
 `result` is the extension map itself (Omi's custom registration adds no wrapper).
-Decode each by operation, never apply a second generic `result` unwrap. Flutter discovers the current isolate each call. No arbitrary RPC/eval/shell; check capabilities/version/profile first.
-`logs` returns a bounded sanitized tail/cursor of this app's events; never
+Decode each by operation, never apply a second generic `result` unwrap. Flutter discovers the current isolate each call. No arbitrary RPC/eval/shell; check capabilities/version/profile first and fail closed on a malformed or incomplete capabilities reply.
+`logs` returns a bounded sanitized tail/cursor of this app's events, redacting URL and credential shapes; never
 persist the VM auth URI, credentials, raw stderr or arbitrary control payloads
 in shareable evidence. `screenshot` calls simctl/adb for the exact lease device,
 writing a broker-assigned PNG under the session directory, then hashes it.
 `status` reports starting/ready/busy/blocked/stopped and build/source identity;
-app.started alone is not ready. For readiness require state profile `localDev`,
-contract `semantic-controls/v1`, signedIn+routed+captureIdle all true and fixture
+app.started alone is not ready. For readiness require state profile `local_dev`,
+contract `semantic-controls/v1`, signedIn+routed+captureIdle all **boolean** true and fixture
 principal uid equal to BOTH seeded lease.default_auth_uid and seed.json.uid,
 with matching fixture_version and status=seeded; missing/mismatched seed blocks.
 Live/simulator lanes use the real isolated uvicorn/emulator/redis session stack,
-with offline providers. Require opt-in `make setup-backend` (or existing owner
+with offline providers. Require opt-in `make lane-backend` (or existing owner
 setup) before start; doctor refuses missing uvicorn. Do not install backend in
 lane-bootstrap or substitute journeys' fixture server for real session seeding.
 
 All state-changing operations, including controls navigate/fault and a verify
-run, share one nonblocking mutation lock; second mutation gets busy (2), never
-queues into Flutter's debounce queue. Screenshot also takes that lock so it
-cannot capture an intermediate frame. Status/logs remain available. Stop cancels/blocks an in-flight request and then drains/tears down;
+run, share one nonblocking mutation lock; VM reads (capabilities/state/wait_ready)
+take the same lock so they cannot consume another RPC's reply. Second mutation
+or in-flight VM read gets busy (2), never queues into Flutter's debounce queue.
+Screenshot also takes that lock so it cannot capture an intermediate frame.
+Cached status/logs remain available without touching stdio, including during a
+412 s compile. Stop cancels/blocks an in-flight request and then drains/tears down;
 no completed-success receipt may follow stop. Never retry an operation id.
 
 ## Isolation, safety, and evidence
@@ -134,7 +145,9 @@ with exit 2 naming the selected journeys and missing adapter. Dart integration t
 addressability nor controls/screenshots provide a journey adapter. A later reviewed package must
 extract a shared executable journey specification and host driver, before advertising live journeys. Hermetic `fast` remains the journey authority.
 PR 1: fake-backed broker protocol, reload/restart/status/logs/stop, injected
-screenshot writer, evidence validation, lifecycle ordering. Accept the builder's
+screenshot writer, evidence validation, lifecycle ordering. This PR adds **no
+new live-process adapter**; stop/reset/recover still reach real service and
+device lifecycle commands. Accept the builder's
 two-day scope estimate, not a promise of real-device completion. Keep real launch
 and live-verify adapter pending for subsequent PRs: B0 plus real-stack boot and
 startup deadlines must be verified before enabling device start. `verify_live`

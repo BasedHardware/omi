@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/widgets/profile_settings_tile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -462,6 +463,23 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
+                  title: context.l10n.voiceIntroduction('title'),
+                  icon: const Icon(Icons.waving_hand_outlined, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (routeContext) => Scaffold(
+                              backgroundColor: Colors.black,
+                              appBar: AppBar(backgroundColor: Colors.black),
+                              body: SpeechProfileWidget(
+                                flowSource: 'settings',
+                                goNext: () => Navigator.of(routeContext).pop(),
+                                onSkip: () => Navigator.of(routeContext).pop(),
+                              ),
+                            )));
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
                   title: context.l10n.speechProfile,
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
@@ -528,7 +546,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.deleteAccountTitle,
-                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.red, size: 20),
                   onTap: () {
                     PlatformManager.instance.analytics.pageOpened('Profile Delete Account Dialog');
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
