@@ -167,6 +167,7 @@ class TranscriptProcessor:
                         # transaction still clears a projection that is actually on the
                         # document (a finalize overlapping capture).
                         invalidate_client_processing=False,
+                        preserve_unseen=True,
                     )
                     if conversation_id == self.host.state.current_conversation_id:
                         self.cache.update_segments(conversation['transcript_segments'])
@@ -199,7 +200,6 @@ class TranscriptProcessor:
             targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
-            self.host.state.speaker_map_dirty = False
             serialised = [segment.model_dump() for segment in conversation.transcript_segments]
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
@@ -213,9 +213,18 @@ class TranscriptProcessor:
                 # transaction still clears a projection that is actually on the
                 # document (a finalize overlapping capture).
                 invalidate_client_processing=False,
+                preserve_unseen=True,
+                return_segments=True,
+                removed_segment_ids=removed,
             )
             if not written:
                 return None
+            if isinstance(written, list):
+                serialised = written
+                by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
+                conversation.transcript_segments = list(by_id.values())
+                updated = [by_id[s.id] for s in updated if s.id in by_id]
+            self.host.state.speaker_map_dirty = False
             self.cache.update_segments(serialised)
         if photos:
             stored = await self.host.persistence.call(
@@ -252,7 +261,7 @@ class TranscriptProcessor:
         )
         self._apply_speaker_identity_statuses(conversation.transcript_segments)
         serialised = [segment.model_dump() for segment in conversation.transcript_segments]
-        await self.host.persistence.call(
+        written = await self.host.persistence.call(
             conversations_db.update_conversation_segments,
             self.host.request.uid,
             conversation.id,
@@ -263,9 +272,17 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
+            preserve_unseen=True,
+            return_segments=True,
         )
+        if not written:
+            return
+        if isinstance(written, list):
+            serialised = written
         self.cache.update_segments(serialised)
         self.host.state.speaker_map_dirty = False
+        if self.host.state.active:
+            await self._deliver_segments(serialised)
 
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
@@ -309,6 +326,8 @@ class TranscriptProcessor:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
             if not self.segment_buffer and not self.photo_buffer:
+                if self.host.state.speaker_map_dirty:
+                    await self.flush_speaker_assignments(self.host.state.current_conversation_id)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
             conversation_id = self.host.state.current_conversation_id
@@ -508,6 +527,7 @@ class TranscriptProcessor:
                 if should_update_speaker_to_person_map(segment.speaker_id):
                     speaker.speaker_to_person[cast(int, segment.speaker_id)] = (person_id, name)
                 speaker.segment_assignments[segment_id] = person_id
+                self.host.state.speaker_map_dirty = True
                 self.suggested_segments.add(segment_id)
 
     async def flush_translations(self) -> None:

@@ -9,6 +9,7 @@ from copy import deepcopy
 import re
 from typing import TYPE_CHECKING, Callable, Optional
 
+from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
@@ -61,7 +62,8 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        row.get('sync_live_target')
+        row.get('manual_speaker_assignments')
+        or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
         or row.get('starred')
@@ -201,7 +203,11 @@ def assign_in_transaction(
         duration = segment['end'] - segment['start']
         segment['start'] = segment.pop('timestamp') - origin
         segment['end'] = segment['start'] + duration
-    result.update(started_at=extent['started_at'], finished_at=extent['finished_at'], transcript_segments=segments)
+    result.update(
+        started_at=extent['started_at'],
+        finished_at=extent['finished_at'],
+        transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
+    )
     result['has_content'] = bool(segments)
     result['discarded'] = False  # sync relevance demotes visibly; it never discards capture
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1

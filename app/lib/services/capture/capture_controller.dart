@@ -75,7 +75,7 @@ class CaptureController extends ChangeNotifier
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
   final ConversationLocationCapture _conversationLocationCapture;
-  final Future<void> Function()? _inProgressConversationLoader;
+  final Future<List<ServerConversation>> Function()? _inProgressConversationLoader;
   final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
   final Future<bool> Function()? _microphonePermissionRequester;
   // Controllable external boundaries (capture_seams.dart). Null means the
@@ -207,7 +207,7 @@ class CaptureController extends ChangeNotifier
   CaptureController({
     CaptureExternalActions? externalActions,
     ConversationLocationCapture? conversationLocationCapture,
-    Future<void> Function()? inProgressConversationLoader,
+    Future<List<ServerConversation>> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
@@ -2388,11 +2388,9 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _loadInProgressConversation() async {
-    if (_inProgressConversationLoader != null) {
-      await _inProgressConversationLoader!();
-      return;
-    }
-    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    final convos = _inProgressConversationLoader != null
+        ? await _inProgressConversationLoader!()
+        : await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
     _conversation = convos.isNotEmpty ? convos.first : null;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
@@ -2701,71 +2699,46 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> assignSpeakerToConversation(
+  Future<bool> assignSpeakerToConversation(
     int speakerId,
     String personId,
     String personName,
-    List<String> segmentIds,
-  ) async {
-    if (segmentIds.isEmpty) return;
-
-    taggingSegmentIds = List.from(segmentIds);
+    List<String> segmentIds, {
+    bool applyToSpeaker = false,
+  }) async {
+    final conversationId = _conversation?.id;
+    final sessionId = activeCaptureSessionId;
+    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
+    final targets = List<String>.of(segmentIds);
+    taggingSegmentIds = targets;
     notifyListeners();
-
     try {
-      String finalPersonId = personId;
-
-      // Create person if new (old app path - calls idempotent API)
-      if (finalPersonId.isEmpty) {
-        Person? newPerson = await externalActions.createPerson(personName);
-        if (newPerson != null) {
-          finalPersonId = newPerson.id;
+      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
+      if (finalPersonId == null || finalPersonId.isEmpty) return false;
+      final saved = await externalActions.assignSpeaker(conversationId, targets, finalPersonId,
+          speakerId: applyToSpeaker ? speakerId : null);
+      if (!saved) return false;
+      if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
+      for (final segment in segments) {
+        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
+          segment.isUser = finalPersonId == 'user';
+          segment.personId = segment.isUser ? null : finalPersonId;
         }
       }
-
-      // Add person to local cache if not exists (backward compatibility for old apps)
-      if (finalPersonId.isNotEmpty && finalPersonId != 'user' && _preferences.getPersonById(finalPersonId) == null) {
-        _preferences.addCachedPerson(
-          Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        );
-      }
-
-      // Find conversation id
-      if (_conversation == null) return;
-
-      final isAssigningToUser = finalPersonId == 'user';
-
-      // Update all segments with this speakerId for UI consistency
-      for (var segment in segments) {
-        if (segment.speakerId == speakerId) {
-          segment.isUser = isAssigningToUser;
-          segment.personId = isAssigningToUser ? null : finalPersonId;
-        }
-      }
-      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
-
-      // Persist change
-      await assignBulkConversationTranscriptSegments(
-        _conversation!.id,
-        segmentIds,
-        isUser: isAssigningToUser,
-        personId: isAssigningToUser ? null : finalPersonId,
-      );
-
-      // Notify backend session
+      _segmentsPhotosVersion++;
       if (_socket?.state == SocketServiceState.connected) {
-        final payload = jsonEncode({
+        _socket?.send(jsonEncode({
           'type': 'speaker_assigned',
           'speaker_id': speakerId,
           'person_id': finalPersonId,
           'person_name': personName,
-          'segment_ids': segmentIds,
-        });
-        _socket?.send(payload);
+          'segment_ids': targets,
+        }));
       }
-
-      // Remove all suggestions for this speakerId
-      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      return true;
+    } catch (_) {
+      return false;
     } finally {
       taggingSegmentIds = [];
       notifyListeners();

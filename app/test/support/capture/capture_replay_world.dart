@@ -346,7 +346,7 @@ class CaptureReplayWorld {
       ),
       now: clock.now,
       scheduling: scheduler,
-      inProgressConversationLoader: () async {},
+      inProgressConversationLoader: () async => [],
       audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
       microphonePermissionRequester: () async => true,
       conversationLocationCapture: ConversationLocationCapture(

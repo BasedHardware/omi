@@ -1850,39 +1850,28 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                           speakerId: speakerId,
                           segmentId: segmentId,
                           segments: provider.conversation.transcriptSegments,
-                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                            provider.toggleEditSegmentLoading(true);
-                            String finalPersonId = personId;
-                            if (personId.isEmpty) {
-                              Person? newPerson = await peopleProvider.createPersonProvider(personName);
-                              if (newPerson != null) {
-                                finalPersonId = newPerson.id;
-                              } else {
-                                provider.toggleEditSegmentLoading(false);
-                                return; // Failed to create person
-                              }
-                            }
-
-                            PlatformManager.instance.analytics.taggedSegment(
-                              finalPersonId == 'user' ? 'User' : 'User Person',
-                            );
-
-                            for (final segmentId in segmentIds) {
-                              final segmentIndex = provider.conversation.transcriptSegments.indexWhere(
-                                (s) => s.id == segmentId,
-                              );
-                              if (segmentIndex == -1) continue;
-                              provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
-                            }
-                            await assignBulkConversationTranscriptSegments(
-                              provider.conversation.id,
+                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+                            final target = provider.conversation;
+                            final finalPersonId = personId.isEmpty
+                                ? (await peopleProvider.createPersonProvider(personName))?.id
+                                : personId;
+                            if (finalPersonId == null || finalPersonId.isEmpty) return false;
+                            final saved = await assignBulkConversationTranscriptSegments(
+                              target.id,
                               segmentIds,
                               isUser: finalPersonId == 'user',
                               personId: finalPersonId == 'user' ? null : finalPersonId,
+                              speakerId: applyToSpeaker ? speakerId : null,
                             );
+                            if (!saved) return false;
+                            for (final segment in target.transcriptSegments) {
+                              if (applyToSpeaker ? segment.speakerId == speakerId : segmentIds.contains(segment.id)) {
+                                segment.isUser = finalPersonId == 'user';
+                                segment.personId = segment.isUser ? null : finalPersonId;
+                              }
+                            }
                             provider.toggleEditSegmentLoading(false);
+                            return true;
                           },
                         );
                       },

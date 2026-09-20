@@ -269,25 +269,19 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
 
     now = datetime(2026, 9, 19, tzinfo=timezone.utc)
 
-    def load(uid, cid):
-        raw = deepcopy(world.store.rows[('users', uid, 'conversations', cid)])
-        # The audio manifest is consumed by extraction, not needed in the
-        # endpoint's response-model fixture.
-        raw.pop('audio_files')
+    def deserialize(raw):
+        raw = deepcopy(raw)
+        raw.pop('audio_files', None)
         for segment in raw['transcript_segments']:
             segment.setdefault('is_user', False)
-        return Conversation(id=cid, created_at=now, finished_at=now, structured={}, **raw)
+        return Conversation(created_at=now, finished_at=now, structured={}, **raw)
 
-    monkeypatch.setattr(conversations, '_get_valid_conversation_by_id', load)
-    monkeypatch.setattr(conversations, 'deserialize_conversation', lambda value: value)
+    monkeypatch.setattr(conversations.conversations_db, 'get_firestore_client', lambda: world.store)
+    # The fixture intentionally keeps its synthetic manifest minimal; exercise
+    # the real command/transaction while leaving storage encryption out of scope.
+    monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
+    monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
-    monkeypatch.setattr(
-        conversations.conversations_db,
-        'update_conversation_segments',
-        lambda uid, cid, segments: world.store.rows[('users', uid, 'conversations', cid)].update(
-            transcript_segments=segments
-        ),
-    )
     monkeypatch.setattr(conversations, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()
     app.include_router(conversations.router)

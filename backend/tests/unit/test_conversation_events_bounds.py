@@ -31,6 +31,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from utils.manual_speaker_assignments import manual_assignment
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -273,7 +274,15 @@ class _FakeSegment:
         self.person_id = None
 
     def model_dump(self):
-        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id}
+        return {
+            "id": self.id,
+            "is_user": self.is_user,
+            "person_id": self.person_id,
+            "speaker_id": 0,
+            "text": "test",
+            "start": 0,
+            "end": 1,
+        }
 
 
 def _fake_conversation_with_segments(count, status=None, with_ids=False):
@@ -294,6 +303,26 @@ def _segment_assign_handler(conv):
         if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
             return route.endpoint
     raise AssertionError("segments/{segment_idx}/assign route is not registered")
+
+
+@pytest.fixture(autouse=True)
+def manual_command_seam(router, monkeypatch):
+    """Route contract uses real selection policy; transaction coverage is separate."""
+
+    def assign(uid, cid, **kwargs):
+        convo = router.conv.deserialize_conversation({})
+        raw = dict(
+            status=getattr(convo, 'status', None),
+            transcript_segments=[s.model_dump() for s in convo.transcript_segments],
+        )
+        before = [dict(s) for s in raw['transcript_segments']]
+        updated, receipt, resolved, _ = manual_assignment(raw, **kwargs)
+        selected_before = [s for i, s in enumerate(before) if updated[i]['id'] in resolved]
+        for segment, data in zip(convo.transcript_segments, updated):
+            segment.id, segment.is_user, segment.person_id = data['id'], data['is_user'], data['person_id']
+        return raw, resolved, [], selected_before
+
+    monkeypatch.setattr(router.conv.conversations_db, 'assign_conversation_speaker', assign)
 
 
 def test_segment_assign_out_of_range_returns_404(router):

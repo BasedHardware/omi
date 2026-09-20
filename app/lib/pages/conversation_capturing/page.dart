@@ -303,13 +303,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                                   segmentId: segmentId,
                                                   segments: provider.segments,
                                                   suggestion: suggestion,
-                                                  onSpeakerAssigned:
-                                                      (speakerId, personId, personName, segmentIds) async {
-                                                    await provider.assignSpeakerToConversation(
+                                                  onSpeakerAssigned: (speakerId, personId, personName, segmentIds,
+                                                      applyToSpeaker) async {
+                                                    return provider.assignSpeakerToConversation(
                                                       speakerId,
                                                       personId,
                                                       personName,
                                                       segmentIds,
+                                                      applyToSpeaker: applyToSpeaker,
                                                     );
                                                   },
                                                 );
@@ -642,8 +643,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           segmentId: segment.id,
           segments: provider.segments,
           suggestion: suggestion,
-          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-            await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds);
+          onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+            return provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
+                applyToSpeaker: applyToSpeaker);
           },
         );
       },

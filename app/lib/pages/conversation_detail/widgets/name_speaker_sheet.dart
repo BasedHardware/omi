@@ -15,7 +15,9 @@ import 'package:omi/widgets/person_chip.dart';
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
-  final Function(int speakerId, String personId, String personName, List<String> segmentIds) onSpeakerAssigned;
+  final Future<bool> Function(
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
 
@@ -40,6 +42,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   bool _isSegmentsExpanded = false;
   bool allowSave = false;
   bool loading = false;
+  bool _saveFailed = false;
   String? speakerTextSample;
   bool _isCreatingNewPerson = false;
   String? _duplicateNameError;
@@ -175,6 +178,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         const SizedBox(height: 16),
                         _buildUntaggedSegments(),
                         const SizedBox(height: 8),
+                        if (_saveFailed)
+                          Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
                         _buildSaveButton(),
                         const SizedBox(height: 28),
                       ],
@@ -338,9 +343,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.personId == null && !s.isUser && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments =
+        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(
@@ -455,16 +459,29 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   personIdToAssign = ''; // Indicates a new person
                 }
 
-                await widget.onSpeakerAssigned(
-                  widget.speakerId,
-                  personIdToAssign,
-                  personNameToAssign,
-                  _selectedSegmentIds,
-                );
+                bool saved = false;
+                try {
+                  saved = await widget.onSpeakerAssigned(
+                    widget.speakerId,
+                    personIdToAssign,
+                    personNameToAssign,
+                    List<String>.of(_selectedSegmentIds),
+                    _isSegmentsExpanded &&
+                        widget.segments
+                            .where((s) => s.speakerId == widget.speakerId)
+                            .every((s) => _selectedSegmentIds.contains(s.id)),
+                  );
+                } catch (_) {
+                  saved = false;
+                }
 
                 setLoading(false);
                 if (mounted) {
-                  Navigator.pop(context);
+                  if (saved) {
+                    Navigator.pop(context);
+                  } else {
+                    setState(() => _saveFailed = true);
+                  }
                 }
               },
         child: Center(child: Text(context.l10n.save)),

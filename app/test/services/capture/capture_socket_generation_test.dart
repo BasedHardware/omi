@@ -88,7 +88,7 @@ CaptureDependencies _deps({
     localSegments: localSegments ?? LocalSegmentStore.disabled(),
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
-    refreshConversation: () async {},
+    refreshConversation: () async => [],
     telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
 }
