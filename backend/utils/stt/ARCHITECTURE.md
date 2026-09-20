@@ -16,9 +16,17 @@ routers/listen/receiver.py
   -> routers/listen/speakers.py   enrolled voiceprint matching
 ```
 
-Provider fallback is a connection-time decision. A dead live socket terminates
-the client connection; reconnect creates a new speaker-provider epoch before
-its provider-local labels enter the resumed conversation.
+Legacy connections and mid-session deaths use separate selection paths.
+The opt-in listen adapter consumes one immutable ranked list for both. Default
+`STT_ROUTING_MODE=legacy` retains the legacy path. `ordered`/`health` use
+`config/stt_routing.py` (pure capabilities and seeded preference), `routing.py`
+(session attempt ownership/first-transcript proof), and `routing_health.py`
+(shared Redis admission with generation-fenced half-open probes). Redis failures
+fall open to config order; managed account namespaces exclude BYOK. See
+`backend/docs/listen_pusher_pipeline.mdx` for flags and bounds.
+
+Provider-relative timestamp origin across a replacement remains a separate
+follow-up; speaker identity scoping does not establish an audio clock.
 
 ## Speaker boundaries
 

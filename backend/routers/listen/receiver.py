@@ -31,6 +31,7 @@ else:
 
 from fastapi.websockets import WebSocketDisconnect
 
+from routers.listen.provider_routing import RoutedListenSTT, routing_for_listen
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from models.transcript_segment import SpeakerIdentityStatus
@@ -130,6 +131,8 @@ class ListenReceiver:
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
+        self.provider_routing: RoutedListenSTT | None = None
+        self.provider_routing_initialized = False
         # Providers whose socket already died this session; a failover must not
         # reselect one, or a dead primary would be chosen again immediately.
         self._stt_failed_providers: set[str] = set()
@@ -256,6 +259,12 @@ class ListenReceiver:
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
     async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
+        if not getattr(self, 'provider_routing_initialized', False):
+            self.provider_routing = getattr(self.host, 'provider_routing', None) or routing_for_listen(self.host)
+            self.provider_routing_initialized = True
+        routing: RoutedListenSTT | None = getattr(self, 'provider_routing', None)
+        if routing is not None:
+            return await routing.connect(callback, sample_rate, modulate_callback)
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
             socket, actual_service = await connect_stt_socket_with_fallback(
@@ -502,7 +511,9 @@ class ListenReceiver:
                     platform=self.host.client_device_context.platform,
                 )
                 return False
-            passthrough = self.host.stt_service == STTService.modulate
+            passthrough = self.host.stt_service == STTService.modulate or (
+                self.provider_routing is not None and self.host.stt_service == STTService.soniox
+            )
             self.stt_socket = (
                 GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
             )
@@ -542,6 +553,9 @@ class ListenReceiver:
         async with self._stt_failover_lock:
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
+            routing: RoutedListenSTT | None = getattr(self, 'provider_routing', None)
+            if routing is not None:
+                return await routing.replace_dead_socket(self)
             return await self._rebuild_stt_socket_locked()
 
     async def _rebuild_stt_socket_locked(self) -> bool:
@@ -623,6 +637,9 @@ class ListenReceiver:
         (``stt_failed`` + WebSocket 1011) as soon as the death latch flips (#10028).
         """
         while self.host.state.active and not self.host.state.stt_terminal_failure:
+            routing: RoutedListenSTT | None = getattr(self, 'provider_routing', None)
+            if routing is not None:
+                await routing.route.flush_health_receipts()
             socket = self.stt_socket
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
