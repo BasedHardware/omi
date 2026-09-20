@@ -92,6 +92,7 @@
 * [`quickstart.te.md`](quickstart.te.md) — omi-cli తో ప్రారంభ దశలు (Telugu Quickstart).
 * [`quickstart.tg.md`](quickstart.tg.md) — omi-cli Дастури оғози сареъ (Tajik Quickstart).
 * [`quickstart.tl.md`](quickstart.tl.md) — Mga Unang Hakbang gamit ang omi-cli (Tagalog Quickstart).
+* [`quickstart.vro.md`](quickstart.vro.md) — Edimädseq sammuq omi-cli-gaq (Võro Quickstart).
 * [`quickstart.yo.md`](quickstart.yo.md) — Awọn Igbesẹ Akọkọ pẹlu omi-cli (Yoruba Quickstart).
 * [`quickstart.yue.md`](quickstart.yue.md) — omi-cli 廣東話快速上手指南 (Cantonese Quickstart).
 * [`quickstart.zu.md`](quickstart.zu.md) — Izinyathelo Zokuqala nge-omi-cli (Zulu Quickstart).
