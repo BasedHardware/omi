@@ -8,22 +8,7 @@ from typing import Any, Mapping
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from utils.conversation_continuity import gap_splits
-
-
-def resumable_continuation(
-    row: Mapping[str, Any], *, source: str, device_id: str | None, now: datetime, timeout: int
-) -> bool:
-    """Unknown device is a partition, not permission to join another device."""
-    finish = row.get('finished_at')
-    return (
-        row.get('status') == 'in_progress'
-        and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
-        and row.get('source') == source
-        and row.get('client_device_id') == device_id
-        and isinstance(finish, datetime)
-        and not gap_splits((now - finish).total_seconds(), timeout)
-    )
+from utils.conversation_continuity import gap_splits, resumable_continuation
 
 
 def resolve_live_continuation(

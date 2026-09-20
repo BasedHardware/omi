@@ -17,7 +17,7 @@ from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
-from database.listen_continuations import resumable_continuation
+from utils.conversation_continuity import resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
