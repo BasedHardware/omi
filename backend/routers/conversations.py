@@ -1449,10 +1449,22 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
