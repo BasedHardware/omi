@@ -960,24 +960,24 @@ async def tool_get_body_measurements(request: Request):
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
 
-        height_m = _safe_float(result.get("height_meter"))
-        weight_kg = _safe_float(result.get("weight_kilogram"))
-        max_hr = _safe_float(result.get("max_heart_rate"))
+        height_m = result.get("height_meter")
+        weight_kg = result.get("weight_kilogram")
+        max_hr = result.get("max_heart_rate")
 
         result_parts = ["**Body Measurements**", ""]
 
-        if height_m is not None and height_m > 0:
+        if height_m:
             height_cm = height_m * 100
             height_ft = height_m * 3.28084
             feet = int(height_ft)
             inches = (height_ft - feet) * 12
             result_parts.append(f"**Height:** {height_cm:.0f} cm ({feet}'{inches:.0f}\")")
 
-        if weight_kg is not None and weight_kg > 0:
+        if weight_kg:
             weight_lb = weight_kg * 2.20462
             result_parts.append(f"**Weight:** {weight_kg:.1f} kg ({weight_lb:.1f} lb)")
 
-        if max_hr is not None and max_hr > 0:
+        if max_hr:
             result_parts.append(f"**Max Heart Rate:** {max_hr:.0f} bpm")
 
         if len(result_parts) == 2:

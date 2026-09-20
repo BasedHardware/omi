@@ -44,6 +44,11 @@ checks:
     triggers: ["plugins/omi-whoop-app/**"]
     lanes: ["local", "ci"]
     reason: "#13927: get_body_measurements requested the nonexistent /body_measurement route so every call failed with a blank error; the documented path is /user/measurement/body and an empty upstream error body must still surface the HTTP status"
+  - id: whoop-weekly-summary-hardening-tests
+    command: ["python3", "plugins/omi-whoop-app/test_measurements_and_summary_hardening.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]

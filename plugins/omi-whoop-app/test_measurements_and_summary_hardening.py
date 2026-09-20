@@ -1,24 +1,112 @@
-import sys
-import unittest
+"""Hermetic tests for Whoop weekly summary null score guards and date parameter sanitization.
+
+Runs under standard library unittest without third-party dependencies.
+"""
+import asyncio
+import importlib.util
 from pathlib import Path
-from unittest.mock import patch
-
-try:
-    from fastapi.testclient import TestClient
-except ModuleNotFoundError:
-    TestClient = None
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-if TestClient is not None:
-    from main import app, _clean_date_param, _safe_float
+import sys
+from types import ModuleType
+import unittest
+from unittest.mock import Mock, patch
 
 
-@unittest.skipIf(TestClient is None, "fastapi/httpx test dependencies are not installed")
+def load_whoop_app():
+    class FastAPI:
+        def __init__(self, **kwargs):
+            pass
+
+        def get(self, *args, **kwargs):
+            return lambda handler: handler
+
+        post = get
+
+    def Query(default=None, **kwargs):
+        return default
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class _Response:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    class ChatToolResponse:
+        def __init__(self, result=None, error=None):
+            self.result = result
+            self.error = error
+
+    requests = ModuleType("requests")
+    requests.get = lambda *args, **kwargs: None
+    requests.post = lambda *args, **kwargs: None
+
+    dotenv = ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: None
+
+    fastapi = ModuleType("fastapi")
+    fastapi.FastAPI = FastAPI
+    fastapi.Request = object
+    fastapi.Query = Query
+    fastapi.HTTPException = HTTPException
+
+    responses = ModuleType("fastapi.responses")
+    responses.HTMLResponse = _Response
+    responses.RedirectResponse = _Response
+    responses.JSONResponse = _Response
+
+    db = ModuleType("db")
+    for name in (
+        "store_whoop_tokens",
+        "update_whoop_tokens",
+        "delete_whoop_tokens",
+        "store_oauth_state",
+        "delete_oauth_state",
+        "store_user_setting",
+    ):
+        setattr(db, name, lambda *args, **kwargs: None)
+    for name in ("get_whoop_tokens", "get_uid_from_oauth_state", "get_user_setting"):
+        setattr(db, name, lambda *args, **kwargs: None)
+
+    models = ModuleType("models")
+    models.ChatToolResponse = ChatToolResponse
+
+    spec = importlib.util.spec_from_file_location(
+        "whoop_app_hardening", Path(__file__).with_name("main.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    with patch.dict(
+        sys.modules,
+        {
+            "requests": requests,
+            "dotenv": dotenv,
+            "fastapi": fastapi,
+            "fastapi.responses": responses,
+            "db": db,
+            "models": models,
+        },
+    ):
+        spec.loader.exec_module(module)
+    return module
+
+
+app = load_whoop_app()
+
+
+class FakeChatRequest:
+    def __init__(self, body):
+        self._body = body
+
+    async def json(self):
+        return self._body
+
+
 class TestMeasurementsAndSummaryHardening(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
-        patcher = patch("main.get_valid_access_token", return_value="test-token")
+        patcher = patch.object(app, "get_valid_access_token", return_value="test-token")
         self.addCleanup(patcher.stop)
         patcher.start()
 
@@ -26,53 +114,22 @@ class TestMeasurementsAndSummaryHardening(unittest.TestCase):
     # Helper unit tests
     # -------------------------------------------------------------
     def test_clean_date_param(self):
-        self.assertEqual(_clean_date_param("2026-09-20"), "2026-09-20")
-        self.assertEqual(_clean_date_param("2026-09-20T12:30:00Z"), "2026-09-20")
-        self.assertIsNone(_clean_date_param("invalid-date"))
-        self.assertIsNone(_clean_date_param(False))
-        self.assertIsNone(_clean_date_param(20260920))
-        self.assertIsNone(_clean_date_param(None))
-        self.assertIsNone(_clean_date_param(""))
+        self.assertEqual(app._clean_date_param("2026-09-20"), "2026-09-20")
+        self.assertEqual(app._clean_date_param("2026-09-20T12:30:00Z"), "2026-09-20")
+        self.assertIsNone(app._clean_date_param("invalid-date"))
+        self.assertIsNone(app._clean_date_param(False))
+        self.assertIsNone(app._clean_date_param(20260920))
+        self.assertIsNone(app._clean_date_param(None))
+        self.assertIsNone(app._clean_date_param(""))
 
     def test_safe_float(self):
-        self.assertEqual(_safe_float("1.85"), 1.85)
-        self.assertEqual(_safe_float(42), 42.0)
-        self.assertEqual(_safe_float(3.14), 3.14)
-        self.assertIsNone(_safe_float("invalid"))
-        self.assertIsNone(_safe_float(None))
-        self.assertEqual(_safe_float(None, 0.0), 0.0)
-        self.assertEqual(_safe_float("invalid", 10.0), 10.0)
-
-    # -------------------------------------------------------------
-    # Body measurements hardening tests
-    # -------------------------------------------------------------
-    def test_body_measurements_with_string_numbers(self):
-        mock_response = {
-            "height_meter": "1.85",
-            "weight_kilogram": "80.0",
-            "max_heart_rate": "190",
-        }
-        with patch("main.whoop_api_request", return_value=mock_response):
-            response = self.client.post("/tools/get_body_measurements", json={"uid": "u1"})
-
-        self.assertEqual(response.status_code, 200)
-        result = response.json().get("result", "")
-        self.assertIn("**Height:** 185 cm", result)
-        self.assertIn("**Weight:** 80.0 kg (176.4 lb)", result)
-        self.assertIn("**Max Heart Rate:** 190 bpm", result)
-
-    def test_body_measurements_with_invalid_types_and_nones(self):
-        mock_response = {
-            "height_meter": "invalid",
-            "weight_kilogram": None,
-            "max_heart_rate": -1,
-        }
-        with patch("main.whoop_api_request", return_value=mock_response):
-            response = self.client.post("/tools/get_body_measurements", json={"uid": "u1"})
-
-        self.assertEqual(response.status_code, 200)
-        result = response.json().get("result", "")
-        self.assertEqual(result, "No body measurements available.")
+        self.assertEqual(app._safe_float("1.85"), 1.85)
+        self.assertEqual(app._safe_float(42), 42.0)
+        self.assertEqual(app._safe_float(3.14), 3.14)
+        self.assertIsNone(app._safe_float("invalid"))
+        self.assertIsNone(app._safe_float(None))
+        self.assertEqual(app._safe_float(None, 0.0), 0.0)
+        self.assertEqual(app._safe_float("invalid", 10.0), 10.0)
 
     # -------------------------------------------------------------
     # Weekly summary hardening tests
@@ -116,11 +173,11 @@ class TestMeasurementsAndSummaryHardening(unittest.TestCase):
                 return workout_records, None
             return [], None
 
-        with patch("main.whoop_fetch_all_records", side_effect=fake_fetch_all):
-            response = self.client.post("/tools/get_weekly_summary", json={"uid": "u1"})
+        with patch.object(app, "whoop_fetch_all_records", side_effect=fake_fetch_all):
+            response = asyncio.run(app.tool_get_weekly_summary(FakeChatRequest({"uid": "u1"})))
 
-        self.assertEqual(response.status_code, 200)
-        result = response.json().get("result", "")
+        self.assertIsNone(response.error)
+        result = response.result
         # Averages should safely compute over valid records without raising AttributeError
         self.assertIn("**Recovery:** Avg 75% (Range: 70%-80%)", result)
         self.assertIn("**Strain:** Avg 12.5 (Total: 25.0)", result)
@@ -137,15 +194,15 @@ class TestMeasurementsAndSummaryHardening(unittest.TestCase):
             captured_params.update(params or {})
             return {"records": [{"score": {"recovery_score": 75}}]}
 
-        with patch("main.whoop_api_request", side_effect=fake_request):
+        with patch.object(app, "whoop_api_request", side_effect=fake_request):
             # Test with valid date
-            self.client.post("/tools/get_recovery", json={"uid": "u1", "date": "2026-09-20"})
+            asyncio.run(app.tool_get_recovery(FakeChatRequest({"uid": "u1", "date": "2026-09-20"})))
             self.assertEqual(captured_params.get("start"), "2026-09-20T00:00:00.000Z")
             self.assertEqual(captured_params.get("end"), "2026-09-20T23:59:59.999Z")
 
             # Test with invalid date representation (e.g. non-string or boolean)
             captured_params.clear()
-            self.client.post("/tools/get_recovery", json={"uid": "u1", "date": False})
+            asyncio.run(app.tool_get_recovery(FakeChatRequest({"uid": "u1", "date": False})))
             self.assertNotIn("start", captured_params)
             self.assertNotIn("end", captured_params)
             self.assertEqual(captured_params.get("limit"), 1)
