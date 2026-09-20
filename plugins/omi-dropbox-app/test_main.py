@@ -377,6 +377,43 @@ class ToolHandlerTests(unittest.IsolatedAsyncioTestCase):
             response = await MAIN.tool_search_dropbox(FakeRequest(payload={"uid": "u1", "query": "zzz"}))
         self.assertIn("No files found", assert_tool_contract(self, response).result)
 
+    async def test_raised_client_exception_never_leaks_into_search_error(self):
+        """A throwing client must produce a fixed error string, not str(e)."""
+        client = SimpleNamespace()
+        marker = "s3cr3t-internal-db-host.internal.example"
+        client.search_files = lambda *a, **k: (_ for _ in ()).throw(RuntimeError(marker))
+        client.list_folder = lambda *a, **k: ([], None)
+        client.download_file = lambda *a, **k: (None, "nf")
+        with connected_client(client):
+            response = await MAIN.tool_search_dropbox(FakeRequest(payload={"uid": "u1", "query": "x"}))
+        error = assert_tool_contract(self, response).error
+        self.assertEqual(error, "Search error")
+        self.assertNotIn(marker, error)
+
+    async def test_raised_client_exception_never_leaks_into_list_error(self):
+        client = SimpleNamespace()
+        marker = "s3cr3t-internal-db-host.internal.example"
+        client.search_files = lambda *a, **k: ([], None)
+        client.list_folder = lambda *a, **k: (_ for _ in ()).throw(RuntimeError(marker))
+        client.download_file = lambda *a, **k: (None, "nf")
+        with connected_client(client):
+            response = await MAIN.tool_list_dropbox(FakeRequest(payload={"uid": "u1"}))
+        error = assert_tool_contract(self, response).error
+        self.assertEqual(error, "List error")
+        self.assertNotIn(marker, error)
+
+    async def test_raised_client_exception_never_leaks_into_read_error(self):
+        client = SimpleNamespace()
+        marker = "s3cr3t-internal-db-host.internal.example"
+        client.search_files = lambda *a, **k: ([], None)
+        client.list_folder = lambda *a, **k: ([], None)
+        client.download_file = lambda *a, **k: (_ for _ in ()).throw(RuntimeError(marker))
+        with connected_client(client):
+            response = await MAIN.tool_read_dropbox_file(FakeRequest(payload={"uid": "u1", "path": "/x.txt"}))
+        error = assert_tool_contract(self, response).error
+        self.assertEqual(error, "Read error")
+        self.assertNotIn(marker, error)
+
     async def test_list_formats_results(self):
         client = make_client(list_results=[
             {"name": "Meeting (2024-01-20)", "path": "/Omi/Meeting", "type": "folder", "size": 0, "modified": "2024-01-20T10:00:00Z"},

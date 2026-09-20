@@ -843,7 +843,8 @@ async def tool_search_dropbox(request: Request) -> ChatToolResponse:
         return ChatToolResponse(result=output)
 
     except Exception as e:
-        return ChatToolResponse(error=f"Search error: {str(e)}")
+        print(f"[TOOLS] Search error: {e}")
+        return ChatToolResponse(error="Search error")
 
 
 @app.post("/tools/list", response_model=ChatToolResponse)
@@ -899,7 +900,8 @@ async def tool_list_dropbox(request: Request) -> ChatToolResponse:
         return ChatToolResponse(result=output)
 
     except Exception as e:
-        return ChatToolResponse(error=f"List error: {str(e)}")
+        print(f"[TOOLS] List error: {e}")
+        return ChatToolResponse(error="List error")
 
 
 @app.post("/tools/read", response_model=ChatToolResponse)
@@ -958,7 +960,8 @@ async def tool_read_dropbox_file(request: Request) -> ChatToolResponse:
             except ImportError:
                 return ChatToolResponse(error="PDF reading is not available. Please contact support.")
             except Exception as e:
-                return ChatToolResponse(error=f"Error reading PDF: {str(e)}")
+                print(f"[TOOLS] PDF read error: {e}")
+                return ChatToolResponse(error="Error reading PDF")
 
         elif file_ext in [
             "txt",
@@ -1019,7 +1022,8 @@ async def tool_read_dropbox_file(request: Request) -> ChatToolResponse:
         return ChatToolResponse(result=output)
 
     except Exception as e:
-        return ChatToolResponse(error=f"Read error: {str(e)}")
+        print(f"[TOOLS] Read error: {e}")
+        return ChatToolResponse(error="Read error")
 
 
 # ============== Audio Streaming Endpoint ==============
