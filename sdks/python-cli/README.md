@@ -388,3 +388,4 @@ MIT — see [`LICENSE`](LICENSE).
 
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
 - [Furlan (Friulian)](examples/quickstart.fur.md)
+- [Aragonés (Aragonese)](examples/quickstart.an.md)
