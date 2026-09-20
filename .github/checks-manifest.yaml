@@ -19,6 +19,11 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
+  - id: omi-crossref-tests
+    command: ["python3", "plugins/omi-crossref-app/test_main.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Crossref works search and DOI detail lookups must safely extract DOIs from URLs/markdown/prefixes, defend against non-dict payloads and nested date formats, and handle Crossref API errors without 500s"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
