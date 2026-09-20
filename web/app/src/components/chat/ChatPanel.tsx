@@ -476,6 +476,7 @@ export function ChatPanel() {
                           ? `Max ${MAX_FILES} files`
                           : 'Attach file'
                       }
+                      aria-label="Attach file"
                     >
                       <Paperclip className="h-[18px] w-[18px]" />
                     </button>
