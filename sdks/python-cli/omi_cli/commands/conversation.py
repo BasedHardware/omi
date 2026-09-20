@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -115,6 +116,75 @@ def get_conversation(
             params={"include_transcript": include_transcript},
         )
     ctx.renderer.emit(result, title="conversation")
+
+
+def _srt_timestamp(seconds: object) -> str:
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        raise UsageError(message="Transcript segment timing must be numeric.")
+    value = float(seconds)
+    if not math.isfinite(value) or value < 0:
+        raise UsageError(message="Transcript segment timing must be a finite, non-negative number.")
+    total_ms = round(value * 1000)
+    hours, remainder = divmod(total_ms, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _segments_to_srt(segments: object) -> str:
+    if not isinstance(segments, list) or not segments:
+        raise UsageError(message="Conversation has no transcript segments to export.")
+
+    blocks: list[str] = []
+    for index, segment in enumerate(segments, start=1):
+        if not isinstance(segment, dict):
+            raise UsageError(message=f"Transcript segment {index} is invalid.")
+        start = segment.get("start")
+        end = segment.get("end")
+        if start is None or end is None:
+            raise UsageError(message=f"Transcript segment {index} is missing start or end timing.")
+        if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+            raise UsageError(message=f"Transcript segment {index} timing must be numeric.")
+        if not math.isfinite(float(start)) or not math.isfinite(float(end)) or float(start) < 0 or float(end) <= float(start):
+            raise UsageError(message=f"Transcript segment {index} has invalid timing.")
+        text = segment.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise UsageError(message=f"Transcript segment {index} has no text.")
+        blocks.append(
+            f"{index}\n{_srt_timestamp(start)} --> {_srt_timestamp(end)}\n{text.strip()}"
+        )
+    return "\n\n".join(blocks) + "\n"
+
+
+@app.command("export", help="Export a conversation transcript.")
+def export_conversation(
+    typer_ctx: typer.Context,
+    conversation_id: str = typer.Argument(..., help="Conversation ID."),
+    format: str = typer.Option("srt", "--format", help="Export format. Currently: srt."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output file path."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing output file."),
+) -> None:
+    if format.lower() != "srt":
+        raise UsageError(message=f"Unsupported export format: {format}", detail="Currently supported: srt.")
+    if output.exists() and not overwrite:
+        raise UsageError(message=f"Output file already exists: {output}", detail="Pass --overwrite to replace it.")
+    if output.exists() and output.is_dir():
+        raise UsageError(message=f"Output path is a directory: {output}")
+
+    ctx = _ctx(typer_ctx)
+    with ctx.make_client() as client:
+        result = client.get(
+            f"/v1/dev/user/conversations/{conversation_id}",
+            params={"include_transcript": True},
+        )
+
+    content = _segments_to_srt(result.get("transcript_segments") if isinstance(result, dict) else None)
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise UsageError(message=f"Cannot write file {output}", detail=str(exc)) from exc
+    ctx.renderer.success(f"Exported conversation [bold]{conversation_id}[/bold] to {output}.")
 
 
 @app.command("create", help="Create a conversation from raw text.")
