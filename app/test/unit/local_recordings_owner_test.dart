@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +41,48 @@ void main() {
     expect(File('${dir.path}/$recording').existsSync(), isTrue);
 
     expect(await listFor('user-a'), [recording]);
+  });
+
+  test('corrupt ownership metadata is not treated as unowned recordings', () async {
+    expect(await listFor('user-a'), [recording]);
+    final owners = File('${dir.path}/omibatch_owners.json');
+    final intact = await owners.readAsString();
+    await owners.writeAsString(intact.substring(0, intact.length - 3));
+
+    expect(await listFor('user-b'), isEmpty);
+    expect(File('${dir.path}/$recording').existsSync(), isTrue);
+    expect(await owners.readAsString(), isNot(contains('user-b')));
+  });
+
+  test('a non-string owner value fails closed instead of rebinding the file', () async {
+    await File('${dir.path}/omibatch_owners.json').writeAsString('{"$recording": 7}');
+
+    expect(await listFor('user-b'), isEmpty);
+    expect(File('${dir.path}/$recording').existsSync(), isTrue);
+    expect(await File('${dir.path}/omibatch_owners.json').readAsString(), '{"$recording": 7}');
+  });
+
+  test('a queued job for another account is not polled', () async {
+    expect(await listFor('user-a'), [recording]);
+    SharedPreferences.setMockInitialValues({
+      'uid': 'user-b',
+      'localRecordingJobs': jsonEncode({recording: 'job-a'}),
+      'batchAudioDir': dir.path,
+    });
+    await SharedPreferencesUtil.init();
+
+    final polled = <String>[];
+    final provider = LocalRecordingsProvider();
+    provider.jobStatusFetcherOverride = (jobId) async {
+      polled.add(jobId);
+      throw StateError('another account\'s job must not be polled');
+    };
+    await provider.refresh();
+    await provider.reconcileForTesting();
+
+    expect(polled, isEmpty);
+    expect(File('${dir.path}/$recording').existsSync(), isTrue);
+    provider.dispose();
   });
 
   test('clearing user data drops the listed recordings', () async {
