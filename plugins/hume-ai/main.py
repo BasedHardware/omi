@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # FastAPI imports
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -52,6 +52,7 @@ from app import (
     analyze_text_with_hume,
     analyze_audio_with_hume,
 )
+from tools_auth import require_hume_tools_auth
 
 # Initialize FastAPI app
 app = FastAPI(title="Omi Audio Streaming Service with Hume AI")
@@ -87,7 +88,8 @@ async def handle_audio_stream(
     uid: str = Query(..., description="User ID"),
     analyze_emotion: bool = Query(True, description="Whether to analyze emotions with Hume AI"),
     send_notification: Optional[bool] = Query(None, description="Override notification setting (uses config default if not specified)"),
-    emotion_filters: Optional[str] = Query(None, description="Override emotion filters (uses config default if not specified)")
+    emotion_filters: Optional[str] = Query(None, description="Override emotion filters (uses config default if not specified)"),
+    _auth: None = Depends(require_hume_tools_auth)
 ):
     """
     Endpoint to receive audio bytes from Omi device and analyze with Hume AI.
@@ -496,7 +498,10 @@ async def reset_stats(request: Request):
 
 
 @app.post("/save-emotion-memory")
-async def manual_save_emotion_memory(uid: Optional[str] = Query(None, description="User ID (optional)")):
+async def manual_save_emotion_memory(
+    uid: Optional[str] = Query(None, description="User ID (optional)"),
+    _auth: None = Depends(require_hume_tools_auth)
+):
     """
     Manually save current emotion statistics to Omi memories.
 
@@ -524,7 +529,10 @@ async def manual_save_emotion_memory(uid: Optional[str] = Query(None, descriptio
 
 
 @app.post("/force-send-notification")
-async def force_send_notification_endpoint(uid: Optional[str] = Query(None, description="User ID (optional)")):
+async def force_send_notification_endpoint(
+    uid: Optional[str] = Query(None, description="User ID (optional)"),
+    _auth: None = Depends(require_hume_tools_auth)
+):
     """
     Force send a notification immediately, bypassing cooldown.
 
