@@ -8,6 +8,8 @@ EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
 LANGUAGES = ["bs", "jv", "rm", "mwl", "an", "rn", "fj", "pap"]
 
+CANONICAL_GUIDE = "agent_quickstart.md"
+
 
 def parse_agent_guide(path: Path):
     content = path.read_text(encoding="utf-8")
@@ -20,6 +22,34 @@ def parse_agent_guide(path: Path):
         "code_fences": len(code_fences),
         "content": content,
     }
+
+
+def executable_lines(path: Path):
+    """Extract the executable portion of every fenced code block.
+
+    Prose that is allowed to be translated (comments, shebang-style markers,
+    and triple-quoted docstrings) is stripped; only the command/code lines
+    themselves are compared byte-for-byte against the canonical guide.
+    """
+    content = path.read_text(encoding="utf-8")
+    lines = []
+    in_docstring = False
+    for block in re.findall(r"```[^\n]*\n(.*?)```", content, re.S):
+        for raw in block.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            if '"""' in line:
+                in_docstring = not in_docstring
+                continue
+            if in_docstring:
+                continue
+            if line.startswith("#"):
+                continue
+            core = re.split(r"\s+#\s*", line)[0].strip()
+            if core:
+                lines.append(core)
+    return lines
 
 
 class AgentQuickstartBatch9ParityTest(unittest.TestCase):
@@ -74,6 +104,14 @@ class AgentQuickstartBatch9ParityTest(unittest.TestCase):
                 self.assertIn("120", content)
                 self.assertIn("25", content)
                 self.assertIn("15", content)
+
+    def test_executable_lines_match_canonical_byte_for_byte(self):
+        canonical = executable_lines(EXAMPLES_DIR / CANONICAL_GUIDE)
+        self.assertGreaterEqual(len(canonical), 20, "canonical guide should yield executable lines")
+        for lang in LANGUAGES:
+            with self.subTest(lang=lang):
+                actual = executable_lines(EXAMPLES_DIR / f"agent_quickstart.{lang}.md")
+                self.assertEqual(actual, canonical, f"{lang} executable code drifted from the canonical guide")
 
 
 if __name__ == "__main__":
