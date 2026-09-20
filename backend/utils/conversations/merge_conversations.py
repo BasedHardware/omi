@@ -509,6 +509,8 @@ def _copy_audio_chunks_for_merge(
     uid: str,
     conversations: List[Dict],
     new_conversation_id: str,
+    *,
+    strict: bool = False,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -561,6 +563,8 @@ def _copy_audio_chunks_for_merge(
             return conversations_db.create_audio_files_from_chunks(uid, new_conversation_id)
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
+            if strict:
+                raise
 
     return []
 
@@ -612,6 +616,7 @@ def _delete_conversation_and_related_data(
     *,
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
     historical_source_ids: Optional[Set[str]] = None,
+    retain_capture: bool = False,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -661,6 +666,16 @@ def _delete_conversation_and_related_data(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
+        if retain_capture:
+            raise
+
+    if retain_capture:
+        # Sync bridges retain redirect tombstones and original audio: another
+        # in-flight worker may still be uploading to that immutable source ID.
+        # Propagate errors so the durable ancestry can replay cleanup on retry.
+        delete_vector(uid, conversation_id)
+        conversations_db._delete_conversation_search_index(uid, conversation_id)
+        return
 
     try:
         # Delete photos subcollection

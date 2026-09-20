@@ -4,34 +4,29 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 
 ## Boundaries
 
-- `pipeline.py` is the coordinator. It owns job/run leases, segment processing, persistence fences, and terminal outcomes.
-- `files.py`, `content_id.py`, and `capture_manifest.py` validate and normalize uploaded files and their identities.
+- `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes.
+- `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
+- `capture.py` carries decoded WAV coverage through VAD, independently of speech timestamps. Quiet files persist review-only coverage without STT or enrichment; valid empty STT also persists coverage without billing speech.
 - `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy.
-- `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers.
-- `playback.py` reconstructs and serves persisted audio artifacts.
+- `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
 - `provenance.py` and `telemetry.py` provide bounded attribution and operational labels.
 
-Keep HTTP routing and database implementations outside this package. New helpers should remain deterministic where possible; changes that mutate a sync job must preserve the run-lease and conversation-persistence fences in `pipeline.py`.
+Keep HTTP routing and database implementations outside this package. Changes must preserve run-lease, durable result, and conversation-persistence fences in `pipeline.py`.
 
-## Cross-job assignment and relevance
+## Cross-job assignment
 
-`lifecycle.ingest_sync_conversation` admits uploads through
-`database.conversations.assign_sync_conversation`. Its Firestore transaction reads
-and writes `users/{uid}/sync_assignment/recent` and the selected conversation
-atomically. `assignment.py` owns the transaction body and speaker-independent
-shape policy. The legacy timestamp query supplies a hint only. `_OrderedTurnstile`
-is a within-job optimization, not a cross-process lock. The index retains 128
-recent intervals; the existing query remains the historical lookup.
+`lifecycle.ingest_sync_conversation` admits uploads through `database.conversations.assign_sync_conversation`. `assignment.py` computes connected capture components in one Firestore transaction, using codecs supplied by the database adapter. Every transactional read precedes writes. Decode/storage errors propagate; there is no uncoordinated create fallback.
 
-A 120-second gap, matching source, and compatible known device IDs admit a merge.
-Missing device IDs retain legacy time-based behavior. Sync-owned recordings dedupe
-absolute ranges, not repeated narration text. A `sync_content_revision` fences
-stale processing writes after an append. Storage errors propagate into the existing
-retry path; they must never fall through to an uncoordinated create.
+`assignment_index.py` stores metadata-only UTC day buckets under `users/{uid}/sync_assignment`. Every occupied day indexes the component. Buckets do not evict entries; Firestore size limits fail visibly. The old `recent` document remains a bounded migration hint and serialization fence, alongside the legacy timestamp-query hint. Pre-index history is not comprehensively backfilled. `_OrderedTurnstile` reduces bridge work within a job; correctness does not depend on it.
 
-Short filler-only content gets `sync_relevance=review`, keeps a visible transcript
-and deterministic title, and skips automatic LLM enrichment. Subsequent intake
-reassesses the whole transcript. Unknown content and language stay `keep`; neither
-speaker profiles nor `is_user` affect this gate. This is transcript-only demotion,
-not a client review-folder feature or a classifier for video versus real speech.
-See root `HANDOFF.md` for remaining verification and edge cases.
+`utils/conversation_continuity.py` owns the gap predicate: an uncovered gap **at least 120 seconds** splits. Sync measures decoded capture coverage; realtime supplies speech silence and its configured timeout. Source, device ID, lock state and explicit capture identity form disjoint partitions. Missing device ID is its own partition, never a wildcard joining two known devices. Live rows are explicit targets, never automatic bridge donors. Shared, photo-bearing or user-curated sync rows also stay intact; they cannot donate content or change identity automatically.
+
+The smallest deterministic chunk ID is the component anchor; late data can replace a visible ID. Absorbed rows become redirect tombstones. Missing explicit targets are created under their supplied ID, with subsequent chunks bound to that capture; user-deleted targets are never reused. This does not authenticate client provenance. Transcript ranges remain absolute through rebasing; `finished_at` includes decoded coverage, while the existing duration helper still controls displayed speech duration.
+
+Bridge writes increment survivor and donor `sync_content_revision`. Processors reject deleted rows and stale revisions. `sync_merged_from` persists ancestry with the transcript, so `bridge.py` can replay external effects after a failed attempt. It reuses merge/delete retraction and audio-copy machinery outside the transaction; cleanup errors propagate to the existing job retry path. Original audio and donor tombstones remain while uploads can finish; deleting the visible conversation also purges its retained sources. In-flight donor audio is recopied when its worker finishes. There is no independent cleanup scheduler: recovery depends on a retried job or later intake. Search-index writes retain their existing best-effort semantics.
+
+## Relevance and remaining differences
+
+Short filler-only content and quiet coverage get `sync_relevance=review`, remain visible with a deterministic title, and skip enrichment. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
+
+Realtime still splits on speech silence, supports configured/multichannel timeouts, and can observe disconnects. Shipped WALs do not carry those policy inputs, so exact path equality through long silence is not claimed. Sync enrichment remains per finishing job and revision-fenced, not quiescence-debounced. Historical aliases already returned to clients may require a history refresh. Tests model serial commit permutations and replay failures hermetically; Firestore retry contention and live UI acceptance require separate evidence.

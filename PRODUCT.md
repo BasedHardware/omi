@@ -96,3 +96,13 @@ title, without automatic summarization; later meaningful content promotes the
 merged recording. Uncertain content stays kept. Long narration is not reliable
 evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
+
+Capture coverage includes quiet decoded audio, not only the last transcribed word.
+New sync intake groups connected intervals independently of arrival order within
+the same source/device/lock/capture partition. Unknown device identity is not a
+wildcard. Late bridges retain redirects and fence stale enrichment. The shared
+boundary predicate splits at a gap of at least 120 seconds; realtime still applies
+it to speech silence and configurable timeouts, while sync applies it to capture
+coverage. Those inputs differ, so complete offline/realtime parity is not yet a
+product guarantee. Shared, photo-bearing and user-curated records remain separate
+from automatic bridges. This change neither uses own-voice labels nor debounces LLM work.

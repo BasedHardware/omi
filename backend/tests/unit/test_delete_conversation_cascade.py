@@ -18,6 +18,11 @@ import pytest
 from database import conversations as conversations_db
 
 
+@pytest.fixture(scope="module", autouse=True)
+def warm_merge_cleanup():
+    from utils.conversations import merge_conversations
+
+
 class _FakeBatch:
     def __init__(self, store: "_FakeFirestore"):
         self._store = store
@@ -50,6 +55,7 @@ class _FakeDocumentReference:
         self.path = path
         self._store = store
         self.exists = True
+        self.data = {}
         self.subcollections: dict[str, _FakeCollectionReference] = {}
 
     # Snapshots streamed out of a query carry `.reference`; the fake document is
@@ -67,6 +73,12 @@ class _FakeDocumentReference:
     def collections(self):
         # Firestore only lists subcollections that still hold documents.
         return [sub for sub in self.subcollections.values() if any(d.exists for d in sub.documents.values())]
+
+    def get(self):
+        return self
+
+    def to_dict(self):
+        return self.data if self.exists else None
 
     def delete(self) -> None:
         self.exists = False
@@ -157,3 +169,17 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
 
     assert not conversation.exists
     assert store.deleted == ['users/uid-1/conversations/conv-1']
+
+
+def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
+    from utils.conversations import merge_conversations
+
+    conversation = _seed_conversation(store)
+    conversation.data['sync_merged_from'] = ['donor-a', 'donor-b']
+    removed = []
+    monkeypatch.setattr(
+        merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid: removed.append(cid)
+    )
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert removed == ['donor-a', 'donor-b']
+    assert not conversation.exists

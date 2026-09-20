@@ -123,6 +123,7 @@ from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_fr
 from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.capture import CaptureSegments, chunk_identity
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -723,7 +724,7 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+def retrieve_vad_segments(path: str, segmented_paths: CaptureSegments, errors: list = None):
     try:
         start_timestamp = get_timestamp_from_path(path)
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
@@ -737,13 +738,21 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             errors.append(error_code)
         raise  # Re-raise to ensure thread failure is visible
 
-    segments = _merge_and_cap_vad_segments(voice_segments)
+    segments = [s for s in _merge_and_cap_vad_segments(voice_segments) if s['end'] - s['start'] >= 1]
     logger.info('event=sync_vad outcome=success segment_count=%d', len(segments))
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
 
     try:
+        capture_end = start_timestamp + len(aseg) / 1000
+        if not segments:
+            # Keep a local copy: the VAD coordinator removes its input WAVs.
+            quiet_dir = os.path.join(path_dir, 'quiet')
+            os.makedirs(quiet_dir, exist_ok=True)
+            quiet_path = f'{quiet_dir}/{start_timestamp}.wav'
+            aseg.export(quiet_path, format='wav')
+            segmented_paths.add_capture(quiet_path, start_timestamp, capture_end, silent=True)
         for i, segment in enumerate(segments):
             if (segment['end'] - segment['start']) < 1:
                 continue
@@ -751,7 +760,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             segment_path = f'{path_dir}/{segment_timestamp}.wav'
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
-            segmented_paths.add(segment_path)
+            segmented_paths.add_capture(segment_path, start_timestamp, capture_end)
             # Explicitly delete segment to free memory immediately
             del segment_aseg
     finally:
@@ -774,14 +783,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     """
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation_data:
+    if not conversation_data or conversation_data.get('deleted'):
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
     # Visible transcript-only review: never discard uncertain real speech.
     # Re-evaluate the entire current transcript so later content promotes it.
-    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
-        conversation_data.get('transcript_segments', [])
+    if conversation_data.get('sync_relevance') == 'review' and (
+        not conversation_data.get('transcript_segments')
+        or needs_fragment_review(conversation_data['transcript_segments'])
     ):
         return
 
@@ -1076,6 +1086,8 @@ def process_segment(
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
+    capture_window: Optional[tuple[float, float]] = None,
+    capture_only: bool = False,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1096,42 +1108,22 @@ def process_segment(
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
-        words, detected_language = prerecorded(
-            url,
-            speakers_count=3,
-            attempts=0,
-            return_language=True,
-            language=req_language,
-            keywords=vocabulary if vocabulary else None,
+        words, detected_language = (
+            ([], user_language)
+            if capture_only
+            else prerecorded(
+                url,
+                speakers_count=3,
+                attempts=0,
+                return_language=True,
+                language=req_language,
+                keywords=vocabulary if vocabulary else None,
+            )
         )
         language = user_language if (single_language_mode and user_language) else detected_language
-        if not words:
-            # A provider that returns without error and produces no words is
-            # reporting that the audio holds no transcribable speech. VAD
-            # admitting the segment is not evidence to the contrary — it
-            # over-reports on noise — so this is the same valid empty result as
-            # VAD finding nothing, not a failure to retry. Counting it as a
-            # failed segment finalized the whole job failed, and the client
-            # re-uploaded the same noise on every pass until it gave up and
-            # showed the recording as permanently failed.
-            _record_empty_segment_as_silence(
-                provider=provider,
-                model=model,
-                lane=sync_lane,
-                deferred_outcome=deferred_outcome,
-            )
-            return False
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-        if not transcript_segments:
-            # Words survived the provider but nothing survived post-processing:
-            # again no transcribable speech, valid and empty rather than failed.
-            _record_empty_segment_as_silence(
-                provider=provider,
-                model=model,
-                lane=sync_lane,
-                deferred_outcome=deferred_outcome,
-            )
-            return False
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0) if words else []
+        # A valid empty STT result still contributes capture coverage. Persist it
+        # before reporting expected silence; it must not disappear as a bridge.
 
         # Download the segment audio once — used for speaker ID and/or to persist the
         # conversation's audio as a private-cloud chunk (realtime parity, below).
@@ -1153,31 +1145,28 @@ def process_segment(
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
 
-        # Conversation assignment must happen chronologically across the batch: wait until
-        # every earlier-timestamped segment has created/merged its conversation, otherwise
-        # the closest-conversation lookup races and adjacent chunks split into separate
-        # conversations.
+        # Chronological scheduling reduces bridge work; the transaction remains
+        # correct when independent jobs or a timed-out worker arrive out of order.
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
-        timestamp = get_timestamp_from_path(path)
-        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+        timestamp = capture_window[0] if capture_only else get_timestamp_from_path(path)
+        speech_end = timestamp + max((segment.end for segment in transcript_segments), default=0)
+        capture_start, capture_end = capture_window or (timestamp, timestamp + get_wav_duration(path))
+        segment_end_timestamp = max(capture_end, speech_end)
+        # Explicit capture identity is resolved transactionally, including absence
+        # and deletion; a lookup miss must not discard that identity.
+        closest_memory = (
+            None
+            if target_conversation_id
+            else get_closest_conversation_to_timestamps(uid, capture_start, segment_end_timestamp)
+        )
+        if capture_start < timestamp:
+            for segment in transcript_segments:
+                segment.start += timestamp - capture_start
+                segment.end += timestamp - capture_start
 
-        # When a target conversation is specified (auto-sync from live capture),
-        # attach segments to it directly instead of searching by timestamp.
-        if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(
-                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
-            )
-            if not conversations_db.eligible_merge_target(closest_memory):
-                logger.warning(
-                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
-                )
-                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-        else:
-            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-
-        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        started_at = datetime.fromtimestamp(capture_start, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
             finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
@@ -1191,7 +1180,7 @@ def process_segment(
             geolocation=geolocation,
         )
         incoming = Conversation(
-            id=str(uuid.uuid4()),
+            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
             created_at=started_at,
             structured=build_deterministic_minimum_structured(create_memory),
             **create_memory.model_dump(),
@@ -1222,16 +1211,28 @@ def process_segment(
                     data_protection_level=data_protection_level,
                     survivors=survivors,
                 )
+        if assigned.get('sync_merged_from') or private_cloud_sync_enabled:
+            from utils.sync.bridge import finish_sync_bridges
+
+            canonical_id = finish_sync_bridges(uid, conversation_id)
+            if canonical_id != conversation_id:
+                with lock:
+                    response['new_memories'].discard(conversation_id)
+                    response['updated_memories'].discard(conversation_id)
+                    response['updated_memories'].add(canonical_id)
+                    response.setdefault('_merged', {}).pop(conversation_id, None)
+                    response['_merged'][canonical_id] = language
+        outcome = TranscriptionOutcome.SUCCESS if transcript_segments else TranscriptionOutcome.EXPECTED_SILENCE
         _set_deferred_segment_outcome(
             deferred_outcome,
-            outcome=TranscriptionOutcome.SUCCESS,
+            outcome=outcome,
             provider=provider,
             model=model,
             retryable=False,
         )
         if deferred_outcome is None:
             _record_sync_segment_outcome(
-                TranscriptionOutcome.SUCCESS,
+                outcome,
                 provider=provider,
                 model=model,
                 lane=sync_lane,
@@ -1676,7 +1677,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             owner_task.add_done_callback(lambda _task: inline_lease_stop_event.set())
     async with concurrency_gate:
         set_byok_uid(uid if get_byok_keys() else None)
-        segmented_paths = set()
+        segmented_paths = CaptureSegments()
         wav_paths = []
         stage_timings = {}
         pipeline_start = time.monotonic()
@@ -1790,7 +1791,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             if vad_errors:
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
-                segmented_paths = set()
+                segmented_paths = CaptureSegments()
                 logger.error(
                     'event=sync_transcription_job outcome=upstream_error stage=vad failure_count=%d',
                     len(vad_errors),
@@ -1810,7 +1811,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # --- Phase 3: Speech metrics & fair-use ---
             total_speech_seconds = await run_blocking(
-                sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
+                sync_executor,
+                lambda: sum(get_wav_duration(p) for p in segmented_paths if p not in segmented_paths.silent),
             )
             total_speech_ms = int(total_speech_seconds * 1000)
             total_segments = len(segmented_paths)
@@ -1880,7 +1882,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     pass
                 if not reservation.allowed:
                     await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
-                    segmented_paths = set()
+                    segmented_paths = CaptureSegments()
                     await _finalize_sync_job_failure(
                         job_id=job_id,
                         uid=uid,
@@ -1954,7 +1956,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         fair_use_restrict_dg = True
                         if await run_blocking(db_executor, is_dg_budget_exhausted, uid):
                             await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
-                            segmented_paths = set()
+                            segmented_paths = CaptureSegments()
                             await _finalize_sync_job_failure(
                                 job_id=job_id,
                                 uid=uid,
@@ -2087,13 +2089,16 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
                     geolocation=geolocation,
+                    capture_window=segmented_paths.windows.get(path),
+                    capture_only=path in segmented_paths.silent,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.
                     # Therefore any skipped segment on a retry has its visible
                     # conversation IDs available for response hydration.
                     with segment_lock:
-                        content_segment_count[0] += 1
+                        if deferred_outcome.get('outcome') != TranscriptionOutcome.EXPECTED_SILENCE.value:
+                            content_segment_count[0] += 1
                         partial = {
                             'new_memories': sorted(response['new_memories']),
                             'updated_memories': sorted(response['updated_memories']),

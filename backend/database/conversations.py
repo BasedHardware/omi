@@ -521,6 +521,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if existing.get('deleted'):
+            return False
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
@@ -1283,6 +1285,13 @@ def delete_conversation(uid, conversation_id):
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    # Sync bridge ancestors remain as redirects while uploads can still finish.
+    # Deleting the visible capture must also purge those retained source copies.
+    snapshot = conversation_ref.get().to_dict() or {}
+    for source_id in snapshot.get('sync_merged_from', []):
+        from utils.conversations.merge_conversations import _delete_conversation_and_related_data
+
+        _delete_conversation_and_related_data(uid, source_id)
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
@@ -2414,13 +2423,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
     @firestore.transactional
     def assign(transaction):
         def encode(payload):
-            return _prepare_conversation_for_write(payload, uid, level[0])
-
-        level = [incoming['data_protection_level']]
-
-        def decode_with_level(raw):
-            level[0] = raw.get('data_protection_level') or level[0]
-            return decode(raw)
+            return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
         return assign_in_transaction(
             transaction,
@@ -2428,7 +2431,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             incoming,
             candidate_id=candidate_id,
             target_id=target_id,
-            decode=decode_with_level,
+            decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
         )

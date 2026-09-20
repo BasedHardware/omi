@@ -7,6 +7,8 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+
 import asyncio
 import hashlib
 import json

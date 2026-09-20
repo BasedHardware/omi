@@ -764,3 +764,21 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 - Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
 
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
+
+## Offline capture continuity
+
+Sync now preserves the decoded WAV window through VAD and persists quiet coverage
+without billing it as speech. Transactional intake joins all connected sync-owned
+components, with deterministic chunk anchors and redirect tombstones for late
+bridges. Explicit capture IDs survive a missing server conversation. Source,
+device, lock state, and capture identity isolate components; unknown device IDs
+are their own partition. No client or wire-schema change is required.
+
+`utils/conversation_continuity.py` supplies the shared gap predicate (split at
+120 seconds by default). Listen still supplies speech silence and its configured
+timeout; sync supplies capture coverage. Continuous silent capture can therefore
+remain one sync conversation even when listen would split it. Job leases,
+persistence fences, encryption codecs, and sync revision fencing remain in force.
+Bridge cleanup is retryable through existing merge/delete helpers; original donor
+audio is retained for late uploads and cascaded when the visible capture is deleted.
+See `utils/sync/ARCHITECTURE.md` for indexing, migration, and recovery limits.
