@@ -134,13 +134,18 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
     from unittest.mock import patch
 
     async def exercise():
-        raw, *_ = db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+        snapshot = dict(
+            id='c',
+            transcript_segments=[dict(segment, person_id=None) for segment in deepcopy(world[2])],
+        )
         processor = object.__new__(TranscriptProcessor)
+        processor._flush_failures = 0
+        processor._flush_backoff_until = 0.0
         calls = []
 
         async def persist(fn, *args, **kwargs):
             calls.append(True)
-            return False if len(calls) == 1 else fn(*args, **kwargs)
+            return False if len(calls) == 1 else args[2]
 
         processor.host = SimpleNamespace(
             request=SimpleNamespace(uid='u'),
@@ -151,7 +156,7 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
             ),
         )
         processor.cache = SimpleNamespace(
-            get=AsyncMock(return_value=raw), protection_level='standard', update_segments=lambda segments: None
+            get=AsyncMock(return_value=snapshot), protection_level='standard', update_segments=lambda segments: None
         )
         processor._deliver_segments = AsyncMock()
         with patch.object(
@@ -163,10 +168,71 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
         ):
             await processor.flush_speaker_assignments('c')
             assert processor.host.state.speaker_map_dirty
+            assert processor._flush_failures == 1
+            assert processor._flush_backoff_until > 0
             processor._deliver_segments.assert_not_awaited()
             await processor.flush_speaker_assignments('c')
         assert not processor.host.state.speaker_map_dirty
-        assert processor._deliver_segments.call_args.args[0][1]['person_id'] == 'new'
+        delivered = processor._deliver_segments.call_args.args[0]
+        assert any(item['id'] == 's1' and item['person_id'] == 'new' for item in delivered)
+        assert len(delivered) < len(snapshot['transcript_segments']) + 1
+
+    asyncio.run(exercise())
+
+
+def test_silence_flush_payload_is_proportional_to_changed_identities():
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+    from routers.listen.transcripts import TranscriptProcessor
+    from models.transcript_segment import TranscriptSegment
+    from routers.listen import transcripts
+
+    async def exercise():
+        segments = [
+            dict(
+                id=f's{i}',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                text='Synthetic speech',
+                start=i,
+                end=i + 1,
+                is_user=False,
+                person_id=None,
+            )
+            for i in range(500)
+        ]
+        raw = dict(id='c', transcript_segments=segments)
+        processor = object.__new__(TranscriptProcessor)
+        processor._flush_failures = 0
+        processor._flush_backoff_until = 0.0
+
+        async def persist(fn, *args, **kwargs):
+            return args[2]
+
+        processor.host = SimpleNamespace(
+            request=SimpleNamespace(uid='u'),
+            state=SimpleNamespace(active=True, speaker_map_dirty=True),
+            persistence=SimpleNamespace(call=persist),
+            speakers=SimpleNamespace(
+                speaker_to_person={}, segment_assignments={'s7': 'new'}, segment_identity_status={}
+            ),
+        )
+        processor.cache = SimpleNamespace(
+            get=AsyncMock(return_value=raw), protection_level='standard', update_segments=lambda items: None
+        )
+        processor._deliver_segments = AsyncMock()
+        with patch.object(
+            transcripts,
+            'deserialize_conversation',
+            lambda data: SimpleNamespace(
+                id='c', transcript_segments=[TranscriptSegment(**s) for s in data['transcript_segments']]
+            ),
+        ):
+            await processor.flush_speaker_assignments('c')
+        delivered = processor._deliver_segments.call_args.args[0]
+        assert len(delivered) <= 2
+        assert any(item['id'] == 's7' and item['person_id'] == 'new' for item in delivered)
 
     asyncio.run(exercise())
 

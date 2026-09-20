@@ -101,6 +101,8 @@ class TranscriptProcessor:
                 on_translation_ready=self._on_translation_ready,
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
             )
+        self._flush_failures = 0
+        self._flush_backoff_until = 0.0
 
     async def _load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         return await self.host.persistence.call(
@@ -256,6 +258,10 @@ class TranscriptProcessor:
         if not data:
             return
         conversation = deserialize_conversation(data)
+        before = {
+            cast(str, segment.id): (segment.person_id, segment.is_user, str(segment.speaker_identity_status))
+            for segment in conversation.transcript_segments
+        }
         process_speaker_assigned_segments(
             conversation.transcript_segments, speaker.segment_assignments, speaker.speaker_to_person
         )
@@ -276,13 +282,24 @@ class TranscriptProcessor:
             return_segments=True,
         )
         if not written:
+            failures = getattr(self, '_flush_failures', 0) + 1
+            self._flush_failures = min(failures, 4)
+            self._flush_backoff_until = time.monotonic() + min(5.0, 0.6 * (2 ** (self._flush_failures - 1)))
             return
         if isinstance(written, list):
             serialised = written
         self.cache.update_segments(serialised)
         self.host.state.speaker_map_dirty = False
-        if self.host.state.active:
-            await self._deliver_segments(serialised)
+        self._flush_failures = 0
+        self._flush_backoff_until = 0.0
+        changed = [
+            item
+            for item in serialised
+            if before.get(item.get('id'))
+            != (item.get('person_id'), item.get('is_user'), str(item.get('speaker_identity_status') or ''))
+        ]
+        if self.host.state.active and changed:
+            await self._deliver_segments(changed)
 
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
@@ -326,7 +343,7 @@ class TranscriptProcessor:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
             if not self.segment_buffer and not self.photo_buffer:
-                if self.host.state.speaker_map_dirty:
+                if self.host.state.speaker_map_dirty and time.monotonic() >= getattr(self, '_flush_backoff_until', 0):
                     await self.flush_speaker_assignments(self.host.state.current_conversation_id)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
