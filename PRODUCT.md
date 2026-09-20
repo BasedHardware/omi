@@ -104,8 +104,8 @@ Without an existing explicit target, sync intake groups connected speech interva
 independently of arrival order within the same source/device/lock partition. Missing
 client target IDs do not partition that intake. Unknown device identity is not a
 wildcard. Late bridges retain redirects and fence stale enrichment. The shared
-boundary predicate applies to speech silence on both paths. The remaining policy
-difference is that realtime can configure its timeout per session; WALs do not
+boundary predicate is used on both paths, but realtime currently observes callback
+wall time while sync observes VAD/word ends. Realtime can configure its timeout per session; WALs do not
 carry that setting, so sync uses the default. Shared, photo-bearing and user-curated
 records remain separate from automatic bridges. This change neither uses own-voice
 labels nor debounces LLM work.
@@ -120,5 +120,7 @@ use ordinary temporal assignment; retry-lineage deletion fences remain intact.
 Appending chunks keeps the existing sync conversation ID; genuine bridges retain redirects.
 Known limitation: different existing live target IDs can still split one continuous
 recording. Sync cannot bridge live-owned targets while sockets may write to them.
-The realtime follow-up must reuse the in-progress conversation on reconnect inside
-the continuity window, so clients keep one ID, and reap abandoned empty stubs.
+Realtime reconnects with the same durable origin now reuse a compatible in-progress
+continuation inside the window without rebinding a completed original. Expired empty
+continuations are reaped through content/lock/revision fences on reconnect. Historical
+distinct targets and anonymous cross-device discovery remain separate follow-ups.
