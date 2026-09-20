@@ -9,7 +9,9 @@ import os
 import re
 import time
 import secrets
-from urllib.parse import urlparse
+import html
+import json
+from urllib.parse import urlparse, quote
 from fastapi import FastAPI, Request, HTTPException, Query
 try:
     from fastapi import Depends
@@ -884,7 +886,8 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={quote(uid, safe='')}"
+        safe_auth_url = html.escape(auth_url, quote=True)
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -899,7 +902,7 @@ async def root(uid: str = Query(None)):
                     <h1>GitHub Issues</h1>
                     <p style="font-size: 18px;">Create and manage GitHub issues through Omi chat</p>
 
-                    <a href="{auth_url}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px;">
+                    <a href="{safe_auth_url}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px;">
                         Connect GitHub Account
                     </a>
 
@@ -973,18 +976,23 @@ async def root(uid: str = Query(None)):
         key: (value[:10] + "...") if value else ""
         for key, value in agent_api_keys.items()
     }
-    provider_labels_js = "{" + ",".join(
-        [f'"{key}":"{meta["label"]}"' for key, meta in PROVIDERS.items()]
-    ) + "}"
-    provider_keys_js = "{" + ",".join(
-        [f'"{key}":"{value}"' for key, value in masked_keys_by_provider.items()]
-    ) + "}"
+    provider_labels_js = json.dumps(
+        {key: meta["label"] for key, meta in PROVIDERS.items()}
+    ).replace('</', '<\\/')  # '\/' keeps a raw '</script>' out of the inline <script> block
+    provider_keys_js = json.dumps(masked_keys_by_provider).replace('</', '<\\/')  # keys and masked values are user-derived strings
+
+    safe_username = html.escape(github_username)
+    safe_masked_agent_key = html.escape(masked_agent_key, quote=True)
+    safe_uid_json = json.dumps(uid).replace('</', '<\\/')  # '\/' keeps a raw '</script>' out of the inline <script> block
 
     repo_options = ""
     for repo in repos:
-        selected_attr = 'selected' if repo['full_name'] == selected_repo else ''
+        repo_name = repo.get('full_name', '')
+        selected_attr = 'selected' if repo_name == selected_repo else ''
         privacy = "Private" if repo.get('private') else "Public"
-        repo_options += f'<option value="{repo["full_name"]}" {selected_attr}>{repo["full_name"]} ({privacy})</option>'
+        safe_name = html.escape(repo_name)
+        safe_val = html.escape(repo_name, quote=True)
+        repo_options += f'<option value="{safe_val}" {selected_attr}>{safe_name} ({privacy})</option>'
 
     return HTMLResponse(content=f"""
     <html>
@@ -1000,7 +1008,7 @@ async def root(uid: str = Query(None)):
                 <div class="card" style="margin-top: 20px;">
                     <h2>Default Repository</h2>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 8px; color: #8b949e;">
-                        Logged in as <span class="username">@{github_username}</span>
+                        Logged in as <span class="username">@{safe_username}</span>
                     </p>
                     <p style="text-align: left; font-size: 14px; margin-bottom: 16px;">
                         Issues will be created here by default:
@@ -1038,7 +1046,7 @@ async def root(uid: str = Query(None)):
                            id="agentKey"
                            placeholder="API key for selected provider"
                            style="width: 100%; padding: 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 14px; margin-bottom: 12px;"
-                           value="{masked_agent_key}">
+                           value="{safe_masked_agent_key}">
 
                     <div style="display: flex; gap: 8px;">
                         <button class="btn btn-secondary" onclick="saveAgentProvider()">
@@ -1115,6 +1123,9 @@ async def root(uid: str = Query(None)):
             </div>
 
             <script>
+                const CURRENT_UID = {safe_uid_json};
+                const ENCODED_UID = encodeURIComponent(CURRENT_UID);
+
                 async function updateRepo() {{
                     const select = document.getElementById('repoSelect');
                     const repo = select.value;
@@ -1125,7 +1136,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/update-repo?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/update-repo?uid=' + ENCODED_UID + '&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
 
@@ -1145,7 +1156,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Refresh your repository list from GitHub?')) return;
 
                     try {{
-                        const response = await fetch('/refresh-repos?uid={uid}', {{
+                        const response = await fetch('/refresh-repos?uid=' + ENCODED_UID, {{
                             method: 'POST'
                         }});
 
@@ -1172,7 +1183,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/check-repo-access?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/check-repo-access?uid=' + ENCODED_UID + '&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -1206,7 +1217,7 @@ async def root(uid: str = Query(None)):
                 async function saveAgentProvider() {{
                     const provider = getSelectedProvider();
                     try {{
-                        const response = await fetch('/save-agent-provider?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/save-agent-provider?uid=' + ENCODED_UID + '&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -1232,7 +1243,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
+                        await fetch('/save-agent-key?uid=' + ENCODED_UID + '&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
                             method: 'POST'
                         }});
 
@@ -1247,7 +1258,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        await fetch('/delete-agent-key?uid=' + ENCODED_UID + '&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
 
@@ -1279,7 +1290,7 @@ async def root(uid: str = Query(None)):
                                 'Content-Type': 'application/json'
                             }},
                             body: JSON.stringify({{
-                                uid: '{uid}',
+                                uid: CURRENT_UID,
                                 prompt,
                                 provider,
                                 repo,
@@ -1418,6 +1429,8 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
 
+        safe_username = html.escape(github_username)
+        encoded_uid = quote(uid, safe='')
         return HTMLResponse(
             content=f"""
             <html>
@@ -1434,14 +1447,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your GitHub account <strong>@{github_username}</strong> is now linked
+                                Your GitHub account <strong>@{safe_username}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(repos)}</strong> {('repository' if len(repos) == 1 else 'repositories')}
                             </p>
                         </div>
 
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={encoded_uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings
                         </a>
 
@@ -1464,6 +1477,8 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        safe_error = html.escape(str(e))
+        encoded_uid = quote(uid, safe='') if uid else ""
         return HTMLResponse(
             content=f"""
             <html>
@@ -1475,8 +1490,8 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication: {safe_error}</p>
+                            <a href="/auth?uid={encoded_uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
