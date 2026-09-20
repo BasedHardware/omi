@@ -838,7 +838,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
         pusher_enabled=True,
         onboarding_handler=None,
         send_event=lambda _event: None,
-        speakers=SimpleNamespace(drain=no_op),
+        speakers=SimpleNamespace(drain=no_op, tasks=set()),
         complete_live_transcription=lambda: delivered.append(True),
     )
     processor = object.__new__(TranscriptProcessor)

@@ -18,6 +18,7 @@ calls and drives the real process_pending. No patching and no sys.modules mutati
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
@@ -44,6 +45,7 @@ class _Host:
         }
         self.waited: list[float] = []
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         self.waited.append(seconds)
@@ -241,6 +243,7 @@ class _ResumeHost:
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
         self.calls: list[tuple] = []
         self._existing = existing_conversation
 
@@ -332,6 +335,7 @@ class _CreateConversationHost:
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
         self.calls: list[tuple] = []
         self._existing = existing_conversation
         self._conversation_snapshot = conversation_snapshot
@@ -378,6 +382,7 @@ async def test_fresh_server_generated_id_skips_the_existence_read():
     create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
     assert len(create_calls) == 1, f'expected the new-conversation path to run, got {host.calls}'
     assert host.state.current_conversation_id is not None
+    host.speakers.refresh_for_conversation.assert_awaited_once_with(host.state.current_conversation_id)
 
 
 async def test_rollover_generation_skips_the_existence_read():

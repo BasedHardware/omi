@@ -213,8 +213,17 @@ def conversations_db():
         "utils.conversations.transcript_hash",
         os.path.join(str(_BACKEND), "utils", "conversations", "transcript_hash.py"),
     )
+    # Receipt policy is stdlib + TranscriptSegment: load it against the real
+    # models.* graph before the stub block, then install the real module. An
+    # AutoMock here would hide apply_manual_assignments / remap_absorbed_receipt
+    # from database.conversations.
+    manual_assignments_real = load_module_fresh(
+        "utils.manual_speaker_assignments",
+        os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
+    )
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
+    fakes["utils.manual_speaker_assignments"] = manual_assignments_real
 
     with stub_modules(fakes):
         module = load_module_fresh(
