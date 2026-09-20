@@ -5,7 +5,7 @@ SQLite database. It reads saved JSON exports, makes no network requests,
 computes completion percentages, and normalises timestamps to UTC text so SQLite
 date and time functions work seamlessly.
 
-You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
+You need Python 3.10+ and an authenticated `omi-cli` for the initial export. The `python -m sqlite3` interactive shell examples below require Python 3.12+.
 
 Export tracked goals:
 
