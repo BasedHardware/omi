@@ -1233,6 +1233,11 @@ checks:
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
+  - id: shopify-robustness-and-null-guards-tests
+    command: ["python3", "plugins/omi-shopify-app/test_robustness_and_null_guards.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15122: guard null analytics metrics, list error responses, and discount code attributes against unhandled TypeError and AttributeError"
   - id: hive-app-tests
     command: ["python3", "plugins/omi-hive-app/test_main.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]

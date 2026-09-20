@@ -20,6 +20,11 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # Load test harness from test_limit_inputs
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_limit_inputs import mock_request, shopify
@@ -282,6 +287,18 @@ class TestShopifyRobustnessAndNullGuards(unittest.TestCase):
             res = asyncio.run(shopify.tool_create_order(req))
             self.assertIsNone(res.error)
             self.assertIn("Order Created Successfully", res.result)
+
+    def test_shopify_api_request_stringifies_list_errors(self):
+        mock_resp = Mock()
+        mock_resp.status_code = 422
+        mock_resp.content = b'{"errors": ["Draft order calculating", "Inventory unavailable"]}'
+        mock_resp.json.return_value = {"errors": ["Draft order calculating", "Inventory unavailable"]}
+
+        with patch.object(shopify.requests, "get", return_value=mock_resp, create=True):
+            res = shopify.shopify_api_request("user-1", "GET", "/test.json")
+            self.assertIn("error", res)
+            self.assertIsInstance(res["error"], str)
+            self.assertEqual(res["error"], "Draft order calculating, Inventory unavailable")
 
 
 if __name__ == "__main__":

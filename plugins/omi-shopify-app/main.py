@@ -122,7 +122,11 @@ def shopify_api_request(
         elif response.status_code >= 400:
             error_data = response.json() if response.content else {}
             error_msg = error_data.get("errors", f"API error: {response.status_code}")
-            if isinstance(error_msg, dict):
+            if isinstance(error_msg, list):
+                error_msg = ", ".join(str(e) for e in error_msg)
+            elif isinstance(error_msg, dict):
+                error_msg = str(error_msg)
+            elif not isinstance(error_msg, str):
                 error_msg = str(error_msg)
             return {"error": error_msg}
         
