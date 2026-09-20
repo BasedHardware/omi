@@ -754,7 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "פעולת לחיצה כפולה",
-    "tripleTap": "לחיצה משולשת",
+    "tripleTap": "לחץ משולש",
     "tripleTapAction": "פעולת לחיצה משולשת",
     "singleTapAction": "פעולת לחיצה בודדת",
     "@doubleTapAction": {
