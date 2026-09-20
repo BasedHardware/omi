@@ -1,3 +1,4 @@
+import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -18,7 +19,6 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
@@ -1789,97 +1789,88 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               );
             }
 
-            return getTranscriptWidget(
-              false,
-              segments,
-              photos,
-              null,
-              conversationId: conversation.id,
-              horizontalMargin: false,
-              topMargin: false,
-              canDisplaySeconds: provider.canDisplaySeconds,
-              isConversationDetail: true,
-              bottomMargin: 150,
-              searchQuery: widget.searchQuery,
-              currentResultIndex: widget.currentResultIndex,
-              onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-              onSegmentTap: widget.onSegmentTap,
-              onEditSegmentText: (segmentIndex) {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (!connectivityProvider.isConnected) {
-                  ConnectivityProvider.showNoInternetDialog(context);
-                  return;
-                }
-                final segments = provider.conversation.transcriptSegments;
-                final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
-                    context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
-                PlatformManager.instance.analytics.editSegmentTextStarted();
-                bool saved = false;
-                showEditSegmentBottomSheet(
-                  context,
-                  segment: segment,
-                  speakerName: speakerName,
-                  onSave: (newText) {
-                    saved = true;
-                    PlatformManager.instance.analytics.editSegmentTextSaved();
-                    provider.saveEditingSegmentText(segmentIndex, newText);
-                  },
-                  onDismissed: () {
-                    if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
-                  },
-                );
-              },
-              editSegment: (segmentId, speakerId) {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (!connectivityProvider.isConnected) {
-                  ConnectivityProvider.showNoInternetDialog(context);
-                  return;
-                }
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.black,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-                  builder: (context) {
-                    return Consumer<PeopleProvider>(
-                      builder: (context, peopleProvider, child) {
-                        return NameSpeakerBottomSheet(
-                          speakerId: speakerId,
-                          segmentId: segmentId,
-                          segments: provider.conversation.transcriptSegments,
-                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-                            final target = provider.conversation;
-                            final finalPersonId = personId.isEmpty
-                                ? (await peopleProvider.createPersonProvider(personName))?.id
-                                : personId;
-                            if (finalPersonId == null || finalPersonId.isEmpty) return false;
-                            final saved = await assignBulkConversationTranscriptSegments(
-                              target.id,
-                              segmentIds,
-                              isUser: finalPersonId == 'user',
-                              personId: finalPersonId == 'user' ? null : finalPersonId,
-                              speakerId: applyToSpeaker ? speakerId : null,
-                            );
-                            if (!saved) return false;
-                            for (final segment in target.transcriptSegments) {
-                              if (applyToSpeaker ? segment.speakerId == speakerId : segmentIds.contains(segment.id)) {
-                                segment.isUser = finalPersonId == 'user';
-                                segment.personId = segment.isUser ? null : finalPersonId;
-                              }
-                            }
-                            provider.toggleEditSegmentLoading(false);
-                            return true;
-                          },
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            );
+            return Column(children: [
+              SpeakerSummaryAction(provider: provider),
+              Expanded(
+                  child: getTranscriptWidget(
+                false,
+                segments,
+                photos,
+                null,
+                conversationId: conversation.id,
+                horizontalMargin: false,
+                topMargin: false,
+                canDisplaySeconds: provider.canDisplaySeconds,
+                isConversationDetail: true,
+                bottomMargin: 150,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+                onSegmentTap: widget.onSegmentTap,
+                onEditSegmentText: (segmentIndex) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  final segments = provider.conversation.transcriptSegments;
+                  final segment = segments[segmentIndex];
+                  final person =
+                      segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                  final speakerName = person?.name ??
+                      context.l10n
+                          .speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+                  PlatformManager.instance.analytics.editSegmentTextStarted();
+                  bool saved = false;
+                  showEditSegmentBottomSheet(
+                    context,
+                    segment: segment,
+                    speakerName: speakerName,
+                    onSave: (newText) {
+                      saved = true;
+                      PlatformManager.instance.analytics.editSegmentTextSaved();
+                      provider.saveEditingSegmentText(segmentIndex, newText);
+                    },
+                    onDismissed: () {
+                      if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
+                    },
+                  );
+                },
+                editSegment: (segmentId, speakerId) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.black,
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                    builder: (context) {
+                      return Consumer<PeopleProvider>(
+                        builder: (context, peopleProvider, child) {
+                          return NameSpeakerBottomSheet(
+                            speakerId: speakerId,
+                            segmentId: segmentId,
+                            segments: provider.conversation.transcriptSegments,
+                            onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+                              final targetId = provider.conversation.id;
+                              final finalPersonId = personId.isEmpty
+                                  ? (await peopleProvider.createPersonProvider(personName))?.id
+                                  : personId;
+                              if (finalPersonId == null || finalPersonId.isEmpty) return false;
+                              return provider.assignSpeaker(segmentIds, finalPersonId,
+                                  speakerId: applyToSpeaker ? speakerId : null, expectedConversationId: targetId);
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              )),
+            ]);
           },
         ),
       ),
