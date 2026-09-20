@@ -657,8 +657,24 @@ def _delete_conversation_and_related_data(
         raise
 
     try:
-        # Delete action items from standalone collection
+        # Delete action items from standalone collection. Read them first: a deleted
+        # row can still own a client-scheduled reminder, and the client only cancels
+        # it on the deletion data message (#5085), so the merge has to send one per
+        # open dated task, like the conversation delete path does.
+        source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+
+        from utils.notifications import sync_action_item_reminder
+
+        for item in source_items:
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=item['id'],
+                    description='',
+                    completed=True,
+                    due_at=None,
+                )
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
 
