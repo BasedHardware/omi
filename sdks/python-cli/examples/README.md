@@ -25,6 +25,7 @@
 * [`quickstart.id.md`](quickstart.id.md) — panduan mulai cepat omi-cli dalam
   bahasa Indonesia (Indonesian Quickstart).
 * [`quickstart.da.md`](quickstart.da.md) — dansk hurtigstartguide til omi-cli (Danish Quickstart).
+* [`quickstart.dsb.md`](quickstart.dsb.md) — Prědne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
 * [`quickstart.ar.md`](quickstart.ar.md) — دليل البدء السريع لـ omi-cli بالعربية (Arabic Quickstart).
