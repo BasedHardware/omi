@@ -196,7 +196,9 @@ class TranscriptProcessor:
         absorbed_into: Dict[str, str] = {}
         if segments:
             combined = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
-            conversation.transcript_segments, updated, removed = combined
+            conversation.transcript_segments = combined.segments
+            updated = combined.joined
+            removed = combined.removed_ids
             absorbed_into = combined.absorbed_into
             sort_transcript_segments_in_place(conversation.transcript_segments)
             speaker = self.host.speakers
@@ -297,7 +299,7 @@ class TranscriptProcessor:
         changed = [
             item
             for item in serialised
-            if before.get(item.get('id'))
+            if before.get(str(item.get('id') or ''))
             != (item.get('person_id'), item.get('is_user'), str(item.get('speaker_identity_status') or ''))
         ]
         if self.host.state.active and changed:
@@ -394,7 +396,7 @@ class TranscriptProcessor:
                 self.host.state.words_transcribed_since_last_record += len(
                     ' '.join(segment.text for segment in new_segments).split()
                 )
-            transcript_segments, _, _ = TranscriptSegment.combine_segments([], new_segments)
+            transcript_segments = TranscriptSegment.combine_segments([], new_segments).segments
             current = deserialize_conversation(data)
             result = await self._update_live_conversation(current, transcript_segments, photos, finished_at, started_at)
             rolled_over = False

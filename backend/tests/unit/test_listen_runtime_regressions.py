@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from models.transcript_segment import CombineSegmentsResult
 from routers.listen.contracts import ListenRequest
 from routers.listen.conversations import resolve_onboarding_provenance_marker
 from routers.listen.runtime import ListenSessionRuntime
@@ -799,7 +800,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
 
         @staticmethod
         def combine_segments(_existing, new_segments):
-            return new_segments, [], []
+            return CombineSegmentsResult(segments=new_segments, joined=[], removed_ids=[], absorbed_into={})
 
     state = SimpleNamespace(
         active=True,

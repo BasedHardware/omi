@@ -220,9 +220,9 @@ class TranscriptSegment(BaseModel):
         def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
             if child is None or not child.id:
                 return
-            removed_ids.append(cast(str, child.id))
+            removed_ids.append(child.id)
             if parent is not None and parent.id:
-                absorbed_into[cast(str, child.id)] = cast(str, parent.id)
+                absorbed_into[child.id] = parent.id
 
         # Combined
         def _merge(
