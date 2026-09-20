@@ -39,6 +39,8 @@ from db import (
 from models import Conversation, EndpointResponse
 from dropbox_client import DropboxClient
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 # ============== Configuration ==============
@@ -141,7 +143,7 @@ def refresh_access_token_full(refresh_token: str) -> Optional[Dict[str, Any]]:
                 "client_id": DROPBOX_APP_KEY,
                 "client_secret": DROPBOX_APP_SECRET,
             },
-            timeout=10,
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -461,6 +463,7 @@ async def auth_callback(
                 "client_id": DROPBOX_APP_KEY,
                 "client_secret": DROPBOX_APP_SECRET,
             },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:

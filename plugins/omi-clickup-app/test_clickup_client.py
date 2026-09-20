@@ -84,7 +84,7 @@ class FakeResponse:
 
 def route(responses):
     """Answer requests.get by URL; get_all_lists makes a variable number of calls."""
-    def get(url, headers=None, params=None):
+    def get(url, headers=None, params=None, timeout=None):
         return responses[url]
     return get
 
@@ -347,7 +347,7 @@ class CreateTaskTests(unittest.TestCase):
     def test_create_task_coerces_numeric_string_assignees_to_integers(self):
         captured_data = {}
 
-        def fake_post(url, headers=None, json=None):
+        def fake_post(url, headers=None, json=None, timeout=None):
             captured_data.update(json)
             return FakeResponse({
                 "id": "task_1",
@@ -370,7 +370,7 @@ class CreateTaskTests(unittest.TestCase):
     def test_create_task_ignores_non_numeric_assignees_without_raising(self):
         captured_data = {}
 
-        def fake_post(url, headers=None, json=None):
+        def fake_post(url, headers=None, json=None, timeout=None):
             captured_data.update(json)
             return FakeResponse({
                 "id": "task_2",
@@ -393,7 +393,7 @@ class CreateTaskTests(unittest.TestCase):
     def test_create_task_accepts_integer_and_numeric_string_due_dates(self):
         captured_data = {}
 
-        def fake_post(url, headers=None, json=None):
+        def fake_post(url, headers=None, json=None, timeout=None):
             captured_data.update(json)
             return FakeResponse({
                 "id": "task_3",
@@ -458,7 +458,7 @@ class CreateTaskTests(unittest.TestCase):
     def test_create_task_parses_iso_due_dates(self):
         captured_data = {}
 
-        def fake_post(url, headers=None, json=None):
+        def fake_post(url, headers=None, json=None, timeout=None):
             captured_data.update(json)
             return FakeResponse({
                 "id": "task_4",

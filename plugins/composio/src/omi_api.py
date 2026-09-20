@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from .db import get_pending_memories, update_memory_status, get_all_memories
 from .tools_auth import require_composio_tools_auth
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,7 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
 
     try:
         logger.info(f"Sending fact to OMI API - URL: {url}")
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         logger.info("Successfully created fact in OMI")
         return True
