@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,6 +36,7 @@ from models import (
     LinearUser,
     WorkflowState,
 )
+from linear_tools_auth import require_linear_tools_auth
 
 load_dotenv()
 
@@ -544,7 +545,7 @@ async def disconnect_linear(uid: str):
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/create_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_issue", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_create_issue(request: Request):
     """
     Create a new issue in Linear.
@@ -705,7 +706,7 @@ def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int =
     return val
 
 
-@app.post("/tools/list_my_issues", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_my_issues", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_list_my_issues(request: Request):
     """
     List issues assigned to the user.
@@ -788,7 +789,7 @@ async def tool_list_my_issues(request: Request):
         return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
 
 
-@app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_list_recent_issues(request: Request):
     """
     List recent issues in Linear workspace.
@@ -888,7 +889,7 @@ async def tool_list_recent_issues(request: Request):
         return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
 
 
-@app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_update_issue_status(request: Request):
     """
     Update the status of an issue.
@@ -986,7 +987,7 @@ async def tool_update_issue_status(request: Request):
         return ChatToolResponse(error=f"Failed to update issue: {str(e)}")
 
 
-@app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_search_issues(request: Request):
     """
     Search for issues in Linear.
@@ -1090,7 +1091,7 @@ async def tool_search_issues(request: Request):
         return ChatToolResponse(error=f"Search failed: {str(e)}")
 
 
-@app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_get_issue(request: Request):
     """
     Get details of a specific issue.
@@ -1167,7 +1168,7 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
 
 
-@app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_linear_tools_auth)])
 async def tool_add_comment(request: Request):
     """
     Add a comment to an issue.

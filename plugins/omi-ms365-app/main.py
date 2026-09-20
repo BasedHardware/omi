@@ -22,7 +22,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeSerializer
 
@@ -31,6 +31,7 @@ from services import auth, mail, profile
 from services import calendar as cal
 from services import teams as teams_svc
 from services import sharepoint as sp
+from ms365_tools_auth import require_ms365_tools_auth
 
 logging.basicConfig(level=get_settings().log_level)
 log = logging.getLogger("omi-ms365")
@@ -209,7 +210,7 @@ def tool_args(body: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in body.items() if key not in _ENVELOPE_KEYS}
 
 
-@app.post("/tools/{tool_name}")
+@app.post("/tools/{tool_name}", dependencies=[Depends(require_ms365_tools_auth)])
 async def tool_dispatch(tool_name: str, request: Request) -> Any:
     body: dict[str, Any] = {}
     try:

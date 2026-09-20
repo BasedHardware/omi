@@ -14,7 +14,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import Depends, FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
@@ -29,6 +29,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from google_calendar_tools_auth import require_google_calendar_tools_auth
 
 load_dotenv()
 
@@ -505,7 +506,7 @@ async def get_omi_tools_manifest():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/list_events", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_events", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_list_events(request: Request):
     """List upcoming calendar events."""
     try:
@@ -570,7 +571,7 @@ async def tool_list_events(request: Request):
         return ChatToolResponse(error=f"Failed to list events: {str(e)}")
 
 
-@app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_create_event(request: Request):
     """Create a new calendar event."""
     try:
@@ -684,7 +685,7 @@ async def tool_create_event(request: Request):
         return ChatToolResponse(error=f"Failed to create event: {str(e)}")
 
 
-@app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_get_event(request: Request):
     """Get details of a specific event."""
     try:
@@ -751,7 +752,7 @@ async def tool_get_event(request: Request):
         return ChatToolResponse(error=f"Failed to get event: {str(e)}")
 
 
-@app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_update_event(request: Request):
     """Update an existing calendar event."""
     try:
@@ -839,7 +840,7 @@ async def tool_update_event(request: Request):
         return ChatToolResponse(error=f"Failed to update event: {str(e)}")
 
 
-@app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_delete_event(request: Request):
     """Delete a calendar event."""
     try:
@@ -876,7 +877,7 @@ async def tool_delete_event(request: Request):
         return ChatToolResponse(error=f"Failed to delete event: {str(e)}")
 
 
-@app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_google_calendar_tools_auth)])
 async def tool_list_calendars(request: Request):
     """List all calendars available to the user."""
     try:

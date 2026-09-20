@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query, Form
+from fastapi import Depends, FastAPI, HTTPException, Request, Query, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -34,6 +34,7 @@ from models import (
     ShopifyAnalytics,
     ShopifyShop,
 )
+from shopify_tools_auth import require_shopify_tools_auth
 
 load_dotenv()
 
@@ -516,7 +517,7 @@ def _coerce_int(
     return max(minimum, min(parsed, maximum))
 
 
-@app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_get_analytics(request: Request):
     """
     Get store analytics.
@@ -831,7 +832,7 @@ async def tool_get_analytics(request: Request):
         return ChatToolResponse(error=f"Failed to get analytics: {str(e)}")
 
 
-@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_get_orders(request: Request):
     """
     Get recent orders.
@@ -905,7 +906,7 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
 
 
-@app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_get_order_details(request: Request):
     """
     Get details of a specific order.
@@ -1111,7 +1112,7 @@ def select_product_variant(product, sku=None):
     return None, format_variant_choices(product)
 
 
-@app.post("/tools/create_order", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_order", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_create_order(request: Request):
     """
     Create a new order.
@@ -1764,7 +1765,7 @@ async def tool_create_order(request: Request):
         return ChatToolResponse(error=f"Failed to create order: {str(e)}")
 
 
-@app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_get_customers(request: Request):
     """
     Get customers.
@@ -1823,7 +1824,7 @@ async def tool_get_customers(request: Request):
         return ChatToolResponse(error=f"Failed to get customers: {str(e)}")
 
 
-@app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shopify_tools_auth)])
 async def tool_create_customer(request: Request):
     """
     Create a new customer.

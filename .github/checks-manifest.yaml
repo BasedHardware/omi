@@ -1293,6 +1293,36 @@ checks:
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
+  - id: gcal-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_google_calendar_tools_auth.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every Google Calendar chat-tool route reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins exactly the six /tools/* routes as protected"
+  - id: hive-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-hive-app/test_hive_tools_auth.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every Hive chat-tool route reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins exactly the five /tools/* routes as protected"
+  - id: linear-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-linear-app/test_linear_tools_auth.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every Linear chat-tool route reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins exactly the seven /tools/* routes as protected"
+  - id: notion-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-notion-app/test_notion_tools_auth.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every Notion chat-tool route reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins exactly the eight /tools/* routes as protected"
+  - id: shopify-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-shopify-app/test_shopify_tools_auth.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every Shopify chat-tool route reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins exactly the six /tools/* routes as protected"
+  - id: ms365-tools-auth-guard-tests
+    command: ["python3", "plugins/omi-ms365-app/test_ms365_tools_auth.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the MS365 tool dispatcher reads uid from the request and acts on the user's stored OAuth token, so it must only be reachable by the trusted Omi backend; the shared-secret guard must fail closed when unconfigured (503) and reject missing/wrong tokens (401), and a route-wiring assertion pins the /tools/{tool_name} dispatcher as protected"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

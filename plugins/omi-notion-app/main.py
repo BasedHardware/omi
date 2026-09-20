@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import Depends, FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
@@ -31,6 +31,7 @@ from db import (
 )
 from models import ChatToolResponse
 from notion_content import encode_payload, plan_content_requests, title_items
+from notion_tools_auth import require_notion_tools_auth
 
 load_dotenv()
 
@@ -470,7 +471,7 @@ async def get_omi_tools_manifest():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/search", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/search", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_search(request: Request):
     """Search Notion workspace."""
     try:
@@ -530,7 +531,7 @@ async def tool_search(request: Request):
         return ChatToolResponse(error=f"Search failed: {str(e)}")
 
 
-@app.post("/tools/list_pages", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_pages", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_list_pages(request: Request):
     """List recently edited pages."""
     try:
@@ -574,7 +575,7 @@ async def tool_list_pages(request: Request):
         return ChatToolResponse(error=f"Failed to list pages: {str(e)}")
 
 
-@app.post("/tools/get_page", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_page", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_get_page(request: Request):
     """Get page details and content."""
     try:
@@ -646,7 +647,7 @@ async def tool_get_page(request: Request):
         return ChatToolResponse(error=f"Failed to get page: {str(e)}")
 
 
-@app.post("/tools/create_page", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_page", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_create_page(request: Request):
     """Create a new page in Notion."""
     try:
@@ -736,7 +737,7 @@ async def tool_create_page(request: Request):
         return ChatToolResponse(error="Failed to create page. Check Notion before retrying.")
 
 
-@app.post("/tools/update_page", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/update_page", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_update_page(request: Request):
     """Update a page's properties."""
     try:
@@ -797,7 +798,7 @@ async def tool_update_page(request: Request):
         return ChatToolResponse(error=f"Failed to update page: {str(e)}")
 
 
-@app.post("/tools/append_content", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/append_content", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_append_content(request: Request):
     """Append content to a page."""
     try:
@@ -832,7 +833,7 @@ async def tool_append_content(request: Request):
         return ChatToolResponse(error="Failed to append content. Check the page before retrying.")
 
 
-@app.post("/tools/list_databases", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/list_databases", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_list_databases(request: Request):
     """List databases in workspace."""
     try:
@@ -873,7 +874,7 @@ async def tool_list_databases(request: Request):
         return ChatToolResponse(error=f"Failed to list databases: {str(e)}")
 
 
-@app.post("/tools/query_database", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/query_database", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_notion_tools_auth)])
 async def tool_query_database(request: Request):
     """Query a database to get its entries."""
     try:

@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query, Form
+from fastapi import Depends, FastAPI, HTTPException, Request, Query, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,6 +29,7 @@ from models import (
     HiveTask,
     HiveAction,
 )
+from hive_tools_auth import require_hive_tools_auth
 
 load_dotenv()
 
@@ -631,7 +632,7 @@ def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int =
     return val
 
 
-@app.post("/tools/hive_get_projects", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/hive_get_projects", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_hive_tools_auth)])
 async def tool_hive_get_projects(request: Request):
     """
     Get user's Hive projects.
@@ -666,7 +667,7 @@ async def tool_hive_get_projects(request: Request):
         return ChatToolResponse(error=f"Failed to get projects: {str(e)}")
 
 
-@app.post("/tools/hive_get_tasks", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/hive_get_tasks", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_hive_tools_auth)])
 async def tool_hive_get_tasks(request: Request):
     """
     Get tasks from a Hive project.
@@ -725,7 +726,7 @@ async def tool_hive_get_tasks(request: Request):
         return ChatToolResponse(error=f"Failed to get tasks: {str(e)}")
 
 
-@app.post("/tools/hive_create_task", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/hive_create_task", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_hive_tools_auth)])
 async def tool_hive_create_task(request: Request):
     """
     Create a new task (Action) in Hive.
@@ -831,7 +832,7 @@ async def tool_hive_create_task(request: Request):
         return ChatToolResponse(error=f"Failed to create task: {str(e)}")
 
 
-@app.post("/tools/hive_search", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/hive_search", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_hive_tools_auth)])
 async def tool_hive_search(request: Request):
     """
     Search for tasks and projects in Hive.
@@ -874,7 +875,7 @@ async def tool_hive_search(request: Request):
         return ChatToolResponse(error=f"Search failed: {str(e)}")
 
 
-@app.post("/tools/hive_update_task_status", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/hive_update_task_status", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_hive_tools_auth)])
 async def tool_hive_update_task_status(request: Request):
     """
     Update the status of a task in Hive.
