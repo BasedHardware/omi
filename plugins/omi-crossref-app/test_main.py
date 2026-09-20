@@ -387,10 +387,23 @@ class EndpointTests(unittest.TestCase):
         res = _run(main.get_crossref_work(req))
         self.assertEqual(res.error, "Invalid DOI format. Example: 10.1038/nphys1170")
 
-    def test_get_crossref_work_path_traversal(self):
-        req = GetWorkInput(doi="10.1038/../traversal")
+    def test_get_crossref_work_invalid_host(self):
+        req = GetWorkInput(doi="https://malicious.com/10.1038/nphys1170")
         res = _run(main.get_crossref_work(req))
-        self.assertEqual(res.error, "Invalid DOI value.")
+        self.assertEqual(res.error, "Invalid DOI format. Example: 10.1038/nphys1170")
+
+    def test_get_crossref_work_dot_segments_quoted(self):
+        mock_data = {
+            "message": {
+                "title": ["Dot Segment Test"],
+                "DOI": "10.1038/a/../b",
+            }
+        }
+        with mock.patch.object(main, "crossref_get", return_value=mock_data) as mock_get:
+            req = GetWorkInput(doi="10.1038/a/../b")
+            res = _run(main.get_crossref_work(req))
+            self.assertIsNone(res.error)
+            mock_get.assert_called_once_with("/works/10.1038%2Fa%2F..%2Fb", {})
 
     def test_get_crossref_work_not_found_404(self):
         mock_resp = types.SimpleNamespace(status_code=404)
