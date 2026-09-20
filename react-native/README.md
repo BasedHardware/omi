@@ -118,11 +118,11 @@ explicitly labelled local fixtures. Use
 `data=empty` for successful empty reads. Neither mode makes account requests.
 This entry is not included in the PWA production build.
 
-Add `&tokens=hana` to apply the experimental Hana-inspired token treatment
-(alpha-based label hierarchy and separator alphas from
-`react-native/src/ui/hanaTokens.ts`; `@hana-ui/react` itself is not published).
-It changes colors only — layout, materials, and interaction defaults are
-untouched, and the flag defaults to off.
+Desktop Home's two-line brief uses loaded account data: the earliest incomplete
+task deadline, then task order, or the newest completed conversation when no
+open tasks are loaded. Counts are qualified when task pages are partial.
+Loading/unavailable reads do not claim a current priority or an empty day.
+This is local ranking, not an AI-generated summary or a calendar/weather feed.
 
 Desktop setup separates the AI assistant gallery from Connect data. Both are
 browsable catalogs; until adapters exist, they explicitly say Coming soon and

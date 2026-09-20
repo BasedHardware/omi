@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import type { ConfigEnv, ProxyOptions } from "vite";
 import {
   DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS,
@@ -114,6 +115,7 @@ export default ({
       ? { [LOCAL_PROXY_PREFIX]: serverProxy(env ?? process.env) }
       : undefined;
   return {
+    plugins: [tailwindcss()],
     define: { global: "globalThis" },
     build: {
       emptyOutDir: true,

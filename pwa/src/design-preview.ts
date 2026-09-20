@@ -1,8 +1,5 @@
 // Development-only component review. This does not mount the authenticated
 // orchestrator or persist setup. Vite's production entry remains index.html.
-// hanaPreviewTokens must stay the first import: it applies the experimental
-// ?tokens=hana overrides before component modules resolve their styles.
-import "./hanaPreviewTokens";
 import React, { useEffect, useRef, useState } from "react";
 import { AppRegistry, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -274,10 +271,6 @@ function Preview() {
           example
             ? "EXAMPLE DATA · Edits stay in this preview · "
             : "COMPONENT PREVIEW · "
-        }${
-          document.body.dataset.tokens === "hana"
-            ? "HANA TOKENS (EXPERIMENT) · "
-            : ""
         }${
           surface.startsWith("mobile")
             ? "Mobile browser preview · Simulated controls · Nothing sent or recorded"
