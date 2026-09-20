@@ -1736,6 +1736,25 @@ def resolve_transcription_allowance(
         return _closed('allowance_unavailable')
 
 
+INDETERMINATE_TRANSCRIPTION_REASONS = frozenset({'allowance_unavailable', 'usage_invalid'})
+
+
+def should_paywall_synced_conversation(uid: str, source: Optional[str] = None) -> bool:
+    """Whether a synced conversation must be stored behind the paid-plan lock.
+
+    :func:`resolve_transcription_allowance` fails closed so that an entitlement it could not
+    resolve never opens a billed STT socket. That posture does not transfer to a durable
+    lock: the sync path writes ``is_locked`` onto the stored conversation, and it is only
+    ever cleared by a subscription transition, so a Firestore blip during one sync would
+    paywall a paying user's conversation permanently. Lock only when the resolver actually
+    decided the user has no allowance, matching
+    :func:`resolve_conversation_processing_allowance`, which treats the same two reasons as
+    allowed (#12663).
+    """
+    allowance = resolve_transcription_allowance(uid, source)
+    return not allowance.managed and allowance.reason not in INDETERMINATE_TRANSCRIPTION_REASONS
+
+
 def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     """Whether the user may open Omi's managed STT right now — a thin wrapper over the one resolver.
 

@@ -154,7 +154,7 @@ def _patch_sync_pipeline(
     monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
     monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 1.25)
-    monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
+    monkeypatch.setattr(sync_router, "should_paywall_synced_conversation", lambda uid: False)
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
     monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
