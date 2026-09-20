@@ -81,6 +81,7 @@
 * [`quickstart.my.md`](quickstart.my.md) — omi-cli ဖြင့် စတင်အသုံးပြုခြင်း (Burmese Quickstart).
 * [`quickstart.ne.md`](quickstart.ne.md) — omi-cli सँग सुरुवात (Nepali Quickstart).
 * [`quickstart.no.md`](quickstart.no.md) — Kom i gang med omi-cli (Norwegian Quickstart).
+* [`quickstart.nv.md`](quickstart.nv.md) — Áłtsé bee omi-cli (Navajo Quickstart).
 * [`quickstart.ps.md`](quickstart.ps.md) — د omi-cli سره لومړي ګامونه (Pashto Quickstart).
 * [`quickstart.sa.md`](quickstart.sa.md) — omi-cli संस्कृत-मार्गदर्शिका (Sanskrit Quickstart).
 * [`quickstart.si.md`](quickstart.si.md) — omi-cli සමඟ මූලික පියවර (Sinhala Quickstart).
