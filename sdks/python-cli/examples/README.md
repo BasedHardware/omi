@@ -70,6 +70,7 @@
 * [`quickstart.kk.md`](quickstart.kk.md) — omi-cli көмегімен алғашқы қадамдар (Kazakh Quickstart).
 * [`quickstart.km.md`](quickstart.km.md) — ជំហានដំបូងជាមួយ omi-cli (Khmer Quickstart).
 * [`quickstart.kok.md`](quickstart.kok.md) — omi-cli कोंकणी मार्गदर्शक (Konkani Quickstart).
+* [`quickstart.krl.md`](quickstart.krl.md) — Enzimäzet azkelet omi-clin kera (Karelian Quickstart).
 * [`quickstart.ku.md`](quickstart.ku.md) — Gavên Yekem bi omi-cli re (Kurdish Quickstart).
 * [`quickstart.ky.md`](quickstart.ky.md) — omi-cli менен баштоо (Kyrgyz Quickstart).
 * [`quickstart.iu.md`](quickstart.iu.md) — ᓯᕗᓪᓕᖅᐹ omi-cli (Inuktitut Quickstart).
