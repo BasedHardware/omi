@@ -373,6 +373,17 @@ async def stream_transcribe(
             except asyncio.TimeoutError:
                 continue
 
+            if msg.get("type") == "websocket.disconnect":
+                # A client hanging up is an expected lifecycle event, not a
+                # server fault. Starlette delivers the hang-up as a normal
+                # message and then raises 'Cannot call "receive" once a
+                # disconnect message has been received.' if the loop re-arms,
+                # so every clean client disconnect used to end the session on
+                # this generic RuntimeError and log a v3/stream ERROR (prod
+                # 2026-09: ~42/30m). Break to the normal finalization path
+                # instead, like every other backend websocket receive loop.
+                break
+
             if "bytes" in msg:
                 segments = cast(List[Any], await session.feed(msg["bytes"]))
                 for seg in segments:
