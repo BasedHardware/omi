@@ -129,6 +129,45 @@ final class AppStateListeningTests: XCTestCase {
   }
 
   @MainActor
+  func testModeOffPillIsNotPausedAndToggleDoesNotWriteOverlay() {
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    defer { AssistantSettings.shared.audioRecordingMode = previousMode }
+    AssistantSettings.shared.audioRecordingMode = .off
+    let appState = AppState()
+    appState.setTranscriptionPaused(false, source: "test")
+
+    let liveOff = CaptureListeningLogic.ConversationListeningPill.state(
+      mode: appState.audioRecordingMode,
+      isPaused: appState.isTranscriptionPaused
+    )
+    XCTAssertEqual(liveOff, .off)
+    XCTAssertEqual(liveOff.title, "Off")
+    XCTAssertNotEqual(liveOff.title, "Paused")
+    XCTAssertEqual(
+      CaptureListeningLogic.ConversationListeningPill.state(mode: .always, isPaused: true).title,
+      "Paused")
+    XCTAssertEqual(
+      CaptureListeningLogic.ConversationListeningPill.state(mode: .always, isPaused: false).title,
+      "Listening")
+
+    let pausedOff = CaptureListeningLogic.ConversationListeningPill.state(mode: .off, isPaused: true)
+    XCTAssertEqual(pausedOff, .off)
+    XCTAssertEqual(pausedOff.title, "Off")
+
+    appState.toggleConversationListening(source: "ui")
+    XCTAssertFalse(appState.isTranscriptionPaused)
+    XCTAssertEqual(appState.audioRecordingMode, .off)
+    XCTAssertNil(UserDefaults.standard.object(forKey: .transcriptionPaused))
+    XCTAssertEqual(
+      CaptureListeningLogic.ConversationListeningPill.state(
+        mode: appState.audioRecordingMode,
+        isPaused: appState.isTranscriptionPaused
+      ),
+      .off
+    )
+  }
+
+  @MainActor
   func testPausedListeningDropsAudioFrames() {
     let appState = AppState()
     let frame = Data([1, 2, 3, 4])

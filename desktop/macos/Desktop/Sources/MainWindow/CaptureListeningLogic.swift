@@ -43,6 +43,38 @@ enum CaptureListeningLogic {
     mode != .off && !isPaused
   }
 
+  /// Control-bar pause/listen pill. Pause is not Off: Off is the recording mode
+  /// that stops capture; pause only gates STT while a mode is on.
+  enum ConversationListeningPill: Equatable {
+    case listening
+    case paused
+    case off
+
+    static func state(
+      mode: AssistantSettings.AudioRecordingMode,
+      isPaused: Bool
+    ) -> ConversationListeningPill {
+      if mode == .off { return .off }
+      return isPaused ? .paused : .listening
+    }
+
+    var title: String {
+      switch self {
+      case .listening: return "Listening"
+      case .paused: return "Paused"
+      case .off: return "Off"
+      }
+    }
+
+    var actionHelp: String {
+      switch self {
+      case .listening: return "Pause conversation listening"
+      case .paused: return "Resume conversation listening"
+      case .off: return "Conversation listening is off"
+      }
+    }
+  }
+
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {
     AssistantSettings.AudioRecordingMode(rawValue: raw) ?? .onlyMeetings
   }

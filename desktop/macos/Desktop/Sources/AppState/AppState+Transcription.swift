@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 extension AppState {
   func toggleConversationListening(source: String = "ui") {
+    guard audioRecordingMode != .off else { return }
     setTranscriptionPaused(!isTranscriptionPaused, source: source)
   }
 

@@ -1582,12 +1582,17 @@ struct FloatingControlBarView: View {
   /// ambient status channel at this size: voice-response gradient wins,
   /// then the aggregate subagent color, then neutral gray.
   private func compactCircleView(agentGroup: NotchAgentStatusGroup?) -> some View {
-    Button {
+    let pill = conversationListeningPill
+    return Button {
       appState.toggleConversationListening(source: "ui")
     } label: {
       HStack(spacing: OmiSpacing.xs) {
         Circle()
-          .fill(appState.isConversationListening ? Ink.listeningGreen : PageGlass.warning)
+          .fill(
+            pill == .listening
+              ? Ink.listeningGreen
+              : pill == .paused ? PageGlass.warning : Color.white.opacity(0.35)
+          )
           .frame(width: 6, height: 6)
         RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
           .fill(compactPillFill(agentGroup: agentGroup))
@@ -1629,23 +1634,28 @@ struct FloatingControlBarView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .help(appState.isConversationListening ? "Listening" : "Paused")
+    .disabled(pill == .off)
+    .help(pill.title)
     .omiAnimation(.easeInOut(duration: 0.18), value: state.isVoiceResponseGlowActive)
   }
 
   private var listeningStatusButton: some View {
-    let isListening = appState.isConversationListening
+    let pill = conversationListeningPill
     return Button {
       appState.toggleConversationListening(source: "ui")
     } label: {
       HStack(spacing: OmiSpacing.xxs) {
         Circle()
-          .fill(isListening ? Ink.listeningGreen : PageGlass.warning)
+          .fill(
+            pill == .listening
+              ? Ink.listeningGreen
+              : pill == .paused ? PageGlass.warning : Color.white.opacity(0.35)
+          )
           .frame(width: 6, height: 6)
-        Image(systemName: isListening ? "ear.fill" : "ear.slash.fill")
+        Image(systemName: pill == .listening ? "ear.fill" : "ear.slash.fill")
           .scaledFont(size: 10, weight: .semibold)
           .foregroundColor(.white.opacity(0.9))
-        Text(isListening ? "Listening" : "Paused")
+        Text(pill.title)
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(.white)
       }
@@ -1655,7 +1665,12 @@ struct FloatingControlBarView: View {
       .cornerRadius(OmiChrome.stripRadius)
     }
     .buttonStyle(.plain)
-    .help(isListening ? "Pause conversation listening" : "Resume conversation listening")
+    .disabled(pill == .off)
+    .help(pill.actionHelp)
+  }
+
+  private var conversationListeningPill: CaptureListeningLogic.ConversationListeningPill {
+    .state(mode: appState.audioRecordingMode, isPaused: appState.isTranscriptionPaused)
   }
 
   private func compactPillFill(agentGroup: NotchAgentStatusGroup?) -> LinearGradient {
