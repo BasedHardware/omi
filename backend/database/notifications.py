@@ -109,9 +109,23 @@ def get_user_time_zone(uid: str) -> Optional[str]:
 
 
 def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
-    """Persist the client's reported IANA timezone on the user document."""
+    """Persist the client's reported IANA timezone on the user document.
+
+    Unlike a bare ``time_zone`` write, this fills in whichever daily-summary
+    schedule fields are still absent, exactly like ``save_token`` does. The
+    module invariant above requires ``users/{uid}`` to carry
+    ``daily_summary_enabled`` and ``daily_summary_hour_local`` as soon as a
+    ``time_zone`` exists, because the indexed daily-summary recipient query
+    selects on all three. A user who never registered an FCM token (web only,
+    or iOS without an APNs token) is only ever written here, so omitting the
+    defaults left them permanently unselectable. Present values, including an
+    explicit ``False`` or hour ``0``, are never overwritten.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    client.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    user_ref = client.collection('users').document(uid)
+    user_doc = user_ref.get()
+    user_data = _typed_doc(user_doc) if getattr(user_doc, "exists", False) else {}
+    user_ref.set({'time_zone': time_zone, **daily_summary_schedule_defaults(user_data)}, merge=True)
 
 
 def resolve_user_timezone(uid: str) -> str:
