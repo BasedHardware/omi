@@ -1263,6 +1263,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14270: tool_search_issues bound a raw body.get('limit', 5) to a non-nullable $first: Int!, so the null the backend sends for an omitted limit failed both the searchIssues query and the issues(filter:) fallback; the limit must run through coerce_limit()"
+  - id: dropbox-token-refresh-and-tools-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_token_refresh_and_tools.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
