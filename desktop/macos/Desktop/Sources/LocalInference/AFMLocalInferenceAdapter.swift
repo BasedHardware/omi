@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 #if canImport(FoundationModels)
   import FoundationModels
@@ -106,6 +107,10 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
     throw LocalInferenceError.capabilityUnavailable("tool_loop")
   }
 
+  /// Nonisolated on purpose: `mapFrameworkError` is a static called from the
+  /// generation path, so it cannot reach a main-actor diagnostics manager.
+  static let engineLog = Logger(subsystem: "com.omi.desktop", category: "local-inference")
+
   static func mapUnknownError(_ error: Error) -> LocalInferenceError {
     #if canImport(FoundationModels)
       if #available(macOS 26.0, *) {
@@ -130,6 +135,21 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
     @available(macOS 26.0, *)
     static func mapFrameworkError(_ error: Error) -> LocalInferenceError {
       if #available(macOS 27.0, *) {
+        // The pinned Xcode 26.6 toolchain cannot name `LanguageModelError`, and
+        // `#if compiler` is forbidden (check-desktop-compiler-gates.py), so the
+        // typed mapping below is unreachable on the OS users actually run.
+        //
+        // Discarding the error entirely cost three diagnostic runs and two wrong
+        // root causes: the real message was
+        // "The session's transcript exceeded the model's context size."
+        // reported as the same `session_failed` as every other failure.
+        //
+        // `NSError` bridging needs no framework type, so the description survives
+        // the pin. The reason stays low-cardinality; the detail goes to diagnostics.
+        let ns = error as NSError
+        Self.engineLog.error(
+          "AFM generation failed: domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) message=\(ns.localizedDescription, privacy: .public)"
+        )
         return .engineFailed("session_failed")
       }
       return mapDeprecatedGenerationError(error)

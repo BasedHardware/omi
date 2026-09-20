@@ -91,6 +91,7 @@ from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     MAX_SESSION_DURATION_S,
@@ -413,6 +414,12 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event(
+            'chat_message_sent',
+            request=request,
+            uid=uid,
+            outcome='quota_exceeded',
+        )
         return StreamingResponse(_quota_exceeded_stream(), media_type="text/event-stream")
 
     compat_app_id = app_id or plugin_id
@@ -473,6 +480,7 @@ def send_message(
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
             yield f"done: {encoded}\n\n"
 
+        record_product_event('chat_message_sent', request=request, uid=uid, outcome='error')
         return StreamingResponse(_quota_accounting_unavailable_stream(), media_type="text/event-stream")
 
     if chat_session:
@@ -586,6 +594,7 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
+        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -726,6 +735,7 @@ def send_message(
         failure_class='provider_error',
         missing_success_class='empty_answer',
     )
+    record_product_event('chat_message_sent', request=request, uid=uid, outcome='ok')
     return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 
@@ -1870,6 +1880,7 @@ def upload_file_chat(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
     thumbs_name = []
+    thumb_source_by_name = {}
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1886,7 +1897,10 @@ def upload_file_chat(
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
-                thumbs_name.append(thumb_name)
+                thumbnail_path = result.get("thumbnail", "")
+                if thumbnail_path:
+                    thumbs_name.append(thumbnail_path)
+                    thumb_source_by_name[thumb_name] = thumbnail_path
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1906,12 +1920,12 @@ def upload_file_chat(
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            source_path = thumb_source_by_name.get(fc.thumb_name, "")
+            thumb_path = thumbs_path.get(source_path, "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            if thumb_file.exists():
-                thumb_file.unlink()
+            if source_path:
+                Path(source_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
@@ -1938,6 +1952,7 @@ def upload_file_chat_v1(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
     thumbs_name = []
+    thumb_source_by_name = {}
     files_chat = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
@@ -1954,7 +1969,10 @@ def upload_file_chat_v1(
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
-                thumbs_name.append(thumb_name)
+                thumbnail_path = result.get("thumbnail", "")
+                if thumbnail_path:
+                    thumbs_name.append(thumbnail_path)
+                    thumb_source_by_name[thumb_name] = thumbnail_path
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1974,11 +1992,12 @@ def upload_file_chat_v1(
         for fc in files_chat:
             if not fc.is_image():
                 continue
-            thumb_path = thumbs_path.get(fc.thumb_name, "")
+            source_path = thumb_source_by_name.get(fc.thumb_name, "")
+            thumb_path = thumbs_path.get(source_path, "")
             fc.thumbnail = thumb_path
             # cleanup file thumb
-            thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if source_path:
+                Path(source_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]

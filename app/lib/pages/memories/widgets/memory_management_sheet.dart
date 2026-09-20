@@ -328,13 +328,15 @@ class MemoryManagementSheet extends StatelessWidget {
             child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
           ),
           TextButton(
-            onPressed: () {
-              provider.deleteAllMemories();
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final l10n = context.l10n;
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Close sheet
-              ScaffoldMessenger.of(context).showSnackBar(
+              final cleared = await provider.deleteAllMemories();
+              messenger.showSnackBar(
                 SnackBar(
-                  content: Text(context.l10n.memoryClearedSuccess),
+                  content: Text(cleared ? l10n.memoryClearedSuccess : l10n.somethingWentWrong),
                   backgroundColor: AppStyles.backgroundTertiary,
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,

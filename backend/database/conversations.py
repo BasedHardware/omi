@@ -488,7 +488,7 @@ def persist_processing_result_with_lifecycle(
 ) -> bool:
     """Merge a processor result into its conversation.
 
-    Only deletion is refused.  Lifecycle state is not: a discard is the system's
+    Deletion and stale sync transcript revisions are refused.  Lifecycle state is not: a discard is the system's
     own verdict that a conversation held nothing, and a status is bookkeeping
     about which generation ran, and every processor re-derives what it writes
     from the content in front of it.  Fencing on either stranded conversations a
@@ -505,8 +505,12 @@ def persist_processing_result_with_lifecycle(
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     transaction = db.transaction()
 
+    stale_sync_revision = False
+
     @firestore.transactional
     def _persist(transaction) -> bool:
+        nonlocal stale_sync_revision
+        stale_sync_revision = False
         write_data = copy.deepcopy(conversation_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
@@ -517,6 +521,13 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        # A processor that read before another sync append cannot replace that
+        # transcript or publish a summary derived from an obsolete revision.
+        if existing.get('sync_content_revision') is not None and (
+            write_data.get('sync_content_revision') != existing['sync_content_revision']
+        ):
+            stale_sync_revision = True
+            return False
 
         # Generated processing content never owns user-managed fields.
         # A null existing value means "never user-set" (stub docs dump None
@@ -546,7 +557,7 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = _persist(transaction)
-    if persisted:
+    if persisted or stale_sync_revision:
         _sync_conversation_search_index(uid, conversation_data['id'])
     else:
         # A processor result for a conversation whose owner is already gone:
@@ -2382,6 +2393,49 @@ def store_conversation_photos(
 # ********************************
 # ********** SYNCING *************
 # ********************************
+
+
+@set_data_protection_level(data_arg_name='incoming')
+def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
+    """Atomically choose, create or append a sync conversation across workers."""
+    from utils.sync.assignment import assign_in_transaction
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+
+    def decode(raw):
+        # Never turn a corrupt/encrypted transcript into [] and overwrite it.
+        result = copy.deepcopy(raw)
+        result['transcript_segments'] = _decode_transcript_segments_strict(
+            uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+        )
+        return result
+
+    @firestore.transactional
+    def assign(transaction):
+        def encode(payload):
+            return _prepare_conversation_for_write(payload, uid, level[0])
+
+        level = [incoming['data_protection_level']]
+
+        def decode_with_level(raw):
+            level[0] = raw.get('data_protection_level') or level[0]
+            return decode(raw)
+
+        return assign_in_transaction(
+            transaction,
+            user_ref,
+            incoming,
+            candidate_id=candidate_id,
+            target_id=target_id,
+            decode=decode_with_level,
+            encode=encode,
+            invalidate=_invalidate_client_processing,
+        )
+
+    result = run_transactional(client, assign)
+    _sync_conversation_search_index(uid, result[0]['id'])
+    return result
 
 
 def is_soft_deleted(conversation: Optional[dict]) -> bool:

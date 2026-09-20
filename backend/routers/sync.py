@@ -91,6 +91,8 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
+from utils.product_metrics import record_product_event, sanitize_app_build
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
 from utils.subscription import has_transcription_credits
 from utils.sync import playback as sync_playback
@@ -245,6 +247,12 @@ async def create_sync_capture_manifest(
         device.client_device_id,
         payload.conversation_id,
         claims,
+    )
+    record_product_event(
+        'sync_job_enqueued',
+        client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
+        app_build=sanitize_app_build(x_app_version),
+        uid=uid,
     )
     return SyncCaptureManifestResponse(manifest=manifest)
 
@@ -856,6 +864,7 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         # The one-time hard-revision-retirement cutover intentionally blocks
@@ -1193,9 +1202,15 @@ async def sync_local_files_v2(
 
             if dispatched:
                 try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='cloud_tasks').inc()
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='cloud_tasks', app_build=sync_app_build).inc()
                 except Exception:
                     pass
+                record_product_event(
+                    'sync_job_enqueued',
+                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
+                    app_build=sync_app_build,
+                    uid=uid,
+                )
             else:
                 # A lost Cloud Tasks acknowledgement is ambiguous: the named
                 # task may already exist and can be executing. Preserve every
@@ -1206,7 +1221,7 @@ async def sync_local_files_v2(
                     type(enqueue_error).__name__ if enqueue_error is not None else 'Exception',
                 )
                 try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='enqueue_uncertain').inc()
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='enqueue_uncertain', app_build=sync_app_build).inc()
                 except Exception:
                     pass
                 try:
@@ -1250,9 +1265,15 @@ async def sync_local_files_v2(
                     outcome='recovered',
                 )
                 try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline', app_build=sync_app_build).inc()
                 except Exception:
                     pass
+                record_product_event(
+                    'sync_job_enqueued',
+                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
+                    app_build=sync_app_build,
+                    uid=uid,
+                )
             elif byok_enabled:
                 record_fallback(
                     component='sync_dispatch',
@@ -1262,9 +1283,15 @@ async def sync_local_files_v2(
                     outcome='recovered',
                 )
                 try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline', app_build=sync_app_build).inc()
                 except Exception:
                     pass
+                record_product_event(
+                    'sync_job_enqueued',
+                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
+                    app_build=sync_app_build,
+                    uid=uid,
+                )
 
             # Inline work needs the same lease as Cloud Tasks. Without it, a
             # long healthy inline worker looks stale to a polling client and its

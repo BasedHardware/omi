@@ -8,6 +8,8 @@
   omi-cli 指南 (Traditional Chinese agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
+* [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
+  agents (French agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
@@ -16,6 +18,7 @@
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
@@ -27,6 +30,7 @@
 * [`quickstart.ar.md`](quickstart.ar.md) — دليل البدء السريع لـ omi-cli بالعربية (Arabic Quickstart).
 * [`quickstart.vi.md`](quickstart.vi.md) — hướng dẫn nhanh omi-cli bằng tiếng Việt (Vietnamese Quickstart).
 * [`quickstart.cs.md`](quickstart.cs.md) — český rychlý start pro omi-cli (Czech Quickstart).
+* [`quickstart.dz.md`](quickstart.dz.md) — omi-cli དང་འགོ་བཙུགས་ནི། (Dzongkha Quickstart).
 * [`quickstart.he.md`](quickstart.he.md) — מדריך התחלה מהירה של omi-cli בעברית (Hebrew Quickstart).
 * [`quickstart.fr.md`](quickstart.fr.md) — guide de démarrage rapide omi-cli en français (French Quickstart).
 * [`quickstart.de.md`](quickstart.de.md) — deutsche Schnellstartanleitung für omi-cli (German Quickstart).
@@ -57,6 +61,7 @@
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
+* [`quickstart.chr.md`](quickstart.chr.md) — ᎢᎬᏱ ᏗᏕᏲᏗ omi-cli (Cherokee Quickstart).
 * [`quickstart.hu.md`](quickstart.hu.md) — Első lépések az omi-cli használatával (Hungarian Quickstart).
 * [`quickstart.hy.md`](quickstart.hy.md) — Առաջին քայլերը omi-cli-ով (Armenian Quickstart).
 * [`quickstart.is.md`](quickstart.is.md) — Fyrstu skref með omi-cli (Icelandic Quickstart).
@@ -90,3 +95,4 @@
 * [`quickstart.zh-CN.md`](quickstart.zh-CN.md) — omi-cli 简体中文快速入门 (Simplified Chinese Quickstart).
 * [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — omi-cli 繁體中文快速入門 (Traditional Chinese Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
+* [`quickstart.bs.md`](quickstart.bs.md) — vodič za brzi početak rada s omi-cli (Bosnian Quickstart).
