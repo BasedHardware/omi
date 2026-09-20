@@ -6,7 +6,7 @@ from pathlib import Path
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
-LANGUAGES = ["hr", "lt", "sl", "et", "tl", "is", "eu", "gl"]
+LANGUAGES = ["lt", "sl", "eu", "gl"]
 
 
 def parse_agent_guide(path: Path):
