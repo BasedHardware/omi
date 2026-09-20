@@ -231,6 +231,22 @@ def test_legacy_wire_id_targets_the_same_stored_segment(world):
     assert saved['transcript_segments'][0]['person_id'] == 'new'
 
 
+def test_locked_conversation_and_all_selectors_invalidate_through_real_owner(world):
+    store, path, _ = world
+    store.rows[path]['is_locked'] = True
+    with pytest.raises(PermissionError):
+        db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    store.rows[path]['is_locked'] = False
+    for kwargs in (
+        dict(segment_index=0),
+        dict(segment_ids=['s1']),
+        dict(speaker_id=4),
+    ):
+        store.rows[path]['client_processing'] = {'structure': {'title': 'old'}}
+        db.assign_conversation_speaker('u', 'c', person_id='new', **kwargs)
+        assert store.rows[path]['client_processing'] is db.firestore.DELETE_FIELD
+
+
 def test_apply_returns_input_when_receipt_has_no_decisions():
     segments = [{'id': 's0', 'person_id': None, 'speaker_id': 0}]
     assert apply_manual_assignments(segments, {}) is segments

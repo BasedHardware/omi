@@ -1452,7 +1452,7 @@ def _assign_manual_speaker(
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:
-        raise HTTPException(status_code=403, detail=str(error)) from error
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)

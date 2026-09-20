@@ -64,6 +64,7 @@ def manual_assignment(
     else:
         by_id = {s.get('id'): i for i, s in enumerate(segments) if s.get('id')}
         indices = []
+        unresolved = []
         for target in segment_ids or []:
             index = by_id.get(target)
             if index is None and conversation.get('status') == 'completed' and target.startswith('#index:'):
@@ -71,9 +72,11 @@ def manual_assignment(
                 if number.isascii() and number.isdecimal() and int(number) < len(segments):
                     index = int(number)
             if index is None:
-                raise ValueError('Unresolved transcript segment')
-            if index not in indices:
+                unresolved.append(target)
+            elif index not in indices:
                 indices.append(index)
+        if unresolved:
+            raise ValueError('Unable to resolve transcript segment assignment target(s): ' + ', '.join(unresolved))
     if not indices:
         raise LookupError('Segment not found')
     receipt = dict(conversation.get('manual_speaker_assignments') or {})

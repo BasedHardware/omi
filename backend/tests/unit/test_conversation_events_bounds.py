@@ -473,9 +473,58 @@ def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
             router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
 
     assert exc.value.status_code == 409
+    assert 'Unable to resolve transcript segment assignment target(s): #index:99' == exc.value.detail
     assert segments[0].person_id == "old-person"
     assert update.call_count == 0
     assert background_tasks.tasks == []
+
+
+def _speaker_assign_handler(conv):
+    target = "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}"
+    for route in conv.router.routes:
+        if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
+            return route.endpoint
+    raise AssertionError("assign-speaker route is not registered")
+
+
+def test_locked_assign_routes_return_402_with_main_detail(router, monkeypatch):
+    def locked(*args, **kwargs):
+        raise PermissionError('Conversation is locked')
+
+    monkeypatch.setattr(router.conv.conversations_db, 'assign_conversation_speaker', locked)
+    convo, _ = _fake_conversation_with_segments(1, with_ids=True)
+    index_handler = _segment_assign_handler(router.conv)
+    speaker_handler = _speaker_assign_handler(router.conv)
+    with patch.object(router.conv, "deserialize_conversation", return_value=convo):
+        for call in (
+            lambda: index_handler("c1", 0, "is_user", value="true", uid="u1"),
+            lambda: speaker_handler("c1", 0, "person_id", value="person-9", uid="u1"),
+            lambda: router.conv.assign_segments_bulk(
+                "c1",
+                router.conv.BulkAssignSegmentsRequest(segment_ids=["segment-0"], assign_type="person_id", value="p"),
+                router.conv.BackgroundTasks(),
+                uid="u1",
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                call()
+            assert exc.value.status_code == 402
+            assert exc.value.detail == "A paid plan is required to access this conversation."
+
+
+@pytest.mark.parametrize(
+    'value,expected_user',
+    [('true', True), ('1', True), ('false', False), ('null', False), (None, False)],
+)
+def test_is_user_assign_parses_true_false_null_and_omitted(router, value, expected_user):
+    convo, segments = _fake_conversation_with_segments(1, with_ids=True)
+    handler = _segment_assign_handler(router.conv)
+    kwargs = dict(assign_type="is_user", uid="u1")
+    if value is not None:
+        kwargs['value'] = value
+    with patch.object(router.conv, "deserialize_conversation", return_value=convo):
+        handler("c1", 0, **kwargs)
+    assert segments[0].is_user is expected_user
 
 
 class _FakeActionItem:
