@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 import database.conversations as conversations_db
 import database.frame_requests as frame_requests_db
-from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 from utils.retrieval.frame_request_storage import (
     delete_frame_request_pixels_for_user,
     download_frame_request_pixels,
@@ -35,9 +34,21 @@ def delete_conversation_and_frame_evidence(
     uid: str,
     conversation_id: str,
     *,
-    delete_conversation: Callable[[str, str], object] = delete_conversation_with_sync_sources,
+    delete_conversation: Callable[[str, str], object] | None = None,
 ) -> None:
-    """Outbox objects before metadata deletion, then converge best-effort."""
+    """Outbox objects before metadata deletion, then converge best-effort.
+
+    The default deleter is ``delete_conversation_with_sync_sources``. Resolve it
+    lazily so this module stays off the merge/memory import graph: stubbed-import
+    tests that load ``routers.conversations`` (and therefore this module) do not
+    need a complete ``utils.memory.retraction_scope``.
+    """
+
+    deleter = delete_conversation
+    if deleter is None:
+        from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+
+        deleter = delete_conversation_with_sync_sources
 
     photo_storage_ids = [
         str(photo.get("storage_id"))
@@ -50,7 +61,7 @@ def delete_conversation_and_frame_evidence(
     )
     storage_ids = list(dict.fromkeys(photo_storage_ids + request_storage_ids))
     frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
-    delete_conversation(uid, conversation_id)
+    deleter(uid, conversation_id)
     for storage_id in storage_ids:
         try:
             delete_frame_request_pixels_for_user(uid, [storage_id])
