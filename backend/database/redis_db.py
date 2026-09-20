@@ -1438,6 +1438,35 @@ def check_tts_rate_limit(
         return -1, 0
 
 
+def check_tts_rate_limit_for_user(
+    uid: str,
+    char_count: int,
+    burst_limit: int = 50,
+    burst_window_secs: int = 60,
+    daily_char_limit: int = 10_000,
+) -> tuple[int, int]:
+    """check_tts_rate_limit with the user's own day resolved here.
+
+    resolve_user_timezone reads Firestore, so it must run inside the executor
+    this is handed to, never on the event loop of an async route.
+    """
+    from zoneinfo import ZoneInfo
+    from database.notifications import resolve_user_timezone
+
+    try:
+        tz = ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        tz = timezone.utc
+    return check_tts_rate_limit(
+        uid,
+        char_count,
+        burst_limit=burst_limit,
+        burst_window_secs=burst_window_secs,
+        daily_char_limit=daily_char_limit,
+        tz=tz,
+    )
+
+
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)

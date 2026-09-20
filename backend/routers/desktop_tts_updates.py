@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from zoneinfo import ZoneInfo
 from datetime import datetime, timezone
 from html import escape
 import hmac
@@ -11,7 +10,6 @@ from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from database import redis_db
-from database.notifications import resolve_user_timezone
 from database._client import get_firestore_client
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -194,12 +192,11 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     if not get_byok_key("openai"):
         status, _ = await run_blocking(
             critical_executor,
-            redis_db.check_tts_rate_limit,
+            redis_db.check_tts_rate_limit_for_user,
             uid,
             char_count=len(text),
             burst_limit=_TTS_BURST_PER_MINUTE,
             daily_char_limit=_TTS_DAILY_CHARS,
-            tz=ZoneInfo(resolve_user_timezone(uid)),
         )
         if status == -1:
             raise HTTPException(status_code=503, detail="TTS rate limiting is unavailable")

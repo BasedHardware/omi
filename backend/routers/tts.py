@@ -10,7 +10,6 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
   - 5,000 characters per single request (hard cap, 400)
 """
 
-from zoneinfo import ZoneInfo
 import logging
 import os
 from typing import Any, Callable, Dict, cast
@@ -20,7 +19,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from database import redis_db
-from database.notifications import resolve_user_timezone
 from models.tts import TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
@@ -90,13 +88,12 @@ async def tts_synthesize(
 
     status, retry_after = await run_blocking(
         critical_executor,
-        redis_db.check_tts_rate_limit,
+        redis_db.check_tts_rate_limit_for_user,
         uid,
         char_count=char_count,
         burst_limit=_TTS_BURST_PER_MINUTE,
         burst_window_secs=_TTS_BURST_WINDOW_SECS,
         daily_char_limit=_TTS_DAILY_CHAR_LIMIT,
-        tz=ZoneInfo(resolve_user_timezone(uid)),
     )
     if status == 1:
         logger.warning(f"tts_synthesize: burst rate limit exceeded uid={uid}")
