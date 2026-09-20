@@ -122,7 +122,7 @@ def generate_dashboard(items: List[Dict[str, Any]]) -> str:
     ]
 
     for g in active_goals:
-        title = g.get("title", "Untitled")
+        title = g.get("title", "Untitled").replace("|", "&#124;")
         g_type = g.get("goal_type", "numeric")
         current = g.get("current_value", 0)
         target = g.get("target_value", 0)
@@ -139,7 +139,7 @@ def generate_dashboard(items: List[Dict[str, Any]]) -> str:
             "| :--- | :--- | :--- | :--- |",
         ])
         for g in inactive_goals:
-            title = g.get("title", "Untitled")
+            title = g.get("title", "Untitled").replace("|", "&#124;")
             g_type = g.get("goal_type", "numeric")
             current = g.get("current_value", 0)
             target = g.get("target_value", 0)
