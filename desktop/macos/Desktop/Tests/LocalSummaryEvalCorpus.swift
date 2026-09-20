@@ -2092,18 +2092,35 @@ enum LocalSummaryEvalCorpus {
   /// Substring matching scored "Priya: release notes, Friday" as a miss against
   /// "Priya will cut the release notes by Friday", which made every recall number
   /// a lower bound under paraphrase — the exact thing a summarizer is supposed to do.
+  ///
+  /// Number-words and inflection are folded before the set is built: a model that
+  /// writes "18%" against a label of "eighteen percent", or "schedule" against
+  /// "schedules", is not a miss. NaturalLanguage's lemmatizer is not used; it
+  /// is not stable across macOS versions.
   static func contentWords(_ text: String) -> Set<String> {
     let stopwords: Set<String> = [
       "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "had", "has", "have", "he",
       "her", "his", "i", "in", "is", "it", "its", "of", "on", "or", "our", "she", "that", "the",
       "their", "them", "they", "this", "to", "was", "we", "were", "will", "with", "you", "your",
     ]
-    let cleaned = text.lowercased().map { $0.isLetter || $0.isNumber ? $0 : " " }
+    var cleaned = ""
+    cleaned.reserveCapacity(text.count)
+    for character in text.lowercased() {
+      if character == "%" {
+        cleaned.append(" percent ")
+      } else if character.isLetter || character.isNumber {
+        cleaned.append(character)
+      } else {
+        cleaned.append(" ")
+      }
+    }
+    let folded = foldNumberWords(cleaned.split(separator: " ").map(String.init))
     return Set(
-      String(cleaned)
-        .split(separator: " ")
-        .map(String.init)
-        .filter { $0.count > 1 && !stopwords.contains($0) }
+      folded
+        .map { token in token.allSatisfy(\.isNumber) ? token : conservativeStem(token) }
+        .filter { token in
+          !stopwords.contains(token) && (token.count > 1 || token.allSatisfy(\.isNumber))
+        }
     )
   }
 
@@ -2124,5 +2141,211 @@ enum LocalSummaryEvalCorpus {
 
   static func matches(label: String, produced: String) -> Bool {
     containment(label: label, produced: produced) >= matchThreshold
+  }
+
+  /// Whether `banned` is claimed by a single sentence or bullet of `produced`.
+  ///
+  /// Containment against a whole overview+sections body (~2,000 characters) is
+  /// how "the pricing experiment showed a clear winner" fired on a summary that
+  /// said the pricing test was flat: `pricing`, `experiments`, `showed`, and
+  /// `clear` (from "clear ownership") each occurred somewhere. A claim lives in
+  /// a sentence, so presence means one unit supports it.
+  static func claims(_ banned: String, in produced: String) -> Bool {
+    scoringUnits(in: produced).contains { matches(label: banned, produced: $0) }
+  }
+
+  /// Produced action that is, after whitespace and case folding, a contiguous
+  /// substring of one transcript turn, or that contains a run of at least
+  /// `verbatimRunLength` words copied from one turn.
+  ///
+  /// `action_support` rewards this by construction (the copied span is in the
+  /// transcript). This flag reports the copying instead of pretending a
+  /// lexical tweak can tell it apart from an attributed paraphrase.
+  static let verbatimRunLength = 12
+
+  static func isVerbatimCopy(_ action: String, of turns: [Turn]) -> Bool {
+    let needle = collapsedWhitespace(action)
+    guard !needle.isEmpty else { return false }
+    let actionWords = needle.split(separator: " ").map(String.init)
+    for turn in turns {
+      let haystack = collapsedWhitespace(turn.text)
+      if haystack.contains(needle) { return true }
+      let turnWords = haystack.split(separator: " ").map(String.init)
+      if containsCopiedRun(actionWords, in: turnWords, length: verbatimRunLength) { return true }
+    }
+    return false
+  }
+
+  // MARK: - Normalization
+
+  private static let onesValues: [String: Int] = [
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+  ]
+
+  private static let tensValues: [String: Int] = [
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80,
+    "ninety": 90,
+  ]
+
+  /// Cardinals zero..ninety-nine plus hundred/thousand compounds. "and" between
+  /// magnitude and remainder is consumed ("two hundred and ten" → 210).
+  private static func foldNumberWords(_ tokens: [String]) -> [String] {
+    var folded: [String] = []
+    var index = 0
+    while index < tokens.count {
+      if let parsed = parseNumberPhrase(tokens, startingAt: index) {
+        folded.append(String(parsed.value))
+        index += parsed.consumed
+      } else {
+        folded.append(tokens[index])
+        index += 1
+      }
+    }
+    return folded
+  }
+
+  private static func parseNumberPhrase(_ tokens: [String], startingAt start: Int) -> (
+    value: Int, consumed: Int
+  )? {
+    var index = start
+    var total = 0
+    var current = 0
+    var consumedAny = false
+
+    func takeBelowHundred() -> Int? {
+      guard index < tokens.count else { return nil }
+      if let ones = onesValues[tokens[index]] {
+        index += 1
+        return ones
+      }
+      if let tens = tensValues[tokens[index]] {
+        index += 1
+        if index < tokens.count, let ones = onesValues[tokens[index]], ones > 0, ones < 10 {
+          index += 1
+          return tens + ones
+        }
+        return tens
+      }
+      return nil
+    }
+
+    // `afterMagnitude` is what lets a remainder attach: "two hundred ten" and
+    // "two hundred and ten" are one number, but "one forty" is two tokens and
+    // "five and ten" is two numbers. Summing every adjacent number word turned
+    // "up from one forty" into 41.
+    var afterMagnitude = false
+    var tookSmall = false
+    while index < tokens.count {
+      if tokens[index] == "and", afterMagnitude, index + 1 < tokens.count,
+        onesValues[tokens[index + 1]] != nil || tensValues[tokens[index + 1]] != nil
+      {
+        index += 1
+        continue
+      }
+      if tokens[index] == "thousand" {
+        consumedAny = true
+        total += (current == 0 ? 1 : current) * 1000
+        current = 0
+        index += 1
+        afterMagnitude = true
+        tookSmall = false
+        continue
+      }
+      if tokens[index] == "hundred" {
+        consumedAny = true
+        current = (current == 0 ? 1 : current) * 100
+        index += 1
+        afterMagnitude = true
+        tookSmall = false
+        continue
+      }
+      if !tookSmall, let small = takeBelowHundred() {
+        current += small
+        consumedAny = true
+        afterMagnitude = false
+        tookSmall = true
+        continue
+      }
+      break
+    }
+
+    guard consumedAny else { return nil }
+    return (total + current, index - start)
+  }
+
+  /// Plural / 3rd-person / -ed / -ing sufficient to fold schedule/schedules/
+  /// scheduled/scheduling onto one token. Deterministic; no dictionary.
+  private static func conservativeStem(_ word: String) -> String {
+    if word.count <= 3 { return word }
+    var stem = word
+    if stem.hasSuffix("sses") {
+      stem = String(stem.dropLast(2))
+    } else if stem.hasSuffix("ies"), stem.count >= 5 {
+      stem = String(stem.dropLast(3)) + "y"
+    } else if stem.hasSuffix("s"), !stem.hasSuffix("ss"), stem.count >= 4 {
+      stem = String(stem.dropLast())
+    }
+
+    if stem.count >= 6, stem.hasSuffix("ing"), hasVowel(String(stem.dropLast(3))) {
+      stem = String(stem.dropLast(3))
+    } else if stem.count >= 5, stem.hasSuffix("ed"), hasVowel(String(stem.dropLast(2))) {
+      stem = String(stem.dropLast(2))
+    }
+
+    if stem.count >= 6, stem.hasSuffix("e") {
+      stem = String(stem.dropLast())
+    }
+    return stem
+  }
+
+  private static func hasVowel(_ word: String) -> Bool {
+    word.contains { "aeiou".contains($0) }
+  }
+
+  /// Lines, bullets and table cells always split. `.`, `!` and `?` split only
+  /// when followed by whitespace or the end, so "0.12.148" and "1.2 seconds"
+  /// stay inside the sentence that states them.
+  private static func scoringUnits(in text: String) -> [String] {
+    var units: [String] = []
+    var current = ""
+    let characters = Array(text)
+    for (offset, character) in characters.enumerated() {
+      let hardBreak = character.isNewline || character == "|" || character == "\u{2022}"
+      let next = offset + 1 < characters.count ? characters[offset + 1] : " "
+      let sentenceEnd = (character == "." || character == "!" || character == "?") && next.isWhitespace
+      if hardBreak || sentenceEnd {
+        units.append(current)
+        current = ""
+      } else {
+        current.append(character)
+      }
+    }
+    units.append(current)
+    return
+      units
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+  }
+
+  private static func collapsedWhitespace(_ text: String) -> String {
+    text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
+  private static func containsCopiedRun(_ actionWords: [String], in turnWords: [String], length: Int)
+    -> Bool
+  {
+    guard actionWords.count >= length, turnWords.count >= length else { return false }
+    var turnRuns: Set<String> = []
+    for start in 0...(turnWords.count - length) {
+      turnRuns.insert(turnWords[start..<(start + length)].joined(separator: " "))
+    }
+    for start in 0...(actionWords.count - length) {
+      if turnRuns.contains(actionWords[start..<(start + length)].joined(separator: " ")) {
+        return true
+      }
+    }
+    return false
   }
 }

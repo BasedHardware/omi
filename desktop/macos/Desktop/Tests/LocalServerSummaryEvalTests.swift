@@ -118,6 +118,7 @@ final class LocalServerSummaryEvalTests: XCTestCase {
     var actionsLabelled = 0
     var actionsProduced = 0
     var actionsSupported = 0
+    var actionsVerbatim = 0
     var hallucinated = 0
     var factsKept = 0
     var factsLabelled = 0
@@ -193,6 +194,7 @@ final class LocalServerSummaryEvalTests: XCTestCase {
 
       let transcript = scenario.turns.map(\.text).joined(separator: " ")
       var caseSupported = 0
+      var caseVerbatim = 0
       for produced in producedActions {
         let support = LocalSummaryEvalCorpus.containment(label: produced, produced: transcript)
         if support >= 0.5 {
@@ -202,6 +204,10 @@ final class LocalServerSummaryEvalTests: XCTestCase {
           print(
             "LOCAL_SERVER_EVAL_UNSUPPORTED id=\(scenario.id) containment=\(String(format: "%.2f", support)) action=\(produced)"
           )
+        }
+        if LocalSummaryEvalCorpus.isVerbatimCopy(produced, of: scenario.turns) {
+          actionsVerbatim += 1
+          caseVerbatim += 1
         }
       }
 
@@ -219,7 +225,7 @@ final class LocalServerSummaryEvalTests: XCTestCase {
       var caseHallucinated = 0
       for banned in scenario.hallucinatedIfPresent {
         let claimed =
-          LocalSummaryEvalCorpus.matches(label: banned, produced: body)
+          LocalSummaryEvalCorpus.claims(banned, in: body)
           || producedActions.contains { LocalSummaryEvalCorpus.matches(label: banned, produced: $0) }
         if claimed {
           hallucinated += 1
@@ -238,7 +244,8 @@ final class LocalServerSummaryEvalTests: XCTestCase {
         actions=\(producedActions.count) overview_len=\(overview.count) \
         facts=\(caseFactsKept)/\(scenario.mustKeepFacts.count) \
         action_recall=\(caseActionsFound)/\(scenario.labelledActionItems.count) \
-        action_support=\(caseSupported)/\(producedActions.count) hallucinated=\(caseHallucinated)
+        action_support=\(caseSupported)/\(producedActions.count) hallucinated=\(caseHallucinated) \
+        verbatim=\(caseVerbatim)/\(producedActions.count)
         TITLE: \(structure.title)
         OVERVIEW: \(overview)
         """
@@ -254,7 +261,8 @@ final class LocalServerSummaryEvalTests: XCTestCase {
       contentless=\(contentless)/\(n) fact_retention=\(factsKept)/\(factsLabelled) \
       action_recall=\(actionsFound)/\(actionsLabelled) \
       action_support=\(actionsSupported)/\(actionsProduced) \
-      hallucinated=\(hallucinated) mean_ms=\(mean)
+      hallucinated=\(hallucinated) mean_ms=\(mean) \
+      verbatim=\(actionsVerbatim)/\(actionsProduced)
       """
     )
 

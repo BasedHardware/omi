@@ -67,6 +67,7 @@ final class AFMSummaryEvalTests: XCTestCase {
     var actionsLabelled = 0
     var actionsProduced = 0
     var actionsSupported = 0
+    var actionsVerbatim = 0
     var hallucinated = 0
     var factsKept = 0
     var factsLabelled = 0
@@ -129,9 +130,15 @@ final class AFMSummaryEvalTests: XCTestCase {
       }
 
       let transcript = scenario.turns.map(\.text).joined(separator: " ")
-      for produced in producedActions
-      where LocalSummaryEvalCorpus.containment(label: produced, produced: transcript) >= 0.5 {
-        actionsSupported += 1
+      var caseVerbatim = 0
+      for produced in producedActions {
+        if LocalSummaryEvalCorpus.containment(label: produced, produced: transcript) >= 0.5 {
+          actionsSupported += 1
+        }
+        if LocalSummaryEvalCorpus.isVerbatimCopy(produced, of: scenario.turns) {
+          actionsVerbatim += 1
+          caseVerbatim += 1
+        }
       }
 
       factsLabelled += scenario.mustKeepFacts.count
@@ -142,7 +149,7 @@ final class AFMSummaryEvalTests: XCTestCase {
 
       for banned in scenario.hallucinatedIfPresent {
         let claimed =
-          LocalSummaryEvalCorpus.matches(label: banned, produced: body)
+          LocalSummaryEvalCorpus.claims(banned, in: body)
           || producedActions.contains { LocalSummaryEvalCorpus.matches(label: banned, produced: $0) }
         if claimed { hallucinated += 1 }
       }
@@ -153,7 +160,8 @@ final class AFMSummaryEvalTests: XCTestCase {
         tokens=\(scenario.estimatedTokens) chunks=\(chunks.count) \
         ms=\(latencies[scenario.id] ?? -1) runtime=\(projection.provenance.runtime) \
         model=\(projection.provenance.modelId) sections=\(sections.count) \
-        actions=\(producedActions.count) overview_len=\(overview.count)
+        actions=\(producedActions.count) overview_len=\(overview.count) \
+        verbatim=\(caseVerbatim)/\(producedActions.count)
         TITLE: \(structure.title)
         OVERVIEW: \(overview)
         """
@@ -169,7 +177,8 @@ final class AFMSummaryEvalTests: XCTestCase {
       contentless=\(contentless)/\(n) fact_retention=\(factsKept)/\(factsLabelled) \
       action_recall=\(actionsFound)/\(actionsLabelled) \
       action_support=\(actionsSupported)/\(actionsProduced) \
-      hallucinated=\(hallucinated) mean_ms=\(mean)
+      hallucinated=\(hallucinated) mean_ms=\(mean) \
+      verbatim=\(actionsVerbatim)/\(actionsProduced)
       """
     )
 
