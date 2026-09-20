@@ -1891,7 +1891,7 @@ def upload_file_chat(
                 shutil.copyfileobj(file.file, buffer)
 
             try:
-                result = FileChatTool.upload(temp_file)
+                result = FileChatTool.upload(temp_file, file_name=file.filename)
             except UnsupportedChatFileError as error:
                 raise HTTPException(status_code=400, detail=str(error))
 
@@ -1963,7 +1963,7 @@ def upload_file_chat_v1(
                 shutil.copyfileobj(file.file, buffer)
 
             try:
-                result = FileChatTool.upload(temp_file)
+                result = FileChatTool.upload(temp_file, file_name=file.filename)
             except UnsupportedChatFileError as error:
                 raise HTTPException(status_code=400, detail=str(error))
 

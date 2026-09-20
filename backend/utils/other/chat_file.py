@@ -60,6 +60,13 @@ class ProviderRejectedChatFileError(Exception):
     """Provider 4xx on the Chat Completions file request, before any tokens."""
 
 
+def _display_file_name(file_name: Optional[str]) -> str:
+    """Basename of a user-picked file name, stripped of any directory component."""
+    if not file_name:
+        return ""
+    return Path(file_name).name
+
+
 def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChatFileError:
     suffix = Path(file_path).suffix.lstrip('.').lower()
     label = f"'{suffix}' files are" if suffix else "this file type is"
@@ -231,7 +238,14 @@ class FileChatTool:
         self.chat_session = ChatSession(**session_data)
 
     @staticmethod
-    def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
+    def upload(file_path: Union[str, Path], file_name: Optional[str] = None) -> Dict[str, Any]:
+        """Upload a chat attachment to the provider's Files API.
+
+        ``file_name`` is the name the user picked. The routes stream the bytes
+        through a uuid-named temp file (path-traversal safety), and the provider
+        echoes that temp name back as ``response.filename``; passing the picked
+        name here keeps it out of the saved FileChat instead.
+        """
         # OpenAI Files upload/download stays direct by design: it is the file
         # bytes/file_id lifecycle, not a model call; only the completions hop
         # is gateway-metered.
@@ -265,7 +279,7 @@ class FileChatTool:
                 file.file_id = response.id
                 file.file_name = response.filename
 
-                result["file_name"] = response.filename
+                result["file_name"] = _display_file_name(file_name) or response.filename
                 result["file_id"] = response.id
                 result["mime_type"] = file.mime_type
                 if file.is_image():
