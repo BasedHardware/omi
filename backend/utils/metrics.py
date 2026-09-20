@@ -545,6 +545,15 @@ OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     ['provider', 'stage'],
 )
 
+# Vendor stream-close frames by bounded provider and bounded reason. Budget/quota
+# exhaustion is never a transient blip; the PAGE alert keys on
+# reason=provider_budget_exhausted. Raw vendor messages are not label values.
+OMI_STT_STREAM_CLOSE_TOTAL = Counter(
+    'omi_stt_stream_close_total',
+    'Live-STT provider stream-close frames by bounded provider and bounded reason',
+    ['provider', 'reason'],
+)
+
 OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
     'omi_vad_gate_audio_seconds_total',
     'Live VAD gate audio seconds by gate outcome and mode',
@@ -586,6 +595,16 @@ OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
     'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
     ['transcription_source', 'client_platform'],
+)
+
+# Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
+# backend-sync, which Prometheus does not scrape today (exporter allowlist is
+# backend + desktop-backend only). Counters are still the contract; alerts on this
+# series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
+OMI_SYNC_INTAKE_TOTAL = Counter(
+    'omi_sync_intake_total',
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
 )
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(

@@ -521,6 +521,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if existing.get('deleted'):
+            return False
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
@@ -2414,13 +2416,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
     @firestore.transactional
     def assign(transaction):
         def encode(payload):
-            return _prepare_conversation_for_write(payload, uid, level[0])
-
-        level = [incoming['data_protection_level']]
-
-        def decode_with_level(raw):
-            level[0] = raw.get('data_protection_level') or level[0]
-            return decode(raw)
+            return _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
 
         return assign_in_transaction(
             transaction,
@@ -2428,7 +2424,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             incoming,
             candidate_id=candidate_id,
             target_id=target_id,
-            decode=decode_with_level,
+            decode=decode,
             encode=encode,
             invalidate=_invalidate_client_processing,
         )

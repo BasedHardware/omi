@@ -1358,6 +1358,7 @@ async def transcribe_voice_message_stream(
     # observability.transcription while chat tests import this module.
     from utils.stt.live_failure import (
         MAX_STT_FAILOVERS,
+        PendingLiveFailover,
         live_stt_socket_is_dead,
         live_stt_upstream_failure,
         send_live_stt_audio,
@@ -1430,6 +1431,7 @@ async def transcribe_voice_message_stream(
     # Providers that already died for this session; the failover chain excludes
     # them so a rebuild never lands on the provider that just failed.
     stt_failed_providers: set[str] = set()
+    pending_live_failover: Optional[PendingLiveFailover] = None
 
     journey_attempt = ClientJourneyAttempt(
         'realtime_voice',
@@ -1471,7 +1473,12 @@ async def transcribe_voice_message_stream(
     _SENTINEL = object()
     segment_queue = asyncio.Queue()
 
-    def stream_transcript(segments):
+    def stream_transcript(segments: object) -> None:
+        nonlocal pending_live_failover
+        if pending_live_failover is not None:
+            pending_live_failover.note_transcript(segments)
+            if pending_live_failover.settled:
+                pending_live_failover = None
         parity_capture.observe("inbound", {"type": "transcript", "segments": segments})
         loop.call_soon_threadsafe(segment_queue.put_nowait, segments)
 
@@ -1539,11 +1546,15 @@ async def transcribe_voice_message_stream(
         The PTT surface has no separate death-monitor task, so this single
         receive loop is the only caller and no failover lock is needed.
         """
-        nonlocal dg_socket, stt_service, stt_language, stt_model
+        nonlocal dg_socket, stt_service, stt_language, stt_model, pending_live_failover
         if dg_socket is not None and not live_stt_socket_is_dead(dg_socket):
             return True
         if stt_send_failed or not websocket_active:
             return False
+        if pending_live_failover is not None:
+            typed = getattr(dg_socket, 'typed_death_reason', None) if dg_socket is not None else None
+            pending_live_failover.note_failure(typed if isinstance(typed, str) else None)
+            pending_live_failover = None
         dead_provider = provider_for_service(stt_service)
         if dead_provider:
             stt_failed_providers.add(dead_provider)
@@ -1556,6 +1567,7 @@ async def transcribe_voice_message_stream(
             # The second check also covers a selector that ignores ``exclude``
             # and re-offers a provider this session already marked dead.
             return False
+        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
             if service == STTService.parakeet:
                 # A provider is never offered its own failure as a fallback, so
@@ -1581,16 +1593,21 @@ async def transcribe_voice_message_stream(
                 socket = await process_audio_modulate(stream_transcript, sample_rate, next_language)
                 actual_service = STTService.modulate
             else:
+                hop.note_failure(None)
                 return False
         except Exception:
             logger.exception('transcribe-stream: STT failover connect raised')
+            hop.note_failure(None)
             return False
         if socket is None:
+            hop.note_failure(None)
             return False
         # A provider can accept the upgrade and reject the stream ~150ms later;
         # treating that as a heal would report recovery for a session that is
         # already dead again.
         if not await fallback_socket_is_serving(socket):
+            raw_typed = getattr(socket, 'typed_death_reason', None)
+            hop.note_failure(raw_typed if isinstance(raw_typed, str) else None)
             close_rejected_socket(socket)
             return False
         if actual_service == STTService.modulate:
@@ -1598,13 +1615,9 @@ async def transcribe_voice_message_stream(
         previous_socket = dg_socket
         dg_socket = socket
         stt_service, stt_language, stt_model = actual_service, next_language, next_model
-        record_fallback(
-            component='stt_live_session',
-            from_mode=dead_provider or 'unknown',
-            to_mode=actual_service.value,
-            reason='connection_lost',
-            outcome='recovered',
-        )
+        if actual_service.value != hop.to_mode:
+            hop = PendingLiveFailover(from_mode=hop.from_mode, to_mode=actual_service.value)
+        pending_live_failover = hop
         logger.info(f'STT failover mid-session: {dead_provider} -> {actual_service.value}')
         if previous_socket is not None:
             try:

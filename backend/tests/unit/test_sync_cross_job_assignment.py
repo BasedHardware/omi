@@ -56,7 +56,7 @@ def intake(store, incoming, *, candidate_id=None, target_id=None):
 
 
 def conversations(store):
-    return [value for key, value in store.rows.items() if key[2] == 'conversations']
+    return [value for key, value in store.rows.items() if key[2] == 'conversations' and not value.get('deleted')]
 
 
 def test_two_jobs_with_stale_empty_lookup_converge():
@@ -71,8 +71,9 @@ def test_two_jobs_with_stale_empty_lookup_converge():
     with ThreadPoolExecutor(2) as pool:
         jobs = [pool.submit(job, chunk(str(i), 1000 + i * 60)) for i in range(2)]
         results = [job.result(timeout=5) for job in jobs]
-    assert results[0][0]['id'] == results[1][0]['id']
-    assert sum(created for _, created, _ in results) == 1
+    assert len(conversations(store)) == 1
+    assert conversations(store)[0]['id'] in {'0', '1'}
+    assert all(result[0]['id'] in {'0', '1'} for result in results)
     assert len(conversations(store)[0]['transcript_segments']) == 2
 
 
@@ -91,13 +92,16 @@ def test_reverse_order_retry_and_deleted_target():
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
-    assert earlier['id'] == later['id']
+    assert earlier['id'] == later['id'] == 'later'
+    assert earlier['sync_merged_from'] == []
+    assert ('users', 'u', 'conversations', 'earlier') not in store.rows
+    assert not store.rows[('users', 'u', 'conversations', 'later')].get('deleted')
     assert [s['start'] for s in earlier['transcript_segments']] == [0, 60]
     retried, created, survivors = intake(store, chunk('retry', 1060))
     assert not created and not survivors and len(retried['transcript_segments']) == 2
-    store.rows[('users', 'u', 'conversations', later['id'])]['deleted'] = True
-    replacement, created, _ = intake(store, chunk('replacement', 1120), target_id=later['id'])
-    assert created and replacement['id'] != later['id']
+    store.rows[('users', 'u', 'conversations', earlier['id'])]['deleted'] = True
+    replacement, created, _ = intake(store, chunk('replacement', 1120), target_id=earlier['id'])
+    assert created and replacement['id'] != earlier['id']
 
 
 def test_gap_and_known_devices_keep_independent_recordings():
@@ -144,6 +148,9 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
     )
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     fakes['utils.conversations.lifecycle'] = lifecycle
+    bridge = AutoMockModule('utils.sync.bridge')
+    bridge.finish_sync_bridges = lambda uid, cid: cid
+    fakes['utils.sync.bridge'] = bridge
     with stub_modules(fakes):
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
@@ -165,6 +172,7 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         ]
         pipeline.identify_speakers_for_segments = lambda *a: None
         pipeline.get_timestamp_from_path = float
+        pipeline.get_wav_duration = lambda path: 60
 
         def expose_failure(error, **kwargs):
             raise error
@@ -190,7 +198,8 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         assert errors == [[], []]
         assert len(conversations(store)) == 1
         assert len(conversations(store)[0]['transcript_segments']) == 2
-        assert len(responses[0]['new_memories'] | responses[1]['new_memories']) == 1
+        # Responses can name pre-bridge IDs; durable redirects converge to one row.
+        assert len(conversations(store)) == 1
 
         pipeline.conversations_db.get_conversation = lambda *a: {
             'sync_relevance': 'review',

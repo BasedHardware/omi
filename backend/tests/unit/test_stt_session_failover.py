@@ -25,10 +25,11 @@ from utils.stt.streaming import STTService, get_stt_service_for_language
 
 
 class FakeSocket:
-    def __init__(self, dead: bool = False):
+    def __init__(self, dead: bool = False, typed_death_reason: Optional[str] = None):
         self._dead = dead
         self.finished = False
         self.sent: list[bytes] = []
+        self.typed_death_reason = typed_death_reason
 
     @property
     def is_connection_dead(self) -> bool:
@@ -255,3 +256,98 @@ async def test_the_audio_send_path_still_terminates_once_the_chain_is_exhausted(
 
     assert receiver.host.state.stt_terminal_failure is True
     receiver.host.request.websocket.close.assert_awaited_once()
+
+
+def _failover_events(monkeypatch: Any) -> list[dict[str, str]]:
+    events: list[dict[str, str]] = []
+
+    def _record(**kwargs: Any) -> None:
+        events.append(kwargs)
+
+    monkeypatch.setattr('utils.stt.live_failure.record_fallback', _record)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_connect_then_vendor_close_is_not_recovered(monkeypatch):
+    """The 2026-09-19 Soniox budget incident: the vendor accepted the socket
+    then closed it. Recording recovered at connect made a dead leg look healthy.
+    """
+    from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+
+    events = _failover_events(monkeypatch)
+    dead = FakeSocket(dead=True, typed_death_reason=PROVIDER_BUDGET_EXHAUSTED)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=dead)
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is False
+
+    live = [event for event in events if event.get('component') == 'stt_live_session']
+    assert all(event['outcome'] != 'recovered' for event in live)
+    assert live == [
+        {
+            'component': 'stt_live_session',
+            'from_mode': MODULATE_PROVIDER,
+            'to_mode': 'soniox',
+            'reason': 'quota',
+            'outcome': 'exhausted',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_connect_then_delayed_vendor_close_is_exhausted_not_recovered(monkeypatch):
+    from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+
+    events = _failover_events(monkeypatch)
+    replacement = FakeSocket(dead=False)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=replacement)
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is True
+        assert not any(event['outcome'] == 'recovered' for event in events)
+        replacement._dead = True
+        replacement.typed_death_reason = PROVIDER_BUDGET_EXHAUSTED
+        await receiver._failover_stt_socket()
+
+    live = [event for event in events if event.get('component') == 'stt_live_session']
+    assert live, events
+    assert live[0]['outcome'] == 'exhausted'
+    assert live[0]['reason'] == 'quota'
+    assert live[0]['to_mode'] == 'soniox'
+    assert all(event['outcome'] != 'recovered' for event in events)
+
+
+@pytest.mark.asyncio
+async def test_connect_then_transcript_recovers_exactly_once(monkeypatch):
+    events = _failover_events(monkeypatch)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver.host.transcripts.enqueue = MagicMock()
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is True
+
+    assert not any(event['outcome'] == 'recovered' for event in events)
+    receiver._enqueue_stt_segments([])
+    assert not any(event['outcome'] == 'recovered' for event in events)
+    receiver._enqueue_stt_segments([{'text': 'hello', 'speaker': 'SPEAKER_00'}])
+    receiver._enqueue_stt_segments([{'text': 'again', 'speaker': 'SPEAKER_00'}])
+    recovered = [event for event in events if event.get('outcome') == 'recovered']
+    assert recovered == [
+        {
+            'component': 'stt_live_session',
+            'from_mode': MODULATE_PROVIDER,
+            'to_mode': 'soniox',
+            'reason': 'connection_lost',
+            'outcome': 'recovered',
+        }
+    ]

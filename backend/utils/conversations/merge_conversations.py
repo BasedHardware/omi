@@ -509,6 +509,8 @@ def _copy_audio_chunks_for_merge(
     uid: str,
     conversations: List[Dict],
     new_conversation_id: str,
+    *,
+    strict: bool = False,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -561,6 +563,8 @@ def _copy_audio_chunks_for_merge(
             return conversations_db.create_audio_files_from_chunks(uid, new_conversation_id)
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
+            if strict:
+                raise
 
     return []
 
@@ -606,12 +610,33 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def retract_sync_bridge_source(uid: str, source_id: str) -> None:
+    """Retract derived data, retaining redirect/audio; propagate failures for retry."""
+    _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
+
+
+def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
+    """Copy retained donor audio strictly; never checkpoint a failed copy."""
+    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+
+
+def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
+    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
+    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    for source_id in row.get('sync_merged_from', []):
+        if source_id != conversation_id:
+            _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
+    conversations_db.delete_conversation(uid, conversation_id)
+
+
 def _delete_conversation_and_related_data(
     uid: str,
     conversation_id: str,
     *,
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
     historical_source_ids: Optional[Set[str]] = None,
+    retain_capture: bool = False,
+    purge_sync_sources: bool = True,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -661,6 +686,16 @@ def _delete_conversation_and_related_data(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
+        if retain_capture:
+            raise
+
+    if retain_capture:
+        # Sync bridges retain redirect tombstones and original audio: another
+        # in-flight worker may still be uploading to that immutable source ID.
+        # Propagate errors so the durable ancestry can replay cleanup on retry.
+        delete_vector(uid, conversation_id)
+        conversations_db._delete_conversation_search_index(uid, conversation_id)
+        return
 
     try:
         # Delete photos subcollection
@@ -681,8 +716,12 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting vector for {conversation_id}: {e}")
 
     try:
-        # Delete conversation document
-        conversations_db.delete_conversation(uid, conversation_id)
+        # Purge retained bridge sources only for a real source/user deletion.
+        # Rollback of a newly created merge target still uses raw DB deletion.
+        if purge_sync_sources:
+            delete_conversation_with_sync_sources(uid, conversation_id)
+        else:
+            conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 

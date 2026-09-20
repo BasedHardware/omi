@@ -49,12 +49,12 @@ from utils.stt.live_failure import (
 )
 from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome, bounded_provider
 from utils.stt.soniox import (
-    SONIOX_DEATH_ACCOUNT_STATE,
     SONIOX_DEATH_IDLE_TIMEOUT,
     SONIOX_DEATH_ROTATION,
     SafeSonioxSocket,
     soniox_death_reason,
 )
+from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
 from utils.stt.streaming import STTService, _fallback_failure_reason
 from utils.stt.vad_gate import GatedSTTSocket
 
@@ -107,7 +107,7 @@ def _frame(code, error_type, message):
 
 
 def test_a_402_balance_exhausted_frame_classifies_as_account_state():
-    assert soniox_death_reason(402, 'organization_balance_exhausted') == SONIOX_DEATH_ACCOUNT_STATE
+    assert soniox_death_reason(402, 'organization_balance_exhausted') == PROVIDER_BUDGET_EXHAUSTED
 
 
 def test_a_400_no_audio_frame_classifies_as_idle_timeout():
@@ -126,7 +126,7 @@ def test_unknown_shapes_degrade_to_connection_lost():
 
 
 def test_the_error_type_match_tolerates_provider_casing():
-    assert soniox_death_reason(402, 'Organization_Balance_Exhausted') == SONIOX_DEATH_ACCOUNT_STATE
+    assert soniox_death_reason(402, 'Organization_Balance_Exhausted') == PROVIDER_BUDGET_EXHAUSTED
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ def test_the_raw_provider_frame_stays_on_the_death_latch():
     sock = _drive_socket([_frame(402, 'organization_balance_exhausted', 'Organization balance exhausted.')])
     assert '402' in (sock.death_reason or '')
     assert 'organization_balance_exhausted' in (sock.death_reason or '')
-    assert sock.typed_death_reason == SONIOX_DEATH_ACCOUNT_STATE
+    assert sock.typed_death_reason == PROVIDER_BUDGET_EXHAUSTED
 
 
 def test_a_live_socket_reports_no_typed_reason():
@@ -178,7 +178,7 @@ def test_a_live_socket_reports_no_typed_reason():
 def test_the_vad_gate_proxies_the_typed_death_reason():
     dead = _drive_socket([_frame(402, 'organization_balance_exhausted', 'Organization balance exhausted.')])
     gated = GatedSTTSocket(dead)
-    assert gated.typed_death_reason == SONIOX_DEATH_ACCOUNT_STATE
+    assert gated.typed_death_reason == PROVIDER_BUDGET_EXHAUSTED
     assert gated.is_connection_dead
 
 
@@ -227,10 +227,10 @@ def _circuit_recorder():
 
 def test_a_typed_account_state_death_opens_the_selection_circuit():
     calls, opener = _circuit_recorder()
-    sock = SimpleNamespace(typed_death_reason=SONIOX_DEATH_ACCOUNT_STATE)
+    sock = SimpleNamespace(typed_death_reason=PROVIDER_BUDGET_EXHAUSTED)
     with patch('utils.stt.streaming.open_provider_selection_circuit', side_effect=opener):
         assert note_typed_provider_death(sock, 'soniox') is True
-    assert calls == [('soniox', 'soniox_account_state')]
+    assert calls == [('soniox', 'provider_budget_exhausted')]
 
 
 def test_session_scoped_typed_deaths_do_not_bench_the_provider():
@@ -256,17 +256,17 @@ async def test_terminate_with_account_state_opens_the_circuit_and_reports_the_ty
 
     with patch('utils.stt.streaming.open_provider_selection_circuit', side_effect=opener):
         sent = await terminate_live_stt_session(
-            websocket, session, failure=failure, reason='soniox_account_state', platform='ios'
+            websocket, session, failure=failure, reason='provider_budget_exhausted', platform='ios'
         )
 
     assert sent is True
     assert session.stt_terminal_failure is True
     assert session.close_code == LIVE_STT_FAILURE_CLOSE_CODE
     event = websocket.send_json.await_args.args[0]
-    assert event['reason'] == 'soniox_account_state'
+    assert event['reason'] == 'provider_budget_exhausted'
     assert event['provider'] == 'soniox'
     assert recorded[0]['phase'] == 'connection'
-    assert calls == [('soniox', 'soniox_account_state')]
+    assert calls == [('soniox', 'provider_budget_exhausted')]
 
 
 @pytest.mark.asyncio
@@ -295,7 +295,7 @@ async def test_the_audio_send_path_terminates_with_the_typed_reason():
 
     class DeadTypedSocket:
         is_connection_dead = True
-        typed_death_reason = 'soniox_account_state'
+        typed_death_reason = 'provider_budget_exhausted'
 
         def send(self, _audio):
             raise AssertionError('a dead socket must not be sent to')
@@ -314,7 +314,7 @@ async def test_the_audio_send_path_terminates_with_the_typed_reason():
 
     assert sent is False
     assert session.stt_terminal_failure is True
-    assert websocket.send_json.await_args.args[0]['reason'] == 'soniox_account_state'
+    assert websocket.send_json.await_args.args[0]['reason'] == 'provider_budget_exhausted'
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ def _receiver_with_dead_soniox(replacement):
     host.stt_service = STTService.soniox
 
     receiver = ListenReceiver(host, [], {})
-    receiver.stt_socket = TypedFakeSocket(dead=True, typed=SONIOX_DEATH_ACCOUNT_STATE)
+    receiver.stt_socket = TypedFakeSocket(dead=True, typed=PROVIDER_BUDGET_EXHAUSTED)
     receiver.vad_gate = None
     receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
     receiver._create_stt_socket = AsyncMock(return_value=replacement)
@@ -380,7 +380,7 @@ async def test_failover_on_a_typed_402_death_opens_the_selection_circuit():
         assert await receiver._failover_stt_socket() is True
 
     assert receiver.stt_socket is healthy
-    assert calls == [('soniox', 'soniox_account_state')]
+    assert calls == [('soniox', 'provider_budget_exhausted')]
 
 
 @pytest.mark.asyncio
@@ -448,3 +448,48 @@ def test_soniox_402_text_classifies_as_quota_not_provider_5xx():
         == 'quota'
     )
     assert _fallback_failure_reason(RuntimeError('Internal server error')) == 'provider_5xx'
+
+
+def test_monthly_budget_exhausted_classifies_as_provider_budget_not_connection_lost():
+    """Prod 2026-09-19/20: organization_monthly_budget_exhausted logged at WARNING
+    as connection_lost, so 27.5h of a dead failover leg never paged.
+    """
+    assert (
+        soniox_death_reason(402, 'organization_monthly_budget_exhausted', 'Organization monthly budget exhausted.')
+        == PROVIDER_BUDGET_EXHAUSTED
+    )
+    assert soniox_death_reason(402, 'project_monthly_budget_exhausted') == PROVIDER_BUDGET_EXHAUSTED
+    assert soniox_death_reason(402, 'some_other_402_wording') == PROVIDER_BUDGET_EXHAUSTED
+
+
+def test_a_monthly_budget_frame_logs_at_error_and_counts_as_budget_close(caplog):
+    from utils.metrics import OMI_STT_STREAM_CLOSE_TOTAL
+
+    before = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='soniox', reason=PROVIDER_BUDGET_EXHAUSTED)._value.get()
+    with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
+        sock = _drive_socket(
+            [_frame(402, 'organization_monthly_budget_exhausted', 'Organization monthly budget exhausted.')]
+        )
+    assert sock.is_connection_dead
+    assert sock.typed_death_reason == PROVIDER_BUDGET_EXHAUSTED
+    errors = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.ERROR and 'Soniox streaming error:' in record.message
+    ]
+    assert errors, 'monthly budget is a provider fault: it must stay an ERROR'
+    after = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='soniox', reason=PROVIDER_BUDGET_EXHAUSTED)._value.get()
+    assert after == before + 1
+
+
+def test_stream_close_reasons_are_bounded_not_raw_vendor_text():
+    from utils.stt.stream_close import bounded_stream_close_reason, record_stt_stream_close
+
+    assert bounded_stream_close_reason('organization_monthly_budget_exhausted') == 'connection_lost'
+    assert bounded_stream_close_reason(PROVIDER_BUDGET_EXHAUSTED) == PROVIDER_BUDGET_EXHAUSTED
+    from utils.metrics import OMI_STT_STREAM_CLOSE_TOTAL
+
+    before = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='unknown', reason='connection_lost')._value.get()
+    record_stt_stream_close(provider='not-a-provider', reason='Organization monthly budget exhausted.')
+    after = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='unknown', reason='connection_lost')._value.get()
+    assert after == before + 1

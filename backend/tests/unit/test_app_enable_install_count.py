@@ -10,8 +10,20 @@ os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key-not-real")
 import asyncio
 from unittest.mock import MagicMock
 
+from starlette.requests import Request
+
 import database.redis_db as redis_db
 import routers.apps as apps
+
+
+def _fake_request() -> Request:
+    """Minimal ASGI-scope Request double for request-taking endpoints.
+
+    ``record_product_event`` only reads ``request.headers`` (fail-open on any
+    other shape), so an empty-header Request is a sufficient double here —
+    consistent with tests/unit/test_product_metrics.py.
+    """
+    return Request({'type': 'http', 'headers': []})
 
 
 def _public_app() -> dict:
@@ -48,8 +60,8 @@ def _install(monkeypatch):
 def test_enabling_an_installed_app_again_counts_one_install(monkeypatch):
     enabled, counted = _install(monkeypatch)
 
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', _fake_request(), uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', _fake_request(), uid='user-1'))
 
     assert enabled == {('user-1', 'app-1')}
     assert counted == ['app-1']
@@ -58,8 +70,8 @@ def test_enabling_an_installed_app_again_counts_one_install(monkeypatch):
 def test_each_new_user_still_counts_an_install(monkeypatch):
     _enabled, counted = _install(monkeypatch)
 
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-1'))
-    asyncio.run(apps.enable_app_endpoint('app-1', uid='user-2'))
+    asyncio.run(apps.enable_app_endpoint('app-1', _fake_request(), uid='user-1'))
+    asyncio.run(apps.enable_app_endpoint('app-1', _fake_request(), uid='user-2'))
 
     assert counted == ['app-1', 'app-1']
 
