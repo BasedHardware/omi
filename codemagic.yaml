@@ -1001,6 +1001,26 @@ workflows:
           echo "OMI_RELEASE_SOURCE_SHA=$OMI_RELEASE_SOURCE_SHA" >> "$CM_ENV"
           echo "OMI_RELEASE_PLATFORM=$OMI_RELEASE_PLATFORM" >> "$CM_ENV"
 
+          # Google Play version codes are global and immutable, and the
+          # internal-auto lane keeps allocating them after a release tag
+          # pins its build number. Keep the tag number when it is above the
+          # live floor; otherwise allocate floor + 1 so publishing cannot
+          # collide with an already-used code.
+          PLAY_LOOKUP="$(mktemp)"
+          if ! google-play get-latest-build-number \
+              --package-name "$PACKAGE_NAME" --tracks internal \
+              > "$PLAY_LOOKUP" 2>/dev/null; then
+            echo "Google Play version lookup failed; refusing to guess a build number." >&2
+            exit 1
+          fi
+          PLAY_PLAN="$(python3 scripts/mobile_play_build_number.py \
+            --tag-number "$BUILD_NUMBER" \
+            --play-output "$PLAY_LOOKUP")"
+          rm -f "$PLAY_LOOKUP"
+          TAG_BUILD_NUMBER="$BUILD_NUMBER"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
+          echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+
           ADMISSION_PROOF="$(mktemp)"
           trap 'rm -f "$ADMISSION_PROOF"' EXIT
           python3 ../.github/scripts/collect_mobile_release_admission.py \
