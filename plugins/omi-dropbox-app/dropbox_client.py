@@ -235,11 +235,13 @@ class DropboxClient:
                 },
             )
 
-            if response.status_code == 200:
+            results = []
+            while True:
+                if response.status_code != 200:
+                    return None, f"List failed: {response.text}"
+
                 data = response.json()
-                entries = data.get("entries", [])
-                results = []
-                for entry in entries:
+                for entry in data.get("entries", []):
                     results.append({
                         "name": entry.get("name", "Unknown"),
                         "path": entry.get("path_display", ""),
@@ -247,9 +249,18 @@ class DropboxClient:
                         "size": entry.get("size", 0),
                         "modified": entry.get("server_modified", ""),
                     })
-                return results, None
-            else:
-                return None, f"List failed: {response.text}"
+                    if len(results) >= limit:
+                        return results, None
+
+                cursor = data.get("cursor")
+                if not data.get("has_more") or not cursor:
+                    return results, None
+
+                response = requests.post(
+                    f"{self.API_BASE}/files/list_folder/continue",
+                    headers=self._headers(),
+                    json={"cursor": cursor},
+                )
 
         except Exception as e:
             return None, f"Error listing: {str(e)}"
