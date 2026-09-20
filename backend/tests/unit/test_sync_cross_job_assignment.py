@@ -59,6 +59,34 @@ def conversations(store):
     return [value for key, value in store.rows.items() if key[2] == 'conversations' and not value.get('deleted')]
 
 
+@pytest.mark.parametrize('reverse', [False, True])
+def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
+    store = StrictFirestore()
+    chunks = [chunk('a', 1000), chunk('b', 1060)]
+    for item in chunks:
+        item['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:' + item['id'])
+    for item in reversed(chunks) if reverse else chunks:
+        result, _, _ = intake(store, item)
+    by_scope = {s['speaker_id_scope']: s['speaker_id'] for s in result['transcript_segments']}
+    assert len(set(by_scope.values())) == 2
+    for item in chunks:
+        result, _, survivors = intake(store, item)
+        assert not survivors
+        assert {s['speaker_id_scope']: s['speaker_id'] for s in result['transcript_segments']} == by_scope
+    assert all(s['speaker'] == 'SPEAKER_00' for s in result['transcript_segments'])
+
+
+def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
+    store = StrictFirestore()
+    live = chunk('live', 1000)
+    live['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id=98)
+    intake(store, live)
+    wal = chunk('wal', 1060)
+    wal['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:content')
+    result, _, _ = intake(store, wal, target_id='live')
+    assert [s['speaker_id'] for s in result['transcript_segments']] == [98, 100]
+
+
 def test_two_jobs_with_stale_empty_lookup_converge():
     store = StrictFirestore()
     barrier = threading.Barrier(2)
