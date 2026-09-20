@@ -10130,4 +10130,7 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Atzīmēt arī šī runātāja turpmāko runu';
 }

@@ -10163,4 +10163,7 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etichetta anche il parlato successivo di questo speaker';
 }

@@ -295,6 +295,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                                   segmentId: segmentId,
                                                   segments: provider.segments,
                                                   suggestion: suggestion,
+                                                  defaultApplyToSpeaker: true,
                                                   onSpeakerAssigned: (speakerId, personId, personName, segmentIds,
                                                       applyToSpeaker) async {
                                                     return provider.assignSpeakerToConversation(
@@ -635,6 +636,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           segmentId: segment.id,
           segments: provider.segments,
           suggestion: suggestion,
+          defaultApplyToSpeaker: true,
           onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
             return provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
                 applyToSpeaker: applyToSpeaker);

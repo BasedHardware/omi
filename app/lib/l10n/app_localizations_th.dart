@@ -10049,4 +10049,7 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย';
 }

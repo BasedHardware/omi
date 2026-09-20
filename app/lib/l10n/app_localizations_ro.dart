@@ -10153,4 +10153,7 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etichetează și vorbirea ulterioară a acestui vorbitor';
 }

@@ -10119,4 +10119,7 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Bu konuşmacının sonraki konuşmasını da etiketle';
 }

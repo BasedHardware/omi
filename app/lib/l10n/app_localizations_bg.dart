@@ -10143,4 +10143,7 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Маркирай и по-късната реч на този говорител';
 }

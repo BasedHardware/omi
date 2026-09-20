@@ -9939,4 +9939,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => '이 화자의 이후 발화도 태그하기';
 }

@@ -372,6 +372,10 @@ void main() {
     expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
     expect(actions.assignedSpeaker, 0);
     expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
+    provider.onSegmentReceived([_segment('c', 'later')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.personId, isNull);
     provider.dispose();
   });
 

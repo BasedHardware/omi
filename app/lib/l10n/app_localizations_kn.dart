@@ -10138,4 +10138,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'ಈ ಮಾತುಗಾರನ ನಂತರದ ಮಾತನ್ನು ಕೂಡ ಟ್ಯಾಗ್ ಮಾಡಿ';
 }

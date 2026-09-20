@@ -10111,4 +10111,7 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Märk även senare tal från den här talaren';
 }

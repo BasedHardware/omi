@@ -10107,4 +10107,7 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'گفتار بعدی این گوینده را هم برچسب بزن';
 }

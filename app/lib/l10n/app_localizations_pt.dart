@@ -10116,4 +10116,7 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etiquetar também a fala posterior deste locutor';
 }

@@ -10112,4 +10112,7 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'এই বক্তার পরবর্তী কথাও ট্যাগ করুন';
 }

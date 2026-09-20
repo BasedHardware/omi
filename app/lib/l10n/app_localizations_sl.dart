@@ -10137,4 +10137,7 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označi tudi poznejši govor tega govorca';
 }

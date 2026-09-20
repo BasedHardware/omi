@@ -10160,4 +10160,7 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Означи го и подоцнежниот говор на овој говорник';
 }

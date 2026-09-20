@@ -10100,4 +10100,7 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Märgi ka selle kõneleja hilisem kõne';
 }

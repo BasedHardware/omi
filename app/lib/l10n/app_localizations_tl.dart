@@ -10197,4 +10197,7 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'I-tag din ang susunod na pananalita ng speaker na ito';
 }

@@ -10136,4 +10136,7 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Таксама пазначыць пазнейшую мову гэтага спікера';
 }

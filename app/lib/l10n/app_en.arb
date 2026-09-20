@@ -11923,5 +11923,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker"
 }

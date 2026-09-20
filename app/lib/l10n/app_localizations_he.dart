@@ -10026,4 +10026,7 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'תייג גם דיבור מאוחר יותר של הדובר הזה';
 }

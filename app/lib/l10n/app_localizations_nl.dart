@@ -10134,4 +10134,7 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Ook latere spraak van deze spreker taggen';
 }

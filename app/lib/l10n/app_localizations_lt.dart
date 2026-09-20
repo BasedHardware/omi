@@ -10126,4 +10126,7 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Pažymėti ir vėlesnę šio kalbėtojo kalbą';
 }

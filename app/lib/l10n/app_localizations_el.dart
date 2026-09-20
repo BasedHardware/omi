@@ -10176,4 +10176,7 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή';
 }

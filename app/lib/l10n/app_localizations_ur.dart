@@ -10118,4 +10118,7 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں';
 }

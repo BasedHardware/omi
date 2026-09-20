@@ -10106,4 +10106,7 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označit i pozdější řeč tohoto mluvčího';
 }

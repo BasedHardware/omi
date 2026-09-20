@@ -9917,4 +9917,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => '同时标记该说话人之后的发言';
 }

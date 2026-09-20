@@ -20,6 +20,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
       onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
+  final bool defaultApplyToSpeaker;
 
   const NameSpeakerBottomSheet({
     super.key,
@@ -28,6 +29,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.onSpeakerAssigned,
     required this.segments,
     this.suggestion,
+    this.defaultApplyToSpeaker = false,
   });
 
   @override
@@ -40,6 +42,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   String selectedPersonName = '';
   List<String> _selectedSegmentIds = [];
   bool _isSegmentsExpanded = false;
+  bool _applyToSpeaker = false;
   bool allowSave = false;
   bool loading = false;
   bool _saveFailed = false;
@@ -81,7 +84,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedSegmentIds.add(widget.segmentId);
+    _applyToSpeaker = widget.defaultApplyToSpeaker;
+    final sameSpeaker = widget.segments.where((s) => s.speakerId == widget.speakerId);
+    _selectedSegmentIds = _applyToSpeaker ? sameSpeaker.map((s) => s.id).toList() : [widget.segmentId];
+    if (!_selectedSegmentIds.contains(widget.segmentId)) {
+      _selectedSegmentIds.add(widget.segmentId);
+    }
+    _isSegmentsExpanded = _applyToSpeaker && sameSpeaker.any((s) => s.id != widget.segmentId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final peopleProvider = context.read<PeopleProvider>();
@@ -353,25 +362,24 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       children: [
         CheckboxListTile(
           title: Text(
-            _isSegmentsExpanded
+            _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
-                : context.l10n.tagOtherSegments,
-            style: TextStyle(fontSize: 14, color: untaggedSegments.isNotEmpty ? Colors.white : Colors.grey),
+                : context.l10n.tagSpeakerIncludingLaterSpeech,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
           ),
-          value: _isSegmentsExpanded,
-          onChanged: untaggedSegments.isNotEmpty
-              ? (value) {
-                  setState(() {
-                    _isSegmentsExpanded = value ?? false;
-                    if (_isSegmentsExpanded) {
-                      _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
-                    } else {
-                      final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
-                      _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
-                    }
-                  });
-                }
-              : null,
+          value: _applyToSpeaker,
+          onChanged: (value) {
+            setState(() {
+              _applyToSpeaker = value ?? false;
+              _isSegmentsExpanded = _applyToSpeaker && untaggedSegments.isNotEmpty;
+              if (_applyToSpeaker) {
+                _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
+              } else {
+                final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
+                _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
+              }
+            });
+          },
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           activeColor: Theme.of(context).colorScheme.secondary,
@@ -424,6 +432,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _selectedSegmentIds.add(segment.id);
                       } else {
                         _selectedSegmentIds.remove(segment.id);
+                        _applyToSpeaker = false;
                       }
                     });
                   },
@@ -468,10 +477,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                     personIdToAssign,
                     personNameToAssign,
                     List<String>.of(_selectedSegmentIds),
-                    _isSegmentsExpanded &&
-                        widget.segments
-                            .where((s) => s.speakerId == widget.speakerId)
-                            .every((s) => _selectedSegmentIds.contains(s.id)),
+                    _applyToSpeaker,
                   );
                 } catch (_) {
                   saved = false;

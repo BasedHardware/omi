@@ -10105,4 +10105,7 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merk også senere tale fra denne taleren';
 }

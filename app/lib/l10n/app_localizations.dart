@@ -18680,6 +18680,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{status, select, ready{Voice ready for recognition} saved_sample_awaiting_embedding{Sample saved; voice processing still needed} not_learned{Voice not learned} other{Voice status unknown}}'**
   String voiceRecognitionStatus(String status);
+
+  /// No description provided for @tagSpeakerIncludingLaterSpeech.
+  ///
+  /// In en, this message translates to:
+  /// **'Also tag later speech from this speaker'**
+  String get tagSpeakerIncludingLaterSpeech;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

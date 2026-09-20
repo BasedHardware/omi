@@ -549,6 +549,7 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  final Map<int, String> _manualSpeakerDefaults = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -650,6 +651,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
@@ -1668,6 +1670,7 @@ class CaptureController extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -2399,7 +2402,10 @@ class CaptureController extends ChangeNotifier
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
   void applyInProgressConversation(ServerConversation? nextConversation) {
-    if (_conversation?.id != nextConversation?.id) suggestionsBySegmentId.clear();
+    if (_conversation?.id != nextConversation?.id) {
+      suggestionsBySegmentId.clear();
+      _manualSpeakerDefaults.clear();
+    }
     _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
@@ -2739,6 +2745,11 @@ class CaptureController extends ChangeNotifier
           speakerId: applyToSpeaker ? speakerId : null);
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
+      if (applyToSpeaker) {
+        _manualSpeakerDefaults[speakerId] = finalPersonId;
+      } else {
+        _manualSpeakerDefaults.remove(speakerId);
+      }
       for (final segment in segments) {
         if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
           segment.isUser = finalPersonId == 'user';
@@ -2791,6 +2802,13 @@ class CaptureController extends ChangeNotifier
     }
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    for (final segment in remainSegments) {
+      final assigned = _manualSpeakerDefaults[segment.speakerId];
+      if (assigned != null && segment.personId == null && !segment.isUser) {
+        segment.isUser = assigned == 'user';
+        segment.personId = segment.isUser ? null : assigned;
+      }
+    }
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)

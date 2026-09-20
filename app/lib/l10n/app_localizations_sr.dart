@@ -10121,4 +10121,7 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Означи и каснији говор овог говорника';
 }

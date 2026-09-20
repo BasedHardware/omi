@@ -75,4 +75,80 @@ void main() {
     expect(calls.last.ids, ['first', 'wrong']);
     expect(calls.last.whole, isTrue);
   });
+
+  testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {
+    final segments = [
+      TranscriptSegment(
+          id: 'only',
+          text: 'Only synthetic speech',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 2,
+          translations: []),
+    ];
+    final calls = <({List<String> ids, bool whole})>[];
+    await tester.pumpWidget(ChangeNotifierProvider(
+        create: (_) => PeopleProvider(),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+              body: NameSpeakerBottomSheet(
+                  speakerId: 0,
+                  segmentId: 'only',
+                  segments: segments,
+                  defaultApplyToSpeaker: true,
+                  onSpeakerAssigned: (speaker, person, name, ids, whole) async {
+                    calls.add((ids: ids, whole: whole));
+                    return true;
+                  })),
+        )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('later speech'), findsOneWidget);
+    final checkbox = tester.widget<CheckboxListTile>(find.byType(CheckboxListTile).first);
+    expect(checkbox.value, isTrue);
+    expect(checkbox.onChanged, isNotNull);
+    await tester.ensureVisible(find.byType(ElevatedButton));
+    await tester.tap(find.byType(ElevatedButton));
+    await tester.pumpAndSettle();
+    expect(calls.single.ids, ['only']);
+    expect(calls.single.whole, isTrue);
+  });
+
+  testWidgets('detail default with one bubble stays a selected-segments edit', (tester) async {
+    final segments = [
+      TranscriptSegment(
+          id: 'only',
+          text: 'Only synthetic speech',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 2,
+          translations: []),
+    ];
+    final calls = <bool>[];
+    await tester.pumpWidget(ChangeNotifierProvider(
+        create: (_) => PeopleProvider(),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+              body: NameSpeakerBottomSheet(
+                  speakerId: 0,
+                  segmentId: 'only',
+                  segments: segments,
+                  onSpeakerAssigned: (speaker, person, name, ids, whole) async {
+                    calls.add(whole);
+                    return true;
+                  })),
+        )));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(ElevatedButton));
+    await tester.tap(find.byType(ElevatedButton));
+    await tester.pumpAndSettle();
+    expect(calls.single, isFalse);
+  });
 }

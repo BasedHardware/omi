@@ -9936,4 +9936,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'この話者の以降の発話もタグ付けする';
 }

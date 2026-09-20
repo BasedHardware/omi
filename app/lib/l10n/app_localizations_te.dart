@@ -10154,4 +10154,7 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి';
 }

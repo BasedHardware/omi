@@ -10101,4 +10101,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Gắn thẻ cả lời nói sau này của người nói này';
 }

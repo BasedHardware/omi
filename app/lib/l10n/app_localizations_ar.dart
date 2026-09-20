@@ -10047,4 +10047,7 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'وسم الكلام اللاحق من هذا المتحدث أيضًا';
 }

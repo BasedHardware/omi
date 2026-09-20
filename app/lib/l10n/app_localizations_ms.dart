@@ -10133,4 +10133,7 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan kemudian daripada penceramah ini';
 }

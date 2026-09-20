@@ -10193,4 +10193,7 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Étiqueter aussi les propos ultérieurs de cet interlocuteur';
 }

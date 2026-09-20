@@ -10177,4 +10177,7 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு';
 }

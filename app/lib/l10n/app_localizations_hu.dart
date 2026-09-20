@@ -10147,4 +10147,7 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Jelöld meg ennek a beszélőnek a későbbi beszédét is';
 }

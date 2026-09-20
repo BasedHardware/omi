@@ -10108,4 +10108,7 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merkitse myös tämän puhujan myöhempi puhe';
 }

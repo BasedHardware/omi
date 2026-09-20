@@ -10115,4 +10115,7 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'या वक्त्याचे नंतरचे बोलणेही टॅग करा';
 }
