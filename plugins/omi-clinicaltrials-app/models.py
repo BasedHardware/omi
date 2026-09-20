@@ -1,5 +1,5 @@
 import re
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -32,6 +32,17 @@ StudyPhase = Literal[
 ]
 
 
+class _NullMeansDefault(BaseModel):
+    """Treat omitted Omi tool parameters as defaults instead of invalid nulls."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if value is not None}
+        return data
+
+
 class ChatToolResponse(BaseModel):
     """Omi chat-tool response containing exactly one of result or error."""
 
@@ -45,7 +56,7 @@ class ChatToolResponse(BaseModel):
         return self
 
 
-class SearchTrialsRequest(BaseModel):
+class SearchTrialsRequest(_NullMeansDefault):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     condition: Optional[str] = Field(default=None, min_length=1, max_length=120)
@@ -64,7 +75,7 @@ class SearchTrialsRequest(BaseModel):
         return self
 
 
-class RecruitingTrialsRequest(BaseModel):
+class RecruitingTrialsRequest(_NullMeansDefault):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
     condition: str = Field(..., min_length=1, max_length=120)

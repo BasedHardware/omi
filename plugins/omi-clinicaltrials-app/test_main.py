@@ -295,6 +295,28 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SearchTrialsRequest()
 
+    def test_search_null_optionals_use_defaults(self):
+        request = SearchTrialsRequest(
+            condition="diabetes",
+            intervention=None,
+            location=None,
+            status=None,
+            phase=None,
+            page_size=None,
+        )
+        self.assertEqual(request.status, "RECRUITING")
+        self.assertIsNone(request.phase)
+        self.assertEqual(request.page_size, 5)
+
+    def test_recruiting_null_optionals_use_defaults(self):
+        request = RecruitingTrialsRequest(
+            condition="asthma",
+            location=None,
+            page_size=None,
+        )
+        self.assertIsNone(request.location)
+        self.assertEqual(request.page_size, 5)
+
     def test_detail_normalizes_nct_id(self):
         request = TrialDetailsRequest(nct_id="nct04280705")
         self.assertEqual(request.nct_id, "NCT04280705")
@@ -442,6 +464,38 @@ class EndpointTests(unittest.TestCase):
         response = self.test_client.post(
             "/tools/search_clinical_trials",
             json={"uid": "not-forwarded", "condition": "diabetes"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["error"])
+        self.assertIn("NCT00000001", payload["result"])
+
+    def test_endpoint_accepts_null_optionals(self):
+        response = self.test_client.post(
+            "/tools/search_clinical_trials",
+            json={
+                "uid": "not-forwarded",
+                "condition": "diabetes",
+                "intervention": None,
+                "location": None,
+                "status": None,
+                "phase": None,
+                "page_size": None,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["error"])
+        self.assertIn("NCT00000001", payload["result"])
+
+    def test_recruiting_endpoint_accepts_null_optionals(self):
+        response = self.test_client.post(
+            "/tools/find_recruiting_trials",
+            json={
+                "condition": "asthma",
+                "location": None,
+                "page_size": None,
+            },
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
