@@ -1401,9 +1401,9 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  void deleteAllMemories() async {
+  Future<bool> deleteAllMemories() async {
     final int countBeforeDeletion = _memories.length;
-    await deleteAllMemoriesServer();
+    if (!await deleteAllMemoriesServer()) return false;
     _memories.clear();
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(
@@ -1411,6 +1411,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
     }
     _setCategories();
+    return true;
   }
 
   /// Create a memory - works offline by saving locally first, then syncing
