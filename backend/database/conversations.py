@@ -180,8 +180,13 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
     if 'manual_speaker_assignments' in data and isinstance(data['manual_speaker_assignments'], dict):
-        data['manual_speaker_assignments'] = _protect_json_value(data['manual_speaker_assignments'], uid, level)
-        data['manual_speaker_assignments_compressed'] = True
+        receipt = data['manual_speaker_assignments']
+        if receipt:
+            data['manual_speaker_assignments'] = _protect_json_value(receipt, uid, level)
+            data['manual_speaker_assignments_compressed'] = True
+        else:
+            data.pop('manual_speaker_assignments', None)
+            data.pop('manual_speaker_assignments_compressed', None)
     return data
 
 
@@ -2549,9 +2554,12 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         result['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
-        result['manual_speaker_assignments'] = decode_manual_speaker_assignments(
-            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
-        )
+        if raw.get('manual_speaker_assignments') is not None:
+            result['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+                uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+            )
+        else:
+            result.pop('manual_speaker_assignments', None)
         return result
 
     @firestore.transactional
