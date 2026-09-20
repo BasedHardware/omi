@@ -516,7 +516,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.pop(sheetContext);
                     },
                   ),
-                  if (_hasButtonTapsFeature == true)
+                  if (_hasButtonTapsFeature == true || currentAction == 3)
                     ListTile(
                       title: Text(
                         context.l10n.off,
