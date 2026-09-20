@@ -1,24 +1,97 @@
-import sys
-import unittest
+"""Hermetic unit tests for Dropbox token refresh persistence, metadata safety, and input coercion.
+
+Runs under standard library unittest without third-party dependencies (FastAPI/TestClient not required).
+"""
+import asyncio
 from datetime import datetime, timedelta, timezone
+import importlib.util
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+import sys
+import types
+import unittest
+from unittest.mock import MagicMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "omi-plugin-sdk" / "src"))
+
+
+class Framework:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get(self, *args, **kwargs):
+        return lambda f: f
+
+    post = get
+
+
+class DummyResponse:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+class EndpointResponseStub:
+    def __init__(self, result=None, error=None, **kwargs):
+        self.result = result
+        self.error = error
+
+
+def make_module(name, **attrs):
+    mod = types.ModuleType(name)
+    mod.__dict__.update(attrs)
+    return mod
+
+
+# Framework stubs for hermetic execution without fastapi installed
+stubs = {
+    "requests": make_module("requests", RequestException=OSError, post=lambda *a, **kw: None, get=lambda *a, **kw: None),
+    "dotenv": make_module("dotenv", load_dotenv=lambda *a, **kw: None),
+    "fastapi": make_module(
+        "fastapi",
+        FastAPI=Framework,
+        Request=object,
+        Query=lambda default=None, **kw: default,
+        HTTPException=Exception,
+    ),
+    "fastapi.responses": make_module(
+        "fastapi.responses",
+        HTMLResponse=DummyResponse,
+        RedirectResponse=DummyResponse,
+        JSONResponse=DummyResponse,
+    ),
+    "db": make_module(
+        "db",
+        store_dropbox_tokens=Mock(),
+        get_dropbox_tokens=Mock(),
+        update_dropbox_tokens=Mock(),
+        delete_dropbox_tokens=Mock(),
+        store_oauth_state=Mock(),
+        get_oauth_state=Mock(),
+        delete_oauth_state=Mock(),
+        get_user_settings=Mock(),
+        store_user_settings=Mock(),
+    ),
+    "models": make_module("models", Conversation=dict, EndpointResponse=EndpointResponseStub),
+}
+
+# Only inject stubs if modules are not already installed
+active_stubs = {k: v for k, v in stubs.items() if k not in sys.modules}
+
+spec = importlib.util.spec_from_file_location(
+    "dropbox_main", Path(__file__).with_name("main.py")
+)
+dropbox_main = importlib.util.module_from_spec(spec)
+with patch.dict(sys.modules, active_stubs):
+    spec.loader.exec_module(dropbox_main)
 
 from dropbox_client import DropboxClient
-from main import (
-    app,
-    get_valid_access_token,
-    refresh_access_token,
-    refresh_access_token_full,
-)
 
-try:
-    from fastapi.testclient import TestClient
-except ModuleNotFoundError:
-    TestClient = None
+
+class FakeRequest:
+    def __init__(self, body):
+        self._body = body
+
+    async def json(self):
+        return self._body
 
 
 class TestDropboxTokenRefreshAndTools(unittest.TestCase):
@@ -29,9 +102,9 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             "refresh_token": "valid_refresh",
             "expires_at": future,
         }
-        with patch("main.get_dropbox_tokens", return_value=tokens), \
-             patch("main.refresh_access_token_full") as mock_refresh:
-            token = get_valid_access_token("user_123")
+        with patch.object(dropbox_main, "get_dropbox_tokens", return_value=tokens), \
+             patch.object(dropbox_main, "refresh_access_token_full") as mock_refresh:
+            token = dropbox_main.get_valid_access_token("user_123")
             self.assertEqual(token, "valid_token")
             mock_refresh.assert_not_called()
 
@@ -49,10 +122,10 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             "refresh_token": "new_refresh_token",
         }
 
-        with patch("main.get_dropbox_tokens", return_value=tokens), \
-             patch("main.refresh_access_token_full", return_value=refresh_result) as mock_refresh, \
-             patch("main.update_dropbox_tokens") as mock_update:
-            token = get_valid_access_token("user_123")
+        with patch.object(dropbox_main, "get_dropbox_tokens", return_value=tokens), \
+             patch.object(dropbox_main, "refresh_access_token_full", return_value=refresh_result) as mock_refresh, \
+             patch.object(dropbox_main, "update_dropbox_tokens") as mock_update:
+            token = dropbox_main.get_valid_access_token("user_123")
             self.assertEqual(token, "refreshed_access_token")
             mock_refresh.assert_called_once_with("my_refresh")
             mock_update.assert_called_once_with(
@@ -63,11 +136,11 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             )
 
     def test_refresh_access_token_string_wrapper(self):
-        with patch("main.refresh_access_token_full", return_value={"access_token": "tok_123"}):
-            self.assertEqual(refresh_access_token("ref"), "tok_123")
+        with patch.object(dropbox_main, "refresh_access_token_full", return_value={"access_token": "tok_123"}):
+            self.assertEqual(dropbox_main.refresh_access_token("ref"), "tok_123")
 
-        with patch("main.refresh_access_token_full", return_value=None):
-            self.assertIsNone(refresh_access_token("ref"))
+        with patch.object(dropbox_main, "refresh_access_token_full", return_value=None):
+            self.assertIsNone(dropbox_main.refresh_access_token("ref"))
 
     def test_search_files_handles_none_metadata_records(self):
         client = DropboxClient("test_token")
@@ -92,32 +165,30 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             ]
         }
 
-        with patch("requests.post", return_value=mock_resp):
+        with patch("dropbox_client.requests.post", return_value=mock_resp):
             results, error = client.search_files("Report")
             self.assertIsNone(error)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0]["name"], "Report.pdf")
             self.assertEqual(results[0]["path"], "/Documents/Report.pdf")
 
-    @unittest.skipIf(TestClient is None, "fastapi test client not installed")
     def test_chat_tools_reject_non_dict_body(self):
-        client = TestClient(app)
-        for endpoint in ["/tools/search", "/tools/list", "/tools/read"]:
-            res = client.post(endpoint, json=["not", "a", "dict"])
-            self.assertEqual(res.status_code, 200)
-            self.assertIn("request body must be a JSON object", res.json().get("error", ""))
+        tools = [dropbox_main.tool_search_dropbox, dropbox_main.tool_list_dropbox, dropbox_main.tool_read_dropbox_file]
+        for tool in tools:
+            res = asyncio.run(tool(FakeRequest(["not", "a", "dict"])))
+            self.assertIn("error", res)
+            self.assertIn("request body must be a JSON object", res["error"])
 
-    @unittest.skipIf(TestClient is None, "fastapi test client not installed")
     def test_chat_tool_search_coerces_and_validates_query(self):
-        client = TestClient(app)
-        with patch("main.get_valid_access_token", return_value="tok"):
+        with patch.object(dropbox_main, "get_valid_access_token", return_value="tok"):
             # Empty / whitespace query
-            res = client.post("/tools/search", json={"uid": "u1", "query": "   "})
-            self.assertIn("Please provide a search query", res.json().get("error", ""))
+            res = asyncio.run(dropbox_main.tool_search_dropbox(FakeRequest({"uid": "u1", "query": "   "})))
+            self.assertIn("error", res)
+            self.assertIn("Please provide a search query", res["error"])
 
             # Numeric query coerced to string
             with patch.object(DropboxClient, "search_files", return_value=([], None)) as mock_search:
-                res = client.post("/tools/search", json={"uid": "u1", "query": 2026})
+                res = asyncio.run(dropbox_main.tool_search_dropbox(FakeRequest({"uid": "u1", "query": 2026})))
                 mock_search.assert_called_once_with("2026", max_results=10)
 
 
