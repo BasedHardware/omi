@@ -111,3 +111,45 @@ def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatc
         assert module.process_segment(f'{timestamp}.wav', 'u', response, threading.Lock(), [])
     assert len(conversations(store)) == 1
     finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)
+
+
+@pytest.mark.parametrize('condition', ['anchor_deleted', 'lineage_deleted', 'user_managed', 'provenance', 'cycle'])
+def test_assignment_outcomes_through_process_segment(pipeline, condition):
+    from copy import deepcopy
+    from tests.unit.test_sync_cross_job_assignment import chunk
+
+    module, store = pipeline
+    cid = chunk_identity('u', 'omi', None, False, 1000)
+    row = chunk(cid, 1000, device=None)
+    row['sync_content_revision'] = 1
+    target = None
+    if condition == 'anchor_deleted':
+        row['deleted'] = True
+    elif condition == 'lineage_deleted':
+        row.update(deleted=True, sync_merged_into='survivor')
+        store.rows[('users', 'u', 'conversations', 'survivor')] = dict(row, id='survivor', sync_merged_into=None)
+    elif condition == 'user_managed':
+        row['user_title'] = 'Preserve my edit'
+    elif condition == 'cycle':
+        row.update(deleted=True, sync_merged_into=cid)
+    else:
+        row = chunk('live', 1000, device='another-device')
+        cid = target = 'live'
+    store.rows[('users', 'u', 'conversations', cid)] = row
+    before = deepcopy(store.rows)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert (
+        module.process_segment(
+            '1000.wav', 'u', response, threading.Lock(), errors, target_conversation_id=target, deferred_outcome=outcome
+        )
+        is False
+    )
+    assert store.rows == before
+    assert response == {'new_memories': set(), 'updated_memories': set()}
+    if condition in ('provenance', 'cycle'):
+        assert errors == ['stt_upstream_error']
+        assert outcome['outcome'].value == 'upstream_error' and outcome['retryable']
+    else:
+        assert errors == []
+        assert outcome['outcome'].value == 'success' and not outcome['retryable']

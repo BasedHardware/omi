@@ -6,6 +6,7 @@ existing retry path; original audio and redirect tombstones are never removed.
 
 from database import conversations as conversations_db
 from database.sync_bridges import mark_sync_bridge_cleaned
+from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 from utils.conversations.merge_conversations import _copy_audio_chunks_for_merge, _delete_conversation_and_related_data
 
 
@@ -13,18 +14,18 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
     visited = set()
     while True:
         if conversation_id in visited:
-            raise ValueError('sync redirect cycle')
+            raise SyncAssignmentConflict('sync redirect cycle')
         visited.add(conversation_id)
         row = conversations_db.get_conversation(uid, conversation_id)
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
-            raise ValueError('sync conversation deleted during bridge')
+            raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
             continue
         for source_id in row.get('sync_merged_from', []):
             source = conversations_db.get_conversation(uid, source_id)
             if not source or not source.get('deleted') or not source.get('sync_merged_into'):
-                raise ValueError('sync bridge source missing or not a tombstone')
+                raise SyncAssignmentConflict('sync bridge source missing or not a tombstone')
             revision = source['sync_content_revision']
             needs_cleanup = source.get('sync_bridge_cleaned_revision') != revision
             audio_target = conversation_id if row.get('private_cloud_sync_enabled') else None
@@ -34,6 +35,12 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             if needs_cleanup:
                 _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
             if needs_copy:
+                # Invalidate an older copy receipt before late audio copying:
+                # if copying fails, a retry without this worker's source hint
+                # must still see pending audio work.
+                if source_id == audio_source_id and source.get('sync_bridge_audio_target') == audio_target:
+                    if not mark_sync_bridge_cleaned(uid, source_id, revision, None):
+                        raise RuntimeError('sync bridge completion revision changed')
                 _copy_audio_chunks_for_merge(uid, [{'id': source_id}], conversation_id, strict=True)
             if (needs_cleanup or needs_copy) and not mark_sync_bridge_cleaned(uid, source_id, revision, audio_target):
                 raise RuntimeError('sync bridge completion revision changed')
@@ -42,7 +49,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             conversation_id = current['sync_merged_into']
             continue
         if not current or current.get('deleted'):
-            raise ValueError('sync conversation deleted during bridge')
+            raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         return conversation_id
 
 

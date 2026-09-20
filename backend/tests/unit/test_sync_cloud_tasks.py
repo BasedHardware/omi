@@ -1018,6 +1018,7 @@ def _load_sync_router_for_fast_path():
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.other',

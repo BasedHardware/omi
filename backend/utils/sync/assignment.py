@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
+from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 from utils.conversation_continuity import intervals_connect
 
 if TYPE_CHECKING:
@@ -99,19 +100,19 @@ def assign_in_transaction(
     # overwrite a tombstone. Redirects are server-authored, not user deletions.
     own = load(incoming['id'])
     if own and own.get('deleted') and not own.get('sync_merged_into'):
-        raise ValueError('sync anchor was deleted')
+        raise SyncAssignmentSuperseded('sync anchor was deleted')
 
     def resolve(cid):
         row = load(cid) if cid else None
         seen = set()
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
-                raise ValueError('sync redirect cycle')
+                raise SyncAssignmentConflict('sync redirect cycle')
             seen.add(row['id'])
             cid = row['sync_merged_into']
             row = load(cid)
         if seen and (not row or row.get('deleted')):
-            raise ValueError('sync capture lineage was deleted')
+            raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
 
     # Check retry lineage independently of client hints: changing a target must
@@ -126,7 +127,7 @@ def assign_in_transaction(
         live = decode(target)
         if live.get('transcript_segments') or live.get('has_photos') or live.get('photos'):
             if not compatible_capture(target, incoming):
-                raise ValueError('sync target provenance mismatch')
+                raise SyncAssignmentConflict('sync target provenance mismatch')
         else:
             target_id, target = None, None
     else:
@@ -134,7 +135,7 @@ def assign_in_transaction(
         # or bypass continuity. An existing sync target remains a lookup hint.
         target_id, target = None, None
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
-        raise ValueError('sync anchor is user managed')
+        raise SyncAssignmentSuperseded('sync anchor is user managed')
 
     matched = {}
     extent = deepcopy(incoming)

@@ -186,3 +186,24 @@ def test_transactional_ingest_does_not_run_external_cleanup(system):
     assert result[0]['sync_merged_from'] == ['chunk-004']
     retract.assert_not_called()
     copy.assert_not_called()
+
+
+def test_failed_late_audio_copy_is_pending_without_transient_source_hint(system):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    ingest(2)
+    retract.reset_mock()
+    copy.side_effect = RuntimeError('copy unavailable')
+    with pytest.raises(RuntimeError, match='copy unavailable'):
+        bridge.finish_sync_bridges('u', 'chunk-004', audio_source_id='chunk-004')
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    assert donor['sync_bridge_audio_target'] is None
+    assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+    copy.side_effect = None
+    copy.reset_mock()
+    ingest(3)
+    retract.assert_not_called()
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)

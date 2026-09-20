@@ -125,6 +125,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.bridge import finish_sync_segment
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -1079,6 +1080,7 @@ def process_segment(
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
 ):
+    conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     try:
@@ -1238,6 +1240,20 @@ def process_segment(
                 retryable=False,
             )
         return True
+    except SyncAssignmentSuperseded:
+        # Acknowledge user authority without failing the WAL or dropping siblings.
+        # False excludes this segment from content usage; the zero-error job still
+        # commits its durable completion ledger before the client sees completed.
+        if conversation_id:
+            with lock:
+                response['new_memories'].discard(conversation_id)
+                response['updated_memories'].discard(conversation_id)
+                response.get('_merged', {}).pop(conversation_id, None)
+        logger.info('event=sync_assignment outcome=superseded')
+        _set_deferred_segment_outcome(
+            deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
+        )
+        return False
     except SyncConversationPersistenceFenced:
         raise
     except Exception as e:

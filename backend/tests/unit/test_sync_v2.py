@@ -1352,6 +1352,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',
@@ -2347,11 +2348,12 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_completes_as_silence(self):
-        """A provider that returns no words for VAD-admitted audio is reporting
-        silence, not failing. The job completes, the content ledger is marked
-        done rather than left retryable, and no usage is billed — the client
-        stops re-uploading the same noise as a failed recording."""
+    @pytest.mark.parametrize('intake_outcome', ['silence', 'deleted', 'lineage', 'protected'])
+    @pytest.mark.parametrize('task_mode', [False, True])
+    async def test_empty_or_superseded_intake_completes_without_retry(self, intake_outcome, task_mode):
+        """Silence and user-superseded intake finish the ledger without errors or
+        usage in both inline and Cloud Tasks modes; #14337 must not recur as
+        endless client re-upload of an intentionally empty result."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2369,6 +2371,24 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
 
+            if intake_outcome != 'silence':
+
+                def payload(**values):
+                    return types.SimpleNamespace(**values, model_dump=lambda: values)
+
+                stubs['pipeline'].CreateConversation = payload
+                stubs['pipeline'].Conversation = payload
+                stubs['pipeline'].ConversationSource = lambda value: value
+                stubs['pipeline'].get_timestamp_from_path = lambda path: 1700000001.0
+                stubs['pipeline'].prerecorded.return_value = ([{'text': 'Speech'}], 'en')
+                stubs['pipeline'].postprocess_words = lambda *a: [types.SimpleNamespace(start=0, end=3)]
+                stubs['pipeline'].identify_speakers_for_segments = lambda *a: None
+
+                def superseded(*a, **kw):
+                    raise stubs['pipeline'].SyncAssignmentSuperseded(intake_outcome)
+
+                sys.modules['utils.conversations.lifecycle'].ingest_sync_conversation = superseded
+
             terminal_events = []
             stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
                 terminal_events.append('content_completed') or True
@@ -2385,6 +2405,7 @@ class TestAsyncCoordinatorBehavioral:
                 False,
                 '/tmp/job-empty',
                 content_id='content-empty',
+                task_mode=task_mode,
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
@@ -3168,6 +3189,7 @@ class TestV2EndpointExecution:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',

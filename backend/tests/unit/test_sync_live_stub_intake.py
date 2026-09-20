@@ -13,6 +13,8 @@ from datetime import timedelta
 
 import pytest
 
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_capture_continuity import arrival_order, capture, signature
 from utils.transcribe_decisions import decide_existing_conversation_action, ConversationLifecycleAction
@@ -161,7 +163,7 @@ def test_retry_lineage_cannot_be_bypassed_with_new_target(target_id):
     intake(store, capture(2))
     store.rows[('users', 'u', 'conversations', 'chunk-000')]['deleted'] = True
     before = deepcopy(store.rows)
-    with pytest.raises(ValueError, match='lineage was deleted'):
+    with pytest.raises(SyncAssignmentSuperseded, match='lineage was deleted'):
         intake(store, capture(4), target_id=target_id)
     assert store.rows == before
 
@@ -175,6 +177,6 @@ def test_missing_target_cannot_overwrite_user_managed_retry_anchor(absorbed):
         intake(store, capture(2))
     store.rows[('users', 'u', 'conversations', 'chunk-000')]['user_title'] = 'Keep my title'
     before = deepcopy(store.rows)
-    with pytest.raises(ValueError, match='user managed'):
+    with pytest.raises(SyncAssignmentSuperseded, match='user managed'):
         intake(store, capture(4 if absorbed else 0), target_id='missing-reconnect')
     assert store.rows == before

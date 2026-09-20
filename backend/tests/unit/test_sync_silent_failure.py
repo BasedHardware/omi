@@ -984,6 +984,8 @@ class TestProcessSegmentReal:
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
 
+        sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
+
         # Import under stubs
         from utils.sync.pipeline import process_segment
 

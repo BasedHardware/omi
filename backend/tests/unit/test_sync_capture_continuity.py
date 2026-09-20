@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, intake, conversations
 from utils.sync.assignment import interval_matches
@@ -200,7 +202,7 @@ def test_retry_of_absorbed_chunk_cannot_resurrect_deleted_survivor():
     intake(store, capture(4))
     intake(store, capture(2))
     store.rows[('users', 'u', 'conversations', 'chunk-000')]['deleted'] = True
-    with pytest.raises(ValueError, match='lineage was deleted'):
+    with pytest.raises(SyncAssignmentSuperseded, match='lineage was deleted'):
         intake(store, capture(4))
     assert not conversations(store)
 
@@ -227,5 +229,5 @@ def test_auto_bridge_preserves_user_managed_and_live_donors(field, value):
     assert len(result['transcript_segments']) == 2
     assert not donor.get('deleted')
     assert len(conversations(store)) == 2
-    with pytest.raises(ValueError, match='user managed'):
+    with pytest.raises(SyncAssignmentSuperseded, match='user managed'):
         intake(store, capture(4))

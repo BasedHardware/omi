@@ -4,7 +4,7 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 
 ## Boundaries
 
-- `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes.
+- `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
 - `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
 - `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy.
@@ -25,7 +25,7 @@ The 2026-09-19 incident was **sync adopting live-flap stubs**: failed live STT c
 
 When matches exist, the survivor is the existing row with earliest `started_at`, then smallest ID on a tie. Incoming chunk IDs create records only when nothing matches. Ordinary append keeps its visible ID; genuine bridges retain redirect tombstones. Partition and absolute content converge across permutations, not the survivor ID. Explicit real live targets retain their ID and lifecycle authority; user-deleted targets are never reused. This does not authenticate client provenance. Transcript ranges remain absolute through rebasing; `finished_at` is the last word end; the existing duration helper controls displayed speech duration.
 
-Bridge writes increment survivor and donor `sync_content_revision`. Processors reject deleted rows and stale revisions. `sync_merged_from` persists ancestry with the transcript, so `bridge.py` can replay external effects after a failed attempt. The only completion call is after segment audio persistence in `process_segment`; transactional lifecycle intake has no external cleanup. It reuses merge/delete retraction and audio-copy machinery outside the transaction. `database/sync_bridges.py` checkpoints `sync_bridge_cleaned_revision` on each tombstone with a revision compare-and-set, and later appends skip completed retraction. `sync_bridge_audio_target` tracks the copy destination: later bridges and late donor audio copy without repeating completed retraction. Cleanup/copy/checkpoint failures propagate to the job retry path; concurrent attempts may repeat effects until a receipt commits. Original audio and donor tombstones remain while uploads can finish; deleting the visible conversation also purges its retained sources. In-flight donor audio is recopied when its worker finishes. There is no independent cleanup scheduler: recovery depends on a retried job or later intake. Search-index writes retain their existing best-effort semantics.
+Bridge writes increment survivor and donor `sync_content_revision`. Processors reject deleted rows and stale revisions. `sync_merged_from` persists ancestry with the transcript, so `bridge.py` can replay external effects after a failed attempt. The only completion call is after segment audio persistence in `process_segment`; transactional lifecycle intake has no external cleanup. It reuses merge/delete retraction and audio-copy machinery outside the transaction. `database/sync_bridges.py` checkpoints `sync_bridge_cleaned_revision` on each tombstone with a revision compare-and-set, and later appends skip completed retraction. `sync_bridge_audio_target` tracks the copy destination: later bridges and late donor audio copy without repeating completed retraction. Cleanup/copy/checkpoint failures propagate to the job retry path; concurrent attempts may repeat effects until a receipt commits. Original audio and donor tombstones remain while uploads can finish; user/source deletion purges retained sources through `delete_conversation_with_sync_sources`, called by the deletion service and developer delete endpoint; the raw database hard-delete primitive does no external orchestration. In-flight donor audio is recopied when its worker finishes; the previous copy receipt is cleared first, so failed late copying remains pending on retry without a transient source hint. There is no independent cleanup scheduler: recovery depends on a retried job or later intake. Search-index writes retain their existing best-effort semantics.
 
 ## Relevance and remaining differences
 
@@ -34,3 +34,14 @@ Short filler-only speech gets `sync_relevance=review`, remain visible with a det
 Explicit follow-up outside this change: realtime should reuse conversations across reconnects inside the continuity window and reap empty stubs. Sync leaves live stub lifecycle untouched.
 
 The remaining boundary-policy input difference is timeout configuration: realtime can configure its timeout per session; shipped WALs do not carry that setting, so sync uses the default 120 seconds. Tests replay the in-order realtime speech rule as the reference and require identical sync membership, absolute transcript ranges and extents across arrival permutations, including 119-second joins and >=120-second splits with live stubs present. Sync enrichment remains per finishing job and revision-fenced, not quiescence-debounced. Historical aliases already returned to clients may require a history refresh. Tests model serial commit permutations and replay failures hermetically; Firestore retry contention and live UI acceptance require separate evidence.
+
+## Assignment outcomes
+
+Deleted anchors, deleted redirect lineage and user-managed retry anchors raise
+`SyncAssignmentSuperseded`. `process_segment` consumes them quietly with no error,
+content usage or response IDs. It returns false, letting sibling segments proceed;
+a zero-error job commits the content-completion ledger before publishing completed
+(inline and Cloud Tasks). The bounded log is `sync_assignment outcome=superseded`;
+this does not masquerade as speech silence. Provenance mismatches and redirect cycles
+raise `SyncAssignmentConflict` and remain loud retryable upstream errors under the
+existing job error taxonomy. Storage/cleanup failures also retain retry behavior.
