@@ -30,7 +30,7 @@ Accuminza l'assistenti interattivu:
 omi auth login
 ```
 
-Scegghji d'accèdiri cu lu browser o d'incuddari na chiavi API pû sviluppaturi Omi. L'input interattivu ammuccia la chiavi; evita di scrìviri la chiavi nta un cumannu ca veni arricurdatU ntâ storia dû terminali.
+Scegghji d'accèdiri cu lu browser o d'incuddari na chiavi API pû sviluppaturi Omi. L'input interattivu ammuccia la chiavi; evita di scrìviri la chiavi nta un cumannu ca veni arricurdatu ntâ storia dû terminali.
 
 Pi jiri drittu ô browser:
 
