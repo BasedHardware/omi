@@ -7,6 +7,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/browser.dart';
+import 'package:omi/utils/url_utils.dart';
 
 class AppHomeWebPage extends StatefulWidget {
   final App app;
@@ -61,7 +62,7 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
         ),
       )
       ..loadRequest(
-        Uri.parse('${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}'),
+        Uri.parse(withUidQueryParameter(widget.app.externalIntegration?.appHomeUrl ?? '', SharedPreferencesUtil().uid)),
       );
   }
 

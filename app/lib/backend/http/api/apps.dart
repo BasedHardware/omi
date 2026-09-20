@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/url_utils.dart';
 
 Category _categoryFromWire(wire.GeneratedAppSelectOption option) {
   return Category(title: option.title, id: option.id);
@@ -376,7 +377,7 @@ Future<bool> isAppSetupCompleted(String? url) async {
   if (url == null || url.isEmpty) return true;
   Logger.debug('isAppSetupCompleted: $url');
   var response = await makeApiCall(
-    url: '$url?uid=${SharedPreferencesUtil().uid}',
+    url: withUidQueryParameter(url, SharedPreferencesUtil().uid),
     method: 'GET',
     headers: {},
     body: '',
