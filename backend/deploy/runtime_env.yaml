@@ -60,8 +60,35 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          STT_CONNECT_ORDER_FROM_CONFIG:
+            value: 'true'
+            category: rollout
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
+          PARAKEET_WINDOW_MAX_SESSIONS:
+            value: '1'
+            category: rollout
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          PARAKEET_WINDOW_DIARIZATION:
+            value: 'false'
+            category: rollout
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
+            value: '1800'
+            category: rollout
+          STT_CIRCUIT_HALF_OPEN_PROBES:
+            value: '1'
+            category: rollout
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
+            value: '3'
+            category: rollout
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
+            value: '30'
+            category: rollout
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,soniox
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1440,6 +1467,33 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          STT_CONNECT_ORDER_FROM_CONFIG:
+            value: 'false'
+            category: rollout
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            value: '0'
+            category: rollout
+          PARAKEET_WINDOW_MAX_SESSIONS:
+            value: '1'
+            category: rollout
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          PARAKEET_WINDOW_DIARIZATION:
+            value: 'false'
+            category: rollout
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
+            value: '1800'
+            category: rollout
+          STT_CIRCUIT_HALF_OPEN_PROBES:
+            value: '1'
+            category: rollout
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
+            value: '3'
+            category: rollout
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
+            value: '30'
+            category: rollout
           STT_SERVICE_MODELS:
             value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy

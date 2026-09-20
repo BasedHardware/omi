@@ -784,3 +784,25 @@ def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():
     assert "Scrape gap" in panels[17]["description"]
     assert "omi_stt_stream_close_total" in panels[18]["targets"][0]["expr"]
     assert "provider_budget_exhausted" in panels[18]["fieldConfig"]["defaults"]["description"]
+
+
+def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
+    """September 19 account outage: failover success must not hide exhausted accounts."""
+    expected = {
+        'omi-stt-leg-error-rate': ('omi_stt_leg_attempts_total', 'by (to_mode)'),
+        'omi-stt-chain-terminal': ('omi_stt_chain_exhausted_total', 'omi_listen_accepted_total'),
+        'omi-stt-init-terminal': ('omi_live_stt_terminal_failures_total', 'phase="initialization"'),
+        'omi-stt-account-state': ('omi_stt_stream_close_total', 'reason="provider_auth_rejected"'),
+        'omi-stt-window-overflow': ('omi_stt_window_admissions_total', 'outcome="overflow"'),
+        'omi-stt-window-saturated': ('omi_stt_window_sessions_active', 'omi_stt_window_sessions_capacity'),
+        'omi-stt-window-post-errors': ('omi_stt_window_posts_total', 'outcome="error"'),
+    }
+    for rules in _all_rule_exports().values():
+        for uid, metrics in expected.items():
+            rule = rules[uid]
+            expressions = ' '.join(d['model'].get('expr', '') for d in rule['data'])
+            assert all(metric in expressions for metric in metrics), uid
+            assert 'job="backend-listen-metrics"' in expressions
+            assert rule['noDataState'] == 'OK'
+            assert any('$A' in d['model'].get('expression', '') for d in rule['data'])
+            assert (REPO / rule['annotations']['runbook']).is_file()

@@ -16,9 +16,14 @@ routers/listen/receiver.py
   -> routers/listen/speakers.py   enrolled voiceprint matching
 ```
 
-Provider fallback is a connection-time decision. A dead live socket terminates
-the client connection; reconnect creates a new speaker-provider epoch before
-its provider-local labels enter the resumed conversation.
+Provider fallback is a connection-time and serialized mid-session decision.
+The legacy connection chain remains the default. `live_rollout.py` gates the new
+configured chain (`live_chain.py`) and UID allocation; `live_session.py` owns its
+VAD, audio timeline, usage ledger and fresh provider callbacks. `parakeet_window.py`
+subclasses the existing batch adapter with bounded admission, POSTs and teardown.
+`live_metrics.py` exposes bounded process/session metrics. Dead providers are excluded
+from that session; each adopted provider gets a new speaker-provider epoch.
+Operational controls and capacity arithmetic: [windowed live STT](../../docs/operational/windowed-live-stt.md).
 
 ## Speaker boundaries
 

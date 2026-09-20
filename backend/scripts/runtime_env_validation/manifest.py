@@ -8,7 +8,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
-from config.stt_provider_policy import STTServingSurface, canonical_model_config  # noqa: E402
+from config.stt_provider_policy import STTServingSurface, canonical_model_config, model_is_enabled  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
@@ -641,6 +641,14 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
+            if (
+                scope == f'{env}/gke/backend-listen'
+                and env_name == 'STT_SERVICE_MODELS'
+                and _manifest_literal_env_value(env_map, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+            ):
+                models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
+                if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
+                    continue
             if env_name not in env_map:
                 continue
             actual_value = _manifest_literal_env_value(env_map, env_name)

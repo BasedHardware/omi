@@ -82,8 +82,11 @@ def test_excluding_the_dead_provider_skips_soniox_without_a_key():
         assert second == STTService.deepgram
 
 
-def test_excluding_every_provider_selects_nothing():
+def test_excluding_every_provider_selects_nothing(monkeypatch):
     """Exhausting the chain must report no provider, not loop back to the first."""
+    # Credentials/stubs from another collected test must not enable a default leg.
+    monkeypatch.setattr('utils.stt.streaming._deepgram_is_available', lambda: False)
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
     with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'soniox']), patch.dict(
         'os.environ', {'SONIOX_API_KEY': 'k'}
     ):
@@ -351,3 +354,17 @@ async def test_connect_then_transcript_recovers_exactly_once(monkeypatch):
             'outcome': 'recovered',
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_failed_ramped_rebuild_keeps_the_dead_provider_attribution(monkeypatch):
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    receiver.host.stt_language, receiver.host.stt_model = 'multi', 'velma-2'
+    receiver._create_stt_socket = AsyncMock(side_effect=RuntimeError('chain exhausted'))
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language', return_value=(STTService.soniox, 'multi', 'soniox')
+    ):
+        assert await receiver._failover_stt_socket() is False
+    assert receiver.host.stt_service == STTService.modulate
+    assert receiver.host.stt_model == 'velma-2'

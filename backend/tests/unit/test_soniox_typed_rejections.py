@@ -493,3 +493,18 @@ def test_stream_close_reasons_are_bounded_not_raw_vendor_text():
     record_stt_stream_close(provider='not-a-provider', reason='Organization monthly budget exhausted.')
     after = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='unknown', reason='connection_lost')._value.get()
     assert after == before + 1
+
+
+@pytest.mark.parametrize('code', [401, 403])
+def test_enabled_auth_refusal_counts_once_in_shared_close_metric(monkeypatch, code):
+    from utils.metrics import OMI_STT_STREAM_CLOSE_TOTAL
+    from utils.stt.stream_close import PROVIDER_AUTH_REJECTED
+
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    counter = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='soniox', reason=PROVIDER_AUTH_REJECTED)
+    budget = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='soniox', reason=PROVIDER_BUDGET_EXHAUSTED)
+    before, budget_before = counter._value.get(), budget._value.get()
+    sock = _drive_socket([_frame(code, 'invalid_api_key', 'Authentication refused')])
+    assert sock.typed_death_reason == PROVIDER_AUTH_REJECTED
+    assert counter._value.get() == before + 1
+    assert budget._value.get() == budget_before

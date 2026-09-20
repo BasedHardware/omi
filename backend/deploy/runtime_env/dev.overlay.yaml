@@ -8,6 +8,12 @@ overlay:
   gke:
     backend-listen:
       env:
+        STT_SERVICE_MODELS:
+          value: parakeet-window,soniox
+        STT_CONNECT_ORDER_FROM_CONFIG:
+          value: 'true'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '100'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:

@@ -18,7 +18,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
-from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
+from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
 
 logger = logging.getLogger(__name__)
 
@@ -56,18 +56,25 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     error shape degrades to ``connection_lost`` rather than growing a new
     metric cardinality per message.
     """
+    from utils.stt.live_rollout import configured_chain_enabled
+
     error = str(error_type or '').strip().lower()
     if error in _SONIOX_BUDGET_ERROR_TYPES:
         return PROVIDER_BUDGET_EXHAUSTED
     try:
         code = int(error_code)
     except (TypeError, ValueError):
-        return 'connection_lost'
+        code = None
     if code == 402:
         # HTTP 402 is payment/quota regardless of error_type wording. Monthly
         # budget used to fall through here as connection_lost (WARNING), so a
         # 27.5h organization_monthly_budget_exhausted outage never paged.
         return PROVIDER_BUDGET_EXHAUSTED
+    if configured_chain_enabled():
+        if error == 'organization_quota_exhausted':
+            return PROVIDER_BUDGET_EXHAUSTED
+        if error == 'invalid_api_key' or code in {401, 403}:
+            return PROVIDER_AUTH_REJECTED
     if code == 400:
         message = str(error_message or '').strip().lower()
         if 'invalid language hint' in message:
@@ -234,7 +241,7 @@ class SafeSonioxSocket(STTSocket):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
                     typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'), msg.get('error_message'))
                     record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)
-                    if typed in (PROVIDER_BUDGET_EXHAUSTED, SONIOX_DEATH_INVALID_HINT):
+                    if typed in (PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED, SONIOX_DEATH_INVALID_HINT):
                         # The provider evaluated the account (402 / monthly budget)
                         # or the session config (400 invalid language hint) and
                         # refused to serve: our side of the fence owns the fix,
