@@ -1293,6 +1293,11 @@ checks:
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Composio's backend routes (/api/omi/facts, /api/omi/facts/batch, /api/notion/blocks, /api/notion/page) take uid from the request and create memories in Omi with the app's integration key or read the user's Notion workspace with their stored OAuth token; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hume-ai's /audio, /save-emotion-memory and /force-send-notification routes take uid from the query string with no caller authentication and write emotion memories into any user's Omi account with the app's integration key or push notifications to any user; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
