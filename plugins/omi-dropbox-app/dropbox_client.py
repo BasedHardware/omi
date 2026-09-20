@@ -232,6 +232,10 @@ class DropboxClient:
         Returns (files_list, error_message).
         """
         try:
+            if limit <= 0:
+                return [], None
+
+            results = []
             response = requests.post(
                 f"{self.API_BASE}/files/list_folder",
                 headers=self._headers(),
@@ -242,11 +246,12 @@ class DropboxClient:
                 },
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                entries = data.get("entries", [])
-                results = []
-                for entry in entries:
+            if response.status_code != 200:
+                return None, f"List failed: {response.text}"
+
+            data = response.json()
+            while True:
+                for entry in data.get("entries", []):
                     if not isinstance(entry, dict):
                         continue
                     results.append({
@@ -256,9 +261,24 @@ class DropboxClient:
                         "size": entry.get("size", 0),
                         "modified": entry.get("server_modified", ""),
                     })
-                return results, None
-            else:
-                return None, f"List failed: {response.text}"
+                    if len(results) >= limit:
+                        return results[:limit], None
+
+                if not data.get("has_more"):
+                    return results, None
+
+                cursor = data.get("cursor")
+                if not cursor:
+                    return None, "List failed: Dropbox returned has_more without a cursor"
+
+                response = requests.post(
+                    f"{self.API_BASE}/files/list_folder/continue",
+                    headers=self._headers(),
+                    json={"cursor": cursor},
+                )
+                if response.status_code != 200:
+                    return None, f"List continuation failed: {response.text}"
+                data = response.json()
 
         except Exception as e:
             return None, f"Error listing: {str(e)}"

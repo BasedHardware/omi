@@ -1281,6 +1281,11 @@ checks:
     triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
+  - id: dropbox-list-folder-pagination-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_dropbox_client.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15153: list_folder must follow Dropbox continuation cursors and fail loudly instead of reporting truncated results as complete"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
