@@ -154,6 +154,12 @@ def _wake_task_changes(uid: str, task_ids: List[str], mutation_key: object) -> N
         run_task_changed_wake(uid, task_id=task_id, mutation_key=mutation_key)
 
 
+def _schedule_action_item_reminder(uid: str, action_item_id: str, description: str, due_at: datetime) -> None:
+    send_action_item_data_message(
+        user_id=uid, action_item_id=action_item_id, description=description, due_at=due_at.isoformat()
+    )
+
+
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -337,12 +343,7 @@ def create_action_item(
     # Schedule a reminder only for an open task with a due date — an already-completed item must
     # not arm a reminder (#5085).
     if request.due_at and not request.completed:
-        send_action_item_data_message(
-            user_id=uid,
-            action_item_id=action_item_id,
-            description=request.description,
-            due_at=request.due_at.isoformat(),
-        )
+        _schedule_action_item_reminder(uid, action_item_id, request.description, request.due_at)
 
     upsert_action_item_vector(uid, action_item_id, request.description)
 
@@ -950,12 +951,7 @@ def create_action_items_batch(
             # Send FCM data message if action item has a due date
             due_at = action_items[idx].due_at if idx < len(action_items) else None
             if due_at is not None:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=item_id,
-                    description=action_items[idx].description,
-                    due_at=due_at.isoformat(),
-                )
+                _schedule_action_item_reminder(uid, item_id, action_items[idx].description, due_at)
 
     upsert_action_item_vectors_batch(
         uid,
@@ -1088,6 +1084,8 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         new_id = action_items_db.create_action_item(uid, new_item)
         created_ids.append(new_id)
         upsert_action_item_vector(uid, new_id, new_item['description'])
+        if isinstance(new_item['due_at'], datetime):
+            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:
