@@ -132,19 +132,10 @@ def failure_from_exception(error: BaseException, *, provider: str | None = None)
 def is_destructive_operation_in_progress(error: BaseException) -> bool:
     '''True when a transient account-level destructive-op fence is in the chain.'''
 
-    try:
-        from database.legal_holds import DestructiveOperationInProgress
-    except Exception:
-        DestructiveOperationInProgress = None  # type: ignore[misc, assignment]
-    fence_type: type[BaseException] | None = None
-    if isinstance(DestructiveOperationInProgress, type) and issubclass(DestructiveOperationInProgress, BaseException):
-        fence_type = DestructiveOperationInProgress
-    for item in _exception_chain(error):
-        if fence_type is not None and isinstance(item, fence_type):
-            return True
-        if type(item).__name__ == 'DestructiveOperationInProgress':
-            return True
-    return False
+    # Match by type name so Cloud Tasks tests (MagicMock `database`) and the
+    # real legal-hold fence both stay identifiable without an issubclass guard
+    # pyright rejects as always-true.
+    return any(type(item).__name__ == 'DestructiveOperationInProgress' for item in _exception_chain(error))
 
 
 def sync_failure_from_exception(error: BaseException, *, provider: str | None = None) -> TranscriptionFailure:
