@@ -113,6 +113,15 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "true"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: FREE_TIER_LOCAL_PROCESSING_COHORT
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
   - name: GITHUB_TOKEN

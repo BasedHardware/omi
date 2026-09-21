@@ -104,6 +104,15 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "true"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: FREE_TIER_LOCAL_PROCESSING_COHORT
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://api.omiapi.com"
   - name: DESKTOP_UPDATE_POINTERS_MODE
