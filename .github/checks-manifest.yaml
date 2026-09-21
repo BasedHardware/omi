@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: rewind-repository-ownership-guard-tests
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: the guard must prove it rejects copied private Rewind DatabasePool/generation caches while accepting repository-owned storage"
+  - id: rewind-repository-ownership
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: all Rewind-backed actors must acquire replaceable pools through RewindRepository so owner switches and recovery cannot leave a private stale pool cache"
   - id: hive-limit-coercion-tests
     command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]

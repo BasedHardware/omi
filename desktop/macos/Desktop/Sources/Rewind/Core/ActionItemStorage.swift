@@ -39,6 +39,7 @@ enum ActionItemTaskIdentity: Equatable {
 /// Provides local-first caching for fast startup and background sync with backend
 actor ActionItemStorage {
   static let shared = ActionItemStorage()
+  private let repository = RewindRepository(owner: "ActionItemStorage")
 
   /// Resolve a surfaced task id (backend id or "local_<rowid>") to its record.
   static func fetchRecord(_ database: Database, surfacedId: String) throws -> ActionItemRecord? {
@@ -53,41 +54,19 @@ actor ActionItemStorage {
     }
   }
 
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
-
   private init() {}
 
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Ensure database is initialized before use
   func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    // Initialize RewindDatabase which creates our tables via migrations
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("ActionItemStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw ActionItemStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   // MARK: - Local-First Read Operations
@@ -954,13 +933,14 @@ actor ActionItemStorage {
           return inserted
         }
       } catch {
-        guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
+        guard RewindFTSDefinition.actionItems.matchesRepairableError(error) else {
           throw error
         }
 
         logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
         try authorization.require()
-        try await RewindDatabase.shared.repairActionItemsFTS(
+        try await self.repository.repairFTS(
+          .actionItems,
           in: db,
           reason: "insertLocalActionItem"
         )
