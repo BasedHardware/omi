@@ -416,6 +416,21 @@ credentials only — `ADAPTER_SPECIFIC_ENV_ALLOWLIST` in `adapters/acp.ts` is ke
 by adapter id, because these commands run under `shell: true` and one agent's API
 key must never reach another.
 
+Checking it on a real machine:
+
+```bash
+cd desktop/macos/agent && npm run smoke:agent-routing
+```
+
+`scripts/smoke-agent-routing.mjs` takes its inventory from
+`ensureRegisteredAdapter` — the same gate `index.ts` uses at boot — so
+"connected" means connected on that host, then asserts the three routing
+behaviours through the real kernel and the real `spawn_background_agent` control
+tool. A check needing an agent the host lacks is skipped and says which env var
+would enable it, rather than being faked; `--with=<ids>` flips activation vars
+for one process to inspect the full matrix. It exits non-zero on failure, and
+starts at the utterance — the audio path is not covered.
+
 ### Chat Continuity Write-Path Contract (INV-6)
 
 Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
