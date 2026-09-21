@@ -75,6 +75,12 @@ environments:
           PARAKEET_WINDOW_DIARIZATION:
             value: 'false'
             category: rollout
+          PARAKEET_WINDOW_PACE_SECONDS:
+            value: '6'
+            category: rollout
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
+            value: '24'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -1481,6 +1487,12 @@ environments:
             category: rollout
           PARAKEET_WINDOW_DIARIZATION:
             value: 'false'
+            category: rollout
+          PARAKEET_WINDOW_PACE_SECONDS:
+            value: '6'
+            category: rollout
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
+            value: '24'
             category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'

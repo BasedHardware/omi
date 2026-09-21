@@ -15,6 +15,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `1` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
+| `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
+| `PARAKEET_WINDOW_MAX_CONTEXT_SECONDS` | `24` | `24` | `24` |
 | `STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS` | `1800` | `1800` | `1800` |
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
@@ -45,14 +47,56 @@ excluded listen shapes drop only the `parakeet-window` token from the configured
 list; they keep the rest of `STT_SERVICE_MODELS` (they are not rewritten onto
 code-default Modulate).
 
+## Why windows are sentence-anchored
+
+`nvidia/parakeet-tdt-0.6b-v3` returns HTTP 200 with empty text when a clip starts
+mid-utterance: from the decoder's start state, blank beats the best token on every
+frame, so greedy TDT never emits a first token. This is a property of the weights
+(same on FP32/BF16, NeMo strategies, and the MLX port), not of the Parakeet
+server. Fixed 6 s slices that cut at an utterance onset come back empty; slices
+that start 2.5 s into an utterance empty far more often. Whole short utterances
+are fine. The live leg therefore posts `[anchor, now]` instead of a disjoint 6 s
+slice, emits completed sentences, and re-anchors at the end of the last emitted
+sentence so the next POST starts on a sentence boundary.
+
+The last sentence is held on a paced POST unless it ended ≥1.2 s ago with
+terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
+is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
+and the single in-flight slot allow. On that pause POST the last segment is
+emitted only if it already ends with `.?!` — there is no 1.2 s gap, because
+the gate has already stripped silence from the timeline. Treating every
+`finalize()` as a forced cut re-anchors at a breath and the next POST starts
+mid-sentence, which is the empty-clip failure mode.
+
+Forced flush (emit everything, re-anchor at `now`) happens only on max-context,
+close / `drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
+callers), or **wall-clock idle**: no audio accepted by `send()` for ≥2.0 s
+while unemitted speech remains after the anchor. Idle fires once per idle
+period. Under the gate no audio arrives during silence, so the pump waits on
+`asyncio.wait_for(self._wake.wait(), timeout=…)` when held audio exists and
+does not arm a timer when nothing is held. An empty model response that still
+contained VAD speech keeps the anchor so a later POST can recover the text.
+The same `[anchor, end]` context is not POSTed again unless the request is
+forced. Max-context (default 24 s, clamped to [6, 30]) force-emits whatever
+is there and counts `omi_stt_window_forced_cuts_total`. After a force flush
+the next context starts at the next speech onset with ~0.3 s of lead-in.
+Pure non-speech never extends a context and is never POSTed. Segment
+`start`/`end` are anchor + relative times, clamped into `[anchor, now]` and never
+earlier than the previously emitted end. Only emitted segments run speaker
+embedding (diarization stays off by default); PCM is sliced relative to the
+posted context.
+
 ## Capacity, audio and latency
 
 One slot per one-process listen pod means at most 12 sessions at 12 replicas or
-60 sessions at 60 replicas. Each session has one in-flight POST and at most 18
-seconds (three 6 s windows) of queued mono PCM16. That extra window absorbs a
-transient slow-but-200 POST (6–8 s) without killing a healthy session. Six-second
-chunks and a minimum six-second interval between POST starts bound sustained
-full-window traffic to 2 or 10 requests/s, respectively. Reconnects and initial
+60 sessions at 60 replicas. Each session has one in-flight POST. The PCM buffer
+holds the current context plus two pace intervals of cushion: default
+`24 + 2×6 = 36` s of mono PCM16, **≤ ~1.2 MB at 16 kHz**. That cushion absorbs a
+transient slow-but-200 POST (6–8 s) without killing a healthy session. Growing
+windows re-post overlapping context as `now` advances, so GPU audio per session
+is about **2.0×** fixed 6 s slicing. A minimum `PARAKEET_WINDOW_PACE_SECONDS`
+(default 6) interval between POST starts still bounds sustained traffic; delivery
+lag in simulation was p50 4–5 s, p90 7–11 s at 6 s pacing. Reconnects and initial
 flushes can burst up to the session cap; this is **not** a fleet-wide global rate
 limiter. Replicas and worker processes multiply these bounds. Default allocation
 zero is the production safety boundary; a cap of one is the smallest nonzero
@@ -71,7 +115,7 @@ A windowed socket proves recovery only on its first successful POST; local
 construction cannot close a half-open circuit. Generation-scoped callbacks
 release cancelled probes without erasing a newer failure. There are no POST
 retries or teardown retries against the failed provider. Sustained buffer
-overflow (the 18 s cap exceeded) fails the leg with `capacity_full` **and**
+overflow (the max-context + two-pace cap exceeded) fails the leg with `capacity_full` **and**
 opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
@@ -82,25 +126,27 @@ failure on that leg closes it before raw audio can escape. Non-window legs on
 the managed chain behave like today's `GatedSTTSocket`: they honour
 `vad_gate_override` / `VAD_GATE_MODE`, and a VAD inference error fails open to
 raw send. Flag-on with allocation 0 therefore changes chain order and breakers
-only, not audio gating. Silence boundaries flush subwindows, subject to the
-same POST pacing, so repeated short utterances cannot defeat the per-session
-limit. After the first POST, a short utterance can wait almost six seconds for
-its turn. Teardown skips that pacing delay for the final flush and releases the
-admission slot as soon as drain starts; the final POST may finish without
-holding the slot. Cancellation releases admission and cancels the outstanding
-request. Failed windows are not replayed to a second provider: the normal
-offline capture/sync recovery still owns that gap, as with existing mid-stream
-provider deaths.
+only, not audio gating. A VAD `finalize()` after the 300 ms hangover is a soft
+pause POST, not a cut. Forced flush is reserved for max-context, close,
+≥1.5 s of ungated non-speech bytes, and 2 s of wall-clock idle with held
+speech. Repeated short utterances still cannot defeat the
+per-session POST limit: pacing applies between POST *starts*, and teardown
+skips that delay for the final flush. Admission is released as soon as drain
+starts; the final POST may finish without holding the slot. Cancellation
+releases admission and cancels the outstanding request. Failed windows are not
+replayed to a second provider: the normal offline capture/sync recovery still
+owns that gap, as with existing mid-stream provider deaths.
 
-There is no overlap. Each PCM sample advances the provider timeline once; boundary
-words may be split. Acoustic accuracy and overlap/dedup tradeoffs need real speech
+Posted contexts overlap by design (held sentence + new audio). Each sample is
+still in at most one *emitted* segment: re-anchoring drops already-emitted
+audio and timestamps stay monotonic. Acoustic accuracy still needs real speech
 qualification before a production ramp. Local tests are not WER evidence.
 
 Each replacement has a fresh gate and a session audio offset. Timestamps are remapped
 once, clamped within TDT windows, then made monotonic across provider epochs. Old
 callbacks are fenced after a replacement is adopted. Existing `SpeakerProviderEpoch`
 scopes provider speaker labels. TDT clustering reuses the existing online embedding
-policy, defaults off, and when enabled embeds at most once per window with a one-second
+policy, defaults off, and when enabled embeds at most once per POST with a one-second
 embedding deadline. Disabled clustering uses speaker zero; several voices in one
 window can share a label. `include_speech_profile` and downstream voiceprint matching
 remain independent and no segment is claimed as the owner merely because TDT emitted it.
@@ -129,8 +175,11 @@ connections; shared `omi_stt_stream_close_total{provider,reason}` counts typed
 budget/quota and authentication refusals at the provider boundary;
 `omi_stt_window_sessions_active`, `omi_stt_window_sessions_capacity`,
 `omi_stt_window_admissions_total{outcome}`, `omi_stt_window_posts_total{outcome}`
-(success/empty/error/cancelled/queue_timeout), and `omi_stt_window_post_seconds`
-expose TDT load. No UID, transcript, URL or exception text is a metric label.
+(success/empty/error/cancelled/queue_timeout), `omi_stt_window_post_seconds`,
+`omi_stt_window_context_seconds` (posted context duration), and
+`omi_stt_window_forced_cuts_total` expose TDT load. `empty` means the posted
+context contained VAD speech and the model returned no text — not "we held the
+last sentence". No UID, transcript, URL or exception text is a metric label.
 Non-terminal configured-chain skips and failed legs emit
 `record_fallback(..., component='stt_selection', outcome='degraded')` plus the
 leg-attempt counter. `outcome='exhausted'` on `stt_selection` is emitted once,

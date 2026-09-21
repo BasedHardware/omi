@@ -20,7 +20,13 @@ Provider fallback is a connection-time and serialized mid-session decision.
 The legacy connection chain remains the default. `live_rollout.py` gates the new
 configured chain (`live_chain.py`) and UID allocation; `live_session.py` owns its
 VAD, audio timeline, usage ledger and fresh provider callbacks. `parakeet_window.py`
-subclasses the existing batch adapter with bounded admission, POSTs and teardown.
+subclasses the existing batch adapter with bounded admission, sentence-anchored
+growing POSTs (`window_anchor.py`) and teardown. Fixed 6 s slices that start
+mid-utterance make TDT return empty; each POST is `[anchor, now]`, completed
+sentences are emitted, and the next POST starts at that sentence boundary.
+VAD `finalize()` is a soft pause POST (emit the last sentence only when it
+already ends with `.?!`); a 2 s wall-clock idle timer, not the hangover, is
+what force-flushes held speech when the gate is dropping silence.
 `live_metrics.py` exposes bounded process/session metrics. Dead providers are excluded
 from that session; each adopted provider gets a new speaker-provider epoch.
 Operational controls and capacity arithmetic: [windowed live STT](../../docs/operational/windowed-live-stt.md).
