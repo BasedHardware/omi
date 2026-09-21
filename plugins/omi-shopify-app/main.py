@@ -7,12 +7,15 @@ and chat tools for analytics, orders, and customer management.
 import os
 import hmac
 import hashlib
+import logging
 import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, HTTPException, Request, Query, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -132,7 +135,8 @@ def shopify_api_request(
         
         return response.json() if response.content else {"success": True}
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        logger.error("Shopify request failed: %s", e)
+        return {"error": "Request failed"}
 
 
 def shopify_fetch_all_pages(
@@ -845,7 +849,8 @@ async def tool_get_analytics(request: Request):
         return ChatToolResponse(result=result)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get analytics: {str(e)}")
+        logger.exception("Failed to get analytics: %s", e)
+        return ChatToolResponse(error="Failed to get analytics")
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -919,7 +924,8 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
+        logger.exception("Failed to get orders: %s", e)
+        return ChatToolResponse(error="Failed to get orders")
 
 
 @app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1038,7 +1044,8 @@ async def tool_get_order_details(request: Request):
         return ChatToolResponse(result=result_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
+        logger.exception("Failed to get order details: %s", e)
+        return ChatToolResponse(error="Failed to get order details")
 
 
 def match_products_by_title(all_products, title):
@@ -1210,8 +1217,7 @@ async def tool_create_order(request: Request):
         except Exception as e:
             print(f"❌ Exception getting tokens: {e}")
             import traceback
-            traceback.print_exc()
-            return ChatToolResponse(error=f"Auth error: {str(e)}")
+            return ChatToolResponse(error="Authentication error")
         
         if not tokens:
             print(f"❌ No Shopify tokens found")
@@ -1794,7 +1800,8 @@ async def tool_create_order(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create order: {str(e)}")
+        logger.exception("Failed to create order: %s", e)
+        return ChatToolResponse(error="Failed to create order")
 
 
 @app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1853,7 +1860,8 @@ async def tool_get_customers(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get customers: {str(e)}")
+        logger.exception("Failed to get customers: %s", e)
+        return ChatToolResponse(error="Failed to get customers")
 
 
 @app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1948,7 +1956,8 @@ async def tool_create_customer(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create customer: {str(e)}")
+        logger.exception("Failed to create customer: %s", e)
+        return ChatToolResponse(error="Failed to create customer")
 
 
 # ============================================
