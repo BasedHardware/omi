@@ -1116,11 +1116,6 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
-  - id: hume-ai-error-handling-tests
-    command: ["python3", "plugins/hume-ai/test_error_handling.py"]
-    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "app.py and main.py endpoints must never leak raw internal exception strings or sensitive network/service traces to clients"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
@@ -1182,6 +1177,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
   - id: hey-omi-question-extraction-tests
+  - id: hume-ai-error-handling-tests
+    command: ["python3", "plugins/hume-ai/test_error_handling.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "app.py and main.py endpoints must never leak raw internal exception strings or sensitive network/service traces to clients"
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
