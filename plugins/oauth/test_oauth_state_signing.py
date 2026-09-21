@@ -33,6 +33,7 @@ def _stub_requests():
     req_exc.RequestException = RequestException
     req.RequestException = RequestException
     req.exceptions = req_exc
+    req.Response = type("Response", (), {})
     req.post = MagicMock()
     req.get = MagicMock()
     utils = types.ModuleType("requests.utils")
