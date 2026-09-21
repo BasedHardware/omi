@@ -409,8 +409,8 @@ async def search_papers(payload: Union[SearchPapersRequest, dict[str, Any], None
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=_arxiv_http_error_message(exc))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"arXiv search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="arXiv search failed.")
 
 
 @app.post("/tools/get_paper_details", response_model=ChatToolResponse)
@@ -437,8 +437,8 @@ async def get_paper_details(payload: Union[GetPaperDetailsRequest, dict[str, Any
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=_arxiv_http_error_message(exc))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"arXiv details request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="arXiv details request failed.")
 
 
 @app.post("/tools/search_author", response_model=ChatToolResponse)
@@ -483,5 +483,5 @@ async def search_author(payload: Union[SearchAuthorRequest, dict[str, Any], None
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=_arxiv_http_error_message(exc))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"arXiv author search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="arXiv author search failed.")
