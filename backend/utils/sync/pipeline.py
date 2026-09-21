@@ -118,6 +118,7 @@ from utils.stt.outcomes import (
     TranscriptionOutcome,
     bounded_provider,
     failure_from_exception,
+    is_destructive_operation_in_progress,
 )
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import select_speaker_match
@@ -148,6 +149,7 @@ _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
+    'destructive_operation_in_progress',
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
@@ -1264,6 +1266,8 @@ def process_segment(
     except SyncConversationPersistenceFenced:
         raise
     except Exception as e:
+        if is_destructive_operation_in_progress(e):
+            raise
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1308,6 +1312,8 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
+            if is_destructive_operation_in_progress(e):
+                raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
     # ingest must not publish an empty success: re-raise so the Cloud Tasks

@@ -1714,6 +1714,33 @@ class TestAsyncCoordinatorBehavioral:
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
 
+    def test_merged_reprocess_destructive_op_fence_is_not_swallowed(self, fenced_worker_module):
+        '''A transient destructive-op fence must fail the batch, not log-and-continue.'''
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class DestructiveOperationInProgress(RuntimeError):
+            pass
+
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=DestructiveOperationInProgress('legal_hold_deletion_gates')
+        )
+        response = {
+            '_merged': {'conv-a': 'en', 'conv-b': 'fr'},
+            'updated_memories': {'conv-a', 'conv-b'},
+            'new_memories': set(),
+        }
+
+        with pytest.raises(DestructiveOperationInProgress):
+            pipeline._reprocess_merged_conversations('uid', response)
+
+        pipeline.logger.error.assert_not_called()
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'conv-a', 'en'),
+        ]
+        assert response['updated_memories'] == {'conv-a', 'conv-b'}
+
     def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
         """A pendant conversation becomes webhook-visible when merged speech revives it."""
         _module, stubs = fenced_worker_module

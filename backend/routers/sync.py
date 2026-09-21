@@ -123,7 +123,7 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
-from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
+from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.sync.rate_limit import (
     FAIR_USE_RATE_LIMIT_CODE,
     bounded_fair_use_retry_after,
@@ -1792,7 +1792,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     if sync_lane == SyncLane.BACKFILL.value:
                         await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
-            failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
+            failure = sync_failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
             if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(

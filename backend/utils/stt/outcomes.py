@@ -129,6 +129,34 @@ def failure_from_exception(error: BaseException, *, provider: str | None = None)
     return TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider)
 
 
+def is_destructive_operation_in_progress(error: BaseException) -> bool:
+    '''True when a transient account-level destructive-op fence is in the chain.'''
+
+    try:
+        from database.legal_holds import DestructiveOperationInProgress
+    except Exception:
+        DestructiveOperationInProgress = None  # type: ignore[misc, assignment]
+    fence_type: type[BaseException] | None = None
+    if isinstance(DestructiveOperationInProgress, type) and issubclass(DestructiveOperationInProgress, BaseException):
+        fence_type = DestructiveOperationInProgress
+    for item in _exception_chain(error):
+        if fence_type is not None and isinstance(item, fence_type):
+            return True
+        if type(item).__name__ == 'DestructiveOperationInProgress':
+            return True
+    return False
+
+
+def sync_failure_from_exception(error: BaseException, *, provider: str | None = None) -> TranscriptionFailure:
+    '''Map a sync-job exception without collapsing a transient fence to generic STT failure.'''
+
+    if is_destructive_operation_in_progress(error):
+        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=True)
+        failure.error_code = 'destructive_operation_in_progress'
+        return failure
+    return failure_from_exception(error, provider=provider)
+
+
 def empty_unexpected_failure(provider: str | None = None) -> TranscriptionFailure:
     """Create the shared failure for speech-positive audio with an empty result."""
 
