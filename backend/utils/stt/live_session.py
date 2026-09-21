@@ -283,19 +283,22 @@ class LiveLegSocket(STTSocket):
     def send(self, data: bytes) -> bool:
         if self.is_connection_dead:
             return False
-        if self._ingest_gain is not None:
-            from utils.stt.parakeet_window import WindowedParakeetSocket
+        from utils.stt.parakeet_window import WindowedParakeetSocket
 
-            data = self._ingest_gain.apply(data)
+        score_pcm: bytes | None = None
+        if self._ingest_gain is not None:
+            # Gain a copy for Silero only. Stored / posted bytes stay original
+            # so the posted stage is the only scale the decoder sees.
+            score_pcm = self._ingest_gain.apply(data)
             if isinstance(self.raw, WindowedParakeetSocket):
-                self.raw.note_ingest_normalized(self._ingest_gain)
+                self.raw.observe_session_peak(self._ingest_gain.peak)
         output = None
         if self.gate is not None:
             try:
                 # Synthetic wall clock follows received audio. Positive epoch
-                # avoids VAD's zero sentinel. Windowed ingest AGC already ran,
-                # so Silero scores the level-corrected chunk.
-                output = self.gate.process_audio(data, 1.0 + self._seconds)
+                # avoids VAD's zero sentinel. Silero scores the level-corrected
+                # copy; pre-roll and audio_to_send stay original-level.
+                output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm)
             except Exception:
                 if self.window:
                     self._dead = True
@@ -316,8 +319,6 @@ class LiveLegSocket(STTSocket):
                 self.session.vad_mode = 'off'
         audio = data if output is None or self.passthrough else output.audio_to_send
         if self.window and output is not None and output.is_speech:
-            from utils.stt.parakeet_window import WindowedParakeetSocket
-
             if isinstance(self.raw, WindowedParakeetSocket):
                 self.raw.mark_speech()
         try:

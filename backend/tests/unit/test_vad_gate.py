@@ -1552,6 +1552,22 @@ class TestHysteresis:
         assert sent == 0
         assert gate._state == GateState.SILENCE
 
+    def test_score_pcm_drives_vad_original_is_forwarded(self):
+        gate = self._windowed_gate()
+        seen: list[bytes] = []
+
+        def _capture(data: bytes) -> bool:
+            seen.append(data)
+            return True
+
+        gate._run_vad = _capture  # type: ignore[method-assign]
+        original = _make_pcm_with_amplitude(40, 0.05)
+        score = _make_pcm_with_amplitude(40, 0.4)
+        assert original != score
+        out = gate.process_audio(original, 1000.0, score)
+        assert seen == [score]
+        assert original in out.audio_to_send
+
 
 class TestTimeBasedPreRoll:
     """Tests for time-based pre-roll buffer eviction."""

@@ -349,12 +349,15 @@ class VADStreamingGate:
 
             return is_speech
 
-    def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
+    def process_audio(self, pcm_data: bytes, wall_time: float, score_pcm: Optional[bytes] = None) -> GateOutput:
         """Process an audio chunk through the VAD gate.
 
         Args:
-            pcm_data: Raw PCM16 audio bytes
+            pcm_data: Raw PCM16 audio bytes forwarded on admit (pre-roll / send)
             wall_time: Wall-clock timestamp of this chunk
+            score_pcm: Optional same-length copy for Silero only. Windowed ingest
+                AGC passes a level-corrected copy here so the stored buffer stays
+                original-level. Ignored when missing or a different length.
 
         Returns:
             GateOutput with audio to send and control signals
@@ -370,8 +373,10 @@ class VADStreamingGate:
         chunk_ms = (n_samples * 1000.0) / self.sample_rate
         self._audio_cursor_ms += chunk_ms
 
-        # Run VAD
-        is_speech = self._run_vad(pcm_data)
+        vad_pcm = pcm_data
+        if score_pcm is not None and len(score_pcm) == len(pcm_data):
+            vad_pcm = score_pcm
+        is_speech = self._run_vad(vad_pcm)
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms

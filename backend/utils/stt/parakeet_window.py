@@ -39,11 +39,10 @@ from utils.stt.window_anchor import (
     read_pace_seconds,
 )
 
-# One bounded peak AGC on the windowed leg. Same target as RNNT AGC_TARGET_PEAK;
-# the 4× cap is the part RNNT lacks (its peak<1 skip is unbounded). Applied at
-# ingest (ahead of VAD) so Silero scores a level-corrected signal and the stored
-# PCM is already gained. Posted AGC is then a no-op on that socket: a second
-# independent 4× on cap-limited audio would compound to 16×.
+# Two jobs, two stages, same 0.8 / 4× bound (the cap RNNT's peak<1 skip lacks).
+# Admission: LiveLegSocket gains a *copy* for Silero. Decoding: one uniform
+# scale of the original-level buffer at POST time. The stored bytes are never
+# gained, so the posted stage cannot compound with ingest.
 WINDOW_AGC_TARGET_PEAK = 0.8
 WINDOW_AGC_MAX_GAIN = 4.0
 WINDOW_INGEST_AGC = True
@@ -199,7 +198,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._last_emitted_end = 0.0
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
-        self._ingest_normalized = False
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
@@ -247,18 +245,21 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._received_bytes += len(data)
         accepted = super().send(data)
         if accepted and data:
-            if not self._ingest_normalized:
-                self._observe_agc_peak(data)
+            self._observe_agc_peak(data)
             self._last_accepted_at = time.monotonic()
             self._idle_flushed = False
         self._wake.set()
         return accepted
 
-    def note_ingest_normalized(self, gain: SessionPcmGain) -> None:
-        """Ingest already applied the session bound. Posted AGC must not re-gain."""
-        self._ingest_normalized = True
-        self._agc_peak = gain.peak
-        self._agc_last_gain = gain.last_gain
+    def observe_session_peak(self, peak: float) -> None:
+        """Fold a pre-VAD incoming peak into the posted envelope.
+
+        LiveLegSocket observes every chunk, including those the gate later
+        drops. Posted AGC must use that same running-max so VAD and TDT share
+        one session envelope. Does not mark the buffer as gained.
+        """
+        if peak > self._agc_peak:
+            self._agc_peak = peak
 
     def _observe_agc_peak(self, data: bytes) -> None:
         peak = pcm16_peak(data)
@@ -266,10 +267,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._agc_peak = peak
 
     def _normalize_posted_pcm(self, pcm: bytes) -> bytes:
-        if self._ingest_normalized:
-            # Same 0.8 / 4× bound already applied at ingest. Re-running it on
-            # cap-limited audio (peak < target/4) would compound to 16×.
-            return pcm
+        # Buffer is original-level. One uniform scale for this window; gain is
+        # taken from the session envelope frozen at POST start (see _post_window).
         out, gain = bounded_agc_pcm16(pcm, peak=self._agc_peak)
         self._agc_last_gain = gain
         return out
@@ -524,9 +523,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             return self._last_speaker
 
     async def _post_window(self, pcm: bytes) -> httpx.Response:
-        # Gain is frozen before the first await so a later send cannot change
-        # this POST's scale. When ingest AGC ran, the buffer is already gained
-        # and this is identity; otherwise the original-level buffer is scaled.
+        # Snapshot the uniform scale before the first await so a later send
+        # cannot change this POST's envelope. Overlapping later POSTs may use a
+        # lower gain if the session peak grew; each POST stays internally flat.
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         acquired = False
         try:
@@ -595,8 +594,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 raise ValueError('Invalid TDT timestamps')
             rel_start = min(dur, max(0.0, segment.start))
             rel_end = min(dur, max(rel_start, segment.end))
-            # PCM is ingest-gained on the windowed path: embeddings see the same
-            # session-normalized level the decoder hears, not the original capture.
+            # Buffer is original-level capture. Embeddings slice that PCM, not
+            # the posted uniform-gain copy the decoder hears.
             speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
             abs_start = min(now, max(start, self._last_emitted_end, start + rel_start))
             abs_end = min(now, max(abs_start, start + rel_end))
