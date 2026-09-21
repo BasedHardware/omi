@@ -12,7 +12,7 @@ import {
   MAIN_CONVERSATION_ID,
 } from "../src/conversations";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
-import { createD1Mock } from "./d1-mock";
+import { applyAccountScopedIds, createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
 let accountBackend: typeof AccountBackend;
@@ -1555,6 +1555,35 @@ describe("chat admission identity and terminals", () => {
     expect(bobHistory.messages).toHaveLength(0);
   });
 
+  test("0010 account-scoped ids let two tenants admit the same message id", async () => {
+    const scoped = createD1Mock();
+    await applyAccountScopedIds(scoped);
+    const { admitMessage, readHistory } = await import("../src/chat");
+    const first = await admitMessage(
+      scoped,
+      "alice",
+      chatCreate("shared-msg-one"),
+      null
+    );
+    expect(typeof first).not.toBe("string");
+    const second = await admitMessage(
+      scoped,
+      "bob",
+      chatCreate("shared-msg-one"),
+      null
+    );
+    expect(typeof second).not.toBe("string");
+    const aliceHistory = await readHistory(scoped, "alice", 50);
+    const bobHistory = await readHistory(scoped, "bob", 50);
+    if (aliceHistory === "invalid_cursor" || bobHistory === "invalid_cursor") {
+      throw new Error("history cursor");
+    }
+    expect(aliceHistory.messages).toHaveLength(1);
+    expect(bobHistory.messages).toHaveLength(1);
+    expect(String(aliceHistory.messages[0]?.id)).toBe("shared-msg-one");
+    expect(String(bobHistory.messages[0]?.id)).toBe("shared-msg-one");
+  });
+
   test("complete after cancel returns the stored cancelled terminal", async () => {
     const chat = await import("../src/chat");
     const admitted = await chat.admitMessage(
@@ -1593,13 +1622,14 @@ describe("chat admission identity and terminals", () => {
       null
     );
     if (typeof admitted === "string") throw new Error(admitted);
-    const originalPrepare = d1Mock.prepare.bind(d1Mock);
-    d1Mock.prepare = ((sql: string) => {
-      if (sql.includes("INSERT INTO chat_messages") && sql.includes("SELECT")) {
-        throw new Error("injected assistant insert failure");
-      }
-      return originalPrepare(sql);
-    }) as typeof d1Mock.prepare;
+    await d1Mock.exec(
+      `CREATE TRIGGER abort_assistant_insert
+       BEFORE INSERT ON chat_messages
+       WHEN NEW.sender = 'ai'
+       BEGIN
+         SELECT RAISE(ABORT, 'injected assistant insert failure');
+       END`
+    );
     await expect(
       chat.completeGeneration(
         d1Mock,
@@ -1608,7 +1638,7 @@ describe("chat admission identity and terminals", () => {
         "should not persist"
       )
     ).rejects.toThrow("injected assistant insert failure");
-    d1Mock.prepare = originalPrepare;
+    await d1Mock.exec("DROP TRIGGER abort_assistant_insert");
     const terminal = await chat.terminalEvent(
       d1Mock,
       "atomic-account",

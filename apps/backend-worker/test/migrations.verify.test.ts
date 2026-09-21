@@ -14,6 +14,31 @@ import {
 
 const directory = new URL("../migrations/", import.meta.url);
 
+test("account-scoped ids apply after the full published D1 chain", () => {
+  const db = new Database(":memory:");
+  try {
+    for (const migration of D1_MIGRATIONS) {
+      db.exec(readFileSync(new URL(migration.fileName, directory), "utf8"));
+    }
+    db.exec(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES ('shared-msg', 'alice', 'hi', 'human', 1, NULL, 1, '{}')"
+    );
+    db.exec(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES ('shared-msg', 'bob', 'hi', 'human', 1, NULL, 1, '{}')"
+    );
+    expect(
+      db
+        .query("SELECT account_id, id FROM chat_messages ORDER BY account_id")
+        .all()
+    ).toEqual([
+      { account_id: "alice", id: "shared-msg" },
+      { account_id: "bob", id: "shared-msg" },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
 test("account-scoped ids let two tenants keep the same chat and task ids", () => {
   const db = new Database(":memory:");
   try {

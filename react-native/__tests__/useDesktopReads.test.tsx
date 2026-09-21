@@ -813,6 +813,108 @@ test('refresh revalidates loaded conversation pages instead of keeping stale old
   reads.unmount();
 });
 
+test('reset during conversation revalidation cannot publish retired pages', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  const older = successOutcomes(['Next page']).conversations;
+  if (older.status !== 'success') {
+    throw Error('fixture');
+  }
+  older.value.page = {
+    ...older.value.page,
+    hasMore: false,
+    nextCursor: null,
+    complete: true,
+    windowStatus: 'complete',
+  };
+  (loadConversations as jest.Mock).mockResolvedValueOnce(older.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  const first = successOutcomes(['Old page']);
+  const second = successOutcomes(['STALE OLDER PAGE']);
+  if (
+    first.conversations.status !== 'success' ||
+    second.conversations.status !== 'success'
+  ) {
+    throw Error('fixture');
+  }
+  first.conversations.value.page = {
+    ...first.conversations.value.page,
+    hasMore: true,
+    nextCursor: 'cursor-one',
+    complete: false,
+    windowStatus: 'more',
+  };
+  readsMock.mockResolvedValue(first);
+  let releaseSecond!: (value: unknown) => void;
+  (loadConversations as jest.Mock)
+    .mockResolvedValueOnce(first.conversations.value)
+    .mockReturnValueOnce(
+      new Promise(resolve => {
+        releaseSecond = resolve;
+      }),
+    );
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().refreshReads(false);
+  });
+  ReactTestRenderer.act(() => {
+    reads.latest().resetReads();
+  });
+  await ReactTestRenderer.act(async () => {
+    if (second.conversations.status !== 'success') {
+      throw Error('fixture');
+    }
+    releaseSecond(second.conversations.value);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  expect(JSON.stringify(reads.latest().readOutcomes)).not.toContain(
+    'STALE OLDER PAGE',
+  );
+  reads.unmount();
+});
+
+test('reset during task revalidation cannot publish retired pages', async () => {
+  readsMock.mockResolvedValue(taskOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadTasks as jest.Mock).mockResolvedValueOnce(
+    taskValue(taskOutcomes(25, 1, false)),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreTasks();
+  });
+  const first = taskValue(taskOutcomes(0, 25, true));
+  const second = taskValue(taskOutcomes(25, 1, false));
+  second.items[0] = {...second.items[0]!, title: 'STALE TASK PAGE'};
+  let releaseSecond!: (value: unknown) => void;
+  (loadTasks as jest.Mock)
+    .mockResolvedValueOnce(first)
+    .mockResolvedValueOnce(first)
+    .mockReturnValueOnce(
+      new Promise(resolve => {
+        releaseSecond = resolve;
+      }),
+    );
+  let pending!: ReturnType<ReturnType<typeof useDesktopReads>['refreshTasks']>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().refreshTasks();
+  });
+  ReactTestRenderer.act(() => {
+    reads.latest().resetReads();
+  });
+  await ReactTestRenderer.act(async () => {
+    releaseSecond(second);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  expect(JSON.stringify(reads.latest().readOutcomes)).not.toContain(
+    'STALE TASK PAGE',
+  );
+  reads.unmount();
+});
+
 test('task mutation refresh revalidates the loaded window', async () => {
   readsMock.mockResolvedValue(taskOutcomes());
   const reads = await renderReads({enabled: true});
@@ -839,6 +941,80 @@ test('task mutation refresh revalidates the loaded window', async () => {
     ...Array.from({length: 25}, (_, index) => `Task ${index}`),
     'Updated task 25',
   ]);
+  reads.unmount();
+});
+
+test('review: retirement during loaded-window refresh cannot republish old rows', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  const older = successOutcomes(['Private old-session row']).conversations;
+  if (older.status !== 'success') {
+    throw Error('fixture');
+  }
+  const olderPage = older.value;
+  (loadConversations as jest.Mock).mockResolvedValueOnce(olderPage);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  let resolvePage!: (value: typeof olderPage) => void;
+  (loadConversations as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        resolvePage = resolve;
+      }),
+  );
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().refreshReads(false);
+  });
+  expect(resolvePage).toBeDefined();
+  await ReactTestRenderer.act(async () => {
+    reads.latest().resetReads();
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  await ReactTestRenderer.act(async () => {
+    resolvePage(olderPage);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  reads.unmount();
+});
+
+test('review: retirement during task window refresh cannot republish old rows', async () => {
+  readsMock.mockResolvedValue(taskOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadTasks as jest.Mock).mockResolvedValueOnce(
+    taskValue(taskOutcomes(25, 1, false)),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreTasks();
+  });
+  let resolvePage!: (value: ReturnType<typeof taskValue>) => void;
+  (loadTasks as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        resolvePage = resolve;
+      }),
+  );
+  let pending!: ReturnType<ReturnType<typeof useDesktopReads>['refreshTasks']>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().refreshTasks();
+  });
+  expect(resolvePage).toBeDefined();
+  await ReactTestRenderer.act(async () => {
+    reads.latest().resetReads();
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  const stale = taskValue(taskOutcomes(0, 1, false));
+  stale.items[0] = {...stale.items[0]!, title: 'Private old-session task'};
+  await ReactTestRenderer.act(async () => {
+    resolvePage(stale);
+    await pending;
+  });
+  expect(reads.latest().readOutcomes).toBeNull();
+  expect(JSON.stringify(reads.latest().readOutcomes)).not.toContain(
+    'Private old-session task',
+  );
   reads.unmount();
 });
 
