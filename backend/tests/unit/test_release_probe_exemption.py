@@ -29,16 +29,13 @@ def test_constant_matches_the_documented_uid() -> None:
     assert RELEASE_PROBE_UID == 'omi-release-probe'
 
 
-def test_minter_and_gates_share_one_constant() -> None:
-    """No uid drift: the minter's PROBE_UID must be the same object as the
-    predicate module's constant (import-level, not a duplicated string)."""
+def test_minter_and_gates_stay_in_lockstep() -> None:
+    """The minter runs standalone (repo-root invocation, no backend package
+    on sys.path), so the uid cannot be imported — instead the two literals
+    must match exactly, asserted at source level in both directions."""
     scripts = Path(__file__).resolve().parents[2] / 'scripts'
-    sys.path.insert(0, str(scripts.parent))
-    import importlib
-
-    minter = importlib.import_module('scripts.firebase_release_probe_token')
-    assert minter.PROBE_UID is RELEASE_PROBE_UID
-    # And the gates import the shared predicate, not a local literal.
+    minter_source = (scripts / 'firebase_release_probe_token.py').read_text(encoding='utf-8')
+    assert f"PROBE_UID = '{RELEASE_PROBE_UID}'" in minter_source
     conversations = Path(__file__).resolve().parents[2] / 'utils' / 'conversations'
     process_source = (conversations / 'process_conversation.py').read_text(encoding='utf-8')
     assert "from utils.release_probe import is_release_probe_uid" in process_source
