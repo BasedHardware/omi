@@ -19,6 +19,11 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
+  - id: notion-error-handling-tests
+    command: ["python3", "plugins/omi-notion-app/test_error_handling.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Notion tool endpoints and API client must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
