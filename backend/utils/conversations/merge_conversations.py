@@ -607,6 +607,51 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def _sync_source_task_reminder(
+    *,
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    completed: bool,
+    due_at: Any,
+) -> None:
+    """Lazily resolve FCM reminder sync so merge cleanup does not import it until needed.
+
+    ``utils.notifications`` pulls Firebase Admin and token lookup. Constructing that
+    stack at call time is what sent hermetic sync-bridge tests to the GCE metadata
+    server after #15177 imported it unconditionally. Resolve it only when an open
+    dated task actually needs a cancel, and keep the name on this module so tests
+    can inject a fake without widening the network fence.
+    """
+    from utils.notifications import sync_action_item_reminder
+
+    sync_action_item_reminder(
+        user_id=user_id,
+        action_item_id=action_item_id,
+        description=description,
+        completed=completed,
+        due_at=due_at,
+    )
+
+
+def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
+    """Best-effort cancel of client-scheduled reminders for rows just deleted.
+
+    Isolated from the task-store mutation: a delivery failure must not fail merge
+    or sync-bridge cleanup after the rows are already gone. Same split as
+    ``process_conversation._write_action_items``.
+    """
+    for item in items:
+        if item.get('due_at') and not item.get('completed'):
+            _sync_source_task_reminder(
+                user_id=uid,
+                action_item_id=item['id'],
+                description='',
+                completed=True,
+                due_at=None,
+            )
+
+
 def retract_sync_bridge_source(uid: str, source_id: str) -> None:
     """Retract derived data, retaining redirect/audio; propagate failures for retry."""
     _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
@@ -704,22 +749,15 @@ def _delete_conversation_and_related_data(
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
-
-        from utils.notifications import sync_action_item_reminder
-
-        for item in source_items:
-            if item.get('due_at') and not item.get('completed'):
-                sync_action_item_reminder(
-                    user_id=uid,
-                    action_item_id=item['id'],
-                    description='',
-                    completed=True,
-                    due_at=None,
-                )
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
         if retain_capture:
             raise
+    else:
+        try:
+            _cancel_open_dated_task_reminders(uid, source_items)
+        except Exception as e:
+            logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
 
     if retain_capture:
         # Sync bridges retain redirect tombstones and original audio: another
