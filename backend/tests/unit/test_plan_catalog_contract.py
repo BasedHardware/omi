@@ -85,6 +85,30 @@ def test_source_scan_skips_gitignored_sibling_worktrees(tmp_path, monkeypatch):
     ]
 
 
+def test_source_scan_skips_gitignored_files_in_tracked_directories(tmp_path, monkeypatch):
+    """An ignored file in a tracked directory is not part of the tree CI checks out.
+
+    #12678 pruned ignored directories. The file loop still scanned gitignored
+    files that live beside production sources (``local.json``), so local
+    preflight failed on paths CI never sees (#12476).
+    """
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True, capture_output=True, timeout=60)
+    (tmp_path / '.gitignore').write_text('local.json\n', encoding='utf-8')
+
+    tracked = tmp_path / 'service' / 'plans.ts'
+    tracked.parent.mkdir()
+    tracked.write_text("const id = 'price_1234567890abcdef';", encoding='utf-8')
+
+    ignored_file = tmp_path / 'service' / 'local.json'
+    ignored_file.write_text("const id = 'price_ignoredfile123456';\n", encoding='utf-8')
+
+    monkeypatch.setattr(plan_catalog_compiler, 'ROOT', tmp_path)
+
+    assert scan_embedded_stripe_ids(load_catalog()) == [
+        'service/plans.ts: embedded Stripe price price_1234567890abcdef is absent from plan_catalog.json',
+    ]
+
+
 def test_plan_identity_and_paid_membership_are_complete():
     assert PLAN_TYPE_VALUES == {
         'basic',
