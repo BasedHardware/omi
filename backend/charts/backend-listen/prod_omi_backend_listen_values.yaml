@@ -89,6 +89,12 @@ envFrom:
 env:
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
