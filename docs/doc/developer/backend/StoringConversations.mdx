@@ -439,3 +439,11 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
     Environment setup and configuration
   </Card>
 </CardGroup>
+
+### Manual speaker attribution during concurrent writes
+
+Live capture retains fresh unmerged input until its transcript transaction reads
+the current protected manual receipt. Selected IDs and speaker-wide defaults
+block every concatenation and partial sentence transfer involving covered speech,
+including clears and training opt-outs. The accepted transcript and deleted-ID
+delta return together for client delivery. This also protects older receipts.

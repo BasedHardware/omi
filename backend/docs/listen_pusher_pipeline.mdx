@@ -810,3 +810,20 @@ merge/delete helpers; original donor audio remains available for late uploads.
 The September 19 incident arose from legacy sync adopting a different empty
 live-flap stub per WAL. Realtime reconnect reuse and empty-stub reaping remain
 explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing limits.
+
+### Transactional manual-speaker boundaries
+
+Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
+The transaction reads the current transcript and manual receipt, then merges only
+its tail and the fresh batch. Any segment covered by a selected-ID decision or a
+speaker-wide default blocks all concatenation and partial sentence transfer;
+clears, training opt-outs, and legacy receipts receive identical protection.
+Inference updates may change identity fields, but the current manual receipt wins.
+The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
+only committed IDs drive live updates and `SegmentsDeletedEvent`.
+
+REST-to-listen cache invalidation remains deferred. A label changed elsewhere may
+remain visually stale until the client reloads, a socket wake occurs, or an
+accepted update covers that segment. The 30-second cache refresh alone does not
+force a historical segment to be delivered again. The transactional merge remains protected
+through that interval; the stale cache never authorizes changing labeled spans.

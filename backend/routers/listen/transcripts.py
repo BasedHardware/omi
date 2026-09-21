@@ -25,9 +25,10 @@ from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, 
 from utils.app_integrations import trigger_realtime_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.observability.fallback import record_fallback
+from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
 from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.streaming import sort_segments_by_start, sort_transcript_segments_in_place
+from utils.stt.streaming import sort_segments_by_start
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
     is_user_self_match,
@@ -193,43 +194,34 @@ class TranscriptProcessor:
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
-        absorbed_into: Dict[str, str] = {}
         if segments:
-            combined = TranscriptSegment.combine_segments(conversation.transcript_segments, segments)
-            conversation.transcript_segments = combined.segments
-            updated = combined.joined
-            removed = combined.removed_ids
-            absorbed_into = combined.absorbed_into
-            sort_transcript_segments_in_place(conversation.transcript_segments)
+            # Preserve unmerged speech until the transaction reads the current receipt.
+            fresh = [segment.model_dump() for segment in segments]
             speaker = self.host.speakers
-            targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
+            targets = (
+                [*conversation.transcript_segments, *segments]
+                if self.host.state.speaker_map_dirty
+                else [*conversation.transcript_segments[-1:], *segments]
+            )
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
-            serialised = [segment.model_dump() for segment in conversation.transcript_segments]
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
                 conversation.id,
-                serialised,
+                [segment.model_dump() for segment in targets],
+                live_segments=fresh,
                 started_at=started_at,
                 data_protection_level=self.cache.protection_level,
-                # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
-                # write loop stays cheap when no projection is present. The segment
-                # transaction still clears a projection that is actually on the
-                # document (a finalize overlapping capture).
                 invalidate_client_processing=False,
-                preserve_unseen=True,
-                return_segments=True,
-                removed_segment_ids=removed,
-                absorbed_into=absorbed_into,
             )
-            if not written:
+            if not isinstance(written, LiveTranscriptMerge):
                 return None
-            if isinstance(written, list):
-                serialised = written
-                by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
-                conversation.transcript_segments = list(by_id.values())
-                updated = [by_id[s.id] for s in updated if s.id in by_id]
+            serialised = written.segments
+            by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
+            conversation.transcript_segments = list(by_id.values())
+            updated = [s for sid, s in by_id.items() if sid in written.updated_ids or self.host.state.speaker_map_dirty]
+            removed = written.removed_ids
             self.host.state.speaker_map_dirty = False
             self.cache.update_segments(serialised)
         if photos:
@@ -396,7 +388,7 @@ class TranscriptProcessor:
                 self.host.state.words_transcribed_since_last_record += len(
                     ' '.join(segment.text for segment in new_segments).split()
                 )
-            transcript_segments = TranscriptSegment.combine_segments([], new_segments).segments
+            transcript_segments = new_segments
             current = deserialize_conversation(data)
             result = await self._update_live_conversation(current, transcript_segments, photos, finished_at, started_at)
             rolled_over = False
