@@ -177,7 +177,7 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "Whoop API request failed"}
 
 
 # Safety cap on continuation pages per collection; a real Whoop week of data
@@ -661,7 +661,7 @@ async def tool_get_recovery(request: Request):
         log(f"Error getting recovery: {e}")
         import traceback
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to get recovery: {str(e)}")
+        return ChatToolResponse(error="Failed to get recovery due to an internal error.")
 
 
 @app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -711,7 +711,7 @@ async def tool_get_strain(request: Request):
 
     except Exception as e:
         log(f"Error getting strain: {e}")
-        return ChatToolResponse(error=f"Failed to get strain: {str(e)}")
+        return ChatToolResponse(error="Failed to get strain due to an internal error.")
 
 
 @app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -761,7 +761,7 @@ async def tool_get_sleep(request: Request):
 
     except Exception as e:
         log(f"Error getting sleep: {e}")
-        return ChatToolResponse(error=f"Failed to get sleep: {str(e)}")
+        return ChatToolResponse(error="Failed to get sleep due to an internal error.")
 
 
 @app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -823,7 +823,7 @@ async def tool_get_workouts(request: Request):
 
     except Exception as e:
         log(f"Error getting workouts: {e}")
-        return ChatToolResponse(error=f"Failed to get workouts: {str(e)}")
+        return ChatToolResponse(error="Failed to get workouts due to an internal error.")
 
 
 @app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -938,7 +938,7 @@ async def tool_get_weekly_summary(request: Request):
 
     except Exception as e:
         log(f"Error getting weekly summary: {e}")
-        return ChatToolResponse(error=f"Failed to get weekly summary: {str(e)}")
+        return ChatToolResponse(error="Failed to get weekly summary due to an internal error.")
 
 
 @app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -987,7 +987,7 @@ async def tool_get_body_measurements(request: Request):
 
     except Exception as e:
         log(f"Error getting body measurements: {e}")
-        return ChatToolResponse(error=f"Failed to get measurements: {str(e)}")
+        return ChatToolResponse(error="Failed to get measurements due to an internal error.")
 
 
 @app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1026,7 +1026,7 @@ async def tool_get_profile(request: Request):
 
     except Exception as e:
         log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        return ChatToolResponse(error="Failed to get profile due to an internal error.")
 
 
 # ============================================
@@ -1132,26 +1132,30 @@ async def whoop_auth(uid: str = Query(...)):
     if not WHOOP_CLIENT_ID or not WHOOP_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Whoop OAuth credentials not configured")
 
-    # Whoop requires state to be at least 8 characters
-    state = secrets.token_urlsafe(16)
-    store_oauth_state(state, uid)
+    try:
+        # Whoop requires state to be at least 8 characters
+        state = secrets.token_urlsafe(16)
+        store_oauth_state(state, uid)
 
-    params = {
-        "client_id": WHOOP_CLIENT_ID,
-        "redirect_uri": WHOOP_REDIRECT_URI,
-        "response_type": "code",
-        "scope": " ".join(WHOOP_SCOPES),
-        "state": state
-    }
+        params = {
+            "client_id": WHOOP_CLIENT_ID,
+            "redirect_uri": WHOOP_REDIRECT_URI,
+            "response_type": "code",
+            "scope": " ".join(WHOOP_SCOPES),
+            "state": state
+        }
 
-    auth_url = f"{WHOOP_AUTH_URL}?{urlencode(params)}"
-    log(f"=== WHOOP AUTH ===")
-    log(f"Client ID: {WHOOP_CLIENT_ID[:8]}...")
-    log(f"Redirect URI: {WHOOP_REDIRECT_URI}")
-    log(f"Scopes: {' '.join(WHOOP_SCOPES)}")
-    log(f"State: {state}")
-    log(f"Auth URL: {auth_url}")
-    return RedirectResponse(url=auth_url)
+        auth_url = f"{WHOOP_AUTH_URL}?{urlencode(params)}"
+        log(f"=== WHOOP AUTH ===")
+        log(f"Client ID: {WHOOP_CLIENT_ID[:8]}...")
+        log(f"Redirect URI: {WHOOP_REDIRECT_URI}")
+        log(f"Scopes: {' '.join(WHOOP_SCOPES)}")
+        log(f"State: {state}")
+        log(f"Auth URL: {auth_url}")
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        log(f"Error starting Whoop OAuth: {e}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/whoop/callback")
@@ -1191,27 +1195,27 @@ async def whoop_callback(
         </html>
         """, status_code=400)
 
-    # Look up uid from state (Whoop requires 8-char state, so we store state->uid mapping)
-    uid = get_uid_from_oauth_state(state)
-    if not uid:
-        return HTMLResponse(content=f"""
-        <html>
-            <head><style>{get_css()}</style></head>
-            <body>
-                <div class="container">
-                    <div class="error-box">
-                        <h2>Session Expired</h2>
-                        <p>Please try connecting again.</p>
-                    </div>
-                </div>
-            </body>
-        </html>
-        """, status_code=400)
-
-    delete_oauth_state(state)
-
-    # Exchange code for tokens
     try:
+        # Look up uid from state (Whoop requires 8-char state, so we store state->uid mapping)
+        uid = get_uid_from_oauth_state(state)
+        if not uid:
+            return HTMLResponse(content=f"""
+            <html>
+                <head><style>{get_css()}</style></head>
+                <body>
+                    <div class="container">
+                        <div class="error-box">
+                            <h2>Session Expired</h2>
+                            <p>Please try connecting again.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """, status_code=400)
+
+        delete_oauth_state(state)
+
+        # Exchange code for tokens
         response = requests.post(
             WHOOP_TOKEN_URL,
             data={
@@ -1275,7 +1279,19 @@ async def whoop_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"""
+        <html>
+            <head><style>{get_css()}</style></head>
+            <body>
+                <div class="container">
+                    <div class="error-box">
+                        <h2>Authentication Error</h2>
+                        <p>An internal error occurred during authentication. Please try connecting again.</p>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """, status_code=500)
 
 
 @app.get("/setup/whoop")
