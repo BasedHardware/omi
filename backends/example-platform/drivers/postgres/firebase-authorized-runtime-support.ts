@@ -57,15 +57,35 @@ const exactOptions = (
   return value as PostgresFirebaseAuthorizationRuntimeOptions;
 };
 
+export type PostgresFirebaseRuntimeCapability =
+  | "memories.read"
+  | "memories.write"
+  | "memories.export"
+  | "tasks.read"
+  | "tasks.write"
+  | "listen.capture.write"
+  | "conversations.read"
+  | "chat.read"
+  | "chat.write";
+
+const POSTGRES_FIREBASE_RUNTIME_CAPABILITIES: ReadonlySet<string> = new Set([
+  "memories.read",
+  "memories.write",
+  "memories.export",
+  "tasks.read",
+  "tasks.write",
+  "listen.capture.write",
+  "conversations.read",
+  "chat.read",
+  "chat.write",
+]);
+
 /** @internal Shared fixed-query authorization construction for PG read/write runtimes. */
 export const createPostgresFirebaseAuthorizationRuntime = (
   optionsValue: PostgresFirebaseAuthorizationRuntimeOptions,
-  capability: "memories.read" | "memories.write" | "memories.export" | "tasks.read" | "tasks.write" | "listen.capture.write" | "conversations.read" | "chat.read",
+  capability: PostgresFirebaseRuntimeCapability,
 ): PostgresFirebaseAuthorizationRuntimeBinding => {
-  if (capability !== "memories.read" && capability !== "memories.write"
-    && capability !== "memories.export" && capability !== "tasks.read"
-    && capability !== "tasks.write" && capability !== "listen.capture.write"
-    && capability !== "conversations.read" && capability !== "chat.read") {
+  if (!POSTGRES_FIREBASE_RUNTIME_CAPABILITIES.has(capability)) {
     throw new TypeError("invalid PostgreSQL Firebase runtime capability");
   }
   const options = exactOptions(optionsValue);

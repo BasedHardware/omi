@@ -20,7 +20,21 @@ answer. Human rows keep `generationOutcome: null`.
 
 `POST /v1/chat-messages` and generation SSE are not mounted. Unmounted writes stay
 404 `{error:"not_found"}`. Do not invent chat quotas or mount admission until a
-real entitlement producer exists.
+real entitlement producer exists. PostgreSQL now has an unmounted `chat.write`
+authorization lookup and a serializable admission/finalization repository against
+migration 0055 tables. Adapter existence does not enable a route. A `chat.read`
+grant, revoked grant, or missing grant never confers write. An unmounted storage
+foundation can persist caller-supplied reservation metadata on the same PostgreSQL
+connection as the message and accepted event. A missing metadata object (`null`)
+refuses. Tests may inject synthetic catalog/subscription/period/unit strings; those
+strings are not paid authorization, do not enforce a budget, and are not a
+source-owned producer or settlement. Exact replay of an already-stored message is
+storage-only and does not insert another reservation row. There is no external
+Settings counter and no compensating decrement. Migration 0057 GRANTs
+`chat_messages` SELECT/INSERT/UPDATE, `chat_generation_events` SELECT/INSERT,
+`chat_admission_reservations` SELECT/INSERT, and the identity sequence under
+existing `chat.write` RLS. Do not apply shared migrations from this work. POST/SSE
+stay unmounted.
 
 Verification uses `bun run check:deployed` for grant denial, empty-page shape,
 projection fail-closed behavior, string generation frames, route pairing and the
@@ -29,7 +43,7 @@ reads, account isolation, unique-terminal assistant outcomes, grant revocation
 and conversation-list composition of `chat:chat-main`. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
-Do not apply migrations 55-56 or deploy this entry until the existing operator
+Do not apply migrations 55-57 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
 migrations 1–54.
