@@ -368,6 +368,19 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
+def _release_chat_quota_question(uid: str, *, idempotency_key: str) -> None:
+    """Give back a question recorded before a turn that then failed.
+
+    Best-effort: the turn is already ending in an error, and a failed
+    compensation must not turn that into a broken stream. The database write is
+    itself idempotent, so a retried release is safe.
+    """
+    try:
+        llm_usage_db.release_chat_quota_question(uid, idempotency_key=idempotency_key)
+    except Exception:
+        logger.exception('Failed to release chat quota question uid=%s', uid)
+
+
 def _required_chat_quota_provider() -> str | None:
     # Direct agent chat consumes managed Anthropic unless an Anthropic BYOK key
     # is on the request. Other BYOK providers must stay metered on this path.
@@ -441,6 +454,9 @@ def send_message(
         type='text',
         app_id=compat_app_id,
     )
+    # One key for both the charge and its compensation: a failure path releases
+    # exactly the question this turn recorded, never someone else's.
+    quota_idempotency_key = f'v2_messages:{message.id}'
     # Ensure chat session exists when files are attached
     if data.file_ids and not chat_session:
         chat_session = acquire_chat_session(uid, compat_app_id)
@@ -466,7 +482,7 @@ def send_message(
     try:
         _record_chat_quota_question(
             uid,
-            idempotency_key=f'v2_messages:{message.id}',
+            idempotency_key=quota_idempotency_key,
             source='v2_messages',
             message_id=message.id,
             chat_session_id=message.chat_session_id,
@@ -602,6 +618,10 @@ def send_message(
         answered = False
         stream_exhausted = False
         streamed_terminal_error = False
+        # The question was charged before this stream started. If the turn ends
+        # without a provider answer, release that charge so a failed turn does
+        # not spend the user's question and a retry does not spend a second one.
+        turn_failed = False
         chat_tz = None
         if data.time_zone:
             chat_tz = await run_blocking(
@@ -617,6 +637,7 @@ def send_message(
             fail-open contract as ``emit_stream_error_fallback``) so the text client is
             not left with only an earlier ``error:`` frame.
             """
+            nonlocal turn_failed
             persist_outcome = 'degraded'
             try:
                 ai_message, ask_for_nps = process_message(response, callback_data)
@@ -642,6 +663,9 @@ def send_message(
             response_message.ask_for_nps = ask_for_nps
             encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
             if callback_data.get('error'):
+                # A staged canned answer is still a failed turn for the user, so
+                # the question it already spent is released below.
+                turn_failed = True
                 journey_attempt.finish('failure')
                 record_fallback(
                     component='other',
@@ -707,6 +731,7 @@ def send_message(
                             callback_data.get('route') or 'unknown',
                             True,
                         )
+                    turn_failed = True
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,
@@ -721,12 +746,22 @@ def send_message(
             journey_attempt.finish('cancelled')
             raise
         except Exception:
+            turn_failed = True
             journey_attempt.finish('failure')
             raise
         finally:
             reset_usage_context(usage_token)
             if not journey_attempt.finished:
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
+            if turn_failed:
+                # Compensation is best-effort and idempotent; the stream is
+                # already ending, so it must not raise a second error.
+                await run_blocking(
+                    db_executor,
+                    _release_chat_quota_question,
+                    uid,
+                    idempotency_key=quota_idempotency_key,
+                )
 
     observed_stream = mobile_journey_attempt.observe_stream(
         generate_stream(),

@@ -337,6 +337,71 @@ def record_chat_quota_question(
     )
 
 
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _release_chat_quota_question_transaction(
+    transaction: Any,
+    user_ref: Any,
+    event_ref: Any,
+) -> bool:
+    event_snapshot = event_ref.get(transaction=transaction)
+    if not getattr(event_snapshot, "exists", False):
+        # Nothing was recorded for this attempt (or it was already released).
+        return False
+
+    event_data = _typed_doc(event_snapshot)
+    doc_id = event_data.get('date')
+    if not isinstance(doc_id, str) or not doc_id:
+        doc_id = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # Decrement the plan the question was charged under, not whatever plan is
+    # active now: the event carries the charge-time attribution.
+    plan_id = event_data.get('plan_id')
+    plan_key = plan_id if isinstance(plan_id, str) and plan_id else _UNATTRIBUTED_PLAN
+
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    update: Dict[str, Any] = {
+        'backend_chat.quota_questions': firestore.Increment(-1),
+        'last_updated': datetime.now(timezone.utc),
+    }
+    # Mirror the charge exactly: the root counter and the plan bucket both
+    # advanced together, so a reader that reconciles plan attribution against
+    # the root total cannot see a phantom question after release.
+    _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
+    # The charge also advanced this bucket's call counter; undo it so the plan
+    # report does not count a call that never produced an answer.
+    update[f'plan_usage.{plan_key}.backend_chat.call_count'] = firestore.Increment(-1)
+    transaction.delete(event_ref)
+    transaction.set(usage_ref, _nested(update), merge=True)
+    return True
+
+
+def release_chat_quota_question(
+    uid: str,
+    idempotency_key: str,
+    *,
+    firestore_client: Any | None = None,
+) -> bool:
+    """Give back one recorded chat question when its turn failed.
+
+    Companion to :func:`record_chat_quota_question`: a question is charged before
+    the provider call (fail-closed), and this compensating write removes that
+    charge when the turn ends without an answer. Deleting the idempotency event
+    in the same transaction means a later retry that reuses the key is charged
+    again, so a successful retry still costs exactly one question. Idempotent: a
+    repeated release finds no event and does nothing. Returns ``True`` when a
+    recorded question was released.
+    """
+    if not idempotency_key:
+        raise ValueError('idempotency_key is required')
+
+    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+    client = _usage_client(firestore_client)
+    user_ref = client.collection('users').document(uid)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
+
+    transaction = client.transaction()
+    return _release_chat_quota_question_transaction(transaction, user_ref, event_ref)
+
+
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
     """
     Get LLM usage for a specific day.

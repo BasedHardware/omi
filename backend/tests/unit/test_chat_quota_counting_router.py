@@ -224,6 +224,41 @@ def test_v2_messages_records_failure_when_the_production_stream_errors():
         _cleanup(saved)
 
 
+def test_v2_messages_releases_quota_question_when_the_turn_fails():
+    """A failed provider turn must give the already-charged question back."""
+    client, module, saved = _make_chat_client()
+    try:
+
+        async def failing_turn(*_args, **kwargs):
+            kwargs['callback_data']['error'] = 'upstream_failure'
+            kwargs['callback_data']['answer'] = 'Unable to complete the response. Please try again.'
+            yield 'error: Unable to complete the response. Please try again.'
+            yield None
+
+        module.execute_chat_stream = failing_turn
+        with patch.object(module.uuid, 'uuid4', side_effect=['human-msg-id', 'ai-msg-id']):
+            response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+
+        assert response.status_code == 200
+        module.llm_usage_db.release_chat_quota_question.assert_called_once_with(
+            'test-uid',
+            idempotency_key='v2_messages:human-msg-id',
+        )
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_does_not_release_quota_question_on_a_successful_turn():
+    client, module, saved = _make_chat_client()
+    try:
+        response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+
+        assert response.status_code == 200
+        module.llm_usage_db.release_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
 def test_v2_voice_messages_records_quota_question_from_visible_message_chunk():
     client, module, saved = _make_chat_client()
     try:
