@@ -4,7 +4,6 @@ Hive Integration App for Omi
 This app provides Hive project management integration through API key authentication
 and chat tools for managing projects, tasks, actions, and searching.
 """
-
 import os
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -40,7 +39,7 @@ HIVE_REST_API_BASE = "https://app.hive.com/api/v1"
 app = FastAPI(
     title="Hive Omi Integration",
     description="Hive project management integration for Omi - Manage projects, tasks, and actions",
-    version="1.0.0",
+    version="1.0.0"
 )
 
 # Mount static files and templates
@@ -56,9 +55,11 @@ templates = Jinja2Templates(directory=templates_dir)
 # Hive GraphQL Client
 # ============================================
 
-
 def hive_graphql_request(
-    api_key: str, query: str, variables: Optional[Dict] = None, timeout: int = 30
+    api_key: str,
+    query: str,
+    variables: Optional[Dict] = None,
+    timeout: int = 30
 ) -> Dict[str, Any]:
     """
     Make a GraphQL request to Hive's API.
@@ -86,7 +87,12 @@ def hive_graphql_request(
     print(f"   Query: {query[:100]}...")
 
     try:
-        response = requests.post(HIVE_GRAPHQL_URL, headers=headers, json=payload, timeout=timeout)
+        response = requests.post(
+            HIVE_GRAPHQL_URL,
+            headers=headers,
+            json=payload,
+            timeout=timeout
+        )
 
         print(f"🐝 Hive Response: Status {response.status_code}")
 
@@ -136,9 +142,7 @@ def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
     return str(errors)
 
 
-def hive_rest_request(
-    uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None
-) -> Dict[str, Any]:
+def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
     """Make authenticated REST request for a user."""
     credentials = get_hive_credentials(uid)
     if not credentials:
@@ -147,7 +151,10 @@ def hive_rest_request(
     api_key = credentials.get("api_key")
     hive_user_id = credentials.get("hive_user_id")
 
-    headers = {"api_key": api_key, "Content-Type": "application/json"}
+    headers = {
+        "api_key": api_key,
+        "Content-Type": "application/json"
+    }
 
     # Ensure endpoint doesn't start with /
     endpoint = endpoint.lstrip("/")
@@ -166,7 +173,14 @@ def hive_rest_request(
     print(f"   Params: {params}")
 
     try:
-        response = requests.request(method=method, url=url, headers=headers, params=params, json=data, timeout=30)
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            params=params,
+            json=data,
+            timeout=30
+        )
 
         print(f"🐝 Hive REST Response: Status {response.status_code}")
 
@@ -277,7 +291,6 @@ query SearchActions($query: String!, $limit: Int) {
 # Helper Functions
 # ============================================
 
-
 def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
     """Verify an API key by fetching user info and workspaces."""
     print(f"🐝 Verifying API key...")
@@ -306,7 +319,11 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
             if user_id:
                 headers["user_id"] = user_id
 
-            response = requests.get(f"{HIVE_REST_API_BASE}/workspaces", headers=headers, timeout=10)
+            response = requests.get(
+                f"{HIVE_REST_API_BASE}/workspaces",
+                headers=headers,
+                timeout=10
+            )
             print(f"   REST Response Status: {response.status_code}")
 
             if response.status_code == 200:
@@ -339,7 +356,11 @@ def get_user_workspaces(uid: str) -> List[Dict]:
         if hive_user_id:
             headers["user_id"] = hive_user_id
 
-        response = requests.get(f"{HIVE_REST_API_BASE}/workspaces", headers=headers, timeout=10)
+        response = requests.get(
+            f"{HIVE_REST_API_BASE}/workspaces",
+            headers=headers,
+            timeout=10
+        )
         if response.status_code == 200:
             return response.json()
     except Exception as e:
@@ -376,15 +397,13 @@ def get_user_projects(uid: str, workspace_id: Optional[str] = None) -> List[Hive
         if not isinstance(p, dict):
             continue
 
-        projects.append(
-            HiveProject(
-                id=p.get("id") or p.get("_id", ""),
-                name=p.get("name", ""),
-                description=p.get("description"),
-                status=p.get("status"),
-                workspace_id=workspace_id,
-            )
-        )
+        projects.append(HiveProject(
+            id=p.get("id") or p.get("_id", ""),
+            name=p.get("name", ""),
+            description=p.get("description"),
+            status=p.get("status"),
+            workspace_id=workspace_id
+        ))
     return projects
 
 
@@ -424,9 +443,7 @@ def get_project_tasks(uid: str, project_id: str, limit: int = 20) -> List[HiveTa
 
     # Use workspace-scoped endpoint: /workspaces/{workspaceId}/actions
     # Note: Param is 'projectId' not 'project' per docs
-    result = hive_rest_request(
-        uid, "GET", f"workspaces/{workspace_id}/actions", params={"projectId": project_id, "limit": limit}
-    )
+    result = hive_rest_request(uid, "GET", f"workspaces/{workspace_id}/actions", params={"projectId": project_id, "limit": limit})
 
     if "errors" in result:
         return []
@@ -443,16 +460,14 @@ def get_project_tasks(uid: str, project_id: str, limit: int = 20) -> List[HiveTa
         if a.get("assignees"):
             assignees = [ass.get("email", "") for ass in a.get("assignees", []) if isinstance(ass, dict)]
 
-        tasks.append(
-            HiveTask(
-                id=a.get("_id") or a.get("id", ""),
-                name=a.get("title") or a.get("name", ""),
-                description=a.get("description"),
-                status=a.get("status"),
-                project_id=project_id,
-                assignees=assignees,
-            )
-        )
+        tasks.append(HiveTask(
+            id=a.get("_id") or a.get("id", ""),
+            name=a.get("title") or a.get("name", ""),
+            description=a.get("description"),
+            status=a.get("status"),
+            project_id=project_id,
+            assignees=assignees,
+        ))
     return tasks
 
 
@@ -477,24 +492,22 @@ def _action_to_task(a: Dict[str, Any]) -> HiveTask:
     )
 
 
-# Ceiling on how many of the workspace's projects a name search fans out
-# across, so a workspace with an unusual number of projects still bounds
-# the request count.
+# Ceiling on how many of the workspace's projects a name search fans out across,
+# so a workspace with an unusual number of projects still bounds the request count.
 MAX_SEARCH_PROJECTS = 20
 
 
 def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
     """Search for tasks across all projects via REST API.
 
-    The 'Get actions' endpoint has no text search, so this fetches actions and
-    filters locally. It used to fetch a single `workspaces/{id}/actions?limit=50`
-    — a cap on the 50 most recently *touched* actions across the entire
-    workspace, not per project — so a task outside that window was silently
-    unfindable by exact name no matter how small its own project was, breaking
-    update-status and parent-task lookups on any workspace with more than 50
-    actions in flight. Searching per project instead (the same `projectId`-scoped
-    request `get_project_tasks` already uses) raises the effective ceiling to 50
-    per project.
+    The 'Get actions' endpoint has no text search, so this fetches actions and filters
+    locally. It used to fetch a single `workspaces/{id}/actions?limit=50` -- a cap on the
+    50 most recently *touched* actions across the entire workspace, not per project -- so
+    a task outside that window was silently unfindable by exact name no matter how small
+    its own project was, breaking update-status and parent-task lookups on any workspace
+    with more than 50 actions in flight. Searching per project instead (the same
+    `projectId`-scoped request `get_project_tasks` already uses) raises the effective
+    ceiling to 50 per project.
     """
     credentials = get_hive_credentials(uid)
     workspace_id = credentials.get("workspace_id") if credentials else None
@@ -529,9 +542,9 @@ def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
             elif query_lower in title_lower or (desc and query_lower in desc.lower()):
                 partial_matches.append(task_obj)
 
-        # An exact match is definitive for the disambiguation this feeds
-        # (update-status, parent-task lookup) — once we have at least `limit`
-        # of them, further projects can't change the outcome.
+        # An exact match is definitive for the disambiguation this feeds (update-status,
+        # parent-task lookup) -- once we have at least `limit` of them, further projects
+        # can't change the outcome.
         if len(exact_matches) >= limit:
             break
 
@@ -543,14 +556,15 @@ def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
 # Setup Endpoints
 # ============================================
 
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
     if not uid:
-        return templates.TemplateResponse(
-            "setup.html", {"request": request, "connected": False, "error": "Missing user ID"}
-        )
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "connected": False,
+            "error": "Missing user ID"
+        })
 
     credentials = get_hive_credentials(uid)
     connected = credentials is not None
@@ -569,21 +583,21 @@ async def home(request: Request, uid: Optional[str] = None):
         projects = get_user_projects(uid)
         default_project = get_default_project(uid)
 
-    return templates.TemplateResponse(
-        "setup.html",
-        {
-            "request": request,
-            "uid": uid,
-            "connected": connected,
-            "user_info": user_info,
-            "projects": projects,
-            "default_project": default_project,
-        },
-    )
+    return templates.TemplateResponse("setup.html", {
+        "request": request,
+        "uid": uid,
+        "connected": connected,
+        "user_info": user_info,
+        "projects": projects,
+        "default_project": default_project,
+    })
 
 
 @app.post("/settings/api-key")
-async def connect_api_key(uid: str = Query(...), api_key: str = Form(...)):
+async def connect_api_key(
+    uid: str = Query(...),
+    api_key: str = Form(...)
+):
     """Connect Hive account using API key."""
     if not uid:
         raise HTTPException(status_code=400, detail="User ID is required")
@@ -596,7 +610,10 @@ async def connect_api_key(uid: str = Query(...), api_key: str = Form(...)):
 
     if not user_info:
         # Return to setup page with error
-        return RedirectResponse(url=f"/?uid={uid}&error=Invalid+API+key.+Please+check+and+try+again.", status_code=303)
+        return RedirectResponse(
+            url=f"/?uid={uid}&error=Invalid+API+key.+Please+check+and+try+again.",
+            status_code=303
+        )
 
     # Store credentials
     store_hive_credentials(
@@ -691,7 +708,8 @@ async def tool_hive_get_projects(request: Request):
         return ChatToolResponse(result=f"📋 Your Hive projects:\n\n" + "\n".join(results))
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get projects: {str(e)}")
+        print(f"🐝 Hive get_projects error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get projects. Please try again.")
 
 
 @app.post("/tools/hive_get_tasks", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -723,9 +741,7 @@ async def tool_hive_get_tasks(request: Request):
             if not target_project:
                 if candidates:
                     names = ", ".join(f"'{p.name}'" for p in candidates)
-                    return ChatToolResponse(
-                        error=f"'{project_name}' matches more than one project: {names}. Say the full project name."
-                    )
+                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -747,10 +763,13 @@ async def tool_hive_get_tasks(request: Request):
             id_info = f" (ID: `{task.id}`)" if task.id else ""
             results.append(f"{i}. **{task.name}**{id_info}{status}")
 
-        return ChatToolResponse(result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results))
+        return ChatToolResponse(
+            result=f"📝 Tasks in **{target_project.name}**:\n\n" + "\n".join(results)
+        )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get tasks: {str(e)}")
+        print(f"🐝 Hive get_tasks error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get tasks. Please try again.")
 
 
 @app.post("/tools/hive_create_task", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -789,9 +808,7 @@ async def tool_hive_create_task(request: Request):
             if not target_project:
                 if candidates:
                     names = ", ".join(f"'{p.name}'" for p in candidates)
-                    return ChatToolResponse(
-                        error=f"'{project_name}' matches more than one project: {names}. Say the full project name."
-                    )
+                    return ChatToolResponse(error=f"'{project_name}' matches more than one project: {names}. Say the full project name.")
                 return ChatToolResponse(error=f"Could not find project: {project_name}")
         else:
             # Use default project
@@ -825,13 +842,9 @@ async def tool_hive_create_task(request: Request):
                 parent_id = project_tasks[0].id
             elif len(project_tasks) > 1:
                 names = ", ".join(f"'{t.name}'" for t in project_tasks)
-                return ChatToolResponse(
-                    error=f"'{parent_task_name}' matches more than one task in **{target_project.name}**: {names}. Say the full task name or pass parent_task_id."
-                )
+                return ChatToolResponse(error=f"'{parent_task_name}' matches more than one task in **{target_project.name}**: {names}. Say the full task name or pass parent_task_id.")
             else:
-                return ChatToolResponse(
-                    error=f"Could not find parent task '{parent_task_name}' in project **{target_project.name}**."
-                )
+                return ChatToolResponse(error=f"Could not find parent task '{parent_task_name}' in project **{target_project.name}**.")
 
         # Create the task via REST API - endpoint is /actions/create
         # Body params: workspace, title, projectId, description
@@ -862,7 +875,8 @@ async def tool_hive_create_task(request: Request):
         return ChatToolResponse(result=success_msg)
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create task: {str(e)}")
+        print(f"🐝 Hive create_task error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to create task. Please try again.")
 
 
 @app.post("/tools/hive_search", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -900,10 +914,13 @@ async def tool_hive_search(request: Request):
             id_info = f" (ID: `{task.id}`)" if task.id else ""
             results.append(f"{i}. **{task.name}**{id_info}{status}{project_info}")
 
-        return ChatToolResponse(result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results))
+        return ChatToolResponse(
+            result=f"🔍 Found {len(tasks)} results for '{query}':\n\n" + "\n".join(results)
+        )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        print(f"🐝 Hive search error: {type(e).__name__}")
+        return ChatToolResponse(error="Search failed. Please try again.")
 
 
 @app.post("/tools/hive_update_task_status", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -978,16 +995,18 @@ async def tool_hive_update_task_status(request: Request):
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
 
         task_display = f"**{task_name}**" if task_name else f"`{task_id}`"
-        return ChatToolResponse(result=f"✅ Updated task {task_display} status to **{hive_status}**!")
+        return ChatToolResponse(
+            result=f"✅ Updated task {task_display} status to **{hive_status}**!"
+        )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to update task: {str(e)}")
+        print(f"🐝 Hive update_task_status error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to update task. Please try again.")
 
 
 # ============================================
 # Omi Chat Tools Manifest
 # ============================================
-
 
 @app.get("/.well-known/omi-tools.json")
 async def get_omi_tools_manifest():
@@ -1009,13 +1028,13 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of projects to return (default: 10)",
+                            "description": "Maximum number of projects to return (default: 10)"
                         }
                     },
-                    "required": [],
+                    "required": []
                 },
                 "auth_required": True,
-                "status_message": "Getting your Hive projects...",
+                "status_message": "Getting your Hive projects..."
             },
             {
                 "name": "hive_get_tasks",
@@ -1025,13 +1044,19 @@ async def get_omi_tools_manifest():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "project_name": {"type": "string", "description": "Name of the project to get tasks from"},
-                        "limit": {"type": "integer", "description": "Maximum number of tasks to return (default: 10)"},
+                        "project_name": {
+                            "type": "string",
+                            "description": "Name of the project to get tasks from"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of tasks to return (default: 10)"
+                        }
                     },
-                    "required": [],
+                    "required": []
                 },
                 "auth_required": True,
-                "status_message": "Getting tasks from Hive...",
+                "status_message": "Getting tasks from Hive..."
             },
             {
                 "name": "hive_create_task",
@@ -1041,22 +1066,31 @@ async def get_omi_tools_manifest():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "task_name": {"type": "string", "description": "Name/title of the task to create"},
+                        "task_name": {
+                            "type": "string",
+                            "description": "Name/title of the task to create"
+                        },
                         "project_name": {
                             "type": "string",
-                            "description": "Name of the project to add the task to (uses default if not specified)",
+                            "description": "Name of the project to add the task to (uses default if not specified)"
                         },
-                        "description": {"type": "string", "description": "Description or details for the task"},
-                        "due_date": {"type": "string", "description": "Due date for the task (format: YYYY-MM-DD)"},
+                        "description": {
+                            "type": "string",
+                            "description": "Description or details for the task"
+                        },
+                        "due_date": {
+                            "type": "string",
+                            "description": "Due date for the task (format: YYYY-MM-DD)"
+                        },
                         "parent_task_name": {
                             "type": "string",
-                            "description": "Name of the parent task if this should be a sub-task",
-                        },
+                            "description": "Name of the parent task if this should be a sub-task"
+                        }
                     },
-                    "required": ["task_name"],
+                    "required": ["task_name"]
                 },
                 "auth_required": True,
-                "status_message": "Creating task in Hive...",
+                "status_message": "Creating task in Hive..."
             },
             {
                 "name": "hive_search",
@@ -1066,16 +1100,19 @@ async def get_omi_tools_manifest():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search query - what to look for"},
+                        "query": {
+                            "type": "string",
+                            "description": "Search query - what to look for"
+                        },
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of results to return (default: 10)",
-                        },
+                            "description": "Maximum number of results to return (default: 10)"
+                        }
                     },
-                    "required": ["query"],
+                    "required": ["query"]
                 },
                 "auth_required": True,
-                "status_message": "Searching Hive...",
+                "status_message": "Searching Hive..."
             },
             {
                 "name": "hive_update_task_status",
@@ -1085,18 +1122,24 @@ async def get_omi_tools_manifest():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "task_name": {"type": "string", "description": "Name of the task to update"},
-                        "task_id": {"type": "string", "description": "ID of the task to update (if known)"},
+                        "task_name": {
+                            "type": "string",
+                            "description": "Name of the task to update"
+                        },
+                        "task_id": {
+                            "type": "string",
+                            "description": "ID of the task to update (if known)"
+                        },
                         "status": {
                             "type": "string",
-                            "description": "New status for the task (e.g., 'completed', 'in progress', 'todo')",
-                        },
+                            "description": "New status for the task (e.g., 'completed', 'in progress', 'todo')"
+                        }
                     },
-                    "required": ["status"],
+                    "required": ["status"]
                 },
                 "auth_required": True,
-                "status_message": "Updating task status in Hive...",
-            },
+                "status_message": "Updating task status in Hive..."
+            }
         ]
     }
 
@@ -1104,7 +1147,6 @@ async def get_omi_tools_manifest():
 # ============================================
 # Health Check
 # ============================================
-
 
 @app.get("/health")
 async def health_check():
@@ -1114,5 +1156,5 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8081)
+

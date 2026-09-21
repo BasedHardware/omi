@@ -258,6 +258,20 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
         self.assertIsNone(get_res.error)
         self.assertIn("ID: `act_77`", get_res.result)
 
+    @patch.object(main, "is_connected", return_value=True)
+    @patch.object(main, "hive_rest_request")
+    @patch.object(main, "get_hive_credentials", return_value={"workspace_id": "ws_1"})
+    def test_an_unhandled_exception_does_not_leak_into_the_user_facing_error(self, mock_creds, mock_rest, mock_conn):
+        """A raw exception message (which can carry internal detail) must never reach the chat response."""
+        mock_rest.side_effect = RuntimeError("connection reset by peer at 10.0.4.12:5432")
+
+        req = FakeRequest({"uid": self.uid, "task_name": "Deploy", "status": "done"})
+        res = asyncio.run(main.tool_hive_update_task_status(req))
+
+        self.assertEqual(res.error, "Failed to update task. Please try again.")
+        self.assertNotIn("10.0.4.12", res.error)
+        self.assertNotIn("connection reset", res.error)
+
 
 class ErrorPayloadShapeTests(unittest.TestCase):
     """A 2xx body can carry any shape under "errors"; only a real error may fail the call."""
