@@ -1191,6 +1191,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: clickup-app-error-messages-dont-leak-tests
+    command: ["python3", "plugins/omi-clickup-app/test_error_messages_dont_leak.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "/update-list, /update-timezone, /refresh-lists and /logout returned f\"{e}\" straight to the chat tool caller on any unhandled exception instead of the type(e).__name__-only convention this file already uses elsewhere; the suite proves a raw exception message never reaches the response"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
