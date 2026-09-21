@@ -1,10 +1,9 @@
-"""Reprocess must reject a soft-deleted conversation.
+"""Reprocess and GET-by-id must reject a soft-deleted conversation.
 
-`POST /v1/conversations/{id}/reprocess` fetches through `_get_valid_conversation_by_id`,
-which does not filter soft-deleted tombstones (`get_conversation` returns them and the
-helper only 404s on a missing doc). Reprocessing runs `process_conversation` with
-`force_process=True`, regenerating structured data, action items, memories and
-embeddings — so reprocessing a tombstone resurrects content the user deleted.
+`_get_valid_conversation_by_id` 404s a `deleted` tombstone so user-facing routes
+cannot fetch a merged-away donor. Reprocess keeps a second `is_soft_deleted`
+check because it force-processes discarded rows: a tombstone must not enter
+`process_conversation` even if a caller patches the helper.
 
 The guard rejects a *deleted* conversation while still allowing a *discarded* one,
 which reprocess intentionally revives — the same tombstone-eligibility contract as
@@ -40,6 +39,20 @@ class TestIsSoftDeleted:
         assert eligible_merge_target({'id': 'c1', 'deleted': True}) is False
         assert eligible_merge_target({'id': 'c1', 'discarded': True}) is True
         assert eligible_merge_target(None) is False
+
+
+class TestGetValidConversationByIdTombstone:
+    def test_helper_404s_a_soft_deleted_conversation(self):
+        deleted = {'id': 'c1', 'deleted': True, 'sync_merged_into': 'survivor'}
+        with patch.object(conv_router.conversations_db, 'get_conversation', return_value=deleted):
+            with pytest.raises(HTTPException) as exc:
+                conv_router._get_valid_conversation_by_id('u1', 'c1')
+        assert exc.value.status_code == 404
+
+    def test_helper_returns_a_live_conversation(self):
+        live = {'id': 'c1', 'status': 'completed'}
+        with patch.object(conv_router.conversations_db, 'get_conversation', return_value=live):
+            assert conv_router._get_valid_conversation_by_id('u1', 'c1') == live
 
 
 class TestReprocessTombstoneGuard:

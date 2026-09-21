@@ -282,6 +282,12 @@ conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
 conv.redact_conversations_for_list = MagicMock()
+# `_get_valid_conversation_by_id` now 404s tombstones via is_soft_deleted. The
+# AutoMock stub is truthy, which would 404 every live fixture. Bind the real
+# predicate so live rows pass and deleted rows still 404.
+from database.conversations import is_soft_deleted as _real_is_soft_deleted  # noqa: E402
+
+conv.conversations_db.is_soft_deleted = _real_is_soft_deleted
 
 
 def _client():
@@ -980,6 +986,24 @@ def test_legacy_finalize_persistence_loser_returns_latest_without_integrations()
 
     integrations.assert_not_called()
     assert response.conversation.status == ConversationStatus.failed
+
+
+def test_finalize_conversation_404s_a_soft_deleted_tombstone():
+    with (
+        patch.object(
+            conv.conversations_db,
+            'get_conversation',
+            return_value={'id': 'conv-1', 'deleted': True, 'sync_merged_into': 'survivor'},
+        ),
+        patch.object(conv.lifecycle_service, 'request_finalization') as request_finalization,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            conv.finalize_conversation('conv-1', uid='test-uid')
+
+    assert exc_info.value.status_code == 404
+    request_finalization.assert_not_called()
+    process.assert_not_called()
 
 
 def test_finalize_conversation_is_noop_for_completed_conversation():
