@@ -18,6 +18,12 @@ can change the preview theme. Ask, Recall and connections explicitly report
 their preview limitations; there are no account requests, capture, telemetry,
 or persisted edits. Glass remains a browser approximation.
 
+Desktop chrome shows non-interactive traffic lights and an icon-only Settings
+button beside the Recall capture toggle. The toggle switches a neutral monitor
+to a green monitor-with-dot, but only simulates state; it never starts capture.
+Ask, Search and Recall are labelled icon buttons inside the omnibar on both
+surfaces. Mobile retains its labelled bottom navigation and Search default.
+
 The production entry and native components stay React Native. Vite's normal
 build excludes this HTML entry. Check with `bun run --cwd pwa typecheck`,
 `bun run --cwd pwa test`, and `bun run --cwd pwa build`; shared daily-brief

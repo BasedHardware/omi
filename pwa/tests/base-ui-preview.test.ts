@@ -99,3 +99,43 @@ test("mobile retains Search default and labels the local-only fixture boundary",
   expect(html).toContain("Edits stay in this preview");
   expect(html).not.toContain('aria-label="Ask Omi"');
 });
+
+test("desktop chrome separates window decoration and icon actions from navigation", () => {
+  const html = render({});
+  expect(html).toContain(
+    'aria-label="macOS window controls (visual preview only)"'
+  );
+  const settings = html.match(
+    /<button\b[^>]*aria-label="Settings"[^>]*>(.*?)<\/button>/s
+  );
+  expect(settings).not.toBeNull();
+  expect(settings![1]).toContain("<svg");
+  expect(settings![1].replace(/<[^>]*>/g, "").trim()).toBe("");
+  const recall = html.match(
+    /<button\b[^>]*aria-label="Recall capture preview"[^>]*>(.*?)<\/button>/s
+  );
+  expect(recall?.[0]).toContain('aria-pressed="false"');
+  expect(recall?.[1]).toContain("lucide-monitor");
+});
+
+test.each([false, true])(
+  "all three input modes are labelled icon-only buttons (mobile=%s)",
+  (mobile) => {
+    const html = render({ mobile });
+    for (const mode of ["Ask", "Search", "Recall"]) {
+      const button = html.match(
+        new RegExp(
+          `<button\\b[^>]*aria-label="${mode} mode"[^>]*>(.*?)<\\/button>`,
+          "s"
+        )
+      );
+      expect(button).not.toBeNull();
+      expect(button![1]).toContain("<svg");
+      expect(button![1].replace(/<[^>]*>/g, "").trim()).toBe("");
+      expect(button![0]).toContain(
+        `aria-pressed="${mode === (mobile ? "Search" : "Ask")}"`
+      );
+    }
+    if (mobile) expect(html).not.toContain('class="traffic-lights"');
+  }
+);

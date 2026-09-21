@@ -11,6 +11,9 @@ import {
   Settings,
   Sun,
   Moon,
+  Search,
+  Monitor,
+  MonitorDot,
 } from "lucide-react";
 import { homeBriefing } from "../../../react-native/src/desktop/homeBriefing";
 import type { ReadsPhase } from "../../../react-native/src/app/useDesktopReads";
@@ -53,6 +56,7 @@ export function Preview({
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [dark, setDark] = useState(mobile);
+  const [recallEnabled, setRecallEnabled] = useState(false);
   const brief = homeBriefing(outcomes, initialPhase);
   const searching = mode === "Search" && query.trim() !== "";
   const matches = (text: string) =>
@@ -199,20 +203,80 @@ export function Preview({
         data-theme={dark ? "dark" : "light"}
       >
         <header className="window-header">
-          <img src="/omi-mark.svg" alt="Omi" width="26" height="26" />
-          <span className="mobile-wordmark">omi</span>
+          {mobile ? (
+            <>
+              <img src="/omi-mark.svg" alt="Omi" width="26" height="26" />
+              <span className="mobile-wordmark">omi</span>
+            </>
+          ) : (
+            <div
+              className="traffic-lights"
+              role="img"
+              aria-label="macOS window controls (visual preview only)"
+              title="Native window controls — visual preview only"
+            >
+              <span className="traffic-close" />
+              <span className="traffic-minimize" />
+              <span className="traffic-zoom" />
+            </div>
+          )}
           <TabsList aria-label="Main navigation" className="main-nav">
-            {routes.map(({ label, icon: Icon, desktop }) => (
-              <TabsTrigger
-                key={label}
-                value={label}
-                className={desktop ? "desktop-only" : ""}
-              >
-                <Icon aria-hidden="true" />
-                <span>{label}</span>
-              </TabsTrigger>
-            ))}
+            {routes
+              .filter(({ label }) => mobile || label !== "Settings")
+              .map(({ label, icon: Icon, desktop }) => (
+                <TabsTrigger
+                  key={label}
+                  value={label}
+                  className={desktop ? "desktop-only" : ""}
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </TabsTrigger>
+              ))}
           </TabsList>
+          <div className="header-actions">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="recall-toggle"
+              aria-label="Recall capture preview"
+              aria-pressed={recallEnabled}
+              title={
+                recallEnabled
+                  ? "Recall on — preview only"
+                  : "Recall off — preview only"
+              }
+              onClick={() => {
+                setRecallEnabled((value) => !value);
+                setNotice(
+                  `Recall preview ${
+                    recallEnabled ? "off" : "on"
+                  } — no screen capture is started.`
+                );
+              }}
+            >
+              {recallEnabled ? (
+                <MonitorDot aria-hidden="true" />
+              ) : (
+                <Monitor aria-hidden="true" />
+              )}
+            </Button>
+            {!mobile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Settings"
+                title="Settings"
+                aria-current={route === "Settings" ? "page" : undefined}
+                onClick={() => {
+                  setRoute("Settings");
+                  setNotice("");
+                }}
+              >
+                <Settings aria-hidden="true" />
+              </Button>
+            )}
+          </div>
         </header>
         <form
           className="omnibar"
@@ -231,28 +295,47 @@ export function Preview({
           }}
         >
           <div className="mode-buttons" role="group" aria-label="Omnibar mode">
-            {(mobile ? ["Ask", "Search"] : ["Ask", "Search", "Recall"]).map(
-              (value) => (
-                <Button
-                  key={value}
-                  variant="ghost"
-                  aria-pressed={mode === value}
-                  className={mode === value ? "mode-active" : ""}
-                  onClick={() => {
-                    setMode(value);
-                    setNotice("");
-                  }}
-                >
-                  {value}
-                </Button>
-              )
-            )}
+            {[
+              { value: "Ask", icon: MessageCircle },
+              { value: "Search", icon: Search },
+              { value: "Recall", icon: History },
+            ].map(({ value, icon: Icon }) => (
+              <Button
+                key={value}
+                variant="ghost"
+                size="icon"
+                aria-label={`${value} mode`}
+                title={value}
+                aria-pressed={mode === value}
+                className={mode === value ? "mode-active" : ""}
+                onClick={() => {
+                  setMode(value);
+                  setNotice("");
+                }}
+              >
+                <Icon aria-hidden="true" />
+              </Button>
+            ))}
           </div>
           <Input
-            aria-label={mode === "Ask" ? "Ask Omi" : "Search history"}
+            aria-label={
+              mode === "Ask"
+                ? "Ask Omi"
+                : mode === "Recall"
+                ? "Search Recall"
+                : "Search history"
+            }
             placeholder={
               mode === "Ask"
-                ? "Ask about your day…"
+                ? mobile
+                  ? "Ask Omi…"
+                  : "Ask about your day…"
+                : mode === "Recall"
+                ? mobile
+                  ? "Search screens…"
+                  : "Find a moment on your screen…"
+                : mobile
+                ? "Search your day…"
                 : "Find something in your day…"
             }
             value={query}
@@ -338,7 +421,7 @@ export function Preview({
               </p>
             </Card>
           </TabsContent>
-          <TabsContent value="Settings">
+          <TabsContent value="Settings" aria-label="Settings">
             <div className="brief">
               <h1>Settings</h1>
               <p>Your space, your preferences.</p>
