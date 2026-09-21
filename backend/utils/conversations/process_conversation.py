@@ -2945,7 +2945,7 @@ def process_conversation(
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
             if is_reprocess:
-                # Same fail-closed idea as `_extract_memories`: a transient
+                # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
                 _save_action_items(uid, conversation, people)
