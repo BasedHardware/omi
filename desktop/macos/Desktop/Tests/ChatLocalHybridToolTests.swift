@@ -23,7 +23,9 @@ final class ChatLocalHybridToolTests: XCTestCase {
     }
     let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
-    let started = Date(timeIntervalSince1970: 1_789_000_000)
+    // Anchor relative to now: the tool searches a [now-7d, now] window, so a
+    // fixed epoch fixture silently fell out of range after 2026-09-17.
+    let started = Date().addingTimeInterval(-3_600)
     let text = "northwind ledger review on the call"
     _ = try await store.upsertTranscriptChunks(
       [
@@ -37,6 +39,7 @@ final class ChatLocalHybridToolTests: XCTestCase {
       sourceKinds: [.transcriptChunk], runtime: runtime)
     XCTAssertTrue(result.contains("northwind ledger review on the call"), result)
     XCTAssertTrue(result.contains("Content:"), result)
-    XCTAssertTrue(result.contains("2026"), result)
+    XCTAssertTrue(
+      result.range(of: "\\d{4}", options: .regularExpression) != nil, result)
   }
 }
