@@ -37,7 +37,11 @@ The shared arithmetic does not unify the observed clocks: live finished_at is cu
 
 ## Assignment outcomes
 
-Deleted anchors, deleted redirect lineage and user-managed retry anchors raise
+Labeled non-target donors are excluded before extending the capture interval. A labeled
+row may remain the survivor for temporal appends, but never donate its receipt into
+another speaker namespace. Retargeting a labeled retry anchor is permanent supersession.
+
+Deleted anchors, deleted redirect lineage and user-managed or labeled retargeted retry anchors raise
 `SyncAssignmentSuperseded`. `process_segment` consumes them quietly with no error,
 content usage or response IDs. It returns false, letting sibling segments proceed;
 a zero-error job commits the content-completion ledger before publishing completed

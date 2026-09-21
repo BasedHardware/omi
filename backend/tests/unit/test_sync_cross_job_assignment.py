@@ -309,3 +309,47 @@ def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_d
     assert all(segment.get('person_id') == 'new' for segment in result['transcript_segments'])
     assert not store.rows[('users', 'u', 'conversations', 'manual')].get('deleted')
     assert ('users', 'u', 'conversations', 'next') not in store.rows
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_labeled_donor_does_not_extend_or_bridge_survivor(explicit):
+    store = StrictFirestore()
+    intake(store, chunk('a', 1000))
+    intake(store, chunk('b', 1240))
+    for cid in ('a', 'b'):
+        store.rows[('users', 'u', 'conversations', cid)]['manual_speaker_assignments'] = {
+            'segments': {cid: {'generation': 1, 'person_id': cid, 'is_user': False}}
+        }
+    donor = deepcopy(store.rows[('users', 'u', 'conversations', 'b')])
+    result, _, _ = intake(store, chunk('bridge', 1120), target_id='a' if explicit else None)
+    assert result['id'] == 'a'
+    assert result['finished_at'] == chunk('bridge', 1120)['finished_at']
+    assert result['sync_merged_from'] == []
+    assert store.rows[('users', 'u', 'conversations', 'b')] == donor
+
+
+def test_labeled_retry_retarget_is_terminal_without_writes():
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    store = StrictFirestore()
+    intake(store, chunk('a', 1000))
+    intake(store, chunk('b', 1240))
+    store.rows[('users', 'u', 'conversations', 'a')]['manual_speaker_assignments'] = {'generation': 1}
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded, match='manual speaker'):
+        intake(store, chunk('a', 1000), target_id='b')
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('donor_start,target_start', [(1000, 1240), (1240, 1000)])
+def test_unlabeled_explicit_target_excludes_labeled_donor_extent(donor_start, target_start):
+    store = StrictFirestore()
+    intake(store, chunk('donor', donor_start))
+    intake(store, chunk('target', target_start))
+    store.rows[('users', 'u', 'conversations', 'donor')]['manual_speaker_assignments'] = {'generation': 1}
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'donor')])
+    result, _, _ = intake(store, chunk('bridge', 1120), target_id='target')
+    assert result['id'] == 'target'
+    assert result['started_at'] == chunk('expected', min(target_start, 1120))['started_at']
+    assert result['finished_at'] == chunk('expected', max(target_start, 1120))['finished_at']
+    assert store.rows[('users', 'u', 'conversations', 'donor')] == before
