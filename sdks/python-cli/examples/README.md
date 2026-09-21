@@ -74,6 +74,7 @@
 * [`quickstart.ky.md`](quickstart.ky.md) — omi-cli менен баштоо (Kyrgyz Quickstart).
 * [`quickstart.iu.md`](quickstart.iu.md) — ᓯᕗᓪᓕᖅᐹ omi-cli (Inuktitut Quickstart).
 * [`quickstart.la.md`](quickstart.la.md) — Initia cum omi-cli (Latin Quickstart).
+* [`quickstart.ch.md`](quickstart.ch.md) — I finenna na pasu siha yan omi-cli (Chamorro Quickstart).
 * [`quickstart.lt.md`](quickstart.lt.md) — Pirmieji žingsniai su omi-cli (Lithuanian Quickstart).
 * [`quickstart.lv.md`](quickstart.lv.md) — Pirmie soļi ar omi-cli (Latvian Quickstart).
 * [`quickstart.mk.md`](quickstart.mk.md) — Први чекори со omi-cli (Macedonian Quickstart).
