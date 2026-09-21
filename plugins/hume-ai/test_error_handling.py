@@ -19,7 +19,7 @@ SENTINEL_ERROR = "INTERNAL_DB_DISCONNECTED_AT_10.240.0.1_PASSWORD_LEAK"
 
 
 def _install_hume_stubs():
-    """Stub Hume SDK, httpx, and fastapi so app.py and main.py load offline."""
+    """Stub Hume SDK, httpx, fastapi, and uvicorn so app.py and main.py load offline."""
     hume = types.ModuleType("hume")
     hume.AsyncHumeClient = Mock()
     expression = types.ModuleType("hume.expression_measurement")
@@ -87,6 +87,9 @@ def _install_hume_stubs():
     fastapi_templating = types.ModuleType("fastapi.templating")
     fastapi_templating.Jinja2Templates = Framework
 
+    uvicorn = types.ModuleType("uvicorn")
+    uvicorn.run = Mock()
+
     return {
         "hume": hume,
         "hume.expression_measurement": expression,
@@ -98,21 +101,17 @@ def _install_hume_stubs():
         "fastapi": fastapi,
         "fastapi.responses": fastapi_responses,
         "fastapi.templating": fastapi_templating,
+        "uvicorn": uvicorn,
     }
 
 
 def load_hume_modules():
     """Load plugins/hume-ai/app.py and main.py hermetically."""
-    app_path = Path(__file__).parent / "hume_app_hardened.py"
-    if not app_path.exists():
-        app_path = Path(__file__).with_name("app.py")
-
-    main_path = Path(__file__).parent / "hume_main_hardened.py"
-    if not main_path.exists():
-        main_path = Path(__file__).with_name("main.py")
+    app_path = Path(__file__).resolve().parent / "app.py"
+    main_path = Path(__file__).resolve().parent / "main.py"
 
     stubs = _install_hume_stubs()
-    with patch.dict(sys.modules, stubs):
+    with patch.dict(sys.modules, stubs), patch("builtins.print"):
         # 1. Load app.py
         spec_app = importlib.util.spec_from_file_location("app", app_path)
         app_mod = importlib.util.module_from_spec(spec_app)
@@ -140,6 +139,11 @@ class TestHumeErrorHandling(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app_mod, cls.main_mod = load_hume_modules()
+
+    def setUp(self):
+        patcher = patch("builtins.print")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_text_analysis_error_masks_exception(self):
         """analyze_text_with_hume masks unexpected exceptions."""
