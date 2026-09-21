@@ -457,8 +457,8 @@ async def tool_check_allergens(request: Request):
     if not avoid:
         return ChatToolResponse(
             success=False,
-            message="avoid must be a non-empty list of allergens",
-            data={"error": "avoid must be a non-empty list of allergens"},
+            message="avoid must be a non-empty list",
+            data={"error": "avoid must be a non-empty list"},
         )
 
     barcode = str(body.get("barcode") or "").strip()
