@@ -11,7 +11,7 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
@@ -1422,6 +1422,7 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                delete_action_item_vector(uid, ai['id'])
                 # The deleted row may own a client-scheduled reminder; the client only
                 # cancels it on the deletion data message, so send one here too (#5085).
                 if ai.get('due_at') and not ai.get('completed'):
