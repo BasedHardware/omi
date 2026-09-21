@@ -86,6 +86,7 @@
 * [`quickstart.sa.md`](quickstart.sa.md) — omi-cli संस्कृत-मार्गदर्शिका (Sanskrit Quickstart).
 * [`quickstart.si.md`](quickstart.si.md) — omi-cli සමඟ මූලික පියවර (Sinhala Quickstart).
 * [`quickstart.sk.md`](quickstart.sk.md) — Prvé kroky s omi-cli (Slovak Quickstart).
+* [`quickstart.hsb.md`](quickstart.hsb.md) — Prěnje kroki z omi-cli (Upper Sorbian Quickstart).
 * [`quickstart.sl.md`](quickstart.sl.md) — Prvi koraki z omi-cli (Slovenian Quickstart).
 * [`quickstart.so.md`](quickstart.so.md) — Tallaabooyinka ugu Horeeya ee omi-cli (Somali Quickstart).
 * [`quickstart.sq.md`](quickstart.sq.md) — Hapat e Parë me omi-cli (Albanian Quickstart).

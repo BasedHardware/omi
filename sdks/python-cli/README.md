@@ -391,3 +391,4 @@ MIT — see [`LICENSE`](LICENSE).
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
 - [Furlan (Friulian)](examples/quickstart.fur.md)
 - [Qırımtatarca (Crimean Tatar)](examples/quickstart.crh.md)
+- [Hornjoserbsćina (Upper Sorbian)](examples/quickstart.hsb.md)
