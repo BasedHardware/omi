@@ -654,7 +654,7 @@ struct AppsPage: View {
   private var appsMoreMenu: some View {
     Menu {
       Button {
-        if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
+        if let url = URL(string: "https://docs.omi.me/doc/developer/apps/Introduction") {
           NSWorkspace.shared.open(url)
         }
       } label: {
