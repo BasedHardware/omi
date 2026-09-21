@@ -84,6 +84,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇮🇳 हिंदी में शुरुआत (Hindi Quickstart)](examples/quickstart.hi.md).
 
 > Looking for localized guides? See the [नेपालीमा सुरुवात (Nepali Quickstart)](examples/quickstart.ne.md).
+> Looking for localized guides? See the [Gàidhlig (Scottish Gaelic Quickstart)](examples/quickstart.gd.md).
 > Looking for localized guides? See the [🇵🇰 سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart)](examples/quickstart.sd.md).
 > Looking for localized guides? See the [Sängö (Sango Quickstart)](examples/quickstart.sg.md), the [Qafar af (Afar Quickstart)](examples/quickstart.aa.md), the [Te Ggana Tuuvalu (Tuvaluan Quickstart)](examples/quickstart.tvl.md), the [Vagahau Niue (Niuean Quickstart)](examples/quickstart.niu.md), the [Gagana Tokelau (Tokelauan Quickstart)](examples/quickstart.tkl.md), or the [Reo Tahiti (Tahitian Quickstart)](examples/quickstart.ty.md).
 
