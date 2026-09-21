@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: twitter-chat-tools-error-handling-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_error_handling.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "verify twitter chat tools and callback sanitize raw exceptions, internal URLs, paths, and tracebacks"
   - id: hive-limit-coercion-tests
     command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
