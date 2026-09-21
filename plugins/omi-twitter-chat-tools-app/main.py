@@ -168,11 +168,11 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
             return {"success": True}
         else:
             log(f"Twitter API error: {response.status_code}")
-            return {"error": response.text, "status_code": response.status_code}
+            return {"error": f"Twitter API error (HTTP {response.status_code})", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Twitter API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "Twitter API request failed"}
 
 
 # X API v2 rejects max_results below the endpoint's floor with HTTP 400, so a
@@ -521,7 +521,7 @@ async def tool_post_tweet(request: Request):
         log(f"Error posting tweet: {e}")
         import traceback
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to post tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to post tweet due to an internal error.")
 
 
 @app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -573,7 +573,7 @@ async def tool_get_timeline(request: Request):
 
     except Exception as e:
         log(f"Error getting timeline: {e}")
-        return ChatToolResponse(error=f"Failed to get timeline: {str(e)}")
+        return ChatToolResponse(error="Failed to get timeline due to an internal error.")
 
 
 @app.post("/tools/get_my_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -639,7 +639,7 @@ async def tool_get_my_tweets(request: Request):
 
     except Exception as e:
         log(f"Error getting tweets: {e}")
-        return ChatToolResponse(error=f"Failed to get tweets: {str(e)}")
+        return ChatToolResponse(error="Failed to get tweets due to an internal error.")
 
 
 @app.post("/tools/get_mentions", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -689,7 +689,7 @@ async def tool_get_mentions(request: Request):
 
     except Exception as e:
         log(f"Error getting mentions: {e}")
-        return ChatToolResponse(error=f"Failed to get mentions: {str(e)}")
+        return ChatToolResponse(error="Failed to get mentions due to an internal error.")
 
 
 @app.post("/tools/search_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -740,7 +740,7 @@ async def tool_search_tweets(request: Request):
 
     except Exception as e:
         log(f"Error searching tweets: {e}")
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        return ChatToolResponse(error="Failed to search tweets due to an internal error.")
 
 
 @app.post("/tools/like_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -776,7 +776,7 @@ async def tool_like_tweet(request: Request):
 
     except Exception as e:
         log(f"Error liking tweet: {e}")
-        return ChatToolResponse(error=f"Failed to like tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to like tweet due to an internal error.")
 
 
 @app.post("/tools/unlike_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -810,7 +810,7 @@ async def tool_unlike_tweet(request: Request):
 
     except Exception as e:
         log(f"Error unliking tweet: {e}")
-        return ChatToolResponse(error=f"Failed to unlike tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to unlike tweet due to an internal error.")
 
 
 @app.post("/tools/retweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -846,7 +846,7 @@ async def tool_retweet(request: Request):
 
     except Exception as e:
         log(f"Error retweeting: {e}")
-        return ChatToolResponse(error=f"Failed to retweet: {str(e)}")
+        return ChatToolResponse(error="Failed to retweet due to an internal error.")
 
 
 @app.post("/tools/delete_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -876,7 +876,7 @@ async def tool_delete_tweet(request: Request):
 
     except Exception as e:
         log(f"Error deleting tweet: {e}")
-        return ChatToolResponse(error=f"Failed to delete tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to delete tweet due to an internal error.")
 
 
 @app.post("/tools/get_user_profile", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -943,7 +943,7 @@ async def tool_get_user_profile(request: Request):
 
     except Exception as e:
         log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        return ChatToolResponse(error="Failed to get profile due to an internal error.")
 
 
 # ============================================
@@ -1110,26 +1110,26 @@ async def twitter_callback(
         </html>
         """, status_code=400)
 
-    # Extract uid from state
     try:
-        uid = state.split(":")[0]
-    except:
-        return HTMLResponse(content="Invalid state", status_code=400)
+        # Extract uid from state
+        try:
+            uid = state.split(":")[0]
+        except Exception:
+            return HTMLResponse(content="Invalid state", status_code=400)
 
-    # Verify state
-    stored_state = get_oauth_state(uid)
-    if stored_state != state:
-        return HTMLResponse(content="State mismatch", status_code=400)
+        # Verify state
+        stored_state = get_oauth_state(uid)
+        if stored_state != state:
+            return HTMLResponse(content="State mismatch", status_code=400)
 
-    # Get code verifier
-    code_verifier = get_user_setting(uid, "code_verifier")
-    if not code_verifier:
-        return HTMLResponse(content="Code verifier not found", status_code=400)
+        # Get code verifier
+        code_verifier = get_user_setting(uid, "code_verifier")
+        if not code_verifier:
+            return HTMLResponse(content="Code verifier not found", status_code=400)
 
-    delete_oauth_state(uid)
+        delete_oauth_state(uid)
 
-    # Exchange code for tokens
-    try:
+        # Exchange code for tokens
         token_data = {
             "code": code,
             "grant_type": "authorization_code",
@@ -1218,7 +1218,7 @@ async def twitter_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content="Authentication error: An internal error occurred during authentication", status_code=500)
 
 
 @app.get("/setup/twitter")
