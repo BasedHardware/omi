@@ -236,6 +236,7 @@ export const runChatGenerationScenario = async (
     stored: admission.stored,
     acceptedEvent: admission.acceptedEvent,
     bearerToken: "scenario-token",
+    verifiedUserUid: "scenario-user",
   });
 
   // Context loading and terminalization are Promise callbacks. Flush those

@@ -122,6 +122,7 @@ describe("reasoning preamble vs Bun idleTimeout", () => {
         gatewayUrl: `http://127.0.0.1:${gateway.port}`,
         laneId: "omi:auto:chat-agent",
         serviceToken: GATEWAY_TOKEN,
+        serviceCaller: "local-qa",
         retrySleep: async () => undefined,
       }),
     });

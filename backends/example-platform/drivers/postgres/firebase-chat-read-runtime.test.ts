@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CHAT_CAPABILITIES } from "../../apps/service/routes/chat-messages";
+import { CHAT_READ_CAPABILITIES } from "../../apps/service/routes/chat-messages";
 import type { PostgresTransactionPool } from "./connection";
 import { createPostgresFirebaseChatReadRuntime } from "./firebase-chat-read-runtime";
 
@@ -71,7 +71,8 @@ test("chat GET denies missing tokens and missing grants instead of returning emp
     "https://service.example/v1/chat-messages",
     { method: "POST", body: "{}" },
   ))).status).toBe(404);
-  expect(CHAT_CAPABILITIES.maxAttachmentsPerMessage).toBe(4);
+  expect(CHAT_READ_CAPABILITIES.maxAttachmentsPerMessage).toBe(0);
+  expect(CHAT_READ_CAPABILITIES.allowedAttachmentMimeTypes).toEqual([]);
   const cancelled = new AbortController();
   cancelled.abort();
   expect((await runtime.executeRequest(new Request(request(), { signal: cancelled.signal }))).status)

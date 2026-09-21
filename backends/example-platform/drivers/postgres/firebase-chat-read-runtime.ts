@@ -12,7 +12,7 @@ import {
 } from "../../apps/service/chat/history-cursor";
 import { createServedCounter } from "../../apps/service/observability/served-count";
 import {
-  CHAT_CAPABILITIES,
+  CHAT_READ_CAPABILITIES,
   parseHistoryQuery,
   projectLoadedHistoryMessage,
 } from "../../apps/service/routes/chat-messages";
@@ -148,7 +148,7 @@ export function createPostgresFirebaseChatReadRuntime(
               return json({
                 messages,
                 page: { olderCursor, hasOlder: page.hasOlder },
-                capabilities: CHAT_CAPABILITIES,
+                capabilities: CHAT_READ_CAPABILITIES,
               }, 200);
             } catch (error) {
               if (error instanceof ExpiredChatHistoryCursorError) {

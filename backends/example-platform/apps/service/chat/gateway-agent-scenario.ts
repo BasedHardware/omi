@@ -419,6 +419,7 @@ export const runGatewayAgentScenario = async (
     gatewayUrl: "http://127.0.0.1:1",
     laneId: "omi:auto:chat-agent-scenario",
     serviceToken: "scenario-only-token",
+    serviceCaller: "local-qa",
     fetch: fetchScript as typeof fetch,
     retrySleep: async () => {},
     ...(loop === undefined ? {} : { readOnlyToolLoop: loop }),
@@ -473,6 +474,7 @@ export const runGatewayAgentScenario = async (
         attemptId: turn.attemptId,
         prompt: turn.prompt,
         context: packet,
+        verifiedUserUid: "scenario-user",
         attachments: [],
         onDelta: (delta) => { text.push(delta); },
         onUsage: (usage) => {

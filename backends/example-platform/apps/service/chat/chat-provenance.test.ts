@@ -81,6 +81,7 @@ test("negative control: canned gateway answer is canned and the real-provider la
       gatewayUrl: String(ready.url),
       laneId: "omi:auto:chat-agent",
       serviceToken: "local-test-gateway-token",
+      serviceCaller: "local-qa",
       engineIdentity: identity,
     });
     expect(readChatGenerationSourceCapability(source)).toEqual(stamp);

@@ -47,6 +47,11 @@ export interface AdmittedChatGeneration {
   readonly acceptedEvent: ChatGenerationEvent;
   /** Ephemeral request credential used only by the injected context source. */
   readonly bearerToken: string;
+  /**
+   * Verified caller identity forwarded to the generation source. Distinct from
+   * `accountId`; the opaque account coordinate is never a gateway UID.
+   */
+  readonly verifiedUserUid: string;
 }
 
 export interface ChatGenerationSupervisor {
@@ -883,6 +888,7 @@ export const createChatGenerationSupervisor = (
             attemptId: state.attemptId,
             prompt: input.stored.message.text,
             context,
+            verifiedUserUid: input.verifiedUserUid,
             attachments,
             onDelta(text): void {
               try {
