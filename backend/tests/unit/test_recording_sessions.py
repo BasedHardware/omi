@@ -464,7 +464,11 @@ class _ResumeSessionHost:
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=self._refresh_speakers)
         self._firestore_client = firestore_client
+
+    async def _refresh_speakers(self, _conversation_id: str) -> None:
+        return None
 
     async def _call(self, fn, *args, **kwargs):
         if fn.__name__ == 'open_live_recording_session':

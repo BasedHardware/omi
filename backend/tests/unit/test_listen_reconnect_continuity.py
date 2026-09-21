@@ -124,6 +124,7 @@ class CaptureHarness:
             persistence=SimpleNamespace(call=self.call),
             send_event=self.events.append,
             transcripts=SimpleNamespace(flush_speaker_assignments=AsyncMock()),
+            speakers=SimpleNamespace(refresh_for_conversation=AsyncMock()),
         )
         controller = LiveConversationController(host, clock=lambda: self.now)
         controller.on_conversation_processed = lambda cid: None

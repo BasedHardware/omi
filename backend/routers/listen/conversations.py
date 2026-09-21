@@ -119,6 +119,7 @@ class LiveConversationController:
         await self.host.persistence.call(
             redis_db.set_in_progress_conversation_id, self.host.request.uid, binding['conversation_id']
         )
+        await self.host.speakers.refresh_for_conversation(binding['conversation_id'])
         self.send_conversation_session(binding, self.host.recording_session_id)
         return True
 
@@ -363,6 +364,7 @@ class LiveConversationController:
                         {'uses_custom_stt': True},
                     )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
+                await self.host.speakers.refresh_for_conversation(conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
             if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
