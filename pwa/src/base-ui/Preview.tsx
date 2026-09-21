@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
@@ -19,6 +19,7 @@ import { OmiAvatar } from "../../../react-native/src/ui/OmiAvatar";
 import { useReduceMotion } from "../../../react-native/src/app/useReduceMotion.web";
 import type { ReadsPhase } from "../../../react-native/src/app/useDesktopReads";
 import type { DesktopReadOutcomes } from "../../../react-native/src/desktopReadClient";
+import type { previewDailyIdea } from "./fixtures";
 import {
   Button,
   Input,
@@ -44,12 +45,15 @@ const routes = [
 export function Preview({
   initialOutcomes,
   initialPhase = "ready",
+  dailyIdea = null,
   mobile = false,
 }: {
   initialOutcomes: DesktopReadOutcomes;
   initialPhase?: ReadsPhase;
+  dailyIdea?: typeof previewDailyIdea | null;
   mobile?: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [outcomes, setOutcomes] = useState(initialOutcomes);
   const [route, setRoute] = useState("Home");
   const [mode, setMode] = useState(mobile ? "Search" : "Ask");
@@ -306,6 +310,7 @@ export function Preview({
               ))}
           </div>
           <Input
+            ref={inputRef}
             aria-label={
               mode === "Ask"
                 ? "Ask Omi"
@@ -356,6 +361,29 @@ export function Preview({
                   : brief.subtitle}
               </p>
             </div>
+            {!searching && ready && dailyIdea && (
+              <Card className="daily-idea" aria-label="For you today">
+                <div className="daily-idea-copy">
+                  <p className="daily-idea-label">For you today</p>
+                  <CardTitle>{dailyIdea.title}</CardTitle>
+                  <p className="daily-idea-body">{dailyIdea.body}</p>
+                  <p className="meta">
+                    Example · Sample profile: {dailyIdea.interests.join(" + ")}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMode("Ask");
+                    setQuery(dailyIdea.prompt);
+                    setNotice("");
+                    inputRef.current?.focus();
+                  }}
+                >
+                  Explore with Omi <ArrowUpRight aria-hidden="true" />
+                </Button>
+              </Card>
+            )}
             <div className="home-columns">
               {taskList}
               {conversationList}

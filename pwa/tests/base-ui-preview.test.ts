@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import type { previewDailyIdea } from "../src/base-ui/fixtures";
 
 let directory: string;
 let render: (props: {
@@ -11,6 +12,7 @@ let render: (props: {
   initialPhase?: string;
   mobile?: boolean;
   failedReads?: boolean;
+  dailyIdea?: typeof previewDailyIdea | null;
 }) => string;
 
 // Like chat-markdown.test, resolve real React instead of the PWA's type-only
@@ -29,17 +31,17 @@ beforeAll(async () => {
     import {Preview} from ${JSON.stringify(
       join(root, "pwa/src/base-ui/Preview.tsx")
     )};
-    import {previewOutcomes} from ${JSON.stringify(
+    import {previewDailyIdea, previewOutcomes} from ${JSON.stringify(
       join(root, "pwa/src/base-ui/fixtures.ts")
     )};
-    export function render({empty, completeFirst, failedReads, ...props}) {
+    export function render({empty, completeFirst, failedReads, dailyIdea = empty ? null : previewDailyIdea, ...props}) {
       const initialOutcomes = previewOutcomes(empty);
       if (completeFirst) initialOutcomes.tasks.value.items[0].completed = true;
       if (failedReads) {
         initialOutcomes.tasks = {status: "error"};
         initialOutcomes.conversations = {status: "error"};
       }
-      return renderToStaticMarkup(React.createElement(Preview, {...props, initialOutcomes}));
+      return renderToStaticMarkup(React.createElement(Preview, {...props, initialOutcomes, dailyIdea}));
     }
   `
   );
@@ -159,23 +161,46 @@ test.each([false, true])(
 );
 
 test.each([false, true])(
-  "Home keeps tasks and conversations without experimental cards (mobile=%s)",
+  "Home has no Apps tab or screen-history card (mobile=%s)",
   (mobile) => {
     const html = render({ mobile });
     expect(html).not.toContain("Screen history");
     expect(html).not.toContain(">Apps</span>");
     expect(html).not.toContain('aria-label="At a glance"');
-    expect(html).not.toContain('aria-label="For you today"');
-    expect(html).not.toContain("Explore with Omi");
-    expect(html).toContain('aria-label="Tasks"');
-    expect(html).toContain('aria-label="Conversations and memories"');
+    expect(html).toContain('aria-label="For you today"');
   }
 );
 
-test("failed reads do not masquerade as empty lists", () => {
+test("daily idea renders supplied copy and profile interests instead of hardcoded metrics", () => {
+  const html = render({
+    dailyIdea: {
+      interests: ["Cooking", "Music"],
+      title: "Give dinner a soundtrack.",
+      body: "Pick one song and make a snack before it ends.",
+      prompt: "Suggest a quick snack and a song.",
+    },
+  });
+  expect(html).toContain("Give dinner a soundtrack.");
+  expect(html).toContain("Pick one song and make a snack before it ends.");
+  expect(html).toContain("Example · Sample profile: Cooking + Music");
+  expect(html).toContain("Explore with Omi");
+  expect(html).not.toContain("Take your ideas on a detour.");
+  expect(html).not.toContain("Recent context");
+  expect(html).not.toContain("1 of 3");
+});
+
+test("no daily idea is fabricated when absent, loading or unavailable", () => {
+  for (const props of [
+    { dailyIdea: null },
+    { empty: true },
+    { initialPhase: "initial-loading" },
+    { initialPhase: "unavailable" },
+  ]) {
+    const html = render(props);
+    expect(html).not.toContain('aria-label="For you today"');
+    expect(html).not.toContain("Explore with Omi");
+  }
   const failed = render({ failedReads: true });
   expect(failed).toContain("Tasks are not loaded yet.");
   expect(failed).toContain("Conversations are not loaded yet.");
-  expect(failed).not.toContain("No tasks yet.");
-  expect(failed).not.toContain("Nothing captured yet.");
 });
