@@ -155,7 +155,7 @@ class TranscriptProcessor:
                     else:
                         translations[replacement] = translation
                     conversation['transcript_segments'][index]['translations'] = translations
-                    await self.host.persistence.call(
+                    written = await self.host.persistence.call(
                         conversations_db.update_conversation_segments,
                         self.host.request.uid,
                         conversation_id,
@@ -170,11 +170,14 @@ class TranscriptProcessor:
                         # transaction still clears a projection that is actually on the
                         # document (a finalize overlapping capture).
                         invalidate_client_processing=False,
-                        preserve_unseen=True,
+                        segment_update_fields=('translations',),
+                        return_segments=True,
                     )
-                    if conversation_id == self.host.state.current_conversation_id:
-                        self.cache.update_segments(conversation['transcript_segments'])
-                        self.host.send_event(TranslationEvent(segments=[conversation['transcript_segments'][index]]))
+                    if isinstance(written, list) and conversation_id == self.host.state.current_conversation_id:
+                        self.cache.update_segments(written)
+                        accepted = next((s for s in written if s['id'] == segment_id), None)
+                        if accepted is not None:
+                            self.host.send_event(TranslationEvent(segments=[accepted]))
                     return
         except Exception as error:
             logger.error(
@@ -274,7 +277,7 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
-            preserve_unseen=True,
+            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status'),
             return_segments=True,
         )
         if not written:

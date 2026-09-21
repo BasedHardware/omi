@@ -2199,6 +2199,7 @@ def update_conversation_segments(
     return_segments: bool = False,
     preserve_unseen: bool = False,
     live_segments: Optional[List[dict]] = None,
+    segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
     """Write a transcript using an explicit segment-set ownership mode.
 
@@ -2206,6 +2207,8 @@ def update_conversation_segments(
     current receipt in this transaction; its LiveTranscriptMerge return value
     owns both storage and the client deletion delta. ``segments`` then carries
     only optional inference identity updates, not cached text or timestamps.
+    ``segment_update_fields`` patches existing IDs only (translation/inference);
+    absent IDs are ignored and current speech content and ordering survive.
 
     ``invalidate_client_processing`` defaults to TRUE, and that default is the
     point. This function's whole job is replacing the transcript, and a stored
@@ -2219,6 +2222,15 @@ def update_conversation_segments(
     is actually present on the document, so a finalize overlapping capture cannot
     leave a hash-bound summary of text that then changed.
     """
+    if live_segments is not None and segment_update_fields is not None:
+        raise ValueError('Live merge and field-only segment updates are mutually exclusive')
+    if segment_update_fields is not None and not set(segment_update_fields) <= {
+        'translations',
+        'person_id',
+        'is_user',
+        'speaker_identity_status',
+    }:
+        raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
@@ -2260,7 +2272,23 @@ def update_conversation_segments(
                 )
                 for s in incoming
             ]
-        if preserve_unseen and planned is None:
+        if segment_update_fields is not None:
+            persisted = _decode_transcript_segments_strict(
+                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+            )
+            updates = {s.get('id'): s for s in incoming}
+            incoming = [
+                dict(
+                    s,
+                    **{
+                        k: updates.get(s.get('id'), {})[k]
+                        for k in segment_update_fields
+                        if k in updates.get(s.get('id'), {})
+                    },
+                )
+                for s in persisted
+            ]
+        elif preserve_unseen and planned is None:
             known = {s.get('id') for s in incoming}
             persisted = _decode_transcript_segments_strict(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))

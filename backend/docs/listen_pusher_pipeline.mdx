@@ -822,6 +822,14 @@ Inference updates may change identity fields, but the current manual receipt win
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.
 
+Translation and inference flushes use `segment_update_fields`: they can update
+existing IDs but cannot restore retired IDs or replace speech text/timestamps.
+Both lifecycle processor writers reapply the current receipt before committing.
+This preserves attribution while leaving summary refresh explicit; processor
+content freshness for non-sync rows is a separate pre-existing limitation.
+Protection migration re-encodes the receipt and transcript in one per-document
+transaction; the stored level outranks a live caller's cached hint.
+
 REST-to-listen cache invalidation remains deferred. A label changed elsewhere may
 remain visually stale until the client reloads, a socket wake occurs, or an
 accepted update covers that segment. The 30-second cache refresh alone does not

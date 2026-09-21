@@ -442,8 +442,12 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 
 ### Manual speaker attribution during concurrent writes
 
-Live capture retains fresh unmerged input until its transcript transaction reads
-the current protected manual receipt. Selected IDs and speaker-wide defaults
-block every concatenation and partial sentence transfer involving covered speech,
-including clears and training opt-outs. The accepted transcript and deleted-ID
-delta return together for client delivery. This also protects older receipts.
+Manual speaker decisions live in a protected sparse receipt alongside the transcript.
+Live STT merging and both processing-result writers read that receipt in their
+commit transaction. Live merging preserves every manually covered speech span,
+including speaker-wide defaults, explicit clears, and training opt-outs. The
+committed transcript and deleted-ID delta are returned together for client delivery.
+Translation and inference-only writers patch current IDs without owning the segment
+set. Privacy-level migration re-encodes the transcript and receipt together.
+Changing attribution does not automatically regenerate a summary; refresh remains
+an explicit user action. Enrollment remains best-effort.
