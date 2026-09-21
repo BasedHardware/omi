@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 import json
+import math
 from pathlib import Path
 import re
 from statistics import median
@@ -43,6 +44,7 @@ def summarize(rows: list[dict[str, str]]) -> dict[str, Any]:
             float(row['clip_seconds']) < 5 and row['accepted'] == 'True' for row in compared
         ),
         'rejected_above_065': sum(float(row['best_distance']) > 0.65 for row in rejected),
+        'rejected_above_065_through_075': sum(0.65 < float(row['best_distance']) <= 0.75 for row in rejected),
         'rejected_065_to_075_inclusive': sum(0.65 <= float(row['best_distance']) <= 0.75 for row in rejected),
         'bins': bins,
         'outcomes': {
@@ -89,6 +91,9 @@ def main() -> None:
                 'malformed': malformed,
                 'time_range': [min(timestamps), max(timestamps)] if timestamps else [],
                 'all': summarize(all_rows),
+                'finite_runner_up': summarize(
+                    [row for row in all_rows if math.isfinite(float(row['runner_up_distance']))]
+                ),
                 'services': {name: summarize(rows) for name, rows in sorted(services.items())},
             },
             indent=2,

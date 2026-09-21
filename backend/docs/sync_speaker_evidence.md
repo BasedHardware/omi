@@ -6,8 +6,14 @@ The supplied `decisions.txt` was parsed with
 `python backend/scripts/analyze_speaker_decisions.py /path/to/decisions.txt`.
 It contains **10,666 parsable decisions**, zero malformed decisions, spanning
 13:12:00.531903Z through 14:02:23.258001Z. No customer identifiers or audio are
-included here. The task's 1,448-decision / 22-user summary cannot be reproduced
-from this file without an additional selection rule.
+included here. The task's 1,448-decision / 22-user summary is reproduced **exactly by retaining
+finite runner-up distances**: the multi-candidate cohort, excluding `inf` rows.
+It has 195 accepts (13.47%). Its four length buckets contain 526/515/175/232
+decisions and 26/56/31/82 accepts respectively; median best distances are
+0.8225/0.794/0.743/0.6935. A five-second floor loses 1,041 of these decisions and
+82 of the 195 accepts (42.05%). 1,116 of its 1,253 rejections have logged distance
+above 0.65; 291 lie in (0.65, 0.75] (295 if both endpoints are included). This cohort is especially relevant to distinguishing taught people
+from the owner; it must not be presented as the whole population.
 
 | Service | Decisions | Distinct users | Accepts | Accept rate |
 | --- | ---: | ---: | ---: | ---: |
@@ -32,7 +38,8 @@ values cannot settle decisions exactly at a threshold or margin boundary.
 
 The old `clip_seconds` is **segment duration**, while extraction caps at ten
 seconds after clamping to WAV bounds. It does not measure embedded duration.
-The logs have no per-speaker segment counts, total available audio, embeddings,
+Finite runner-up distance indicates at least two comparable candidate voiceprints;
+it does not establish which candidate is correct. The logs have no per-speaker segment counts, total available audio, embeddings,
 correct identity, or persisted conversation linkage. They cannot establish how
 many speakers would gain evidence, simulate centroid distances, measure recall
 or false accepts, or justify retuning. Length associations are confounded by
@@ -51,8 +58,8 @@ embedded seconds rather than two (4x evidence, still one call). A long speaker
 can contribute thirty rather than ten seconds, with up to three rather than one
 embedding calls. These are capacity bounds, **not measured production uplift**.
 Remaining audio above thirty seconds is excluded to bound cost. Clip failures
-retain successful evidence and log failed clip counts; no successful embedding
-produces an explicit counted terminal reason. Subsecond turns may collectively
+retain successful evidence and log failed clip counts. If no embedding succeeds,
+the attempt produces an explicit counted terminal reason. Subsecond turns may collectively
 reach the same one-second floor. This is a compatibility floor, not an assertion
 that one second is reliably identifiable.
 
@@ -81,7 +88,8 @@ negative if pooled turns contain another voice. No numeric uplift is claimed.
 False accepts may decrease as evidence improves, or increase with contaminated
 clusters. The unchanged boundary does not guarantee unchanged precision.
 
-After deployment, rerun the analyzer separately by service and evidence policy;
+After deployment, rerun the analyzer separately by service, finite-runner-up cohort
+and evidence policy;
 compare matched cohorts, available seconds, selected clips, failures, and distance
 and margin distributions. New insufficient-evidence outcomes expand the decision
 denominator, so compare both all attempts and actual comparisons. The first manual
