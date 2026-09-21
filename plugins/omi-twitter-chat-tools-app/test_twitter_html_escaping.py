@@ -1,27 +1,20 @@
 """Hermetic regression tests: omi-twitter-chat-tools-app must not reflect
 ``error`` or ``username`` values into HTML without escaping.
 
-Three unauthenticated or OAuth-controlled sinks were found in the Twitter
-plugin and fixed in this PR:
-
-1. ``GET /auth/twitter/callback?error=...`` — the ``error`` OAuth parameter
-   was inserted into ``<p>{error}</p>`` without ``html.escape``.
-
-2. ``GET /`` (connected page) — ``username`` retrieved from stored OAuth tokens
-   was inserted into ``<p>Connected as @{username}</p>`` without escaping.
-   While the username originates from Twitter's API, it is stored in the DB and
-   re-injected into HTML; any compromise of the stored value (or a crafted
-   token response) can trigger stored/reflected XSS.
-
-3. ``GET /auth/twitter/callback`` (success page) — same ``username`` reflected
-   in ``<p>Your Twitter account @{username} is now linked to Omi</p>``.
+Tests exercise the production handler routes directly in main.py via
+standard library unittest and hermetic stubs, ensuring templates cannot drift.
 
 Run: python3 plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py
 """
 
+import asyncio
 import html
+import importlib.util
+from pathlib import Path
 import sys
+from types import ModuleType
 import unittest
+from unittest.mock import Mock, patch
 
 BREAKOUT = '"><script>alert(1)</script>'
 QUOTE_BREAKER = '"\'&<>'
@@ -30,105 +23,162 @@ BENIGN_USERNAME = "elonmusk"
 MALICIOUS_USERNAME = '<script>alert("xss_via_username")</script>'
 
 
-def _render_error_page(error_value: str) -> str:
-    """Exact template from twitter_callback when ``if error:`` fires (fixed version)."""
-    safe_error = html.escape(error_value or "", quote=True)
-    return (
-        "<html><body><div class='container'>"
-        "<div class='error-box'>"
-        "<h2>Authorization Failed</h2>"
-        f"<p>{safe_error}</p>"
-        "</div></div></body></html>"
-    )
+def load_twitter_app():
+    """Load plugins/omi-twitter-chat-tools-app/main.py hermetically."""
+    class FastAPI:
+        def __init__(self, **kwargs):
+            pass
+
+        def get(self, *args, **kwargs):
+            return lambda handler: handler
+
+        post = get
+
+    def Query(default=None, **kwargs):
+        return default
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class _Response:
+        def __init__(self, content="", status_code=200, **kwargs):
+            self.content = content
+            self.status_code = status_code
+            self.kwargs = kwargs
+
+    class ChatToolResponse:
+        def __init__(self, result=None, error=None):
+            self.result = result
+            self.error = error
+
+    requests = ModuleType("requests")
+    requests.get = lambda *args, **kwargs: None
+    requests.post = lambda *args, **kwargs: None
+
+    dotenv = ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: None
+
+    fastapi = ModuleType("fastapi")
+    fastapi.FastAPI = FastAPI
+    fastapi.Request = object
+    fastapi.Query = Query
+    fastapi.HTTPException = HTTPException
+
+    responses = ModuleType("fastapi.responses")
+    responses.HTMLResponse = _Response
+    responses.RedirectResponse = _Response
+    responses.JSONResponse = _Response
+
+    db = ModuleType("db")
+    for name in (
+        "store_twitter_tokens",
+        "update_twitter_tokens",
+        "delete_twitter_tokens",
+        "store_oauth_state",
+        "delete_oauth_state",
+        "store_user_setting",
+    ):
+        setattr(db, name, lambda *args, **kwargs: None)
+    for name in ("get_twitter_tokens", "get_oauth_state", "get_user_setting"):
+        setattr(db, name, lambda *args, **kwargs: None)
+
+    models = ModuleType("models")
+    models.ChatToolResponse = ChatToolResponse
+
+    main_py_path = Path(__file__).with_name("main.py")
+    spec = importlib.util.spec_from_file_location("twitter_main_app", main_py_path)
+    module = importlib.util.module_from_spec(spec)
+    with patch.dict(
+        sys.modules,
+        {
+            "requests": requests,
+            "dotenv": dotenv,
+            "fastapi": fastapi,
+            "fastapi.responses": responses,
+            "db": db,
+            "models": models,
+        },
+    ):
+        spec.loader.exec_module(module)
+    return module
 
 
-def _render_connected_page(username: str, uid: str) -> str:
-    """Exact template from root() when token exists (fixed version)."""
-    safe_username = html.escape(username or "", quote=True)
-    return (
-        "<html><body>"
-        "<div class='success-box'>"
-        "<h2>Twitter Connected</h2>"
-        f"<p>Connected as @{safe_username}</p>"
-        "</div>"
-        "</body></html>"
-    )
+class TestTwitterHtmlEscaping(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = load_twitter_app()
 
+    def test_error_callback_escapes_script_breakout(self):
+        """Unauthenticated GET /auth/twitter/callback?error=<payload> must escape script tags."""
+        resp = asyncio.run(self.app.twitter_callback(error=BREAKOUT))
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn("<script>", resp.content)
+        self.assertIn(html.escape(BREAKOUT, quote=True), resp.content)
 
-def _render_success_page(username: str, uid: str) -> str:
-    """Exact template from twitter_callback() success branch (fixed version)."""
-    safe_username = html.escape(username or "", quote=True)
-    from urllib.parse import quote as url_quote
-    uid_q = url_quote(uid or "", safe="")
-    return (
-        "<html><body>"
-        "<div class='success-box'>"
-        f"<p>Your Twitter account @{safe_username} is now linked to Omi</p>"
-        f"<a href='/?uid={uid_q}'>Continue to Settings</a>"
-        "</div>"
-        "</body></html>"
-    )
+    def test_error_callback_escapes_html_entities(self):
+        """Quote characters and angle brackets must be encoded as entities."""
+        resp = asyncio.run(self.app.twitter_callback(error=QUOTE_BREAKER))
+        self.assertEqual(resp.status_code, 400)
+        self.assertNotIn("'<", resp.content)
+        self.assertIn("&quot;&#x27;&amp;&lt;&gt;", resp.content)
 
+    def test_error_callback_benign_value_passes_through(self):
+        """Standard OAuth error codes pass through undamaged."""
+        resp = asyncio.run(self.app.twitter_callback(error=BENIGN_ERROR))
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(BENIGN_ERROR, resp.content)
 
-class ErrorPageEscapingTest(unittest.TestCase):
-    """``error`` OAuth parameter must be HTML-escaped in the callback failure page."""
+    def test_error_callback_none_does_not_crash(self):
+        """When error is None, callback proceeds past error branch without TypeError."""
+        resp = asyncio.run(self.app.twitter_callback(code=None, state=None, error=None))
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Missing authorization code or state", resp.content)
 
-    def test_breakout_not_reflected_raw(self) -> None:
-        page = _render_error_page(BREAKOUT)
-        self.assertNotIn(BREAKOUT, page)
+    def test_root_page_escapes_stored_username_xss(self):
+        """GET / (connected page) must escape malicious username from tokens."""
+        with patch.object(self.app, "get_twitter_tokens", return_value={"username": MALICIOUS_USERNAME, "access_token": "tok"}):
+            resp = asyncio.run(self.app.root(uid="user123"))
+            self.assertNotIn("<script>", resp.content)
+            self.assertIn(html.escape(MALICIOUS_USERNAME, quote=True), resp.content)
 
-    def test_script_tag_absent(self) -> None:
-        page = _render_error_page(BREAKOUT)
-        self.assertNotIn("<script>", page)
+    def test_root_page_handles_benign_username(self):
+        """GET / renders normal alphanumeric handle."""
+        with patch.object(self.app, "get_twitter_tokens", return_value={"username": BENIGN_USERNAME, "access_token": "tok"}):
+            resp = asyncio.run(self.app.root(uid="user123"))
+            self.assertIn(f"@{BENIGN_USERNAME}", resp.content)
 
-    def test_escaped_form_present(self) -> None:
-        page = _render_error_page(QUOTE_BREAKER)
-        self.assertIn(html.escape(QUOTE_BREAKER, quote=True), page)
+    def test_root_page_handles_none_username_safely(self):
+        """GET / handles tokens with missing or None username without crashing."""
+        with patch.object(self.app, "get_twitter_tokens", return_value={"username": None, "access_token": "tok"}):
+            resp = asyncio.run(self.app.root(uid="user123"))
+            self.assertNotIn("<script>", resp.content)
+            self.assertIn("Twitter Connected", resp.content)
 
-    def test_benign_error_renders(self) -> None:
-        page = _render_error_page(BENIGN_ERROR)
-        self.assertIn(BENIGN_ERROR, page)
+    def test_success_callback_escapes_twitter_api_username(self):
+        """GET /auth/twitter/callback success branch escapes username from Twitter user profile."""
+        fake_token_resp = Mock(status_code=200)
+        fake_token_resp.json.return_value = {"access_token": "at", "refresh_token": "rt", "expires_in": 7200}
+        fake_user_resp = Mock(status_code=200)
+        fake_user_resp.json.return_value = {"data": {"id": "12345", "username": MALICIOUS_USERNAME}}
 
-    def test_empty_error_safe(self) -> None:
-        page = _render_error_page("")
-        self.assertNotIn("{error}", page)
+        def mock_post(*args, **kwargs):
+            return fake_token_resp
 
+        def mock_get(*args, **kwargs):
+            return fake_user_resp
 
-class ConnectedPageEscapingTest(unittest.TestCase):
-    """``username`` from stored token must be HTML-escaped on the connected homepage."""
-
-    def test_malicious_username_not_raw(self) -> None:
-        page = _render_connected_page(MALICIOUS_USERNAME, "user1")
-        self.assertNotIn(MALICIOUS_USERNAME, page)
-        self.assertNotIn("<script>", page)
-
-    def test_benign_username_renders(self) -> None:
-        page = _render_connected_page(BENIGN_USERNAME, "user1")
-        self.assertIn(BENIGN_USERNAME, page)
-
-    def test_quote_breaker_escaped(self) -> None:
-        page = _render_connected_page(QUOTE_BREAKER, "user1")
-        self.assertIn(html.escape(QUOTE_BREAKER, quote=True), page)
-
-
-class SuccessPageEscapingTest(unittest.TestCase):
-    """``username`` must be HTML-escaped on the OAuth success page."""
-
-    def test_malicious_username_not_raw(self) -> None:
-        page = _render_success_page(MALICIOUS_USERNAME, "user1")
-        self.assertNotIn(MALICIOUS_USERNAME, page)
-        self.assertNotIn("<script>", page)
-
-    def test_benign_username_renders(self) -> None:
-        page = _render_success_page(BENIGN_USERNAME, "user1")
-        self.assertIn(BENIGN_USERNAME, page)
-
-    def test_uid_url_encoded_in_continue_link(self) -> None:
-        """uid in continue-link href must be URL-encoded, not raw."""
-        uid = '"><script>alert(1)</script>'
-        page = _render_success_page(BENIGN_USERNAME, uid)
-        self.assertNotIn(uid, page, "Raw uid must not appear in href attribute")
+        with patch.object(self.app.requests, "post", side_effect=mock_post), \
+             patch.object(self.app.requests, "get", side_effect=mock_get), \
+             patch.object(self.app, "get_oauth_state", return_value="user123:valid_token"), \
+             patch.object(self.app, "get_user_setting", return_value="test_verifier"), \
+             patch.object(self.app, "store_twitter_tokens"):
+            resp = asyncio.run(self.app.twitter_callback(code="valid_code", state="user123:valid_token", error=None))
+            self.assertNotIn("<script>", resp.content)
+            self.assertIn(html.escape(MALICIOUS_USERNAME, quote=True), resp.content)
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()
