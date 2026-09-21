@@ -1171,6 +1171,11 @@ checks:
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+  - id: plugin-db-eval-security-tests
+    command: ["python3", "plugins/test_db.py"]
+    triggers: ["plugins/db.py", "plugins/test_db.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "eval in get_upsert_segment_to_transcript_plugin executed arbitrary python code from Redis transcript buffer; literal_eval prevents code execution"
   - id: plugin-mentor-session-auth-tests
     command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
