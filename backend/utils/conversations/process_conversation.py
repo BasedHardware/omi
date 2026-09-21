@@ -90,6 +90,7 @@ from utils.observability.fallback import record_fallback
 from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
+from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import (
     is_trial_paywalled,
@@ -2532,6 +2533,14 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
+    # The synthetic release-probe identity (dev pusher release lane) is
+    # exempt from the desktop deferral gates below so the probe certifies
+    # the full terminal desktop path end to end. New desktop gates must
+    # check is_release_probe_uid(uid) (utils/release_probe.py) or the probe
+    # fails loudly in CI — that is intended.
+    probe_uid = is_release_probe_uid(uid)
+    if probe_uid:
+        logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -2543,6 +2552,7 @@ def process_conversation(
     if (
         hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and is_trial_paywalled(uid, 'macos')
     ):
         logger.info(
@@ -2578,6 +2588,7 @@ def process_conversation(
         free_tier_local_processing_enabled(uid)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
     ):
         source_value = getattr(conversation.source, 'value', conversation.source)
         # Explicit ingest-time projection wins over a previously stored one.
@@ -2641,6 +2652,7 @@ def process_conversation(
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and should_defer_desktop_processing(uid)
     ):
         deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
