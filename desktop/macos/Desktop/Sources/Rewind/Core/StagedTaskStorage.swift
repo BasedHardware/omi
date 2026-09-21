@@ -38,39 +38,19 @@ enum CanonicalReceiptInvalidationError: Error, Equatable, LocalizedError {
 /// Mirrors a subset of ActionItemStorage methods but operates on the staged_tasks table.
 actor StagedTaskStorage {
   static let shared = StagedTaskStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "StagedTaskStorage")
 
   private init() {}
 
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("StagedTaskStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw ActionItemStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   // MARK: - Insert
