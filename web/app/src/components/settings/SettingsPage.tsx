@@ -593,7 +593,11 @@ function ProfileSection({
         <Card>
           <SettingRow
             label="Daily Summary"
-            description="Receive a daily digest of your action items"
+            description={
+              dailySummary === null
+                ? 'Could not load your daily summary settings'
+                : 'Receive a daily digest of your action items'
+            }
           >
             <Toggle
               enabled={dailySummary?.enabled ?? false}
