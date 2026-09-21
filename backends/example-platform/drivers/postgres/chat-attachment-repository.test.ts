@@ -144,7 +144,8 @@ test("stage, scan, bind, expire, and remove stay on one authorized connection", 
         });
         return { rowCount: 1 };
       }
-      if (statement.name === "chat.attachment_scan") {
+      if (statement.name === "chat.attachment_scan"
+        || statement.name === "chat.attachment_retry_scan") {
         const row = rows.get(String(statement.values[3]));
         if (row === undefined || row.attachment_state === "bound") return { rowCount: 0 };
         row.attachment_state = statement.values[0];
@@ -226,6 +227,12 @@ test("stage, scan, bind, expire, and remove stay on one authorized connection", 
     },
   );
   expect(scanned?.state).toBe("clean");
+  expect(await withAuthorizedChatAttachments(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.retryScan("att-1", clock),
+  )).toBeNull();
   const bound = await withAuthorizedChatAttachments(
     pool,
     context(),
@@ -325,5 +332,67 @@ test("expired staging cannot bind and production composition stays unmounted", a
     expect(source).not.toContain("chat-attachment-repository");
     expect(source).not.toContain("chat-attachments");
     expect(source).not.toContain("withAuthorizedChatAttachments");
+    expect(source).not.toContain("loadForGeneration");
   }
+  const repository = await Bun.file(new URL("./chat-attachment-repository.ts", import.meta.url)).text();
+  expect(repository).not.toContain("loadForGeneration");
+  expect(repository).toContain("dev-noop-scanner");
+});
+
+test("retryScan restarts failed terminals and ignores clean or bound rows", async () => {
+  const rows = new Map<string, Record<string, unknown>>([
+    ["att-timeout", {
+      account_id: account,
+      id: "att-timeout",
+      content_reference: "ref-timeout",
+      attachment_scope: MAIN_CHAT_ATTACHMENT_SCOPE,
+      display_name: "old.png",
+      mime_type: "image/png",
+      size_bytes: 8,
+      attachment_state: "timed_out",
+      scanner_id: "dev-noop-scanner",
+      scanning_started_at: 10,
+      staged_at: 10,
+      stage_expires_at: 10 + ATTACHMENT_STAGING_TTL_MS,
+      bound_message_id: null,
+      bound_at: null,
+      content_expires_at: null,
+      content_bytes: png,
+    }],
+  ]);
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute(statement) {
+      if (statement.name === "chat.attachment_scan"
+        || statement.name === "chat.attachment_retry_scan") {
+        const row = rows.get(String(statement.values[3]));
+        if (row === undefined || row.attachment_state === "bound") return { rowCount: 0 };
+        row.attachment_state = statement.values[0];
+        row.scanning_started_at = statement.values[1];
+        return { rowCount: 1 };
+      }
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      if (statement.name === "authority.lock_and_revalidate") return [authorityRow()] as never;
+      if (statement.name === "chat.attachment_final_clock") return [{ now: 100 }] as never;
+      if (statement.name === "chat.attachment_read") {
+        const stored = rows.get(String(statement.values[1]));
+        return (stored === undefined ? [] : [stored]) as never;
+      }
+      return [] as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  const retried = await withAuthorizedChatAttachments(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.retryScan("att-timeout", { now: () => 1_500 }),
+  );
+  expect(retried?.state).toBe("clean");
 });
