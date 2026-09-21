@@ -66,6 +66,7 @@
 * [`quickstart.hu.md`](quickstart.hu.md) — Első lépések az omi-cli használatával (Hungarian Quickstart).
 * [`quickstart.hy.md`](quickstart.hy.md) — Առաջին քայլերը omi-cli-ով (Armenian Quickstart).
 * [`quickstart.is.md`](quickstart.is.md) — Fyrstu skref með omi-cli (Icelandic Quickstart).
+* [`quickstart.seh.md`](quickstart.seh.md) — Kuyambirira ndi omi-cli (Sena Quickstart).
 * [`quickstart.ka.md`](quickstart.ka.md) — პირველი ნაბიჯები omi-cli-ით (Georgian Quickstart).
 * [`quickstart.kk.md`](quickstart.kk.md) — omi-cli көмегімен алғашқы қадамдар (Kazakh Quickstart).
 * [`quickstart.km.md`](quickstart.km.md) — ជំហានដំបូងជាមួយ omi-cli (Khmer Quickstart).
