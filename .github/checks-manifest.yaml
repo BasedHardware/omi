@@ -19,11 +19,6 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
-  - id: notion-error-handling-tests
-    command: ["python3", "plugins/omi-notion-app/test_error_handling.py"]
-    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "notion_api_request and all chat tools must never leak raw internal exception strings or sensitive provider/network traces to clients"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
@@ -1177,6 +1172,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
   - id: notion-pagination-tests
+  - id: notion-error-handling-tests
+    command: ["python3", "plugins/omi-notion-app/test_error_handling.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "notion_api_request and all chat tools must never leak raw internal exception strings or sensitive provider/network traces to clients"
     command: ["python3", "plugins/omi-notion-app/test_pagination.py"]
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
