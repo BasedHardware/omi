@@ -62,6 +62,7 @@
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
+* [`quickstart.tcy.md`](quickstart.tcy.md) — omi-cli ಒಟ್ಟಿಗೆ ಸುರುತ ಹೆಜ್ಜೆಲು (Tulu Quickstart).
 * [`quickstart.chr.md`](quickstart.chr.md) — ᎢᎬᏱ ᏗᏕᏲᏗ omi-cli (Cherokee Quickstart).
 * [`quickstart.hu.md`](quickstart.hu.md) — Első lépések az omi-cli használatával (Hungarian Quickstart).
 * [`quickstart.hy.md`](quickstart.hy.md) — Առաջին քայլերը omi-cli-ով (Armenian Quickstart).
