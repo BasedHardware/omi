@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from models.memories import SubjectAttribution
+
 
 def _memory(content: str, *, memory_id: str, subject_attribution="unknown") -> SimpleNamespace:
     return SimpleNamespace(
@@ -61,7 +63,6 @@ def memory_surfaces(monkeypatch):
 
 def test_format_memory_evidence_preserves_complete_long_claim_and_json_controls():
     from utils.retrieval.memory_evidence import MEMORY_EVIDENCE_NOTICE, format_memory_evidence
-    from models.memories import SubjectAttribution
 
     claim = (
         "User prefers a quiet morning routine. "
