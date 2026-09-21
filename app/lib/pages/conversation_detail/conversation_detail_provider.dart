@@ -55,8 +55,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     _savingSpeaker = true;
     try {
-      final saved =
-          await _assignSpeaker(target.id, List.of(segmentIds), isUser: self, personId: person, speakerId: speakerId);
+      final bool saved;
+      try {
+        saved =
+            await _assignSpeaker(target.id, List.of(segmentIds), isUser: self, personId: person, speakerId: speakerId);
+      } catch (_) {
+        return false;
+      }
       if (!saved) return false;
       for (final segment in selected) {
         segment.isUser = self;
@@ -465,15 +470,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return false;
     }
-  }
-
-  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
-    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-    if (segmentIdx == -1) return;
-    conversation.transcriptSegments[segmentIdx].isUser = false;
-    conversation.transcriptSegments[segmentIdx].personId = null;
-    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
-    notifyListeners();
   }
 
   /// Returns the explicit source and body used by every summary surface.

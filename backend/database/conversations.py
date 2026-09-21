@@ -22,7 +22,13 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
-from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment, remap_absorbed_receipt
+from utils.manual_speaker_assignments import (
+    LiveTranscriptMerge,
+    apply_manual_assignments,
+    manual_assignment,
+    merge_live_segments,
+    remap_absorbed_receipt,
+)
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -179,7 +185,9 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
-    if 'manual_speaker_assignments' in data and isinstance(data['manual_speaker_assignments'], dict):
+    if 'manual_speaker_assignments' in data:
+        if not isinstance(data['manual_speaker_assignments'], dict):
+            raise ValueError('manual_speaker_assignments must be an object')
         receipt = data['manual_speaker_assignments']
         if receipt:
             data['manual_speaker_assignments'] = _protect_json_value(receipt, uid, level)
@@ -463,6 +471,29 @@ def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
 # *****************************
 
 
+def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: dict) -> None:
+    """A processor owns content, never the receipt read in its commit transaction."""
+    write_data.pop('manual_speaker_assignments', None)
+    write_data.pop('manual_speaker_assignments_compressed', None)
+    if 'transcript_segments' not in write_data:
+        return
+    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
+    receipt = decode_manual_speaker_assignments(
+        uid, existing.get('manual_speaker_assignments'), bool(existing.get('manual_speaker_assignments_compressed'))
+    )
+    segments = _decode_transcript_segments_strict(
+        uid, write_data['transcript_segments'], bool(write_data.get('transcript_segments_compressed'))
+    )
+    write_data.update(
+        _prepare_conversation_for_write(
+            {'transcript_segments': apply_manual_assignments(segments, receipt), 'manual_speaker_assignments': receipt},
+            uid,
+            level,
+        )
+    )
+    write_data['data_protection_level'] = level
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
@@ -511,6 +542,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                     write_data['structured'] = structured
                 structured['title'] = user_title
 
+            _reapply_current_manual_assignments(uid, write_data, existing)
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
@@ -608,6 +640,7 @@ def persist_processing_result_with_lifecycle(
                 write_data['structured'] = structured
             structured['title'] = user_title
 
+        _reapply_current_manual_assignments(uid, write_data, existing)
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1446,14 +1479,21 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
 
 def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
     """
-    Migrates a batch of conversations to the target protection level, committing in batches of 450.
+    Migrates each conversation atomically; photos retain their batched migration path.
     """
     batch = db.batch()
     batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
     doc_snapshots = db.get_all(
-        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed']
+        doc_refs,
+        field_paths=[
+            'data_protection_level',
+            'transcript_segments',
+            'transcript_segments_compressed',
+            'manual_speaker_assignments',
+            'manual_speaker_assignments_compressed',
+        ],
     )
 
     for doc_snapshot in doc_snapshots:
@@ -1461,40 +1501,35 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
-        conversation_data = doc_snapshot.to_dict()
-        current_level = conversation_data.get('data_protection_level', 'standard')
+        @firestore.transactional
+        def _migrate(transaction):
+            current = doc_snapshot.reference.get(transaction=transaction).to_dict()
+            if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
+                return False
+            if current.get('data_protection_level', 'standard') == target_level:
+                return False
+            payload = {'data_protection_level': target_level}
+            if 'transcript_segments' in current:
+                payload['transcript_segments'] = _decode_transcript_segments_strict(
+                    uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
+                )
+            if 'manual_speaker_assignments' in current:
+                payload['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+                    uid,
+                    current['manual_speaker_assignments'],
+                    bool(current.get('manual_speaker_assignments_compressed')),
+                )
+            prepared = _prepare_conversation_for_write(payload, uid, target_level)
+            if 'manual_speaker_assignments' in payload and not payload['manual_speaker_assignments']:
+                prepared['manual_speaker_assignments'] = firestore.DELETE_FIELD
+                prepared['manual_speaker_assignments_compressed'] = firestore.DELETE_FIELD
+            transaction.update(doc_snapshot.reference, prepared)
+            return True
 
-        if current_level == target_level:
+        if not _migrate(db.transaction()):
             continue
 
-        # Decrypt/decompress the data to get a clean slate.
-        plain_data = _prepare_conversation_for_read(conversation_data, uid)
-
-        # Re-prepare the segments for writing with the new level.
-        update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
-        prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
-
-        # Update the document with the migrated data and the new protection level.
-        update_data = {
-            'data_protection_level': target_level,
-        }
-        if 'transcript_segments' in prepared_payload:
-            update_data['transcript_segments'] = prepared_payload['transcript_segments']
-            update_data['transcript_segments_compressed'] = prepared_payload.get(
-                'transcript_segments_compressed', False
-            )
-
-        if not update_data.get('transcript_segments_compressed'):
-            update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
-
-        batch.update(doc_snapshot.reference, update_data)
-        batch_count += 1
-        if batch_count >= 100:
-            batch.commit()
-            batch = db.batch()
-            batch_count = 0
-
-        # Now migrate photos for this conversation in the same batch
+        # Photos retain their separate batched migration path.
         photos_ref = doc_snapshot.reference.collection('photos')
         photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
         for photo_doc in photos_stream:
@@ -2163,10 +2198,17 @@ def update_conversation_segments(
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
     preserve_unseen: bool = False,
-    removed_segment_ids: Optional[List[str]] = None,
-    absorbed_into: Optional[Dict[str, str]] = None,
+    live_segments: Optional[List[dict]] = None,
+    segment_update_fields: Optional[tuple[str, ...]] = None,
 ):
-    """Replace a conversation's transcript segments.
+    """Write a transcript using an explicit segment-set ownership mode.
+
+    ``live_segments`` supplies fresh, unmerged speech. Merge planning reads the
+    current receipt in this transaction; its LiveTranscriptMerge return value
+    owns both storage and the client deletion delta. ``segments`` then carries
+    only optional inference identity updates, not cached text or timestamps.
+    ``segment_update_fields`` patches existing IDs only (translation/inference);
+    absent IDs are ignored and current speech content and ordering survive.
 
     ``invalidate_client_processing`` defaults to TRUE, and that default is the
     point. This function's whole job is replacing the transcript, and a stored
@@ -2180,6 +2222,15 @@ def update_conversation_segments(
     is actually present on the document, so a finalize overlapping capture cannot
     leave a hash-bound summary of text that then changed.
     """
+    if live_segments is not None and segment_update_fields is not None:
+        raise ValueError('Live merge and field-only segment updates are mutually exclusive')
+    if segment_update_fields is not None and not set(segment_update_fields) <= {
+        'translations',
+        'person_id',
+        'is_user',
+        'speaker_identity_status',
+    }:
+        raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
@@ -2189,16 +2240,56 @@ def update_conversation_segments(
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
-        doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
-        remap = dict(absorbed_into or {})
+        planned = None
+        if live_segments is not None:
+            persisted = _decode_transcript_segments_strict(
+                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+            )
+            planned = merge_live_segments(persisted, live_segments, receipt)
+        remap = planned.absorbed_into if planned is not None else {}
         if remap:
             receipt = remap_absorbed_receipt(receipt, remap)
-        incoming = list(segments)
-        if preserve_unseen:
-            known = {s.get('id') for s in incoming} | set(removed_segment_ids or [])
+        incoming = planned.segments if planned is not None else list(segments)
+        if planned is not None:
+            # Inference may update identity fields, never replay cached text/spans.
+            identities = {s.get('id'): s for s in segments}
+            incoming = [
+                (
+                    dict(
+                        s,
+                        **{
+                            k: identities[s.get('id')][k]
+                            for k in ('person_id', 'is_user', 'speaker_identity_status')
+                            if k in identities[s.get('id')]
+                        },
+                    )
+                    if s.get('id') in identities
+                    else s
+                )
+                for s in incoming
+            ]
+        if segment_update_fields is not None:
+            persisted = _decode_transcript_segments_strict(
+                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+            )
+            updates = {s.get('id'): s for s in incoming}
+            incoming = [
+                dict(
+                    s,
+                    **{
+                        k: updates.get(s.get('id'), {})[k]
+                        for k in segment_update_fields
+                        if k in updates.get(s.get('id'), {})
+                    },
+                )
+                for s in persisted
+            ]
+        elif preserve_unseen and planned is None:
+            known = {s.get('id') for s in incoming}
             persisted = _decode_transcript_segments_strict(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
             )
@@ -2209,7 +2300,7 @@ def update_conversation_segments(
             'transcript_segments': accepted,
             # Once a live generation has received content, empty cleanup must
             # never reclaim it even if an older in-memory snapshot is empty.
-            'has_content': bool(current.get('has_content')) or bool(segments),
+            'has_content': bool(current.get('has_content')) or bool(accepted),
         }
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
@@ -2226,6 +2317,8 @@ def update_conversation_segments(
             # with finalize) must still be cleared in this same write.
             _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
+        if planned is not None:
+            return LiveTranscriptMerge(accepted, planned.updated_ids, planned.removed_ids, planned.absorbed_into)
         return accepted if return_segments else True
 
     return run_transactional(client, _write_segments)

@@ -134,6 +134,10 @@ def assign_in_transaction(
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
         raise SyncAssignmentSuperseded('sync anchor is user managed')
 
+    if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
+        raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
+
+    receipt_owner = target_id or (own_id if own_anchor and own_anchor.get('manual_speaker_assignments') else None)
     matched = {}
     extent = deepcopy(incoming)
     if target_id and target:
@@ -144,28 +148,33 @@ def assign_in_transaction(
         ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
         ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
         before = len(matched)
+        candidates = []
         for cid in sorted(ids - matched.keys()):
             raw = load(cid)
             if raw and not raw.get('deleted') and interval_matches(raw, extent):
-                # Live conversations are explicit targets only. Their lifecycle,
-                # photos and recording bindings are not owned by sync intake.
+                # Live and user-managed rows can only be explicit targets.
                 if not auto_mergeable(raw) and cid != target_id:
                     continue
-                matched[cid] = raw
-                extent['started_at'] = min(extent['started_at'], raw['started_at'])
-                extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
+                candidates.append((cid, raw))
+        if receipt_owner is None:
+            labeled = [(cid, raw) for cid, raw in candidates if raw.get('manual_speaker_assignments')]
+            if labeled:
+                receipt_owner = min(labeled, key=lambda item: (item[1]['started_at'], item[0]))[0]
+        for cid, raw in candidates:
+            # Excluded receipts must not extend the search or survivor's timestamps.
+            if raw.get('manual_speaker_assignments') and cid != receipt_owner:
+                continue
+            matched[cid] = raw
+            extent['started_at'] = min(extent['started_at'], raw['started_at'])
+            extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
         if len(matched) == before:
             break
 
-    labeled = [cid for cid, row in matched.items() if row.get('manual_speaker_assignments')]
-    if labeled and not target_id:
-        canonical = min(labeled, key=lambda cid: (matched[cid]['started_at'], cid))
-        for cid in [cid for cid in matched if cid != canonical and matched[cid].get('manual_speaker_assignments')]:
-            del matched[cid]
-    else:
-        canonical = target_id or (
-            min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
-        )
+    canonical = (
+        target_id
+        or (receipt_owner if receipt_owner in matched else None)
+        or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
+    )
     current = matched.get(canonical)
     created = current is None
     records = [decode(raw) for _, raw in sorted(matched.items())]

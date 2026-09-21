@@ -135,8 +135,8 @@ def test_forward_merge_drops_segment_when_only_incomplete():
     assert segments[0].text == "unfinished continues now."
     assert len(updated_segments) == 1
     assert updated_segments[0].speaker == "SPEAKER_01"
-    assert removed_ids == []
-    assert a.id not in removed_ids
+    assert removed_ids == [a.id]
+    assert a.id in removed_ids
     assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
