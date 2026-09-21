@@ -728,7 +728,7 @@ export function AppForm({ mode, app }: AppFormProps) {
             <h2 className="text-lg font-medium text-text-primary">Screenshots</h2>
             <div className="flex gap-3 overflow-x-auto pb-2">
               {thumbnails.map((thumb, index) => (
-                <div key={thumb.id ?? thumb.url} className="relative flex-shrink-0">
+                <div key={`${thumb.id ?? thumb.url}-${index}`} className="relative flex-shrink-0">
                   <Image
                     src={thumb.url}
                     alt="Screenshot"
