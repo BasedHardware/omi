@@ -626,7 +626,7 @@ def send_message(
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
 
-        def emit_done_frame(response: str) -> str:
+        async def emit_done_frame(response: str) -> str:
             """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs.
 
             If Firestore persistence fails, still emit an in-memory ``done:`` frame (same
@@ -635,7 +635,7 @@ def send_message(
             """
             persist_outcome = 'degraded'
             try:
-                ai_message, ask_for_nps = process_message(response, callback_data)
+                ai_message, ask_for_nps = await run_blocking(db_executor, process_message, response, callback_data)
             except Exception as persist_exc:
                 logger.error(
                     'chat stream terminal answer persistence failed for uid=%s: %s',
@@ -703,7 +703,7 @@ def send_message(
                     if response:
                         # This is the furthest server-observable client boundary:
                         # a yielded terminal frame is not a client-render acknowledgement.
-                        yield emit_done_frame(response)
+                        yield await emit_done_frame(response)
                         answered = True
 
             if not answered:
@@ -713,7 +713,7 @@ def send_message(
                 # without setting ``callback_data['answer']`` (those still need ``done:``).
                 response = callback_data.get('answer')
                 if response:
-                    yield emit_done_frame(response)
+                    yield await emit_done_frame(response)
                 else:
                     if streamed_terminal_error:
                         logger.error(
