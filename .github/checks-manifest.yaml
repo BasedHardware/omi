@@ -1296,6 +1296,11 @@ checks:
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15122: guard null analytics metrics, list error responses, and discount code attributes against unhandled TypeError and AttributeError"
+  - id: shopify-error-handling-tests
+    command: ["python3", "plugins/omi-shopify-app/test_error_handling.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the shared shopify_api_request helper and all six chat-tool handlers returned str(e) verbatim, reflecting internal socket errors, filesystem paths and provider details to the OMI backend and chat clients; the suite drives the real handlers against raising seams and asserts no exception text reaches a response"
   - id: hive-app-tests
     command: ["python3", "plugins/omi-hive-app/test_main.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
