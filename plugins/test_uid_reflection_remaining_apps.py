@@ -106,6 +106,7 @@ def _stub_modules_for(app_main: Path):
     fastapi.FastAPI = _FastAPI
     fastapi.Request = object
     fastapi.Query = lambda default=None, **kw: default
+    fastapi.Depends = lambda *a, **k: None
     fastapi.Form = lambda default=None, **kw: default
     fastapi.HTTPException = type('HTTPException', (Exception,), {'status_code': 500, 'detail': ''})
     responses = types.ModuleType('fastapi.responses')
