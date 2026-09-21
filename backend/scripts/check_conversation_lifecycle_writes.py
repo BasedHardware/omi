@@ -134,11 +134,49 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[str]:
+    """Static owner inventory for #15247; behavioral tests prove receipt precedence."""
+    if relative_path != 'backend/database/conversations.py':
+        return []
+    policies = {
+        'upsert_conversation_with_lifecycle': '_reapply_current_manual_assignments',
+        'persist_processing_result_with_lifecycle': '_reapply_current_manual_assignments',
+        'update_conversation_segments': 'apply_manual_assignments',
+        'assign_conversation_speaker': 'manual_assignment',
+        # These rewrite current transactional content rather than caller snapshots.
+        'update_conversation_segment_text': '_prepare_conversation_for_read',
+        'migrate_conversations_level_batch': '_prepare_conversation_for_read',
+        'create_conversation_if_absent_with_lifecycle': None,
+    }
+    errors = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        calls = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+        writes = any(
+            isinstance(n.func, ast.Attribute)
+            and n.func.attr in {'set', 'update', 'create'}
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id in {'transaction', 'txn', 'batch', 'doc_ref', 'conversation_ref'}
+            for n in calls
+        )
+        transcript = any(isinstance(n, ast.Constant) and n.value == 'transcript_segments' for n in ast.walk(node))
+        snapshot_input = any(a.arg == 'conversation_data' for a in node.args.args)
+        if not writes or not (transcript or snapshot_input):
+            continue
+        required = policies.get(node.name)
+        if node.name not in policies or (
+            required and not any(isinstance(n.func, ast.Name) and n.func.id == required for n in calls)
+        ):
+            errors.append(f'{relative_path}:{node.lineno}: transcript writer {node.name} lacks current receipt policy')
+    return errors
+
+
 def violations(source: str, relative_path: str) -> list[str]:
     tree = ast.parse(source, filename=relative_path)
     visitor = _LifecycleWriteVisitor(relative_path)
     visitor.visit(tree)
-    return visitor.errors
+    return visitor.errors + _transcript_writer_violations(tree, relative_path)
 
 
 def _source_files() -> list[Path]:

@@ -469,6 +469,29 @@ def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
 # *****************************
 
 
+def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: dict) -> None:
+    """A processor owns content, never the receipt read in its commit transaction."""
+    write_data.pop('manual_speaker_assignments', None)
+    write_data.pop('manual_speaker_assignments_compressed', None)
+    if 'transcript_segments' not in write_data:
+        return
+    level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
+    receipt = decode_manual_speaker_assignments(
+        uid, existing.get('manual_speaker_assignments'), bool(existing.get('manual_speaker_assignments_compressed'))
+    )
+    segments = _decode_transcript_segments_strict(
+        uid, write_data['transcript_segments'], bool(write_data.get('transcript_segments_compressed'))
+    )
+    write_data.update(
+        _prepare_conversation_for_write(
+            {'transcript_segments': apply_manual_assignments(segments, receipt), 'manual_speaker_assignments': receipt},
+            uid,
+            level,
+        )
+    )
+    write_data['data_protection_level'] = level
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
@@ -517,6 +540,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                     write_data['structured'] = structured
                 structured['title'] = user_title
 
+            _reapply_current_manual_assignments(uid, write_data, existing)
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
@@ -614,6 +638,7 @@ def persist_processing_result_with_lifecycle(
                 write_data['structured'] = structured
             structured['title'] = user_title
 
+        _reapply_current_manual_assignments(uid, write_data, existing)
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
