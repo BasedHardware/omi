@@ -47,11 +47,13 @@ FIXTURE_CODEC = "pcm16"
 # landed by the bounded deadline.
 TRANSCRIPT_SETTLE_SECONDS = 20
 TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
-# The product's discard policy hard-keeps any transcript above 100 words;
-# below that, an LLM applies a <2-minute "higher bar" that fences a generic
-# fixture phrase. Streaming the fixture this many times (17 words/pass)
-# crosses the deterministic keep line, so acceptance never depends on an
-# LLM discard verdict.
+# The discard verdict is exempted for the probe uid in the product
+# (utils/conversations/process_conversation.py, run 35583992730: the durable
+# word count could not be made deterministic — the trailing passes' transcripts
+# flush late into the rollover generation). The loop below still matters:
+# streaming several passes keeps the fixture phrase durably present in the
+# CLIENT conversation even when the trailing passes flush after the rollover,
+# so the durable-transcript readback never depends on a single STT pass.
 DISCARD_KEEP_AUDIO_PASSES = 8
 
 
@@ -212,11 +214,11 @@ async def _listen_sample(
                     )
 
         receiver = asyncio.create_task(receive_transcripts())
-        # The discard policy hard-keeps only transcripts above the 100-word
-        # line; a single 17-word fixture pass reads as generic filler under
-        # the <2-minute higher bar and the conversation fences as discarded
-        # (run 35580455756). Loop the fixture so the durable transcript
-        # crosses the deterministic keep threshold before finalization.
+        # Loop the fixture so the durable transcript in the CLIENT conversation
+        # contains the fixture phrase with margin: the dev STT chain can flush
+        # trailing passes only at teardown, after the lifecycle rollover has
+        # moved current_conversation_id (run 35583992730: the last passes'
+        # segments landed in the rollover generation, not this one).
         for _ in range(DISCARD_KEEP_AUDIO_PASSES):
             for offset in range(0, len(fixture.pcm), chunk_bytes):
                 chunk = fixture.pcm[offset : offset + chunk_bytes]

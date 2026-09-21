@@ -565,13 +565,24 @@ def _get_structured(
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-        with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(
-                discard_transcript,
-                main_conv.photos,
-                duration_seconds,
-                trusted_wake_word_markers=has_wake_word_marker,
-            )
+        # The discard verdict is a desktop post-processing gate, and the release
+        # probe's terminal contract only completes through a kept conversation,
+        # so the probe uid must skip it (gate convention, utils/release_probe.py).
+        # The probe's synthetic transcript cannot rely on the deterministic
+        # >100-word keep line: the trailing fixture passes flush late — at
+        # teardown, into the rollover generation — so the durably-present word
+        # count varies with STT yield, and the discard LLM fences the lane at
+        # terminal_failure (run 35583992730).
+        if is_release_probe_uid(uid):
+            discarded = False
+        else:
+            with track_usage(uid, Features.CONVERSATION_DISCARD):
+                discarded = should_discard_conversation(
+                    discard_transcript,
+                    main_conv.photos,
+                    duration_seconds,
+                    trusted_wake_word_markers=has_wake_word_marker,
+                )
         if discarded:
             # Calendar overlap outranks discard (SCA-381): a scrap recorded
             # inside a booked meeting is evidence, never noise. Only a positive
@@ -653,7 +664,10 @@ def _get_conversation_obj(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
 ) -> Conversation:
-    discarded = structured.title == ''
+    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    # The empty-title fallback is the discard gate's second verdict and is
+    # covered by the same release-probe exemption as the LLM discard above:
+    # an LLM mood must not terminalize the probe lane's synthetic capture.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
