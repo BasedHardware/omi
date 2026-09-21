@@ -60,6 +60,7 @@
 * [`quickstart.fi.md`](quickstart.fi.md) — Ensiaskeleet omi-cli-työkalun kanssa (Finnish Quickstart).
 * [`quickstart.ga.md`](quickstart.ga.md) — Treoir Mhearthosaithe do omi-cli (Irish Quickstart).
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
+* [`quickstart.mni.md`](quickstart.mni.md) — omi-cli দা অহানবা খোংচাৎশিং (Meitei Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
 * [`quickstart.chr.md`](quickstart.chr.md) — ᎢᎬᏱ ᏗᏕᏲᏗ omi-cli (Cherokee Quickstart).

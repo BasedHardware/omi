@@ -66,6 +66,7 @@ emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
 > [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
+> Looking for localized guides? See the [মৈতৈলোন (Meitei Quickstart)](examples/quickstart.mni.md).
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), or the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md).
 
