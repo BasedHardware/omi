@@ -36,6 +36,19 @@ Settings counter and no compensating decrement. Migration 0057 GRANTs
 existing `chat.write` RLS. Do not apply shared migrations from this work. POST/SSE
 stay unmounted.
 
+Chat entitlement ownership, from existing source (not a new ledger):
+`backend/utils/subscription.py:get_chat_quota_snapshot` and
+`enforce_chat_quota` read Firestore via `database.users.get_user_valid_subscription`
+and monthly counters in `database.user_usage.get_monthly_chat_usage`. The product
+question writer is `database.llm_usage.record_chat_quota_question` /
+`release_chat_quota_question` (idempotent event doc, UTC day, plan bucket).
+Gateway `llm_gateway/gateway/executor.py:reserve_jit_attempt` /
+`settle_jit_attempt` is JIT QA spend only and cannot authorize subscriber chat.
+Display names come from Firebase Auth (`utils.users.get_user_display_name`), not
+PostgreSQL grants. Compatible portable admission must call that source-owned
+reserve/settle pair; snapshots and PG reservation metadata rows are not that
+producer. No authenticated transport for that pair exists in example-platform.
+
 Verification uses `bun run check:deployed` for grant denial, empty-page shape,
 projection fail-closed behavior, string generation frames, route pairing and the
 production import closure, and `bun run test:postgres` for actual application-role
