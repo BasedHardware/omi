@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 import unicodedata
 from typing import Any
@@ -17,6 +18,8 @@ app = FastAPI(
     description="No-auth Crossref chat tools for paper metadata search and lookup",
     version="1.0.1",
 )
+
+logger = logging.getLogger(__name__)
 
 
 def clamp_max_results(value: int) -> int:
@@ -240,8 +243,15 @@ async def search_crossref_works(payload: SearchWorksInput):
             "/works",
             {"query": query, "rows": limited, "sort": "relevance", "order": "desc"},
         )
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Crossref HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"Crossref API error: {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Crossref request failed: %s", exc)
+        return ChatToolResponse(error="Crossref request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.exception("Unexpected error in search_crossref_works: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
@@ -264,8 +274,18 @@ async def get_crossref_work(payload: GetWorkInput):
 
     try:
         payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code == 404:
+            return ChatToolResponse(error="Work not found.")
+        logger.warning("Crossref HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"Crossref API error: {code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Crossref request failed: %s", exc)
+        return ChatToolResponse(error="Crossref request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.exception("Unexpected error in get_crossref_work: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
     item = payload.get("message", {})
     title = clean((item.get("title") or ["Untitled"])[0])
     publisher = clean(item.get("publisher"))
@@ -302,8 +322,18 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
                 "order": "desc",
             },
         )
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code == 404:
+            return ChatToolResponse(error="Author not found.")
+        logger.warning("Crossref HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"Crossref API error: {code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Crossref request failed: %s", exc)
+        return ChatToolResponse(error="Crossref request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.exception("Unexpected error in get_crossref_works_by_author: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")
