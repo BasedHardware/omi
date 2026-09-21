@@ -107,11 +107,18 @@ export function createD1Mock(): D1Database {
       db.exec(sql);
     },
     batch: async (statements: D1PreparedStatement[]) => {
-      const results: D1Result<unknown>[] = [];
-      for (const stmt of statements) {
-        results.push(await stmt.run());
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const results: D1Result<unknown>[] = [];
+        for (const stmt of statements) {
+          results.push(await stmt.run());
+        }
+        db.exec("COMMIT");
+        return results;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
       }
-      return results;
     },
     withSession: () => {
       throw new Error("withSession not supported in mock");

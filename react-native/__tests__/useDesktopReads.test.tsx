@@ -729,6 +729,119 @@ test.each(['refresh', 'disable', 'mutation'])(
   },
 );
 
+test('an empty first page after Load more does not keep deleted older rows', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  const older = successOutcomes(['Next page']).conversations;
+  if (older.status !== 'success') {
+    throw Error('fixture');
+  }
+  older.value.page = {
+    ...older.value.page,
+    hasMore: false,
+    nextCursor: null,
+    complete: true,
+    windowStatus: 'complete',
+  };
+  (loadConversations as jest.Mock).mockResolvedValueOnce(older.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  expect(reads.latest().conversationsExtended).toBe(true);
+  const empty = successOutcomes([]);
+  if (empty.conversations.status !== 'success') {
+    throw Error('fixture');
+  }
+  readsMock.mockResolvedValue(empty);
+  (loadConversations as jest.Mock).mockResolvedValue(empty.conversations.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: []},
+  });
+  expect(loadConversations).toHaveBeenCalled();
+  reads.unmount();
+});
+
+test('refresh revalidates loaded conversation pages instead of keeping stale older rows', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  const older = successOutcomes(['Next page']).conversations;
+  if (older.status !== 'success') {
+    throw Error('fixture');
+  }
+  older.value.page = {
+    ...older.value.page,
+    hasMore: false,
+    nextCursor: null,
+    complete: true,
+    windowStatus: 'complete',
+  };
+  (loadConversations as jest.Mock).mockResolvedValueOnce(older.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  const first = successOutcomes(['Old page']);
+  const second = successOutcomes(['Updated older']);
+  if (
+    first.conversations.status !== 'success' ||
+    second.conversations.status !== 'success'
+  ) {
+    throw Error('fixture');
+  }
+  first.conversations.value.page = {
+    ...first.conversations.value.page,
+    hasMore: true,
+    nextCursor: 'cursor-one',
+    complete: false,
+    windowStatus: 'more',
+  };
+  readsMock.mockResolvedValue(first);
+  (loadConversations as jest.Mock)
+    .mockResolvedValueOnce(first.conversations.value)
+    .mockResolvedValueOnce(second.conversations.value);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: [{title: 'Old page'}, {title: 'Updated older'}]},
+  });
+  expect(
+    (loadConversations as jest.Mock).mock.calls.map(call => call[1]),
+  ).toEqual(['cursor-one', null, 'cursor-one']);
+  reads.unmount();
+});
+
+test('task mutation refresh revalidates the loaded window', async () => {
+  readsMock.mockResolvedValue(taskOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadTasks as jest.Mock).mockResolvedValueOnce(
+    taskValue(taskOutcomes(25, 1, false)),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreTasks();
+  });
+  expect(taskValue(reads.latest().readOutcomes!).items).toHaveLength(26);
+  const first = taskValue(taskOutcomes(0, 25, true));
+  const second = taskValue(taskOutcomes(25, 1, false));
+  second.items[0] = {...second.items[0]!, title: 'Updated task 25'};
+  (loadTasks as jest.Mock)
+    .mockResolvedValueOnce(first)
+    .mockResolvedValueOnce(first)
+    .mockResolvedValueOnce(second);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshTasks();
+  });
+  expect(
+    taskValue(reads.latest().readOutcomes!).items.map(item => item.title),
+  ).toEqual([
+    ...Array.from({length: 25}, (_, index) => `Task ${index}`),
+    'Updated task 25',
+  ]);
+  reads.unmount();
+});
+
 test('task cursor expiry resets once and changed-account pages never append', async () => {
   readsMock.mockResolvedValue(taskOutcomes());
   const reads = await renderReads({enabled: true});

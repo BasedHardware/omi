@@ -372,7 +372,7 @@ export function DesktopSettings({
             ? 'Stop the active response before switching backends.'
             : prefs.softwarePlane === 'new'
             ? prefs.stampedV5Origin != null
-              ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
+              ? 'New sends v5 chat, capture, conversations, memories, and tasks to the stamped origin. Account, apps, privacy, and native Settings still use production api.omi.me.'
               : 'New is selected, but no valid stamped v5 origin is configured.'
             : 'Old backend uses your existing Omi account and api.omi.me.'
         }

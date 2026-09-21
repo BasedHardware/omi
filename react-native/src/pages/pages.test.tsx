@@ -141,8 +141,72 @@ test('Settings keeps Old backend and New backend on the native transport', async
   });
   expect(mockBackend.setSoftwarePlane).toHaveBeenCalledWith('new');
   expect(textOf(renderer)).toContain(
-    'New sends v5 chat, capture, conversations, memories, tasks, and settings',
+    'New sends v5 chat, capture, conversations, memories, and tasks',
   );
+  expect(textOf(renderer)).toContain(
+    'native Settings still use production api.omi.me',
+  );
+});
+
+test('native Settings retires the workspace after a successful plane switch', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.stampedV5BackendOrigin.mockResolvedValue(
+    'https://omi-v5-backend-staging.example.workers.dev',
+  );
+  const onWorkspaceReload = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <SettingsPage
+        onSignIn={jest.fn()}
+        onWorkspaceReload={onWorkspaceReload}
+      />,
+    );
+  });
+  renderers.push(renderer);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use New backend')
+      .props.onPress();
+  });
+  expect(mockBackend.setSoftwarePlane).toHaveBeenCalledWith('new');
+  expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
+});
+
+test('native Settings does not switch backends while chat is busy', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.stampedV5BackendOrigin.mockResolvedValue(
+    'https://omi-v5-backend-staging.example.workers.dev',
+  );
+  const onWorkspaceReload = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <SettingsPage
+        chatBusy
+        onSignIn={jest.fn()}
+        onWorkspaceReload={onWorkspaceReload}
+      />,
+    );
+  });
+  renderers.push(renderer);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use New backend')
+      .props.onPress();
+  });
+  expect(mockBackend.setSoftwarePlane).not.toHaveBeenCalled();
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
 });
 
 test('a signed-out session still offers the native sign-in', async () => {

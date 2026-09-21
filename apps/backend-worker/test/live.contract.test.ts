@@ -333,6 +333,37 @@ describe("live session provider request shape", () => {
 });
 
 describe("live session route", () => {
+  test("Firebase sessions cannot mint live voice", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async () =>
+      Response.json({ users: [{ localId: "firebase-user" }] })
+    ) as never;
+    try {
+      const response = await fetchWorker(
+        "/v1/live/sessions",
+        {
+          ...baseEnv,
+          FIREBASE_API_KEY: "test-firebase-key",
+          OPENAI_API_KEY: "openai-secret",
+        },
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer firebase-id-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ provider: "gpt_live", sdp: "v=0\\r\\n" }),
+        }
+      );
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as Record<string, unknown>;
+      const error = body["error"] as Record<string, unknown>;
+      expect(error["code"]).toBe("service_unavailable");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("requires authentication", async () => {
     const response = await fetchWorker("/v1/live/sessions", baseEnv, {
       method: "POST",

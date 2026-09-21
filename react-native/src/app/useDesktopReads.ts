@@ -24,22 +24,38 @@ export type ReadsPhase =
   | 'saved-but-refresh-failed'
   | 'unavailable';
 
-function mergeExtendedPage<T extends {items: Array<{id: string}>; page: unknown}>(
-  previous: T,
-  incoming: T,
-): T {
-  const incomingIds = new Set(incoming.items.map(item => item.id));
-  const previousFirstPage = new Set(
-    previous.items.slice(0, incoming.items.length).map(item => item.id),
-  );
-  const older = previous.items.filter(
-    item => !incomingIds.has(item.id) && !previousFirstPage.has(item.id),
-  );
-  return {
-    ...incoming,
-    items: [...incoming.items, ...older],
-    page: previous.page,
-  };
+async function revalidateLoadedWindow<
+  T extends {
+    items: Array<{id: string}>;
+    page: {hasMore: boolean; nextCursor: string | null};
+  },
+>(
+  load: (cursor: string | null) => Promise<T>,
+  previousCount: number,
+): Promise<T> {
+  const items: T['items'] = [];
+  const ids = new Set<string>();
+  let cursor: string | null = null;
+  let latest!: T;
+  while (items.length < 10000) {
+    latest = await load(cursor);
+    for (const item of latest.items) {
+      if (ids.has(item.id)) {
+        throw new Error('Loaded page did not advance');
+      }
+      ids.add(item.id);
+      items.push(item);
+    }
+    cursor = latest.page.nextCursor;
+    if (
+      items.length >= previousCount ||
+      !latest.page.hasMore ||
+      cursor === null
+    ) {
+      break;
+    }
+  }
+  return {...latest, items};
 }
 
 function mergeOutcome<T extends DomainReadOutcome<DesktopReadProjection>>(
@@ -78,7 +94,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   const conversationsExtendedRef = useRef(false);
   const tasksExtendedRef = useRef(false);
   const [conversationsExtended, setConversationsExtended] = useState(false);
-  const [tasksExtended, setTasksExtended] = useState(false);
+  const [, setTasksExtended] = useState(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
   // bumps it, so a refresh that started under a previous session (or before a
@@ -173,27 +189,33 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           return;
         }
         const previous = readOutcomesRef.current;
+        const transport = omiBackend;
         if (
           conversationsExtendedRef.current &&
           previous?.conversations.status === 'success' &&
-          outcomes.conversations.status === 'success'
+          outcomes.conversations.status === 'success' &&
+          transport != null
         ) {
           outcomes.conversations = {
             status: 'success',
-            value: mergeExtendedPage(
-              previous.conversations.value,
-              outcomes.conversations.value,
+            value: await revalidateLoadedWindow(
+              loadCursor => loadConversations(transport, loadCursor),
+              previous.conversations.value.items.length,
             ),
           };
         }
         if (
           tasksExtendedRef.current &&
           previous?.tasks.status === 'success' &&
-          outcomes.tasks.status === 'success'
+          outcomes.tasks.status === 'success' &&
+          transport != null
         ) {
           outcomes.tasks = {
             status: 'success',
-            value: mergeExtendedPage(previous.tasks.value, outcomes.tasks.value),
+            value: await revalidateLoadedWindow(
+              loadCursor => loadTasks(transport, loadCursor),
+              previous.tasks.value.items.length,
+            ),
           };
         }
         const homeOutcomes = [
@@ -323,7 +345,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       };
       readOutcomesRef.current = merged;
       setReadOutcomes(merged);
-      conversationsExtendedRef.current = !replace && items.length > next.items.length;
+      conversationsExtendedRef.current =
+        !replace && items.length > next.items.length;
       setConversationsExtended(conversationsExtendedRef.current);
       if (replace) {
         setConversationNotice(
@@ -440,9 +463,13 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       }
       const previousTasks =
         previous.tasks.status === 'success' ? previous.tasks.value : null;
+      const transport = omiBackend;
       const mergedTasks =
-        tasksExtendedRef.current && previousTasks !== null
-          ? mergeExtendedPage(previousTasks, tasks)
+        tasksExtendedRef.current && previousTasks !== null && transport != null
+          ? await revalidateLoadedWindow(
+              loadCursor => loadTasks(transport, loadCursor),
+              previousTasks.items.length,
+            )
           : tasks;
       const next: DesktopReadOutcomes = {
         ...previous,

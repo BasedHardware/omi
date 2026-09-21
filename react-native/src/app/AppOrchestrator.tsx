@@ -801,6 +801,28 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     }
   };
 
+  const retireWorkspace = useCallback(() => {
+    chatSessionEpochRef.current += 1;
+    chatMutationSeqRef.current += 1;
+    setChatError(null);
+    setDraft('');
+    setMessages([]);
+    setOlderChatCursor(null);
+    setHasOlderChat(false);
+    setChatBusy(false);
+    setLoadingOlderChat(false);
+    setChatHistorySettled(false);
+    setActiveGenerationId(null);
+    setActiveOmiRequestId(null);
+    omiRequestRef.current = null;
+    sendInFlightRef.current = null;
+    stableChatMessageIds.clear();
+    animatedChatMessageIds.clear();
+    resetReads();
+    refreshReads(true).catch(() => undefined);
+    setChatEpoch(current => current + 1);
+  }, [animatedChatMessageIds, refreshReads, resetReads, stableChatMessageIds]);
+
   const shouldAnimateChatMessage = (id: string) => {
     if (stableChatMessageIds.has(id) || animatedChatMessageIds.has(id)) {
       return false;
@@ -1048,27 +1070,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onPreferencesChange={prefs => {
             setLiveVoiceProvider(prefs.liveVoiceProvider);
           }}
-          onWorkspaceReload={() => {
-            chatSessionEpochRef.current += 1;
-            chatMutationSeqRef.current += 1;
-            setChatError(null);
-            setDraft('');
-            setMessages([]);
-            setOlderChatCursor(null);
-            setHasOlderChat(false);
-            setChatBusy(false);
-            setLoadingOlderChat(false);
-            setChatHistorySettled(false);
-            setActiveGenerationId(null);
-            setActiveOmiRequestId(null);
-            omiRequestRef.current = null;
-            sendInFlightRef.current = null;
-            stableChatMessageIds.clear();
-            animatedChatMessageIds.clear();
-            resetReads();
-            refreshReads(true).catch(() => undefined);
-            setChatEpoch(current => current + 1);
-          }}
+          onWorkspaceReload={retireWorkspace}
           outcomes={readOutcomes}
           reads={reads}
           postSetupHomeCue={postSetupHomeCue}
@@ -1249,27 +1251,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             onOpenApps={() => setRoute('Connectors')}
             onSignIn={signInAndRefresh}
             onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
-            onWorkspaceReload={() => {
-              chatSessionEpochRef.current += 1;
-              chatMutationSeqRef.current += 1;
-              setChatError(null);
-              setDraft('');
-              setMessages([]);
-              setOlderChatCursor(null);
-              setHasOlderChat(false);
-              setChatBusy(false);
-              setLoadingOlderChat(false);
-              setChatHistorySettled(false);
-              setActiveGenerationId(null);
-              setActiveOmiRequestId(null);
-              omiRequestRef.current = null;
-              sendInFlightRef.current = null;
-              stableChatMessageIds.clear();
-              animatedChatMessageIds.clear();
-              resetReads();
-              refreshReads(true).catch(() => undefined);
-              setChatEpoch(current => current + 1);
-            }}
+            onWorkspaceReload={retireWorkspace}
             signingIn={signingIn}
           />
         }
@@ -1736,27 +1718,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     chatBusy={chatBusy}
                     onSignIn={signInAndRefresh}
                     onSignOut={signOutAndRefresh}
-                    onWorkspaceReload={() => {
-                      chatSessionEpochRef.current += 1;
-                      chatMutationSeqRef.current += 1;
-                      setChatError(null);
-                      setDraft('');
-                      setMessages([]);
-                      setOlderChatCursor(null);
-                      setHasOlderChat(false);
-                      setChatBusy(false);
-                      setLoadingOlderChat(false);
-                      setChatHistorySettled(false);
-                      setActiveGenerationId(null);
-                      setActiveOmiRequestId(null);
-                      omiRequestRef.current = null;
-                      sendInFlightRef.current = null;
-                      stableChatMessageIds.clear();
-                      animatedChatMessageIds.clear();
-                      resetReads();
-                      refreshReads(true).catch(() => undefined);
-                      setChatEpoch(current => current + 1);
-                    }}
+                    onWorkspaceReload={retireWorkspace}
                     signingIn={signingIn}
                   />
                 )}

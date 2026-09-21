@@ -158,6 +158,24 @@ describe('MobileAppSurface', () => {
     },
   );
 
+  test.each([
+    ['loading', 'Loading conversations…'],
+    ['offline', 'Couldn’t refresh conversations'],
+    ['error', 'Couldn’t load conversations'],
+  ] as const)(
+    'home conversations stay honest for %s instead of claiming none yet',
+    (status, copy) => {
+      const renderer = render({
+        conversationStatus: status,
+        conversations: [],
+      });
+      const tree = renderedText(renderer);
+      expect(tree).toContain(copy);
+      expect(tree).not.toContain('No conversations yet');
+      expect(tree).not.toContain('Nothing current right now.');
+    },
+  );
+
   test('routes and toggles with accessible controls', () => {
     const onRouteChange = jest.fn();
     const onTaskToggle = jest.fn();
