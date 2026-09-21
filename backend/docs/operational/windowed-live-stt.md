@@ -130,10 +130,26 @@ opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
 
-The windowed TDT leg owns forced-active VAD with a short silence tail. Initial
-noise never reaches TDT. VAD initialization failure skips TDT; inference
-failure on that leg closes it before raw audio can escape. Non-window legs on
-the managed chain behave like today's `GatedSTTSocket`: they honour
+The windowed TDT leg owns forced-active VAD with a short silence tail. Speech
+starts at Silero's published 0.5 probability and continues at 0.35 (the model's
+`neg_threshold`) so quiet far-field is not dropped by the billed-path 0.65
+start threshold; hangover remains 300 ms. Initial noise never reaches TDT. VAD
+initialization failure skips TDT; inference failure on that leg closes it
+before raw audio can escape.
+
+The windowed leg applies one bounded peak AGC **ahead of VAD**: target 0.8 of
+full scale (the RNNT path's `AGC_TARGET_PEAK`), hard 4× (12 dB) cap, session
+running-max of *incoming* PCM, fast attack, no release, never attenuates.
+Digital silence (peak 0) is unchanged. Silero therefore scores a
+level-corrected signal, and the stored buffer is already gained. Posted-window
+AGC is a no-op on that socket so the same 4× bound cannot compound to 16× on
+cap-limited audio. Direct `WindowedParakeetSocket.send` (no ingest) still
+peak-normalises the POST from the original-level buffer. Speaker embeddings
+slice the stored (ingest-gained) PCM — the same session-normalized level the
+decoder hears. The cap exists so a faint noise floor cannot be lifted by
+orders of magnitude the way RNNT's `peak < 1` skip can.
+
+Non-window legs on the managed chain behave like today's `GatedSTTSocket`: they honour
 `vad_gate_override` / `VAD_GATE_MODE`, and a VAD inference error fails open to
 raw send. Flag-on with allocation 0 therefore changes chain order and breakers
 only, not audio gating. A VAD `finalize()` after the 300 ms hangover is a soft

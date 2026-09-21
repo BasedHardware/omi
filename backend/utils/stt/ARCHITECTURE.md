@@ -21,7 +21,9 @@ The legacy connection chain remains the default. `live_rollout.py` gates the new
 configured chain (`live_chain.py`) and UID allocation; `live_session.py` owns its
 VAD, audio timeline, usage ledger and fresh provider callbacks. `parakeet_window.py`
 subclasses the existing batch adapter with bounded admission, sentence-anchored
-growing POSTs (`window_anchor.py`) and teardown. Fixed 6 s slices that start
+growing POSTs (`window_anchor.py`) and teardown. Bounded peak AGC (0.8 of
+full scale, 4× cap) runs once at ingest so VAD and TDT see the same
+level-corrected PCM; posted AGC does not re-gain that buffer. Fixed 6 s slices that start
 mid-utterance make TDT return empty; each POST is `[anchor, now]`, completed
 sentences are emitted, and the next POST starts at that sentence boundary.
 VAD `finalize()` is a soft pause POST (emit the last sentence only when it
