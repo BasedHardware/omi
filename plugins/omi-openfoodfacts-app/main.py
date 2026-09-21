@@ -5,6 +5,7 @@ This app gives Omi users a small set of read-only food lookup tools backed by
 the public Open Food Facts API.
 """
 
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -13,6 +14,8 @@ import requests
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+
+logger = logging.getLogger(__name__)
 
 
 OPENFOODFACTS_BASE_URL = os.getenv(
@@ -220,9 +223,14 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
         response.raise_for_status()
         return response.json()
     except requests.RequestException as exc:
-        return {"error": f"Open Food Facts request failed: {exc}"}
-    except ValueError:
+        logger.warning("Open Food Facts request failed: %s", exc)
+        return {"error": "Open Food Facts request failed."}
+    except ValueError as exc:
+        logger.warning("Open Food Facts non-JSON response: %s", exc)
         return {"error": "Open Food Facts returned a non-JSON response"}
+    except Exception as exc:
+        logger.exception("Unexpected error in _openfoodfacts_get: %s", exc)
+        return {"error": "Unexpected error communicating with Open Food Facts."}
 
 
 async def _openfoodfacts_get_async(
