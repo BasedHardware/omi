@@ -185,7 +185,9 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
-    if 'manual_speaker_assignments' in data and isinstance(data['manual_speaker_assignments'], dict):
+    if 'manual_speaker_assignments' in data:
+        if not isinstance(data['manual_speaker_assignments'], dict):
+            raise ValueError('manual_speaker_assignments must be an object')
         receipt = data['manual_speaker_assignments']
         if receipt:
             data['manual_speaker_assignments'] = _protect_json_value(receipt, uid, level)
@@ -1477,14 +1479,21 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
 
 def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
     """
-    Migrates a batch of conversations to the target protection level, committing in batches of 450.
+    Migrates each conversation atomically; photos retain their batched migration path.
     """
     batch = db.batch()
     batch_count = 0
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
     doc_snapshots = db.get_all(
-        doc_refs, field_paths=['data_protection_level', 'transcript_segments', 'transcript_segments_compressed']
+        doc_refs,
+        field_paths=[
+            'data_protection_level',
+            'transcript_segments',
+            'transcript_segments_compressed',
+            'manual_speaker_assignments',
+            'manual_speaker_assignments_compressed',
+        ],
     )
 
     for doc_snapshot in doc_snapshots:
@@ -1492,40 +1501,35 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
-        conversation_data = doc_snapshot.to_dict()
-        current_level = conversation_data.get('data_protection_level', 'standard')
+        @firestore.transactional
+        def _migrate(transaction):
+            current = doc_snapshot.reference.get(transaction=transaction).to_dict()
+            if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
+                return False
+            if current.get('data_protection_level', 'standard') == target_level:
+                return False
+            payload = {'data_protection_level': target_level}
+            if 'transcript_segments' in current:
+                payload['transcript_segments'] = _decode_transcript_segments_strict(
+                    uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
+                )
+            if 'manual_speaker_assignments' in current:
+                payload['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+                    uid,
+                    current['manual_speaker_assignments'],
+                    bool(current.get('manual_speaker_assignments_compressed')),
+                )
+            prepared = _prepare_conversation_for_write(payload, uid, target_level)
+            if 'manual_speaker_assignments' in payload and not payload['manual_speaker_assignments']:
+                prepared['manual_speaker_assignments'] = firestore.DELETE_FIELD
+                prepared['manual_speaker_assignments_compressed'] = firestore.DELETE_FIELD
+            transaction.update(doc_snapshot.reference, prepared)
+            return True
 
-        if current_level == target_level:
+        if not _migrate(db.transaction()):
             continue
 
-        # Decrypt/decompress the data to get a clean slate.
-        plain_data = _prepare_conversation_for_read(conversation_data, uid)
-
-        # Re-prepare the segments for writing with the new level.
-        update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
-        prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
-
-        # Update the document with the migrated data and the new protection level.
-        update_data = {
-            'data_protection_level': target_level,
-        }
-        if 'transcript_segments' in prepared_payload:
-            update_data['transcript_segments'] = prepared_payload['transcript_segments']
-            update_data['transcript_segments_compressed'] = prepared_payload.get(
-                'transcript_segments_compressed', False
-            )
-
-        if not update_data.get('transcript_segments_compressed'):
-            update_data['transcript_segments_compressed'] = firestore.DELETE_FIELD
-
-        batch.update(doc_snapshot.reference, update_data)
-        batch_count += 1
-        if batch_count >= 100:
-            batch.commit()
-            batch = db.batch()
-            batch_count = 0
-
-        # Now migrate photos for this conversation in the same batch
+        # Photos retain their separate batched migration path.
         photos_ref = doc_snapshot.reference.collection('photos')
         photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
         for photo_doc in photos_stream:
@@ -2224,7 +2228,7 @@ def update_conversation_segments(
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
-        doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
