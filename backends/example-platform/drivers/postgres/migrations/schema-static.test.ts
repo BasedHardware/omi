@@ -156,6 +156,7 @@ const expectedTables = [
   "listen_conversation_read_revisions",
   "listen_conversation_cursor_positions",
   "chat_admission_reservations",
+  "chat_attachments",
   "chat_generation_events",
   "chat_messages",
   "memory_render_responses",
@@ -774,7 +775,7 @@ describe("static PostgreSQL schema contract", () => {
     expect(grants.length).toBeGreaterThan(0);
     expect(grants.join("\n")).not.toMatch(/\b(?:ALL|DELETE|TRUNCATE|CREATE|ALTER|DROP)\b/);
     const updateGrants = grants.filter((grant) => /\bUPDATE\b/.test(grant));
-    expect(updateGrants).toHaveLength(5);
+    expect(updateGrants).toHaveLength(6);
     expect(updateGrants[0]).toContain("UPDATE (commit_id, sequence, updated_at)");
     expect(updateGrants[0]).toContain("omi_memory.memory_graph_heads");
     expect(updateGrants[0]).not.toContain("INSERT");
@@ -784,6 +785,7 @@ describe("static PostgreSQL schema contract", () => {
     expect(updateGrants[2]).toContain("omi_memory.memory_work_heads");
     expect(updateGrants[3]).toBe("GRANT SELECT,INSERT,UPDATE ON omi_memory.%I TO omi_platform_application',target);");
     expect(updateGrants[4]).toBe("GRANT SELECT, INSERT, UPDATE ON omi_memory.chat_messages TO omi_platform_application;");
+    expect(updateGrants[5]).toBe("GRANT SELECT, INSERT, UPDATE ON omi_memory.chat_attachments TO omi_platform_application;");
     const chatWriteSql = migrationSql.find((migration) => migration.version === 57)!.sql;
     expect(chatWriteSql).toContain("GRANT SELECT, INSERT ON omi_memory.chat_generation_events TO omi_platform_application;");
     expect(chatWriteSql).not.toContain("UPDATE ON omi_memory.chat_generation_events");

@@ -39,15 +39,20 @@ stay unmounted.
 Chat entitlement ownership, from existing source (not a new ledger):
 `backend/utils/subscription.py:get_chat_quota_snapshot` and
 `enforce_chat_quota` read Firestore via `database.users.get_user_valid_subscription`
-and monthly counters in `database.user_usage.get_monthly_chat_usage`. The product
-question writer is `database.llm_usage.record_chat_quota_question` /
-`release_chat_quota_question` (idempotent event doc, UTC day, plan bucket).
-Gateway `llm_gateway/gateway/executor.py:reserve_jit_attempt` /
-`settle_jit_attempt` is JIT QA spend only and cannot authorize subscriber chat.
+and monthly counters in `database.user_usage.get_monthly_chat_usage`. Limit
+checks happen in `enforce_chat_quota` before the provider call.
+`database.llm_usage.record_chat_quota_question` atomically deduplicates and
+increments `backend_chat.quota_questions` (idempotent event doc, UTC day, plan
+bucket); it does not check a quota limit in that transaction.
+`release_chat_quota_question` currently keys the usage document with today's UTC
+date rather than the stored event date, so delayed cross-day release is not
+original-period proof. Gateway `llm_gateway/gateway/executor.py:reserve_jit_attempt`
+/ `settle_jit_attempt` is JIT QA spend only and cannot authorize subscriber chat.
 Display names come from Firebase Auth (`utils.users.get_user_display_name`), not
-PostgreSQL grants. Compatible portable admission must call that source-owned
-reserve/settle pair; snapshots and PG reservation metadata rows are not that
-producer. No authenticated transport for that pair exists in example-platform.
+PostgreSQL grants. Portable paid admission may reuse that ownership, but needs an
+owner-side atomic contract with payload/UID/epoch binding and original-period
+settlement — not an authenticated wrapper around the incrementer, and not PG
+reservation-metadata rows. Do not change billing policy from this tree.
 
 Verification uses `bun run check:deployed` for grant denial, empty-page shape,
 projection fail-closed behavior, string generation frames, route pairing and the
@@ -56,7 +61,10 @@ reads, account isolation, unique-terminal assistant outcomes, grant revocation
 and conversation-list composition of `chat:chat-main`. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
-Do not apply migrations 55-57 or deploy this entry until the existing operator
+Unmounted PostgreSQL attachment staging (migration 0058) follows the existing
+sniff/bind/expiry/account contracts and `chat.write` RLS. Production GET still
+advertises `maxAttachmentsPerMessage: 0`. POST `/v1/chat-attachments` stays 404.
+Do not apply migrations 55-58 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
 migrations 1–54.
