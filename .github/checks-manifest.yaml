@@ -1276,6 +1276,11 @@ checks:
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the Wikipedia app interpolated caller input straight into the outbound request: str.isalpha() accepted Unicode letters that IDNA-map to a different host label, quote() defaulted to safe='/' so a title could walk out of the summary path segment, and non-string tool arguments raised AttributeError as HTTP 500; the suite pins the hostname, the encoded path segment, and the tool-error envelope"
+  - id: wikipedia-error-handling-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_error_handling.py"]
+    triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Wikipedia plugin must prevent internal exception details from leaking into chat tool responses"
   - id: crossref-doi-normalization-tests
     command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
