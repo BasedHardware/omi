@@ -416,6 +416,7 @@ test("real service accepts a streamed completion and a tool-call round trip thro
       gatewayUrl: String(ready.url),
       laneId: "omi:auto:chat-agent",
       serviceToken: GATEWAY_TOKEN,
+      serviceCaller: "local-qa",
       readOnlyToolLoopForInput: (input) => {
         const service = serviceForGatewayTools;
         if (service === null) return undefined;

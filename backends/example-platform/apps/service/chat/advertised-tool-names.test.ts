@@ -68,6 +68,7 @@ describe("advertised gateway tool names", () => {
       gatewayUrl: "http://127.0.0.1:1",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: dottedLoop(),
     })).toThrow(
       `invalid advertised tool name "${dottedName}"; expected a string matching ^[a-zA-Z0-9_-]{1,64}$`,

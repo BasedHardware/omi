@@ -11,8 +11,10 @@ authoritative account, control, credential and grant records described in
 
 Migration 0055 adds account-owned chat message rows and generation events. History
 uses the insertion snapshot and opaque HMAC cursor already used by the local
-service. An empty granted account is an honest empty page with the existing
-attachment capability advertisement. Assistant rows require a unique terminal
+service. An empty granted account is an honest empty page. Production GET
+advertises `maxAttachmentsPerMessage: 0` and an empty MIME list because
+attachment storage is not mounted; the local write composition still uses the
+existing attachment capability advertisement. Assistant rows require a unique terminal
 generation event; an orphan or mismatched terminal is 503 rather than a completed
 answer. Human rows keep `generationOutcome: null`.
 

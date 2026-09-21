@@ -323,7 +323,7 @@ export const startGatewayReadOnlyToolLoop = (
             "authorization": `Bearer ${options.serviceToken}`,
             "content-type": "application/json",
             "x-omi-service-caller": options.serviceCaller,
-            "x-omi-user-uid": input.context.ownerAccountId,
+            "x-omi-user-uid": input.verifiedUserUid,
             "x-omi-llm-feature": options.usageFeature,
           },
           body: JSON.stringify({

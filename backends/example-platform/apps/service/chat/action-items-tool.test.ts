@@ -55,6 +55,7 @@ const sourceInput = (
   attemptId: "action-items-generation:attempt:1",
   prompt: "What should I do next?",
   context: contextFor,
+  verifiedUserUid: "firebase-user-1",
   attachments: [],
   onDelta() {},
   onComplete() {},
@@ -192,6 +193,7 @@ describe("get_action_items gateway tool", () => {
         gatewayUrl: "http://127.0.0.1:8787",
         laneId: "omi:auto:chat-agent",
         serviceToken: "gateway-service-token",
+        serviceCaller: "local-qa",
         readOnlyToolLoop: createGetActionItemsToolLoop({
           fetch: (request) => service.app.fetch(request),
           bearerToken: service.devToken,
@@ -226,6 +228,7 @@ describe("get_action_items gateway tool", () => {
         gatewayUrl: "http://127.0.0.1:8787",
         laneId: "omi:auto:chat-agent",
         serviceToken: "gateway-service-token",
+        serviceCaller: "local-qa",
         readOnlyToolLoopForInput: (input) => {
           if (input.context.ownerAccountId !== ownerAccountId) throw new Error("owner mismatch");
           return createGetActionItemsToolLoop({

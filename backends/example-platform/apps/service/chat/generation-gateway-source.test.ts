@@ -37,6 +37,7 @@ const input = (
   attemptId: "generation-1:attempt:1",
   prompt: "What should I do next?",
   context,
+  verifiedUserUid: "firebase-user-1",
   attachments: [],
   onDelta() {},
   onComplete() {},
@@ -110,6 +111,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "http://127.0.0.1:8787",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async () => {
           executions += 1;
@@ -164,6 +166,7 @@ describe("gateway chat generation source", () => {
         gatewayUrl: "https://gateway.internal",
         laneId: "omi:auto:chat-agent",
         serviceToken: "service-secret",
+        serviceCaller: "local-qa",
         readOnlyToolLoop: {
           registry: createAgentToolRegistry([safeReadTool(async () => {
             executions += 1;
@@ -201,6 +204,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async () => {
           executions += 1;
@@ -242,6 +246,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async () => {
           executions += 1;
@@ -266,6 +271,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async () => ({
           summary: "must not run", durationMs: 1, retryable: false,
@@ -289,6 +295,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async () => ({
           summary: "must not run", durationMs: 1, retryable: false,
@@ -311,6 +318,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(async (_value, control) => {
           started();
@@ -342,6 +350,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       retrySleep: async () => {},
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(() => new Promise(() => {}), { timeoutMs: 5, retryable: true })]),
@@ -367,6 +376,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "http://127.0.0.1:8787",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       fetch: async (url, init) => {
         requests.push({ url: String(url), init: init ?? {} });
         return stream(
@@ -409,8 +419,8 @@ describe("gateway chat generation source", () => {
     expect(requests[0]?.init.headers).toEqual({
       authorization: "Bearer service-secret",
       "content-type": "application/json",
-      "x-omi-service-caller": "platform",
-      "x-omi-user-uid": "account-1",
+      "x-omi-service-caller": "local-qa",
+      "x-omi-user-uid": "firebase-user-1",
       "x-omi-llm-feature": "rewrite_chat",
     });
     const body = JSON.parse(String(requests[0]?.init.body)) as Record<string, unknown>;
@@ -449,6 +459,7 @@ describe("gateway chat generation source", () => {
         gatewayUrl: `http://127.0.0.1:${server.port}`,
         laneId: "omi:auto:chat-agent",
         serviceToken: "network-test-token",
+        serviceCaller: "local-qa",
         fetch,
       });
       const deltas: string[] = [];
@@ -464,7 +475,7 @@ describe("gateway chat generation source", () => {
       expect(deltas).toEqual(["fake-through-gateway"]);
       expect(observed).toMatchObject({
         authorization: "Bearer network-test-token",
-        caller: "platform",
+        caller: "local-qa",
         tenant: null,
       });
       expect(observed?.body.model).toBe("omi:auto:chat-agent");
@@ -485,6 +496,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       retrySleep: async () => {},
       fetch: async () => stream(JSON.stringify({ choices: [{ delta: { content: "partial" } }] })),
     });
@@ -509,6 +521,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       retrySleep: async () => {},
       fetch: async () => stream(),
     });
@@ -530,6 +543,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal/v1/chat/completions",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       fetch: (_url, init) => {
         signal = init?.signal ?? undefined;
         return new Promise<Response>((_resolve, reject) => {
@@ -549,18 +563,27 @@ describe("gateway chat generation source", () => {
   test("rejects provider model names and malformed gateway configuration", () => {
     expect(() => createGatewayChatGenerationSource({
       gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      serviceCaller: "Platform",
+    })).toThrow("invalid LLM gateway caller configuration");
+    expect(() => createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
       laneId: "deepseek-v4-flash",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
     })).toThrow("invalid LLM gateway configuration");
     expect(() => createGatewayChatGenerationSource({
       gatewayUrl: "file:///tmp/gateway",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
     })).toThrow("invalid LLM gateway URL");
     expect(readChatGenerationSourceCapability(createGatewayChatGenerationSource({
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
     }))).toEqual({
       tier: "unknown",
       adapter: "omi-llm-gateway",
@@ -570,6 +593,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       engineIdentity: {
         schema: "omi.local-test-gateway.v1",
         realModelProxy: false,
@@ -584,6 +608,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       engineIdentity: {
         schema: "omi.local-model-gateway.v1",
         realModelProxy: true,
@@ -594,6 +619,28 @@ describe("gateway chat generation source", () => {
       adapter: "omi.local-model-gateway.v1/glm-4.7",
       deterministic: false,
     });
+  });
+
+  test("missing verified user uid fails closed without a gateway request", async () => {
+    let requested = 0;
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      serviceCaller: "local-qa",
+      fetch: async () => {
+        requested += 1;
+        return stream("[DONE]");
+      },
+    });
+    let failed: unknown = null;
+    source.start(input({
+      verifiedUserUid: "",
+      onError: (error) => { failed = error; },
+    }));
+    await Promise.resolve();
+    expect(requested).toBe(0);
+    expect(failed).toEqual({ code: "generation_provider_failed", retryable: true });
   });
 
   test("the app-facing no-gateway source fails instead of emitting a fake answer", async () => {
@@ -626,6 +673,7 @@ describe("gateway chat generation source", () => {
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "original-token",
+      serviceCaller: "local-qa",
       fetch: async (_url, init) => {
         request = init;
         return stream("[DONE]");

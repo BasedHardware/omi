@@ -283,6 +283,7 @@ const main = async (): Promise<void> => {
       gatewayUrl: config.llmGateway.url,
       laneId: config.llmGateway.laneId,
       serviceToken: config.llmGateway.token,
+      serviceCaller: "local-qa",
       ...(engineIdentity === null ? {} : { engineIdentity }),
       // Gateway tools are composed only for an explicitly configured gateway.
       // The closure binds the already-built authenticated app, so the tool

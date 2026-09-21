@@ -1691,12 +1691,14 @@ describe("ratified chat generation wire red proofs", () => {
         stored: admitted.stored,
         acceptedEvent: admitted.acceptedEvent,
         bearerToken: "header.payload.signature",
+        verifiedUserUid: "firebase-user-1",
       });
       second.onAdmitted({
         accountId: ACCOUNT,
         stored: admitted.stored,
         acceptedEvent: admitted.acceptedEvent,
         bearerToken: "header.payload.signature",
+        verifiedUserUid: "firebase-user-1",
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (firstCallbacks === null || secondCallbacks === null) throw new TypeError("sources did not start");
@@ -2179,6 +2181,7 @@ describe("ratified chat generation wire red proofs", () => {
       gatewayUrl: `http://127.0.0.1:${gateway.port}`,
       laneId: "omi:auto:chat-agent",
       serviceToken: gatewayToken,
+      serviceCaller: "local-qa",
     });
     const publicBodies: string[] = [];
 
@@ -2257,7 +2260,7 @@ describe("ratified chat generation wire red proofs", () => {
 
       expect(gatewayRequest).toMatchObject({
         authorization: `Bearer ${gatewayToken}`,
-        caller: "platform",
+        caller: "local-qa",
         user: ACCOUNT,
         feature: "rewrite_chat",
       });

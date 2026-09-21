@@ -30,6 +30,11 @@ export interface ChatGenerationSourceInput {
   readonly prompt: string;
   /** Structured, privacy-safe context; legacy adapters are normalized before provider start. */
   readonly context: ChatGenerationContextPacket;
+  /**
+   * Verified caller identity for gateway `x-omi-user-uid`. This is never the
+   * opaque context account id; omitting it fails closed before a provider call.
+   */
+  readonly verifiedUserUid: string;
   readonly attachments: readonly ChatGenerationAttachmentDescriptor[];
   readonly onDelta: (text: string) => void;
   readonly onProgress?: (progress: ChatGenerationProgress) => void;
@@ -195,7 +200,8 @@ export interface GatewayChatGenerationSourceOptions {
   /** Semantic lane id such as omi:auto:chat-agent, never a provider model name. */
   readonly laneId: string;
   readonly serviceToken: string;
-  readonly serviceCaller?: string;
+  /** Allowlisted gateway caller. There is no default; `platform` is not implied. */
+  readonly serviceCaller: string;
   readonly usageFeature?: string;
   readonly fetch?: typeof fetch;
   /** Optional bounded safe read-only tool composition; omitted by default. */
@@ -220,6 +226,7 @@ export interface GatewayChatGenerationSourceOptions {
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/u;
 const SAFE_SERVICE_CALLER = /^[a-z][a-z0-9_-]{0,63}$/u;
 const SAFE_USAGE_FEATURE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
+const SAFE_USER_UID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 
 const gatewayEndpoint = (value: string): string => {
   let parsed: URL;
@@ -332,7 +339,7 @@ export const createGatewayChatGenerationSource = (
     || options.serviceToken.length > 4096) {
     throw new TypeError("invalid LLM gateway configuration");
   }
-  const serviceCaller = options.serviceCaller ?? "platform";
+  const serviceCaller = options.serviceCaller;
   const usageFeature = options.usageFeature ?? "rewrite_chat";
   if (!SAFE_SERVICE_CALLER.test(serviceCaller) || !SAFE_USAGE_FEATURE.test(usageFeature)) {
     throw new TypeError("invalid LLM gateway caller configuration");
@@ -369,6 +376,10 @@ export const createGatewayChatGenerationSource = (
         generationId: input.generationId,
         attemptId: input.attemptId ?? input.generationId,
       });
+      if (!SAFE_USER_UID.test(input.verifiedUserUid)) {
+        queueMicrotask(() => fail(gatewayFailure("generation_provider_failed")));
+        return Object.freeze({ cancel(): void { cancelled = true; } });
+      }
       if (input.attachments.length > 0) {
         // Bind/admission already fail-closed unless scanState is clean; the gateway
         // attachment slice still rejects all attachments until a later product pass.
@@ -423,7 +434,7 @@ export const createGatewayChatGenerationSource = (
               "authorization": `Bearer ${serviceToken}`,
               "content-type": "application/json",
               "x-omi-service-caller": serviceCaller,
-              "x-omi-user-uid": input.context.ownerAccountId,
+              "x-omi-user-uid": input.verifiedUserUid,
               "x-omi-llm-feature": usageFeature,
             },
             body: JSON.stringify({

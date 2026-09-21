@@ -6,7 +6,7 @@ import { createPostgresJsTransactionPool } from "./postgresjs";
 import type { PostgresTransactionPool } from "./connection";
 import { createPostgresFirebaseChatReadRuntime } from "./firebase-chat-read-runtime";
 import { seedProdLocalFirebaseAuthorizationSql } from "../../scripts/prod-local-identity-seed";
-import { CHAT_CAPABILITIES } from "../../apps/service/routes/chat-messages";
+import { CHAT_READ_CAPABILITIES } from "../../apps/service/routes/chat-messages";
 
 const url = process.env.OMI_TEST_POSTGRES_URL;
 const realTest = url ? test : test.skip;
@@ -121,7 +121,7 @@ realTest("real chat reads require chat.read and never invent empty success", asy
     expect(await empty.json()).toEqual({
       messages: [],
       page: { olderCursor: null, hasOlder: false },
-      capabilities: CHAT_CAPABILITIES,
+      capabilities: CHAT_READ_CAPABILITIES,
     });
     await owner.unsafe(
       `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'hello','human','text',1000,1000,NULL,NULL,0,'sha256:human','desktop_chat',NULL,false,'rev-human','[]'::jsonb,'gen_human')`,
@@ -177,7 +177,7 @@ realTest("real chat reads require chat.read and never invent empty success", asy
     expect(await (await call("", "other.payload.signature")).json()).toEqual({
       messages: [],
       page: { olderCursor: null, hasOlder: false },
-      capabilities: CHAT_CAPABILITIES,
+      capabilities: CHAT_READ_CAPABILITIES,
     });
     await owner.unsafe(
       "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",

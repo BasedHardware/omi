@@ -35,6 +35,7 @@ const generationInput = (
   attemptId: "generation-approval-live:attempt:1",
   prompt: "Record the scoped write.",
   context,
+  verifiedUserUid: "firebase-user-1",
   attachments: [],
   onDelta() {},
   onComplete() {},
@@ -121,6 +122,7 @@ describe("gateway approval live path", () => {
       gatewayUrl: "http://127.0.0.1:8787",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: ctx.loop,
       fetch: async () => responses.shift()!,
     });
@@ -161,6 +163,7 @@ describe("gateway approval live path", () => {
       gatewayUrl: "http://127.0.0.1:8787",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoop: ctx.loop,
       fetch: async () => responses.shift()!,
     });
@@ -198,6 +201,7 @@ describe("gateway approval live path", () => {
       gatewayUrl: "http://127.0.0.1:8787",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      serviceCaller: "local-qa",
       readOnlyToolLoopForInput: () => createSafeWriteToolLoop({
         agentRunEvents: service.writePath.agentRunEvents,
         approvalCoordinator: service.writePath.agentApprovalCoordinator,

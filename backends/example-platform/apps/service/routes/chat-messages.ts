@@ -56,6 +56,13 @@ export const CHAT_CAPABILITIES = Object.freeze({
   allowedAttachmentMimeTypes: CHAT_ALLOWED_ATTACHMENT_MIME_TYPES,
 });
 
+/** Production GET advertises no attachment writes until those routes exist. */
+export const CHAT_READ_CAPABILITIES = Object.freeze({
+  maxAttachmentsPerMessage: 0,
+  maxAttachmentBytes: CHAT_MAX_ATTACHMENT_BYTES,
+  allowedAttachmentMimeTypes: Object.freeze([] as const),
+});
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const SERVICE_UNAVAILABLE_RETRY_AFTER_SECONDS = 60;
@@ -736,6 +743,7 @@ export const registerChatMessagesRoutes = (
         stored: admission.stored,
         acceptedEvent,
         bearerToken: authentication.token,
+        verifiedUserUid: principal.uid,
       });
       const projectedMessage = Object.freeze({
         ...admission.stored.message,
