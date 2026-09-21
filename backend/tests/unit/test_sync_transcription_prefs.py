@@ -176,6 +176,7 @@ def _build_fakes() -> dict:
     speaker_embedding = ModuleType('utils.stt.speaker_embedding')
     speaker_embedding.extract_embedding_from_bytes = MagicMock()
     speaker_embedding.compare_embeddings = _compare_embeddings
+    speaker_embedding.speaker_embedding_configured = lambda: True
     speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
     fakes['utils.stt.speaker_embedding'] = speaker_embedding
 
@@ -1138,6 +1139,27 @@ class TestIdentifySpeakersForSegments:
         identify_speakers_for_segments(segments, None, {}, 'uid1')
 
         assert segments[0].person_id == 'p1'
+
+    def test_unset_embedding_url_skips_voice_match(self, monkeypatch):
+        import utils.sync.pipeline as sync_module
+
+        mock_extract = MagicMock()
+        mock_users_db = MagicMock()
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        monkeypatch.setattr(sync_module, 'extract_embedding_from_bytes', mock_extract)
+        monkeypatch.setattr(sync_module, 'speaker_embedding_configured', lambda: False)
+        monkeypatch.setattr(sync_module, 'users_db', mock_users_db)
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),
+        ]
+        audio = _make_wav_bytes(duration_sec=5.0)
+
+        sync_module.identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        mock_extract.assert_not_called()
+        assert segments[0].person_id == 'p2'
+        assert not segments[0].is_user
 
     @patch('utils.sync.pipeline.users_db')
     def test_no_audio_still_runs_text_detection(self, mock_users_db):

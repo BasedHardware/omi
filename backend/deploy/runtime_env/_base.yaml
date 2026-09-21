@@ -127,6 +127,8 @@ environment_shared:
           category: rollout
         HOSTED_PARAKEET_API_URL:
           category: service_discovery
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          category: service_discovery
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
           category: reliability
@@ -252,6 +254,8 @@ environment_shared:
           category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          category: service_discovery
     config_map:
       name: '{env}-omi-backend-config'
       entries:
@@ -433,6 +437,8 @@ environment_shared:
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -531,6 +537,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -646,6 +654,8 @@ environment_shared:
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -744,6 +754,8 @@ environment_shared:
             value: parakeet,modulate-velma-2
             category: stt_policy
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
