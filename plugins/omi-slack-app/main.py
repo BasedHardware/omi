@@ -432,7 +432,7 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/callback")
@@ -634,7 +634,8 @@ async def update_channel(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error updating default channel: {e}", flush=True)
+        return {"success": False, "error": "Failed to update default channel"}
 
 
 @app.post("/refresh-channels")
@@ -660,7 +661,8 @@ async def refresh_channels(uid: str = Query(...)):
         
         return {"success": True, "channels_count": len(channels)}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error refreshing channels: {e}", flush=True)
+        return {"success": False, "error": "Failed to refresh channels"}
 
 
 @app.post("/logout")
@@ -685,7 +687,8 @@ async def logout(uid: str = Query(...)):
         
         return {"success": True, "message": "Logged out successfully"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ Error logging out: {e}", flush=True)
+        return {"success": False, "error": "Failed to log out"}
 
 
 @app.post("/webhook")
@@ -718,7 +721,8 @@ async def webhook(
     try:
         payload = await request.json()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {str(e)}")
+        print(f"❌ Invalid JSON payload: {e}", flush=True)
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
     # Handle both formats
     segments = []
@@ -1307,7 +1311,7 @@ async def chat_tool_send_message(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 
@@ -1428,7 +1432,7 @@ async def chat_tool_search_messages(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 
@@ -1515,7 +1519,7 @@ async def chat_tool_search_channels(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(
-            content={'error': f'Internal server error: {str(e)}'},
+            content={'error': 'Internal server error'},
             status_code=500
         )
 
