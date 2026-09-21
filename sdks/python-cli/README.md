@@ -388,6 +388,7 @@ bash release.sh --build-only
 
 MIT — see [`LICENSE`](LICENSE).
 
+- [Tok Pisin](examples/quickstart.tpi.md)
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
 - [Furlan (Friulian)](examples/quickstart.fur.md)
 - [Qırımtatarca (Crimean Tatar)](examples/quickstart.crh.md)
