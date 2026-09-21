@@ -10,7 +10,10 @@ so the None branch called .get on None, raised AttributeError, and the
 handler's broad `except Exception` reported it verbatim — users saw
 "Failed to get timeline: 'NoneType' object has no attribute 'get'" instead of
 being told to reconnect. A dict carrying an "error" key must still surface
-that message unchanged.
+that message unchanged. Provider text and exception text are
+vendor- or attacker-controlled, so neither may reach a ChatToolResponse at
+all: every failure renders one fixed string per tool and the detail goes to
+the log.
 
 Import the production module with framework-only stubs and drive the real
 handlers. No network, credentials, or third-party packages required.
@@ -107,12 +110,18 @@ HANDLERS = {
 
 
 class ApiFailureMessageTests(unittest.TestCase):
-    def drive(self, name, api_result):
+    def drive(self, name, api_result, raises=None):
         handler = getattr(app, name)
+
+        def api(*a, **k):
+            if raises is not None:
+                raise raises
+            return api_result
+
         with patch.object(app, "get_twitter_tokens", lambda uid: {"access_token": "t"}), \
              patch.object(app, "get_valid_access_token", lambda uid: "t"), \
              patch.object(app, "get_user_id", lambda uid: "123"), \
-             patch.object(app, "twitter_api_request", lambda *a, **k: api_result):
+             patch.object(app, "twitter_api_request", api):
             return asyncio.run(handler(_request(dict(HANDLERS[name]))))
 
     def test_none_result_does_not_leak_a_python_error(self):
@@ -130,11 +139,36 @@ class ApiFailureMessageTests(unittest.TestCase):
         response = self.drive("tool_get_timeline", None)
         self.assertIn("reconnect", response.error.lower())
 
-    def test_api_supplied_error_message_is_preserved(self):
-        response = self.drive("tool_get_timeline", {"error": "Rate limit exceeded"})
-        self.assertIn("Rate limit exceeded", response.error)
+    def test_provider_text_never_reaches_the_user(self):
+        # The X payload is vendor-controlled and can carry arbitrary text.
+        marker = "PROVIDER_TEXT_MARKER"
+        for name in HANDLERS:
+            with self.subTest(handler=name):
+                response = self.drive(name, {"error": marker})
+                self.assertIsNotNone(response.error)
+                self.assertNotIn(marker, response.error)
 
-    def test_error_payload_without_a_message_falls_back(self):
+    def test_raised_client_exception_never_reaches_the_user(self):
+        marker = "EXCEPTION_TEXT_MARKER"
+        for name in HANDLERS:
+            with self.subTest(handler=name):
+                response = self.drive(name, None, raises=RuntimeError(marker))
+                self.assertIsNotNone(response.error)
+                self.assertNotIn(marker, response.error)
+                self.assertNotIn("RuntimeError", response.error)
+                self.assertNotIn("Traceback", response.error)
+
+    def test_every_failure_uses_one_of_the_fixed_messages(self):
+        allowed = set(app.TOOL_FAILURE_MESSAGES.values())
+        for name in HANDLERS:
+            for label, kwargs in (("none", {"api_result": None}),
+                                  ("provider-error", {"api_result": {"error": "boom"}}),
+                                  ("raised", {"api_result": None, "raises": RuntimeError("boom")})):
+                with self.subTest(handler=name, case=label):
+                    response = self.drive(name, **kwargs)
+                    self.assertIn(response.error, allowed)
+
+    def test_error_payload_without_a_message_still_fails_cleanly(self):
         for payload in ({"error": None}, {"error": ""}):
             with self.subTest(payload=payload):
                 response = self.drive("tool_get_timeline", payload)
@@ -159,13 +193,15 @@ class ApiFailureMessageTests(unittest.TestCase):
                 self.assertIsNone(response.error)
                 self.assertIn(claim, response.result)
 
-    def test_helper_handles_every_shape(self):
-        self.assertEqual(app.api_error_detail({"error": "boom"}), "boom")
-        self.assertEqual(app.api_error_detail({"error": None}), "Unknown error")
-        self.assertEqual(app.api_error_detail({}), "Unknown error")
-        for bad in (None, [], "nope", 5):
+    def test_log_detail_helper_handles_every_shape(self):
+        # failure_detail feeds the log only, but it must never raise.
+        self.assertEqual(app.failure_detail({"error": "boom"}), "boom")
+        self.assertEqual(app.failure_detail({"error": None}), "unknown error")
+        self.assertEqual(app.failure_detail(None), "no response from X")
+        self.assertIn("RuntimeError", app.failure_detail(RuntimeError("boom")))
+        for bad in ([], "nope", 5):
             with self.subTest(result=bad):
-                self.assertNotIn("NoneType", app.api_error_detail(bad))
+                self.assertNotIn("NoneType", app.failure_detail(bad))
 
 
 if __name__ == "__main__":
