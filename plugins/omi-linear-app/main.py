@@ -6,6 +6,7 @@ and chat tools for managing issues, projects, and workflows.
 """
 import os
 import base64
+import logging
 import re
 import urllib.parse
 from datetime import datetime
@@ -62,6 +63,8 @@ app = FastAPI(
     description="Linear integration for Omi - Manage issues, projects, and workflows with voice",
     version="1.0.0"
 )
+
+logger = logging.getLogger(__name__)
 
 # Mount static files and templates
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
@@ -160,7 +163,11 @@ def linear_graphql_request(
         
         return result.get("data", {})
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        logger.warning("Linear GraphQL request failed: %s", e)
+        return {"error": "Request failed"}
+    except Exception as e:
+        logger.exception("Unexpected error in linear_graphql_request: %s", e)
+        return {"error": "Unexpected error communicating with Linear"}
 
 
 def get_issue_by_identifier(uid: str, issue_identifier: str) -> Dict[str, Any]:
@@ -682,7 +689,8 @@ async def tool_create_issue(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
+        logger.exception("Unexpected error in tool_create_issue: %s", e)
+        return ChatToolResponse(error="Failed to create issue")
 
 
 def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
@@ -785,7 +793,8 @@ async def tool_list_my_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        logger.exception("Unexpected error in tool_list_issues: %s", e)
+        return ChatToolResponse(error="Failed to list issues")
 
 
 @app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -885,7 +894,8 @@ async def tool_list_recent_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        logger.exception("Unexpected error in tool_list_recent_issues: %s", e)
+        return ChatToolResponse(error="Failed to list issues")
 
 
 @app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -983,7 +993,8 @@ async def tool_update_issue_status(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to update issue: {str(e)}")
+        logger.exception("Unexpected error in tool_update_issue_status: %s", e)
+        return ChatToolResponse(error="Failed to update issue")
 
 
 @app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1087,7 +1098,8 @@ async def tool_search_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        logger.exception("Unexpected error in tool_search_issues: %s", e)
+        return ChatToolResponse(error="Search failed")
 
 
 @app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1164,7 +1176,8 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(result="\n".join(details))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
+        logger.exception("Unexpected error in tool_get_issue: %s", e)
+        return ChatToolResponse(error="Failed to get issue")
 
 
 @app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1235,7 +1248,8 @@ async def tool_add_comment(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to add comment: {str(e)}")
+        logger.exception("Unexpected error in tool_add_comment: %s", e)
+        return ChatToolResponse(error="Failed to add comment")
 
 
 # ============================================
