@@ -662,13 +662,20 @@ def _delete_conversation_and_related_data(
             historical_source_ids=historical_source_ids,
         )
         if not skip_retraction:
+            # retain_capture is the sync-bridge path: derived-data cleanup for a
+            # conversation the same assignment already tombstoned. That must not
+            # take the exclusive per-account destructive gate.
+            retract_kwargs: dict[str, Any] = {}
+            if retain_capture:
+                retract_kwargs['claim_destructive_gate'] = False
             if on_authoritative_retraction is None:
-                memory_service.retract_conversation_memories(uid, conversation_id)
+                memory_service.retract_conversation_memories(uid, conversation_id, **retract_kwargs)
             else:
                 memory_service.retract_conversation_memories(
                     uid,
                     conversation_id,
                     on_authoritative_commit=on_authoritative_retraction,
+                    **retract_kwargs,
                 )
         elif on_authoritative_retraction is not None:
             # Nothing to retract, but everything below this point still destroys

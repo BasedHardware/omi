@@ -210,3 +210,58 @@ def test_failed_late_audio_copy_is_pending_without_transient_source_hint(system)
     ingest(3)
     retract.assert_not_called()
     copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+
+
+def test_intake_accepts_chunk_when_destructive_gate_is_held_and_retraction_converges_later(system, caplog):
+    """Held account gate must not fail accepted sync intake; retraction defers then converges.
+
+    POST /v2/sync-local-files answers 202 only after the chunk is admitted. Donor
+    retraction that collides with the exclusive destructive-operation gate used
+    to raise DestructiveOperationInProgress and turn that admission into a 503.
+    """
+    from database.legal_holds import DestructiveOperationInProgress
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    retract.side_effect = DestructiveOperationInProgress('another destructive operation owns the account gate')
+    with caplog.at_level('INFO'):
+        row, _, _ = ingest(2)
+        assert len(row['transcript_segments']) == 3
+        donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+        assert donor['deleted'] and donor['sync_merged_into'] == 'chunk-000'
+        assert 'sync_bridge_cleaned_revision' not in donor
+        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+        assert any('event=sync_bridge outcome=deferred' in record.message for record in caplog.records)
+        retract.side_effect = None
+        retract.reset_mock()
+        copy.reset_mock()
+        ingest(3)
+        assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+        retract.assert_called_with('u', 'chunk-004', retain_capture=True)
+        assert any('event=sync_bridge outcome=converged' in record.message for record in caplog.records)
+
+
+def test_sync_bridge_retraction_does_not_claim_the_account_destructive_gate(monkeypatch):
+    from utils.conversations import merge_conversations as merge
+    from database import action_items
+
+    seen: dict[str, object] = {}
+
+    class FakeMemoryService:
+        def __init__(self, db_client=None):
+            del db_client
+
+        def retract_conversation_memories(self, uid, conversation_id, **kwargs):
+            del uid, conversation_id
+            seen.update(kwargs)
+
+    monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: False)
+    monkeypatch.setattr(merge, 'MemoryService', FakeMemoryService)
+    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', MagicMock(return_value=0))
+    monkeypatch.setattr(merge, 'delete_conversation_audio_files', MagicMock())
+    monkeypatch.setattr(merge.conversations_db, 'delete_conversation', MagicMock())
+    monkeypatch.setattr(merge.conversations_db, '_delete_conversation_search_index', MagicMock())
+    monkeypatch.setattr(merge, 'delete_vector', MagicMock())
+    merge.retract_sync_bridge_source('u', 'donor')
+    assert seen.get('claim_destructive_gate') is False

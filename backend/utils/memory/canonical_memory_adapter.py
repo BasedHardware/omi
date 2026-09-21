@@ -57,6 +57,7 @@ from database.memory_apply_store import (
 )
 from database.legal_holds import (
     LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
     current_destructive_operation_token,
     destructive_operation_gate,
 )
@@ -2404,6 +2405,7 @@ def replace_conversation_sourced_memories(
     db_client: Any = None,
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2421,6 +2423,10 @@ def replace_conversation_sourced_memories(
     conversation already has rows and no deletion gate is held, the existing
     rows are kept and the call resolves as a no-op instead of failing —
     extraction variance is not permission to destroy knowledge.
+
+    ``claim_destructive_gate`` is True for account-scale privacy deletion.
+    Sync-bridge donor retraction passes False: it still retracts rows, but
+    fences against a live wipe instead of taking the exclusive account lock.
     """
     if empty_set_intent not in {"retraction", "extraction"}:
         raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
@@ -2480,6 +2486,15 @@ def replace_conversation_sourced_memories(
             # ``expected_reactivation_items`` derives from
             # ``terminal_source_ids``, itself derived from
             # ``expected_source_items``, so it is necessarily empty here too.
+            if not claim_destructive_gate:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
             try:
                 current_destructive_operation_token(uid, kind="explicit_memory_deletion")
             except LegalHoldAuthorityUnavailable:
@@ -2595,8 +2610,11 @@ def replace_conversation_sourced_memories(
                 expected_reactivation_items=expected_reactivation_items,
                 writes=writes,
                 deletion_gate_token=(
-                    current_destructive_operation_token(uid, kind="explicit_memory_deletion") if not items else None
+                    current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+                    if not items and claim_destructive_gate
+                    else None
                 ),
+                require_deletion_gate=bool(not items and claim_destructive_gate),
                 db_client=client,
             )
             break
@@ -3795,6 +3813,7 @@ def _retract_conversation_sourced_memories_under_gate(
     conversation_id: str,
     *,
     db_client: Any = None,
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete source set with nothing.
 
@@ -3820,6 +3839,7 @@ def _retract_conversation_sourced_memories_under_gate(
                 [],
                 db_client=client,
                 conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
+                claim_destructive_gate=claim_destructive_gate,
             )
         except ConversationReplacementConflictError as exc:
             last_conflict = exc
@@ -3848,8 +3868,24 @@ def _retract_conversation_sourced_memories_under_gate(
     ) from last_conflict
 
 
-def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
+def retract_conversation_sourced_memories(
+    uid: str,
+    conversation_id: str,
+    *,
+    db_client: Any = None,
+    claim_destructive_gate: bool = True,
+) -> Dict[str, Any]:
     client = db_client if db_client is not None else default_db_client
+    if not claim_destructive_gate:
+        # Sync-bridge derived cleanup: refuse under an active legal hold or
+        # account wipe, but do not take the exclusive per-account lock.
+        assert_account_deletion_permitted(uid, firestore_client=client)
+        return _retract_conversation_sourced_memories_under_gate(
+            uid,
+            conversation_id,
+            db_client=client,
+            claim_destructive_gate=False,
+        )
     with destructive_operation_gate(
         uid,
         kind="explicit_memory_deletion",

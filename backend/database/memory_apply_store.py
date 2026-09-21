@@ -795,6 +795,7 @@ def replace_conversation_source_firestore(
     expected_reactivation_items: List[MemoryItem],
     writes: List[CanonicalApplyWrite],
     deletion_gate_token: str | None = None,
+    require_deletion_gate: bool = True,
     db_client: Any = db,
 ) -> ConversationSourceReplacementResult:
     """Atomically replace every active item sourced from one conversation.
@@ -820,6 +821,7 @@ def replace_conversation_source_firestore(
         expected_reactivation_items,
         writes,
         deletion_gate_token,
+        require_deletion_gate,
     )
 
 
@@ -1682,9 +1684,10 @@ def _replace_conversation_source_firestore_transaction(
     expected_reactivation_items: List[MemoryItem],
     writes: List[CanonicalApplyWrite],
     deletion_gate_token: str | None,
+    require_deletion_gate: bool,
 ) -> ConversationSourceReplacementResult:
     collections = MemoryCollections(uid=uid)
-    if writes:
+    if writes or not require_deletion_gate:
         assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
     else:
         if deletion_gate_token is None:
