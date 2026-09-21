@@ -307,6 +307,8 @@ def get_conversations_in_folder(
     conversations: List[Dict[str, Any]] = []
     for doc in query.stream():
         conv_data = _typed_doc(doc)
+        if conv_data.get('deleted'):
+            continue
         conv_data['id'] = doc.id
         conversations.append(conv_data)
 

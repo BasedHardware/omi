@@ -86,6 +86,18 @@ def test_serve_error_cooldown_is_longer_than_connect_path_and_needs_multiple_suc
     assert circuit.allow_request() is True
 
 
+def test_force_never_bypasses_account_cooldown():
+    clock = Clock()
+    circuit = ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30, clock=clock)
+    circuit.record_account_failure(1800)
+    assert circuit.allow_request(force=True) is False
+    clock.now = 1799
+    assert circuit.allow_request(force=True) is False
+    clock.now = 1800
+    assert circuit.allow_request(force=True) is True
+    assert circuit.allow_request(force=True) is False
+
+
 def test_connect_path_still_closes_on_the_first_half_open_success():
     clock = Clock()
     circuit = ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30, clock=clock)

@@ -29,12 +29,15 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/widgets/capture_gap_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -43,7 +46,7 @@ enum _ConversationListRowKind {
   captureGap,
   conversation,
   recording,
-  groupSpacer
+  groupSpacer,
 }
 
 typedef _ConversationListRow = ({
@@ -73,6 +76,7 @@ typedef _ConversationPageSnapshot = ({
   bool isLoadingConversations,
   bool isFetchingConversations,
   bool isAwaitingInitialFetchRetry,
+  ApiViewPhase apiViewPhase,
   int conversationIdentitySignature,
   int processingIdentitySignature,
   int recordingIdentitySignature,
@@ -134,6 +138,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     isLoadingConversations: conversations.isLoadingConversations,
     isFetchingConversations: conversations.isFetchingConversations,
     isAwaitingInitialFetchRetry: conversations.isAwaitingInitialFetchRetry,
+    apiViewPhase: conversations.apiViewState.phase,
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
@@ -249,7 +254,12 @@ List<_ConversationListRow> _buildConversationListRows({
 }
 
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key});
+  const ConversationsPage({super.key, this.requestInitialLoad = true});
+
+  /// Production stays true. Widget tests that already call
+  /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
+  /// false so initState does not queue loopback I/O on the fake-async clock.
+  final bool requestInitialLoad;
 
   @override
   State<ConversationsPage> createState() => _ConversationsPageState();
@@ -284,9 +294,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
       try {
-        if (conversationProvider.conversations.isEmpty) {
+        if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
           await conversationProvider.getInitialConversations();
-        } else {
+        } else if (widget.requestInitialLoad) {
           // Still check for daily summaries even if conversations are cached
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
         }
@@ -617,6 +627,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final apiPhase = snapshot.apiViewPhase;
+        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
+            apiPhase == ApiViewPhase.locked ||
+            apiPhase == ApiViewPhase.terminal ||
+            apiPhase == ApiViewPhase.authenticationRequired ||
+            apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
         final bool isShowingConversationSkeleton = isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
@@ -772,8 +788,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     );
                   },
                 ),
-              // Show daily summaries list or conversations based on filter
-              if (convoProvider.showDailySummaries)
+              // Typed HTTP status precedes empty/loading/hero so an outage is
+              // never the new-account empty state. Unset (data) keeps production.
+              if (showTypedStatus &&
+                  snapshot.conversations.isEmpty &&
+                  !hasRecordings &&
+                  !_hasActiveFilter(convoProvider))
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: ConversationApiStatus(provider: convoProvider)),
+                )
+              else if (convoProvider.showDailySummaries)
                 const DailySummariesList()
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
                   !hasRecordings &&
@@ -830,7 +855,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         );
                       case _ConversationListRowKind.captureGap:
                         return CaptureGapListItem(
-                            key: ValueKey('gap_${row.captureGap!.eventId}'), gap: row.captureGap!);
+                          key: ValueKey('gap_${row.captureGap!.eventId}'),
+                          gap: row.captureGap!,
+                        );
                       case _ConversationListRowKind.conversation:
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
@@ -845,7 +872,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     }
                   }),
                 ),
-              SliverToBoxAdapter(child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100)),
+              // Clears the nav bar, or the taller merge action bar that covers it in
+              // selection mode; both sit on top of the same system inset.
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: convoProvider.isSelectionModeActive
+                      ? 160 + bottomNavBarReservedInset(context)
+                      : bottomNavBarClearance(context),
+                ),
+              ),
             ],
           ),
         );

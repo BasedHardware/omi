@@ -7476,6 +7476,32 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
+          },
           "transcript_segments": {
             "default": [],
             "items": {
@@ -8578,6 +8604,32 @@
             },
             "title": "Suggested Summarization Apps",
             "type": "array"
+          },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
           },
           "transcript_segments": {
             "default": [],
@@ -20787,6 +20839,10 @@
               }
             ],
             "title": "Updated At"
+          },
+          "voice_readiness": {
+            "$ref": "#/components/schemas/VoiceReadiness",
+            "default": "unknown"
           }
         },
         "required": [
@@ -29255,6 +29311,16 @@
         ],
         "title": "VoiceMessageTranscriptionResponse",
         "type": "object"
+      },
+      "VoiceReadiness": {
+        "enum": [
+          "ready",
+          "saved_sample_awaiting_embedding",
+          "not_learned",
+          "unknown"
+        ],
+        "title": "VoiceReadiness",
+        "type": "string"
       },
       "WebSearchAssistantSettings": {
         "properties": {
@@ -39928,7 +39994,6 @@
     },
     "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of all segments in the transcript of a conversation with the given speaker_id.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file should be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch",
         "parameters": [
           {
@@ -40054,7 +40119,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Set Assignee Conversation Segment",
+        "summary": "Set Assignee Conversation Speaker",
         "tags": [
           "conversations"
         ]
@@ -41821,7 +41886,6 @@
     },
     "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of a segment in the transcript of a conversation.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file shuold be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch",
         "parameters": [
           {

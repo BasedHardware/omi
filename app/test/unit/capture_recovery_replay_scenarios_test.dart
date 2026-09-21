@@ -493,6 +493,103 @@ void main() {
         reason: 'acknowledgement resolves by polling, never by re-uploading bytes');
   });
 
+  test('a job the server refuses for an input reason stops re-uploading the same bytes', () async {
+    await produceWalOnDisk(12);
+    // More queued outcomes than wakes: any re-upload is visible as an attempt
+    // rather than being absorbed by the script running dry.
+    for (var i = 0; i < 12; i++) {
+      world.uploads.enqueueOutcome(() => UploadFilesResult.queued('job-undecodable'));
+    }
+    // The measured production verdict for an undecodable recording: the whole
+    // job fails because nothing in the batch produced PCM.
+    world.jobStatuses['job-undecodable'] = SyncJobFetch(
+      SyncJobFetchOutcome.ok,
+      SyncJobStatusResponse(
+        jobId: 'job-undecodable',
+        status: 'failed',
+        totalSegments: 1,
+        processedSegments: 1,
+        failedSegments: 1,
+        reasonCode: 'sync_invalid_audio',
+        error: 'Audio decode failed',
+      ),
+    );
+
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect(world.uploads.attempts, hasLength(1), reason: 'the first attempt is what earns the verdict');
+
+    final walPath = (await Wal.getFilePath((await world.wal.syncs.phone.getAllWals()).single.filePath))!;
+    final bytesAfterVerdict = File(walPath).lengthSync();
+
+    // Every later wake reason the app has: foreground, connectivity, device,
+    // cooldown, startup — plus the most permissive one, an explicit retry.
+    for (final trigger in WakeTrigger.values) {
+      await world.coordinator.wake(trigger);
+      await world.settle();
+    }
+
+    expect(world.uploads.attempts, hasLength(1),
+        reason: 'a permanently refused recording must not buy another upload on every wake');
+
+    final wal = (await world.wal.syncs.phone.getAllWals()).single;
+    expect(wal.status, WalStatus.unsupportedAudio,
+        reason: 'audio is never dropped — only the sync attempt is terminal');
+    expect(wal.syncDisplayState, WalSyncDisplayState.unsupportedAudio);
+    expect(File(walPath).lengthSync(), bytesAfterVerdict, reason: 'the local recording is retained untouched');
+
+    // The row used to render as "Failed — tap Retry", which sent the same bytes
+    // back for the same verdict on every tap and left the needs-attention banner
+    // permanent. The verdict is now stated instead of re-armed.
+    expect(wal.syncDisplayState, isNot(WalSyncDisplayState.failed));
+    expect(isRetryableSyncState(wal.syncDisplayState), isFalse);
+
+    // A deliberate call still reaches the server — audio is never orphaned — but
+    // the sync pages no longer offer it for this state, they offer deletion.
+    await world.wal.syncs.phone.syncWal(wal: wal);
+    await world.settle();
+    expect(world.uploads.attempts, hasLength(2), reason: 'a deliberate retry is honoured');
+
+    // That retry earns the same verdict, and the loop stays closed after it.
+    await world.coordinator.wake(WakeTrigger.cooldownElapsed);
+    await world.settle();
+    expect(world.uploads.attempts, hasLength(2), reason: 'one deliberate tap buys exactly one upload');
+    expect(
+      (await world.wal.syncs.phone.getAllWals()).single.syncDisplayState,
+      WalSyncDisplayState.unsupportedAudio,
+    );
+  });
+
+  test('a transient job failure keeps its per-attempt retry budget', () async {
+    await produceWalOnDisk(12);
+    for (var i = 0; i < 12; i++) {
+      world.uploads.enqueueOutcome(() => UploadFilesResult.queued('job-flaky'));
+    }
+    world.jobStatuses['job-flaky'] = SyncJobFetch(
+      SyncJobFetchOutcome.ok,
+      SyncJobStatusResponse(
+        jobId: 'job-flaky',
+        status: 'failed',
+        totalSegments: 1,
+        processedSegments: 1,
+        failedSegments: 1,
+        reasonCode: 'stt_upstream_error',
+      ),
+    );
+
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    expect((await world.wal.syncs.phone.getAllWals()).single.retryCount, 1,
+        reason: 'an upstream failure costs one attempt, not the whole budget');
+
+    await world.coordinator.wake(WakeTrigger.userRetry);
+    await world.settle();
+    final wal = (await world.wal.syncs.phone.getAllWals()).single;
+    expect(world.uploads.attempts, hasLength(2), reason: 'transient failures keep retrying');
+    expect(wal.retryCount, 2);
+    expect(wal.syncDisplayState, WalSyncDisplayState.retrying);
+  });
+
   // ---------------------------------------------------------------------------
   // 6. ownership-transition-outstanding-work
   // ---------------------------------------------------------------------------

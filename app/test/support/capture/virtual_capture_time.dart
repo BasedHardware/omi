@@ -23,7 +23,7 @@ class VirtualClock {
 /// A [Timer] whose firing is owned by a [ManualScheduler].
 class FakeTimer implements Timer {
   final Duration? _interval;
-  final void Function() _fire;
+  final Object? Function() _fire;
   final String label;
   bool _active = true;
   bool _done = false;
@@ -61,26 +61,33 @@ class ManualScheduler implements CaptureScheduling {
   final int maxFires;
 
   final List<FakeTimer> _timers = [];
+  final List<Future<void>> _inFlightIo = [];
   Duration _advanced = Duration.zero;
   int _fired = 0;
 
   ManualScheduler({required this.clock, this.maxTotalAdvance = const Duration(hours: 24), this.maxFires = 100000});
 
   @override
-  Timer once(Duration delay, void Function() callback) => _register(delay, null, callback, 'once($delay)');
+  Timer once(Duration delay, void Function() callback) =>
+      _register(delay, null, () => _invoke(callback), 'once($delay)');
 
   @override
   Timer periodic(Duration interval, void Function(Timer timer) callback) {
     late final FakeTimer timer;
-    timer = _register(interval, interval, () => callback(timer), 'periodic($interval)');
+    timer = _register(interval, interval, () => _invoke(callback, timer), 'periodic($interval)');
     return timer;
   }
 
-  FakeTimer _register(Duration delay, Duration? interval, void Function() fire, String label) {
+  FakeTimer _register(Duration delay, Duration? interval, Object? Function() fire, String label) {
     final t = FakeTimer._(delay, interval, fire, label, clock.now());
     _timers.add(t);
     return t;
   }
+
+  /// Production WAL timers are declared `void Function(Timer)` but the bodies
+  /// are `async` and return a discarded [Future] (`LocalWalSync._flush`).
+  /// Invoke through [Function] so that Future is observable.
+  static Object? _invoke(Function callback, [Timer? timer]) => timer == null ? callback() : callback(timer);
 
   List<FakeTimer> get pendingTimers => _timers.where((t) => t._active && !t._done).toList();
 
@@ -88,9 +95,31 @@ class ManualScheduler implements CaptureScheduling {
 
   List<String> get pendingTimerLabels => pendingTimers.map((t) => t.label).toList()..sort();
 
+  /// True while a Future returned by a fired callback has not yet completed.
+  /// Coordinator-idle is a different signal and is not sufficient.
+  bool get hasInFlightIo => _inFlightIo.isNotEmpty;
+
+  /// Await every Future a fired callback returned, including Futures those
+  /// completions start. Quiescence is observed — no wall-clock sleeps.
+  Future<void> waitForCallbackIo() async {
+    while (_inFlightIo.isNotEmpty) {
+      final batch = List<Future<void>>.of(_inFlightIo);
+      _inFlightIo.clear();
+      await Future.wait(batch);
+    }
+  }
+
+  void _trackCallbackResult(Object? result) {
+    if (result is Future) {
+      _inFlightIo.add(Future<void>.sync(() async {
+        await result;
+      }));
+    }
+  }
+
   /// Advances virtual time by [duration], firing every timer that comes due.
-  /// Callbacks run synchronously; async work they schedule settles separately
-  /// (see [CaptureReplayWorld.settle] in the world harness).
+  /// Callbacks run synchronously; any [Future] they return is tracked until
+  /// [waitForCallbackIo] (see [CaptureReplayWorld.settle]).
   void elapse(Duration duration) {
     final totalLimitCheck = _advanced + duration;
     if (totalLimitCheck > maxTotalAdvance) {
@@ -127,7 +156,7 @@ class ManualScheduler implements CaptureScheduling {
       if (_fired > maxFires) {
         throw StateError('ManualScheduler exceeded $maxFires timer fires; runaway periodic loop?');
       }
-      t._fire();
+      _trackCallbackResult(t._fire());
     }
   }
 }

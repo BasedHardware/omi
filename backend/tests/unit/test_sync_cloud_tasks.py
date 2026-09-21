@@ -7,6 +7,10 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+
 import asyncio
 import hashlib
 import json
@@ -978,6 +982,9 @@ def _load_sync_router_for_fast_path():
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
     from utils.stt import speaker_match as actual_speaker_match
+    from utils.stt import speaker_identity as actual_speaker_identity
+    from utils import manual_speaker_assignments as actual_manual_assignments
+    from utils.sync import lanes as actual_sync_lanes
 
     saved_modules = {}
     prior_utils_sync = sys.modules.get('utils.sync')
@@ -1015,6 +1022,7 @@ def _load_sync_router_for_fast_path():
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.other',
@@ -1029,6 +1037,12 @@ def _load_sync_router_for_fast_path():
         'utils.observability',
         'utils.observability.fallback',
         'utils.metrics',
+        'utils.product_metrics',
+        'utils.journey_metrics_contract',
+        'utils.sync.rate_limit',
+        'utils.sync.lanes',
+        'utils.sync.provenance',
+        'utils.sync.capture_manifest',
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.multipart',
@@ -1048,6 +1062,18 @@ def _load_sync_router_for_fast_path():
     for mod_name in heavy_deps:
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
+
+    # utils.conversations is a namespace package on disk (no __init__.py), so the
+    # sync pipeline's submodule imports resolve only through a real __path__.
+    # Replace the heavy_deps MagicMock parent with a real-path package and keep
+    # the existing submodule stubs on top of it — otherwise a new module-level
+    # import like utils.conversations.deterministic_minimum fails with
+    # "'utils.conversations' is not a package" during the file-path re-exec below.
+    conv_pkg = types.ModuleType('utils.conversations')
+    conv_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'conversations')]
+    saved_modules['utils.conversations'] = sys.modules.get('utils.conversations')
+    sys.modules['utils.conversations'] = conv_pkg
+    sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
     # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
@@ -1170,6 +1196,8 @@ def _load_sync_router_for_fast_path():
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
+    saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
@@ -1180,6 +1208,14 @@ def _load_sync_router_for_fast_path():
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.
     sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+    # Keep allocator + receipt policy real: assignment.py imports both at module
+    # scope, and MagicMock parents for utils / utils.stt are not packages.
+    sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+    saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
+    # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
+    # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.
+    sys.modules['utils.sync.lanes'] = actual_sync_lanes
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
 
     class _AudioPrecacheResponse(BaseModel):

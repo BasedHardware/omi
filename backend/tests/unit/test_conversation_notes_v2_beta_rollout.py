@@ -22,6 +22,7 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
+    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
 )
 
 # backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
@@ -77,6 +78,13 @@ def test_prod_keeps_calendar_and_ocr_context_flags_dark():
     for scope in SUMMARY_PIPELINE_SCOPES:
         for flag in ('CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED', 'CONVERSATION_OCR_CONTEXT_ENABLED'):
             assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
+
+
+def test_prod_keeps_basic_plan_eager_extraction_gate_dark():
+    """PR #14165's identified-basic first-open deny stays prod-off until a separate ask."""
+    env_maps = _env_maps(_composed()['environments']['prod'])
+    for scope in SUMMARY_PIPELINE_SCOPES:
+        assert _value(env_maps[scope], 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED') == 'false', scope
 
 
 def test_reprocess_cannot_disagree_with_live_finalization():

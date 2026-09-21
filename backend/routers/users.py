@@ -125,6 +125,7 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.other.notifications import (
     DAILY_SUMMARY_DECLINE_LOCKED,
+    bound_daily_summary_conversations,
     generate_daily_summary_on_demand,
     local_day_bounds_utc,
 )
@@ -618,22 +619,23 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    person = Person(**person)
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
-        stored_paths = person.get('speech_samples', [])
-        person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+        stored_paths = person.speech_samples
+        person.speech_samples = get_speech_sample_signed_urls(stored_paths)
     return person
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_all_people {include_speech_samples}')
-    people = get_people(uid)
+    people = Person.deserialize_many_safe(get_people(uid))
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
-            stored_paths = person.get('speech_samples', [])
-            people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+            stored_paths = person.speech_samples
+            people[i].speech_samples = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -1677,6 +1679,7 @@ def test_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(
@@ -2002,6 +2005,7 @@ def regenerate_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
     summary_data = generate_comprehensive_daily_summary(
         uid,

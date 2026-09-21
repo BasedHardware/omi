@@ -1,0 +1,842 @@
+[
+  {
+    "uid": "omi-stt-chain-terminal",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - configured chain terminal exhaustion",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live STT - configured chain terminal exhaustion",
+      "user_impact": "Users cannot start a live transcript after all configured providers fail.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 20 && $B > 0.10",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-chain-terminal",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-account-state",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - provider authentication refusals",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_auth_rejected\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 10 && $B > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live STT - provider authentication refusals",
+      "user_impact": "A provider rejects authentication or authorization; sessions depend on the remaining tail. Budget/quota deaths have the separate provider-budget page.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 10 && $B > 0",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-account-state",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-overflow",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live TDT - admission overflow",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\",outcome=\"overflow\"}[5m])) / clamp_min(sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 10 && $B > 0.20",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live TDT - admission overflow",
+      "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 10 && $B > 0.20",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-overflow",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-saturated",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live TDT - sustained session cap",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(omi_stt_window_sessions_capacity{job=\"backend-listen-metrics\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(omi_stt_window_sessions_active{job=\"backend-listen-metrics\"}) / clamp_min(sum(omi_stt_window_sessions_capacity{job=\"backend-listen-metrics\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $B >= 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live TDT - sustained session cap",
+      "user_impact": "The admitted TDT cohort has used almost all process session slots.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A > 0 && $B >= 0.90",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-saturated",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-post-errors",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live TDT - batch POST errors",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome!=\"cancelled\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome=\"error\"}[5m])) / clamp_min(sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome!=\"cancelled\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 10 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live TDT - batch POST errors",
+      "user_impact": "Speech windows fail at /v1/transcribe and sessions move to the tail.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 10 && $B > 0.10",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-post-errors",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-leg-error-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - provider leg connection errors",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\",outcome=\"error\"}[5m])) / clamp_min(sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live STT - provider leg connection errors",
+      "user_impact": "A configured provider leg rejects more than half its attempted connections; surviving sessions depend on the tail.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 20 && $B > 0.50",
+      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
+      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-leg-error-rate",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  }
+]

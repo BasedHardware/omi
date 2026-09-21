@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/test_live_session.py",
+  "owner": "V1",
+  "before": "b30f7969fa6a548b1e7716c9cfcc8efc2cf76f55c0b67d145997d34f97ef6855",
+  "after": "d9c7e930aba67056f8955810778e8f3daa42f21fb56fe2a807146e0d56e44a80",
+  "reason": "Spine A turn 5 Harness review: strengthen real RPC delivery, failure classification, lifecycle ordering, worktree exclusion and seed identity; match actual semantic_controls.navigate payload. Local Flutter 3.44.5 source and loopback custom-extension probe establish wire expectations."
+}

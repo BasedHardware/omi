@@ -1711,7 +1711,7 @@ def _capture_proactivity_journeys(monkeypatch):
     monkeypatch.setattr(
         journeys,
         'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None, app_build='unknown': terminal.append(
             (journey, client_kind, outcome, issue_class)
         ),
     )
@@ -1844,6 +1844,12 @@ async def test_legacy_clients_are_not_gated_by_jit_rollout(monkeypatch):
 # --- S14 proactivity half: route-level managed-compute plan gate ----------------
 
 
+@pytest.fixture
+def basic_plan_proactivity_gate_on(monkeypatch):
+    monkeypatch.setenv('BASIC_PLAN_GATE_PROACTIVITY_ENABLED', 'true')
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
 @pytest.mark.asyncio
 async def test_proactive_completion_rejects_basic_before_quota_or_provider(monkeypatch):
     """Route-level fail-closed gate: basic never reaches a paid provider.
@@ -1881,6 +1887,7 @@ async def test_proactive_completion_rejects_basic_before_quota_or_provider(monke
     assert touched == []
 
 
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
 @pytest.mark.asyncio
 async def test_proactive_completion_rejects_basic_reasoning_on_its_own_lane(monkeypatch):
     seen = {}
@@ -1906,6 +1913,7 @@ async def test_proactive_completion_rejects_basic_reasoning_on_its_own_lane(monk
     assert seen['funding_owner'] == 'omi'
 
 
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
 @pytest.mark.asyncio
 async def test_proactive_completion_extraction_gate_uses_the_extraction_lane_feature(monkeypatch):
     seen = {}
@@ -1923,6 +1931,7 @@ async def test_proactive_completion_extraction_gate_uses_the_extraction_lane_fea
     assert seen['feature'] == 'desktop_proactive_extraction'
 
 
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
 @pytest.mark.asyncio
 async def test_proactive_completion_maps_authorization_outage_to_503(monkeypatch):
     monkeypatch.setattr(
@@ -1937,6 +1946,7 @@ async def test_proactive_completion_maps_authorization_outage_to_503(monkeypatch
     assert error.value.status_code == 503
 
 
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
 @pytest.mark.asyncio
 async def test_proactive_completion_paid_decision_reaches_the_provider(monkeypatch):
     provider_calls = []
@@ -1964,5 +1974,40 @@ async def test_proactive_completion_paid_decision_reaches_the_provider(monkeypat
 
     envelope = await desktop_proactivity.proactive_completion(request(), Response(), uid='paid-uid')
 
+    assert provider_calls == ['proactive_extraction']
+    assert envelope.operation.value == 'proactive_extraction'
+
+
+@pytest.mark.asyncio
+async def test_proactive_completion_switch_off_skips_authorize_and_reaches_the_provider(monkeypatch):
+    """Unset / not-true: byte-identical to main before #14165 for this surface."""
+    auth_calls = []
+    provider_calls = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _gate_decision(allowed=False, reason='basic_not_entitled')
+
+    async def quota(*_args, **_kwargs):
+        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60, reservation_token='tok')
+
+    async def provider(provider_request, *, uid, operation, reservation_token, max_completion_tokens=None):
+        provider_calls.append(operation.value)
+        return {
+            'choices': [{'message': {'content': '{"summary": ""}'}}],
+            'usage': {'prompt_tokens': 1, 'completion_tokens': 1},
+        }
+
+    monkeypatch.delenv('BASIC_PLAN_GATE_PROACTIVITY_ENABLED', raising=False)
+    monkeypatch.setattr(desktop_proactivity, 'authorize_managed_compute', authorize)
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway')
+    monkeypatch.setattr(desktop_proactivity, '_validate_gateway_output', lambda *_a, **_k: None)
+
+    envelope = await desktop_proactivity.proactive_completion(request(), Response(), uid='basic-uid')
+
+    assert auth_calls == []
     assert provider_calls == ['proactive_extraction']
     assert envelope.operation.value == 'proactive_extraction'

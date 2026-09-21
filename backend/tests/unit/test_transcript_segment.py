@@ -56,12 +56,14 @@ def test_merge_same_speaker_with_small_gap():
     b = _segment("world.", speaker="SPEAKER_00", start=1.1, end=2.0)
     input_concat = _concat_texts([a.text, b.text])
 
-    segments, _, removed_ids = TranscriptSegment.combine_segments([], [a, b])
+    result = TranscriptSegment.combine_segments([], [a, b])
+    segments, _, removed_ids = result
 
     assert len(segments) == 1
     assert segments[0].text == "Hello world."
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
+    assert b.id in removed_ids
+    assert result.absorbed_into.get(b.id) == a.id
     assert _concat_segments(segments) == input_concat
 
 
@@ -77,9 +79,9 @@ def test_updated_segments_returned_for_existing_merge():
     assert len(updated_segments) == 1
     assert updated_segments[0].id == existing.id
     assert updated_segments[0].text == "Hello world."
-    assert removed_ids == []
+    assert removed_ids == [new.id]
     assert existing.id not in removed_ids
-    assert new.id not in removed_ids
+    assert new.id in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -133,8 +135,8 @@ def test_forward_merge_drops_segment_when_only_incomplete():
     assert segments[0].text == "unfinished continues now."
     assert len(updated_segments) == 1
     assert updated_segments[0].speaker == "SPEAKER_01"
-    assert removed_ids == []
-    assert a.id not in removed_ids
+    assert removed_ids == [a.id]
+    assert a.id in removed_ids
     assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
@@ -247,9 +249,8 @@ def test_backward_merge_single_lowercase_sentence_from_next_segment():
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text.endswith("listen.")
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -263,9 +264,8 @@ def test_merge_lowercase_continuation_same_speaker():
     assert len(segments) == 1
     assert segments[0].text == "Hello world"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -293,10 +293,9 @@ def test_backward_merge_lowercase_phrase_between_same_speaker_segments():
     assert segments[0].speaker == "SPEAKER_1"
     assert "able to just, like, go to different countries" in segments[0].text
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
-    assert c.id not in removed_ids
+    assert c.id in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -317,9 +316,8 @@ def test_backward_merge_lowercase_phrase_at_end_of_speaker_segment():
     assert segments[0].speaker == "SPEAKER_3"
     assert segments[0].text.endswith("pretty much")
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -475,9 +473,8 @@ def test_empty_text_segment_does_not_break_concat():
     assert len(segments) == 1
     assert segments[0].text == "Hello"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -491,9 +488,8 @@ def test_non_latin_text_merges_same_speaker():
     assert len(segments) == 1
     assert segments[0].text == "こんにちは 世界。"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
