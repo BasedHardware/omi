@@ -60,6 +60,7 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 ```bash
 omi --json memory list | jq '.[] | {id, content}'
 ```
+> Looking for localized guides? See the [Rumantsch (Romansh Quickstart)](examples/quickstart.rm.md).
 
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
