@@ -86,7 +86,9 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
     let node = try AFMJSONSchemaBridge.parse(schema)
     let data: Data
     do {
+      Self.trace("AFM_CALL_START schema=\(schema.name) prompt_bytes=\(prompt.utf8.count)")
       data = try await session.generateJSON(prompt: prompt, node: node)
+      Self.trace("AFM_CALL_OK schema=\(schema.name) prompt_bytes=\(prompt.utf8.count) completion_bytes=\(data.count)")
     } catch is CancellationError {
       throw CancellationError()
     } catch let error as LocalInferenceError {
@@ -109,6 +111,17 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
 
   /// Nonisolated on purpose: `mapFrameworkError` is a static called from the
   /// generation path, so it cannot reach a main-actor diagnostics manager.
+  /// Stdout trace for an evaluation run, off unless asked for.
+  ///
+  /// The unified log is where the real error goes, and it is not readable from a
+  /// test run or a background agent session. Twice that turned a context
+  /// overflow into hours of guessing at load and thermal causes. Sizes only —
+  /// never prompt or completion text.
+  static func trace(_ line: @autoclosure () -> String) {
+    guard ProcessInfo.processInfo.environment["OMI_LOCAL_INFERENCE_TRACE"] == "1" else { return }
+    print(line())
+  }
+
   static let engineLog = Logger(subsystem: "com.omi.desktop", category: "local-inference")
 
   static func mapUnknownError(_ error: Error) -> LocalInferenceError {
@@ -150,6 +163,7 @@ struct AFMLocalInferenceAdapter: LocalInferenceService {
         Self.engineLog.error(
           "AFM generation failed: domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) message=\(ns.localizedDescription, privacy: .public)"
         )
+        trace("AFM_CALL_FAILED domain=\(ns.domain) code=\(ns.code) message=\(ns.localizedDescription)")
         return .engineFailed("session_failed")
       }
       return mapDeprecatedGenerationError(error)
