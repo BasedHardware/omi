@@ -91,7 +91,7 @@ function BackendPlaneRow({
   const copy =
     plane === 'new'
       ? stampedOrigin != null
-        ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
+        ? 'New sends v5 chat, capture, conversations, memories, and tasks to the stamped origin. Account, apps, privacy, and native Settings still use production api.omi.me.'
         : 'New is selected, but no valid stamped v5 origin is configured.'
       : 'Old backend uses your existing Omi account and api.omi.me.';
   return (
@@ -337,7 +337,11 @@ export function SettingsPage({
 
   const selectSoftwarePlane = async (plane: SoftwarePlane) => {
     const backend = omiBackend;
-    if (backend?.setSoftwarePlane === undefined || pending !== null || chatBusy) {
+    if (
+      backend?.setSoftwarePlane === undefined ||
+      pending !== null ||
+      chatBusy
+    ) {
       return;
     }
     setPending('software-plane');

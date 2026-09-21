@@ -140,13 +140,11 @@ static void test_hosts() {
   expect(omi_backend_is_allowed_v5_hostname("workers.dev") == 0,
          "bare workers.dev");
   expect(omi_backend_is_allowed_v5_hostname(
-             "omi-platform-dev-abcdef012345-uc.a.run.app") == 1,
-         "reviewed run.app");
+             "omi-platform-dev-abcdef012345-uc.a.run.app") == 0,
+         "unverified run.app");
   expect(omi_backend_is_allowed_v5_hostname(
-             "omi-platform-dev-abcdef012345.us-central1.run.app") == 1,
-         "reviewed regional run.app");
-  expect(omi_backend_is_allowed_v5_hostname("other-service-uc.a.run.app") == 0,
-         "other run.app");
+             "omi-platform-dev-attacker.a.run.app") == 0,
+         "attacker run.app");
   expect(omi_backend_is_allowed_v5_hostname("untrusted.invalid") == 0,
          "untrusted");
 }

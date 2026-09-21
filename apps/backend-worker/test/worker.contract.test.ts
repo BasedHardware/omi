@@ -182,18 +182,19 @@ const authenticatedHeaders = {
   "x-omi-client-id": "test-account",
 };
 
-const chatCreate = (id: string) => ({
-  op: "create",
-  opId: `op-${id}`,
-  id,
-  at: 1,
-  text: "hello",
-  sender: "human",
-  journalRevision: 0,
-  appId: null,
-  chatSessionId: null,
-  attachmentIds: [],
-});
+const chatCreate = (id: string) =>
+  ({
+    op: "create",
+    opId: `op-${id}`,
+    id,
+    at: 1,
+    text: "hello",
+    sender: "human",
+    journalRevision: 0,
+    appId: null,
+    chatSessionId: null,
+    attachmentIds: [],
+  } as const);
 
 const emptyConversationPage = () => ({
   contractVersion: CONVERSATIONS_READ_CONTRACT_VERSION,
@@ -1527,20 +1528,26 @@ describe("chat create wire validator", () => {
 describe("chat admission identity and terminals", () => {
   test("a second account cannot occupy another account's message id", async () => {
     const { admitMessage } = await import("../src/chat");
-    const first = await admitMessage(d1Mock, "alice", chatCreate("shared-msg-one"), null);
-    expect(typeof first).not.toBe("string");
-    const second = await admitMessage(d1Mock, "bob", chatCreate("shared-msg-one"), null);
-    expect(second).toBe("conflict");
-    const aliceHistory = await (await import("../src/chat")).readHistory(
+    const first = await admitMessage(
       d1Mock,
       "alice",
-      50,
+      chatCreate("shared-msg-one"),
+      null
     );
-    const bobHistory = await (await import("../src/chat")).readHistory(
+    expect(typeof first).not.toBe("string");
+    const second = await admitMessage(
       d1Mock,
       "bob",
-      50,
+      chatCreate("shared-msg-one"),
+      null
     );
+    expect(second).toBe("conflict");
+    const aliceHistory = await (
+      await import("../src/chat")
+    ).readHistory(d1Mock, "alice", 50);
+    const bobHistory = await (
+      await import("../src/chat")
+    ).readHistory(d1Mock, "bob", 50);
     if (aliceHistory === "invalid_cursor" || bobHistory === "invalid_cursor") {
       throw new Error("history cursor");
     }
@@ -1554,24 +1561,74 @@ describe("chat admission identity and terminals", () => {
       d1Mock,
       "cancel-account",
       chatCreate("cancel-then-complete"),
-      null,
+      null
     );
     if (typeof admitted === "string") throw new Error(admitted);
     const cancelled = await chat.cancelGeneration(
       d1Mock,
       "cancel-account",
-      admitted.generation.id,
+      admitted.generation.id
     );
     expect(typeof cancelled).not.toBe("string");
     const completed = await chat.completeGeneration(
       d1Mock,
       "cancel-account",
       admitted.generation.id,
-      "should not persist",
+      "should not persist"
     );
     expect(completed.kind).toBe("cancelled");
     const history = await chat.readHistory(d1Mock, "cancel-account", 50);
     if (history === "invalid_cursor") throw new Error("history cursor");
-    expect(history.messages.every(message => message.sender !== "ai")).toBe(true);
+    expect(history.messages.every((message) => message.sender !== "ai")).toBe(
+      true
+    );
+  });
+
+  test("a failed assistant insert rolls back the done terminal", async () => {
+    const chat = await import("../src/chat");
+    const admitted = await chat.admitMessage(
+      d1Mock,
+      "atomic-account",
+      chatCreate("atomic-complete"),
+      null
+    );
+    if (typeof admitted === "string") throw new Error(admitted);
+    const originalPrepare = d1Mock.prepare.bind(d1Mock);
+    d1Mock.prepare = ((sql: string) => {
+      if (sql.includes("INSERT INTO chat_messages") && sql.includes("SELECT")) {
+        throw new Error("injected assistant insert failure");
+      }
+      return originalPrepare(sql);
+    }) as typeof d1Mock.prepare;
+    await expect(
+      chat.completeGeneration(
+        d1Mock,
+        "atomic-account",
+        admitted.generation.id,
+        "should not persist"
+      )
+    ).rejects.toThrow("injected assistant insert failure");
+    d1Mock.prepare = originalPrepare;
+    const terminal = await chat.terminalEvent(
+      d1Mock,
+      "atomic-account",
+      admitted.generation.id
+    );
+    expect(terminal).toBeNull();
+    const retry = await chat.completeGeneration(
+      d1Mock,
+      "atomic-account",
+      admitted.generation.id,
+      "persisted after retry"
+    );
+    expect(retry.kind).toBe("done");
+    const history = await chat.readHistory(d1Mock, "atomic-account", 50);
+    if (history === "invalid_cursor") throw new Error("history cursor");
+    expect(
+      history.messages.some(
+        (message) =>
+          message.sender === "ai" && message.text === "persisted after retry"
+      )
+    ).toBe(true);
   });
 });

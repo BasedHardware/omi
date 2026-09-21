@@ -52,7 +52,11 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     generationId: string
   ): Promise<"not_found" | "accepted" | "terminal"> {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const result = await cancelGeneration(this.env.DB, accountId, generationId);
+      const result = await cancelGeneration(
+        this.env.DB,
+        accountId,
+        generationId
+      );
       if (result === "not_found" || result === "terminal") return result;
       this.notifyWaiters(generationId, result);
       return "accepted";
@@ -157,7 +161,11 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       input.text
     );
     if (composed.kind === "fail") {
-      const event = await failGeneration(this.env.DB, accountId, generationId);
+      const event = await this.settleGeneration(
+        accountId,
+        generationId,
+        "fail"
+      );
       this.notifyWaiters(generationId, event);
       return;
     }
@@ -176,10 +184,10 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
             })
           )
         );
-        const event = await failGeneration(
-          this.env.DB,
+        const event = await this.settleGeneration(
           accountId,
-          generationId
+          generationId,
+          "fail"
         );
         this.notifyWaiters(generationId, event);
         return;
@@ -191,17 +199,17 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         composed.history
       );
       if (result.kind === "error") {
-        const event = await failGeneration(
-          this.env.DB,
+        const event = await this.settleGeneration(
           accountId,
-          generationId
+          generationId,
+          "fail"
         );
         this.notifyWaiters(generationId, event);
       } else {
-        const event = await completeGeneration(
-          this.env.DB,
+        const event = await this.settleGeneration(
           accountId,
           generationId,
+          "complete",
           result.text
         );
         this.notifyWaiters(generationId, event);
@@ -229,25 +237,46 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         typeof response.response !== "string" ||
         response.response.length === 0
       ) {
-        const event = await failGeneration(
-          this.env.DB,
+        const event = await this.settleGeneration(
           accountId,
-          generationId
+          generationId,
+          "fail"
         );
         this.notifyWaiters(generationId, event);
       } else {
-        const event = await completeGeneration(
-          this.env.DB,
+        const event = await this.settleGeneration(
           accountId,
           generationId,
+          "complete",
           response.response
         );
         this.notifyWaiters(generationId, event);
       }
     } catch {
-      const event = await failGeneration(this.env.DB, accountId, generationId);
+      const event = await this.settleGeneration(
+        accountId,
+        generationId,
+        "fail"
+      );
       this.notifyWaiters(generationId, event);
     }
+  }
+
+  private async settleGeneration(
+    accountId: string,
+    generationId: string,
+    kind: "complete" | "fail",
+    text?: string
+  ): Promise<GenerationEvent> {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      if (kind === "fail") {
+        return failGeneration(this.env.DB, accountId, generationId);
+      }
+      if (text === undefined) {
+        throw new Error("complete generation requires text");
+      }
+      return completeGeneration(this.env.DB, accountId, generationId, text);
+    });
   }
 
   private notifyWaiters(generationId: string, event: GenerationEvent): void {

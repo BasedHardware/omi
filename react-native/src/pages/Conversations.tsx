@@ -127,6 +127,7 @@ export function ConversationsPage({
   const selected = conversations.find(item => item.id === selectedId) ?? null;
   const scrolledAway = useRef(false);
   const paginated = useRef(preserveLoadedPages);
+  paginated.current = preserveLoadedPages || paginated.current;
   const refreshState = useRef({onRefresh, loading, loadingMore, selectedId});
   refreshState.current = {onRefresh, loading, loadingMore, selectedId};
   const refreshEnabled = onRefresh !== undefined;

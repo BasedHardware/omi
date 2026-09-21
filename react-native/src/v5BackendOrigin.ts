@@ -63,23 +63,13 @@ export function isCloudHostname(hostname: string): boolean {
   return hostname.toLocaleLowerCase() === 'api.omi.me';
 }
 
-/** Reviewed Cloud Run DEV host for omi-platform-dev in us-central1. Not every run.app tenant. */
-export function isReviewedDevRunHostname(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[|\]$/g, '').toLocaleLowerCase();
-  return (
-    /^omi-platform-dev-[a-z0-9-]+\.a\.run\.app$/.test(normalized) ||
-    /^omi-platform-dev-[a-z0-9-]+\.us-central1\.run\.app$/.test(normalized)
-  );
-}
-
 export function isAllowedV5Hostname(hostname: string): boolean {
   const normalized = hostname.replace(/^\[|\]$/g, '').toLocaleLowerCase();
   if (isLoopbackHostname(normalized) || isCloudHostname(normalized)) {
     return true;
   }
-  if (isReviewedDevRunHostname(normalized)) {
-    return true;
-  }
+  // Shared-provider Cloud Run suffixes are not a reviewed origin. Stamp an
+  // exact verified hostname before New-plane routing can select GCP DEV.
   return (
     normalized.endsWith('.workers.dev') &&
     normalized.length > '.workers.dev'.length

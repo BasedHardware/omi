@@ -134,43 +134,43 @@ export async function admitMessage(
   const boundAt = Date.now();
 
   try {
-  await db.batch([
-    db
-      .prepare(
-        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
-      )
-      .bind(
-        message.id,
-        accountId,
-        message.text,
-        message.createdAt,
-        position,
-        JSON.stringify(message)
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+        )
+        .bind(
+          message.id,
+          accountId,
+          message.text,
+          message.createdAt,
+          position,
+          JSON.stringify(message)
+        ),
+      db
+        .prepare(
+          "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(
+          input.id,
+          accountId,
+          input.opId,
+          JSON.stringify(input),
+          generationId
+        ),
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '1', 1, ?)"
+        )
+        .bind(
+          generationId,
+          accountId,
+          JSON.stringify({ id: "1", kind: "snapshot", text: "" })
+        ),
+      ...resolved.attachments.map((attachment) =>
+        bindAttachmentStatement(db, accountId, input.id, attachment.id, boundAt)
       ),
-    db
-      .prepare(
-        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
-      )
-      .bind(
-        input.id,
-        accountId,
-        input.opId,
-        JSON.stringify(input),
-        generationId
-      ),
-    db
-      .prepare(
-        "INSERT OR IGNORE INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '1', 1, ?)"
-      )
-      .bind(
-        generationId,
-        accountId,
-        JSON.stringify({ id: "1", kind: "snapshot", text: "" })
-      ),
-    ...resolved.attachments.map((attachment) =>
-      bindAttachmentStatement(db, accountId, input.id, attachment.id, boundAt)
-    ),
-  ]);
+    ]);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "";
     if (detail.includes("UNIQUE constraint failed")) return "conflict";
@@ -360,31 +360,39 @@ export async function completeGeneration(
   const existing = await terminalEvent(db, accountId, generationId);
   if (existing !== null) return existing;
 
-  await appendGenerationEvent(db, accountId, generationId, {
-    id: "2",
-    kind: "done",
-    message,
-  });
-  const storedTerminal = await terminalEvent(db, accountId, generationId);
-  if (storedTerminal === null) throw new Error("generation terminal missing");
-  if (storedTerminal.kind !== "done") return storedTerminal;
-
   const position = await nextPosition(db, accountId);
   const stored = { ...message, revision: String(position) };
-  await db
-    .prepare(
-      "INSERT OR IGNORE INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', ?, ?)"
-    )
-    .bind(
-      stored.id,
-      accountId,
-      stored.text,
-      stored.createdAt,
-      position,
-      JSON.stringify(stored)
-    )
-    .run();
+  const doneEvent: GenerationEvent = { id: "2", kind: "done", message };
+  await db.batch([
+    db
+      .prepare(
+        "INSERT OR IGNORE INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(generationId, accountId, JSON.stringify(doneEvent)),
+    db
+      .prepare(
+        `INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload)
+         SELECT ?, ?, ?, 'ai', ?, 'completed', ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM chat_generation_events
+           WHERE generation_id = ? AND account_id = ? AND event_id = '2'
+             AND instr(payload, '"kind":"done"') > 0
+         )`
+      )
+      .bind(
+        stored.id,
+        accountId,
+        stored.text,
+        stored.createdAt,
+        position,
+        JSON.stringify(stored),
+        generationId,
+        accountId
+      ),
+  ]);
 
+  const storedTerminal = await terminalEvent(db, accountId, generationId);
+  if (storedTerminal === null) throw new Error("generation terminal missing");
   return storedTerminal;
 }
 

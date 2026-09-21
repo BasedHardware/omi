@@ -14,6 +14,50 @@ import {
 
 const directory = new URL("../migrations/", import.meta.url);
 
+test("account-scoped ids let two tenants keep the same chat and task ids", () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(readFileSync(new URL("0001_tasks.sql", directory), "utf8"));
+    db.exec(readFileSync(new URL("0002_chat.sql", directory), "utf8"));
+    db.exec(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES ('shared-msg', 'alice', 'hi', 'human', 1, NULL, 1, '{}')"
+    );
+    expect(() =>
+      db.exec(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES ('shared-msg', 'bob', 'hi', 'human', 1, NULL, 1, '{}')"
+      )
+    ).toThrow();
+    db.exec(
+      readFileSync(new URL("0010_account_scoped_ids.sql", directory), "utf8")
+    );
+    db.exec(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES ('shared-msg', 'bob', 'hi', 'human', 1, NULL, 1, '{}')"
+    );
+    db.exec(
+      "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES ('shared-task', 'alice', 'a', 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+    );
+    db.exec(
+      "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES ('shared-task', 'bob', 'b', 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+    );
+    expect(
+      db
+        .query("SELECT account_id, id FROM chat_messages ORDER BY account_id")
+        .all()
+    ).toEqual([
+      { account_id: "alice", id: "shared-msg" },
+      { account_id: "bob", id: "shared-msg" },
+    ]);
+    expect(
+      db.query("SELECT account_id, id FROM tasks ORDER BY account_id").all()
+    ).toEqual([
+      { account_id: "alice", id: "shared-task" },
+      { account_id: "bob", id: "shared-task" },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
 test("capture ID migration preserves multiple legacy sessions with unknown capture identity", () => {
   const db = new Database(":memory:");
   try {
@@ -386,6 +430,7 @@ describe("D1 migration manifest", () => {
       "0007_device_audio_chunks.sql",
       "0008_device_capture_id.sql",
       "0009_device_capture_time.sql",
+      "0010_account_scoped_ids.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 

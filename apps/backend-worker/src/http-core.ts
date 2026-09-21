@@ -467,6 +467,9 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
 export async function handleLiveSession(
   context: CoreContext
 ): Promise<Response> {
+  if (context.get("accountId").startsWith("firebase:")) {
+    return backendError("service_unavailable", "retry", 503, true);
+  }
   const parsed = await readBoundedJson(context.req.raw, LIVE_REQUEST_MAX_BYTES);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);

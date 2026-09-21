@@ -36,43 +36,6 @@ bool starts_with(std::string_view value, std::string_view prefix) {
   return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
 }
 
-bool ends_with(std::string_view value, std::string_view suffix) {
-  return value.size() >= suffix.size() &&
-         value.substr(value.size() - suffix.size()) == suffix;
-}
-
-bool is_dns_hyphen_label(std::string_view value) {
-  if (value.empty()) {
-    return false;
-  }
-  for (char c : value) {
-    const unsigned char ch = static_cast<unsigned char>(c);
-    if (!(std::islower(ch) || std::isdigit(ch) || c == '-')) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool is_reviewed_dev_run_hostname(std::string_view host) {
-  constexpr std::string_view prefix = "omi-platform-dev-";
-  constexpr std::string_view a_run = ".a.run.app";
-  constexpr std::string_view regional = ".us-central1.run.app";
-  if (!starts_with(host, prefix)) {
-    return false;
-  }
-  if (ends_with(host, a_run) && host.size() > prefix.size() + a_run.size()) {
-    return is_dns_hyphen_label(
-        host.substr(prefix.size(), host.size() - prefix.size() - a_run.size()));
-  }
-  if (ends_with(host, regional) &&
-      host.size() > prefix.size() + regional.size()) {
-    return is_dns_hyphen_label(host.substr(
-        prefix.size(), host.size() - prefix.size() - regional.size()));
-  }
-  return false;
-}
-
 bool example_platform_device_session(std::string_view method,
                                      std::string_view route) {
   constexpr std::string_view prefix = "/v1/device-sessions";
@@ -227,9 +190,6 @@ int32_t omi_backend_is_allowed_v5_hostname(const char* hostname) {
         std::tolower(static_cast<unsigned char>(*p))));
   }
   std::string_view host = normalize_host(lower);
-  if (is_reviewed_dev_run_hostname(host)) {
-    return 1;
-  }
   constexpr std::string_view suffix = ".workers.dev";
   return (host.size() > suffix.size() &&
           host.substr(host.size() - suffix.size()) == suffix)

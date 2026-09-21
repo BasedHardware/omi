@@ -326,7 +326,7 @@ test('automatic refresh does not disturb scrolled lists, open details or loaded 
 test('automatic refresh after remount does not replace a loaded older page', () => {
   const refresh = jest.fn();
   const loadMore = jest.fn();
-  const page = (preserveLoadedPages: boolean) => (
+  const page = (
     <ConversationsPage
       embedded
       outcome={{
@@ -339,14 +339,14 @@ test('automatic refresh after remount does not replace a loaded older page', () 
       loading={false}
       onRefresh={refresh}
       onLoadMore={loadMore}
-      preserveLoadedPages={preserveLoadedPages}
+      preserveLoadedPages
     />
   );
   let tree!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
-    tree = ReactTestRenderer.create(page(false));
+    tree = ReactTestRenderer.create(page);
   });
-  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
   act(() =>
     tree.root
       .findAllByProps({accessibilityLabel: 'Load more conversations'})[0]
@@ -355,10 +355,10 @@ test('automatic refresh after remount does not replace a loaded older page', () 
   expect(loadMore).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
   act(() => {
-    tree = ReactTestRenderer.create(page(true));
+    tree = ReactTestRenderer.create(page);
   });
   act(() => jest.advanceTimersByTime(15000));
-  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
   act(() => tree.unmount());
 });
 
