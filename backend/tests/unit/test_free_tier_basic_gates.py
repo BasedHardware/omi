@@ -280,12 +280,32 @@ def test_actions_variable_reaches_renderers_and_desktop_deploy_without_shell_int
     binding = '${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}'
     action = yaml.safe_load((repo / '.github/actions/deploy-backend-stack/action.yml').read_text())
     steps = {step['name']: step for step in action['runs']['steps']}
+    # A composite action cannot read `vars`; referencing it makes the action fail to
+    # LOAD, which stopped every backend deploy on 2026-09-21. It takes an input, and
+    # only the calling workflows read the variable.
+    action_binding = '${{ inputs.dev_free_tier_local_processing_cohort }}'
+    assert action['inputs']['dev_free_tier_local_processing_cohort']['default'] == ''
     for name in (
         'Render backend runtime env',
         'Validate backend runtime env before deploy',
         'Apply non-secret backend runtime config',
     ):
-        assert steps[name]['env'][key] == binding
+        assert steps[name]['env'][key] == action_binding
+    callers = {
+        'gcp_backend_auto_dev.yml': binding,
+        'gcp_backend.yml': "${{ github.event.inputs.environment == 'development' && vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT || '' }}",
+    }
+    for filename, expected in callers.items():
+        workflow = yaml.safe_load((repo / '.github/workflows' / filename).read_text())
+        uses = [
+            step
+            for job in workflow['jobs'].values()
+            for step in job.get('steps', [])
+            if step.get('uses') == './.github/actions/deploy-backend-stack'
+        ]
+        assert uses
+        for step in uses:
+            assert step['with']['dev_free_tier_local_processing_cohort'] == expected
     for filename in ('gcp_backend_listen_helm.yml', 'gcp_backend_pusher.yml'):
         workflow = yaml.safe_load((repo / '.github/workflows' / filename).read_text())
         config_steps = [
@@ -335,3 +355,25 @@ def test_production_admission_rejects_activation_on_any_host(path, key, value):
     assert any(
         'must remain dark in prod' in error.message for error in validate_free_tier_deploy_contract('prod', config)
     )
+
+
+def test_no_composite_action_reads_a_context_it_cannot_access():
+    """`vars` and `secrets` do not exist inside a composite action.
+
+    GitHub rejects the whole action at load time ("Unrecognized named-value"), so the
+    failure is not the step that used it but every workflow that calls the action.
+    YAML parsing and string-level wiring tests both pass on such a file.
+    """
+    import re
+
+    repo = BACKEND.parent
+    offenders = []
+    for path in sorted((repo / '.github/actions').glob('*/action.y*ml')):
+        action = yaml.safe_load(path.read_text())
+        if (action.get('runs') or {}).get('using') != 'composite':
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            for expression in re.findall(r'\$\{\{(.*?)\}\}', line):
+                if re.search(r'(?<![\w.])(vars|secrets)\.', expression):
+                    offenders.append(f'{path.relative_to(repo)}:{number}: {expression.strip()}')
+    assert not offenders, 'composite actions cannot read vars/secrets; pass an input instead:\n' + '\n'.join(offenders)
