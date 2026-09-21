@@ -33,7 +33,11 @@ def _bash5() -> str | None:
         "/bin/bash",
     ]
     for candidate in dict.fromkeys(entry for entry in candidates if entry):
-        version = subprocess.run([candidate, "--version"], capture_output=True, text=True, check=False).stdout
+        try:
+            version = subprocess.run([candidate, "--version"], capture_output=True, text=True, check=False).stdout
+        except OSError:
+            # Broken/architecturally-mismatched bash on PATH: skip it.
+            continue
         match = re.search(r"version (\d+)\.", version)
         if match and int(match.group(1)) >= 5:
             return candidate
@@ -197,8 +201,10 @@ def test_dev_fails_fast_when_the_deploy_identity_cannot_sign_as_the_named_signer
     preflight = AUTO.index("Validate Firebase probe signer configuration before publishing")
     build = AUTO.index("- name: Build and Push Docker image")
     block = AUTO[preflight:build]
-    assert "test-iam-permissions" in block
-    assert "iam.serviceAccounts.signJwt" in block
+    # gcloud has no service-account test-iam-permissions, so the gate proves
+    # the grant by signing a throwaway JWT via the real sign-jwt primitive.
+    assert "iam service-accounts sign-jwt" in block
+    assert "test-iam-permissions" not in block
     assert "roles/iam.serviceAccountTokenCreator" in block
     assert "add-iam-policy-binding" in block
     # The 2026-09-13 -> 09-20 outage was a GCP_CREDENTIALS key rotated to
