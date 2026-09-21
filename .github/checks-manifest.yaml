@@ -1256,6 +1256,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: ms365-input-coercion-tests
+    command: ["python3", "plugins/omi-ms365-app/test_input_coercion.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15116: normalize recipient inputs and safely coerce date range parameters"
   - id: wikipedia-request-boundary-tests
     command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
