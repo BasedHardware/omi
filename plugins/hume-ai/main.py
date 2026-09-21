@@ -248,7 +248,7 @@ async def handle_audio_stream(
         print(f"Error processing audio: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -376,7 +376,7 @@ async def analyze_text_emotion(
         print(f"Error analyzing text: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/emotion-config")
@@ -462,7 +462,7 @@ async def update_emotion_config(request: Request):
         raise
     except Exception as e:
         print(f"Error updating config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to update configuration")
 
 
 @app.post("/reset-stats")
@@ -492,7 +492,7 @@ async def reset_stats(request: Request):
         raise
     except Exception as e:
         print(f"Error resetting stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to reset statistics")
 
 
 @app.post("/save-emotion-memory")
