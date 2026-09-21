@@ -50,7 +50,7 @@ for _name, _mod in _stubs.items():
     if _name not in sys.modules:
         try:
             __import__(_name)
-        except ImportError:
+        except Exception:
             sys.modules[_name] = _mod
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
