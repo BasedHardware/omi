@@ -21,6 +21,15 @@ const chatSchema = [
   "CREATE UNIQUE INDEX IF NOT EXISTS device_sessions_r2_prefix ON device_sessions (r2_prefix)",
 ];
 
+export async function applyAccountScopedIds(db: D1Database): Promise<void> {
+  await db.exec(
+    readFileSync(
+      new URL("../migrations/0010_account_scoped_ids.sql", import.meta.url),
+      "utf8"
+    )
+  );
+}
+
 export function createD1Mock(): D1Database {
   const db = new Database(":memory:");
   for (const statement of chatSchema) db.exec(statement);

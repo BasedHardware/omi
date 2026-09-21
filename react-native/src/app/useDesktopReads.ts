@@ -32,13 +32,20 @@ async function revalidateLoadedWindow<
 >(
   load: (cursor: string | null) => Promise<T>,
   previousCount: number,
-): Promise<T> {
+  stillCurrent: () => boolean,
+): Promise<T | null> {
   const items: T['items'] = [];
   const ids = new Set<string>();
   let cursor: string | null = null;
   let latest!: T;
   while (items.length < 10000) {
+    if (!stillCurrent()) {
+      return null;
+    }
     latest = await load(cursor);
+    if (!stillCurrent()) {
+      return null;
+    }
     for (const item of latest.items) {
       if (ids.has(item.id)) {
         throw new Error('Loaded page did not advance');
@@ -55,7 +62,7 @@ async function revalidateLoadedWindow<
       break;
     }
   }
-  return {...latest, items};
+  return stillCurrent() ? {...latest, items} : null;
 }
 
 function mergeOutcome<T extends DomainReadOutcome<DesktopReadProjection>>(
@@ -169,6 +176,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         return;
       }
       const seq = ++refreshSeqRef.current;
+      const stillCurrent = () => seq === refreshSeqRef.current;
       conversationPagePendingRef.current = false;
       taskPagePendingRef.current = false;
       setTasksLoadingMore(false);
@@ -185,38 +193,45 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
         const outcomes = await loadDesktopReads(backend);
         // A newer refresh or a gate transition retired this one: its rows
         // belong to a session that is no longer mounted.
-        if (seq !== refreshSeqRef.current) {
+        if (!stillCurrent()) {
           return;
         }
         const previous = readOutcomesRef.current;
-        const transport = omiBackend;
         if (
           conversationsExtendedRef.current &&
           previous?.conversations.status === 'success' &&
-          outcomes.conversations.status === 'success' &&
-          transport != null
+          outcomes.conversations.status === 'success'
         ) {
-          outcomes.conversations = {
-            status: 'success',
-            value: await revalidateLoadedWindow(
-              loadCursor => loadConversations(transport, loadCursor),
-              previous.conversations.value.items.length,
-            ),
-          };
+          const conversations = await revalidateLoadedWindow(
+            loadCursor => loadConversations(backend, loadCursor),
+            previous.conversations.value.items.length,
+            stillCurrent,
+          );
+          if (conversations === null) {
+            return;
+          }
+          outcomes.conversations = {status: 'success', value: conversations};
+        }
+        if (!stillCurrent()) {
+          return;
         }
         if (
           tasksExtendedRef.current &&
           previous?.tasks.status === 'success' &&
-          outcomes.tasks.status === 'success' &&
-          transport != null
+          outcomes.tasks.status === 'success'
         ) {
-          outcomes.tasks = {
-            status: 'success',
-            value: await revalidateLoadedWindow(
-              loadCursor => loadTasks(transport, loadCursor),
-              previous.tasks.value.items.length,
-            ),
-          };
+          const tasks = await revalidateLoadedWindow(
+            loadCursor => loadTasks(backend, loadCursor),
+            previous.tasks.value.items.length,
+            stillCurrent,
+          );
+          if (tasks === null) {
+            return;
+          }
+          outcomes.tasks = {status: 'success', value: tasks};
+        }
+        if (!stillCurrent()) {
+          return;
         }
         const homeOutcomes = [
           outcomes.conversations,
@@ -300,6 +315,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     ) {
       return;
     }
+    const backend = omiBackend;
     const cursor = previous.conversations.value.page.nextCursor;
     const sequence = refreshSeqRef.current;
     conversationPagePendingRef.current = true;
@@ -309,7 +325,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       let replace = false;
       let next;
       try {
-        next = await loadConversations(omiBackend, cursor);
+        next = await loadConversations(backend, cursor);
       } catch (error) {
         if (
           !(error instanceof ConversationCursorExpiredError) ||
@@ -318,7 +334,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           throw error;
         }
         replace = true;
-        next = await loadConversations(omiBackend);
+        next = await loadConversations(backend);
       }
       if (sequence !== refreshSeqRef.current) {
         return;
@@ -380,6 +396,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     ) {
       return;
     }
+    const backend = omiBackend;
     const cursor = previous.tasks.value.page.nextCursor;
     const sequence = refreshSeqRef.current;
     taskPagePendingRef.current = true;
@@ -389,7 +406,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       let replace = false;
       let next;
       try {
-        next = await loadTasks(omiBackend, cursor);
+        next = await loadTasks(backend, cursor);
       } catch (error) {
         if (
           !(error instanceof TaskCursorExpiredError) ||
@@ -398,7 +415,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           throw error;
         }
         replace = true;
-        next = await loadTasks(omiBackend);
+        next = await loadTasks(backend);
       }
       if (sequence !== refreshSeqRef.current) {
         return;
@@ -448,7 +465,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     if (!enabled || omiBackend == null) {
       return null;
     }
+    const backend = omiBackend;
     const sequence = ++refreshSeqRef.current;
+    const stillCurrent = () => sequence === refreshSeqRef.current;
     conversationPagePendingRef.current = false;
     taskPagePendingRef.current = false;
     setTasksLoadingMore(false);
@@ -456,21 +475,24 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     refreshPendingRef.current = true;
     setConversationsLoadingMore(false);
     try {
-      const tasks = await loadTasks(omiBackend);
+      const tasks = await loadTasks(backend);
       const previous = readOutcomesRef.current;
-      if (sequence !== refreshSeqRef.current || previous === null) {
+      if (!stillCurrent() || previous === null) {
         return null;
       }
       const previousTasks =
         previous.tasks.status === 'success' ? previous.tasks.value : null;
-      const transport = omiBackend;
       const mergedTasks =
-        tasksExtendedRef.current && previousTasks !== null && transport != null
+        tasksExtendedRef.current && previousTasks !== null
           ? await revalidateLoadedWindow(
-              loadCursor => loadTasks(transport, loadCursor),
+              loadCursor => loadTasks(backend, loadCursor),
               previousTasks.items.length,
+              stillCurrent,
             )
           : tasks;
+      if (mergedTasks === null || !stillCurrent()) {
+        return null;
+      }
       const next: DesktopReadOutcomes = {
         ...previous,
         tasks: {status: 'success', value: mergedTasks},
@@ -488,7 +510,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     } catch {
       return null;
     } finally {
-      if (sequence === refreshSeqRef.current) refreshPendingRef.current = false;
+      if (stillCurrent()) refreshPendingRef.current = false;
     }
   }, [enabled]);
 
