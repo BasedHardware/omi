@@ -553,7 +553,7 @@ async def sync_local_files(
         )
 
     # Pre-check gates (#5854)
-    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
     if lane_decision.lane == SyncLane.FRESH and hard_restricted:
         return await _fair_use_restriction_response(
             uid=uid,
@@ -569,7 +569,7 @@ async def sync_local_files(
     # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
     # already over the rolling-24h total. Set high enough that no legitimate user hits it;
     # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
-    if lane_decision.lane == SyncLane.FRESH and is_daily_audio_ceiling_exceeded(uid):
+    if lane_decision.lane == SyncLane.FRESH and await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
         logger.info(f'sync: daily audio ceiling reached uid={uid}')
         return await _fair_use_restriction_response(
             uid=uid,
@@ -583,7 +583,7 @@ async def sync_local_files(
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
-    should_lock = not has_transcription_credits(uid)
+    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -692,10 +692,10 @@ async def sync_local_files(
         fair_use_restrict_dg = False
         if FAIR_USE_ENABLED and lane_decision.lane == SyncLane.FRESH:
             try:
-                fair_use_stage = get_enforcement_stage(uid)
+                fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
                 if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     fair_use_restrict_dg = True
-                    dg_budget_blocked = is_dg_budget_exhausted(uid)
+                    dg_budget_blocked = await run_blocking(db_executor, is_dg_budget_exhausted, uid)
             except Exception as e:
                 logger.error(f'sync: DG budget check error for {uid}: {e}')
 
@@ -813,7 +813,9 @@ async def sync_local_files(
         try:
             usage_seconds = int(total_speech_seconds)
             if usage_seconds > 0:
-                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+                await run_blocking(
+                    db_executor, record_usage, uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds
+                )
         except Exception as e:
             logger.error(f'sync: usage record error for {uid}: {e}')
 
