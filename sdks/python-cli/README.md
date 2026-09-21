@@ -56,6 +56,7 @@ omi goal list
 
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
+> Looking for localized guides? See the [Mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md).
 
 ```bash
 omi --json memory list | jq '.[] | {id, content}'

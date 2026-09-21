@@ -78,6 +78,7 @@
 * [`quickstart.lv.md`](quickstart.lv.md) — Pirmie soļi ar omi-cli (Latvian Quickstart).
 * [`quickstart.mk.md`](quickstart.mk.md) — Први чекори со omi-cli (Macedonian Quickstart).
 * [`quickstart.mt.md`](quickstart.mt.md) — Gwida għal Bidu Mgħaġġel ta' omi-cli (Maltese Quickstart).
+* [`quickstart.mwl.md`](quickstart.mwl.md) — purmeiros passos cun omi-cli an mirandés (Mirandese Quickstart).
 * [`quickstart.my.md`](quickstart.my.md) — omi-cli ဖြင့် စတင်အသုံးပြုခြင်း (Burmese Quickstart).
 * [`quickstart.ne.md`](quickstart.ne.md) — omi-cli सँग सुरुवात (Nepali Quickstart).
 * [`quickstart.no.md`](quickstart.no.md) — Kom i gang med omi-cli (Norwegian Quickstart).
