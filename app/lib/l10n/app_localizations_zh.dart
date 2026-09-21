@@ -9923,4 +9923,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => '用新名字更新摘要';
+
+  @override
+  String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 }

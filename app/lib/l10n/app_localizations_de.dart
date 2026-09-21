@@ -10195,4 +10195,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Zusammenfassung mit neuen Namen aktualisieren';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio nicht lesbar — Synchronisierung nicht möglich';
 }

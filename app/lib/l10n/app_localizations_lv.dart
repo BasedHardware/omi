@@ -10136,4 +10136,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Atjaunināt kopsavilkumu ar jaunajiem vārdiem';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
 }

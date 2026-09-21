@@ -10132,4 +10132,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Оновити підсумок з новими іменами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не вдалося прочитати аудіо — синхронізація неможлива';
 }

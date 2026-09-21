@@ -10144,4 +10144,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'ಹೊಸ ಹೆಸರುಗಳೊಂದಿಗೆ ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸಿ';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
 }

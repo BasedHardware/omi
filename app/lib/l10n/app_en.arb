@@ -11925,5 +11925,9 @@
         }
     },
     "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker",
-    "updateSummaryWithNewNames": "Update summary with new names"
+    "updateSummaryWithNewNames": "Update summary with new names",
+    "syncStatusUnsupportedAudio": "Audio couldn't be read — can't be synced",
+    "@syncStatusUnsupportedAudio": {
+        "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
+    }
 }

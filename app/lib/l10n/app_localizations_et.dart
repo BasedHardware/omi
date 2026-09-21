@@ -10106,4 +10106,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Uuenda kokkuvõtet uute nimedega';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 }

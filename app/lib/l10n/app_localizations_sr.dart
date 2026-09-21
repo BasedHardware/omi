@@ -10127,4 +10127,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Ажурирај резиме са новим именима';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Звук не може да се прочита — синхронизација није могућа';
 }

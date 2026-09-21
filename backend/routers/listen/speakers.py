@@ -25,7 +25,7 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
-from utils.transcribe_store import user_db
+from utils.transcribe_store import get_user_name, user_db
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,11 @@ class SpeakerMatcher:
         self.tasks: set[asyncio.Task[Any]] = set()
         self._profile_conversation_id: Optional[str] = None
         self._profile_lock = asyncio.Lock()
+        # The account owner's own first name, so hearing it in the transcript cannot
+        # mint a person who is really the user. Resolved lazily by
+        # resolve_owner_name(); never used for matching, only as a veto.
+        self.owner_name: Optional[str] = None
+        self._owner_name_resolved = False
 
     async def refresh_for_conversation(self, conversation_id: str) -> None:
         async with self._profile_lock:
@@ -66,6 +71,27 @@ class SpeakerMatcher:
             self._profile_conversation_id = conversation_id
             if self.host.state.speaker_id_enabled:
                 await self._load_profiles()
+
+    async def resolve_owner_name(self) -> Optional[str]:
+        """The account owner's first name, resolved at most once per session.
+
+        Deliberately lazy. Text detection only produces a name when a segment
+        matches a self-introduction pattern, which is rare, and that path already
+        makes a person lookup — so the veto costs one extra call there instead of
+        an auth round trip on every conversation refresh. A failure leaves the
+        veto off rather than failing the session.
+        """
+        if self._owner_name_resolved:
+            return self.owner_name
+        self._owner_name_resolved = True
+        try:
+            name = await self.host.persistence.call(get_user_name, self.host.request.uid, False)
+        except Exception as error:
+            logger.error('Speaker ID owner name load failed type=%s', type(error).__name__)
+            return None
+        if name and isinstance(name, str) and name.strip():
+            self.owner_name = name.strip()
+        return self.owner_name
 
     async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:

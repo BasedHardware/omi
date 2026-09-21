@@ -10124,4 +10124,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی';
 }

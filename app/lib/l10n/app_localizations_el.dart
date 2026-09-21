@@ -10182,4 +10182,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Ενημέρωση περίληψης με τα νέα ονόματα';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί';
 }

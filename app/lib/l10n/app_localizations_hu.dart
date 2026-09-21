@@ -10153,4 +10153,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Összefoglaló frissítése az új nevekkel';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
 }

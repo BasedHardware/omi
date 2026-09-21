@@ -10140,4 +10140,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Samenvatting bijwerken met nieuwe namen';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio niet leesbaar — kan niet worden gesynchroniseerd';
 }

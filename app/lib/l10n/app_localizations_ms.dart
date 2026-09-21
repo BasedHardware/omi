@@ -10139,4 +10139,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Kemas kini ringkasan dengan nama baharu';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
 }

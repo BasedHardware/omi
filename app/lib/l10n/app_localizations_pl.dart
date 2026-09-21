@@ -10142,4 +10142,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Zaktualizuj podsumowanie o nowe imiona';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Nie można odczytać dźwięku — synchronizacja niemożliwa';
 }

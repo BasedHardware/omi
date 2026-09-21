@@ -9942,4 +9942,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => '新しい名前で要約を更新';
+
+  @override
+  String get syncStatusUnsupportedAudio => '音声を読み取れません — 同期できません';
 }

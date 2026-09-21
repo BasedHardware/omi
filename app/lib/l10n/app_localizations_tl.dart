@@ -10203,4 +10203,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'I-update ang buod gamit ang mga bagong pangalan';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
 }

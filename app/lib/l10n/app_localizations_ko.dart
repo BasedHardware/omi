@@ -9945,4 +9945,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => '새 이름으로 요약 업데이트';
+
+  @override
+  String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 }
