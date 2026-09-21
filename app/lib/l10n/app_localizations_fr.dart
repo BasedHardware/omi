@@ -10179,4 +10179,24 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voix prête pour la reconnaissance',
+        'saved_sample_awaiting_embedding': 'Échantillon enregistré ; traitement vocal encore nécessaire',
+        'not_learned': 'Voix non apprise',
+        'other': 'État de la voix inconnu',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Étiqueter aussi les propos ultérieurs de cet interlocuteur';
+
+  @override
+  String get updateSummaryWithNewNames => 'Mettre à jour le résumé avec les nouveaux noms';
 }

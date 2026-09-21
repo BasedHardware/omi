@@ -45,3 +45,12 @@ a zero-error job commits the content-completion ledger before publishing complet
 this does not masquerade as speech silence. Provenance mismatches and redirect cycles
 raise `SyncAssignmentConflict` and remain loud retryable upstream errors under the
 existing job error taxonomy. Storage/cleanup failures also retain retry behavior.
+
+## Speaker identity
+
+Speaker IDs are conversation-local. Each independently transcribed WAL chunk
+carries a retry-stable content scope (legacy direct intake uses capture time).
+After duplicate removal, the transaction hydrates the surviving conversation's
+allocator and allocates incoming and donor identities. Legacy donors receive a
+stable conversation/speaker scope. Provider labels and recognized person IDs are
+preserved; equal provider numbers never establish that two voices are the same.

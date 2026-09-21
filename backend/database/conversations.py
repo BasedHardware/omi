@@ -22,6 +22,7 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
+from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment, remap_absorbed_receipt
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -101,6 +102,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
     data = copy.deepcopy(conversation_data)
 
     if 'transcript_segments' not in data:
+        _reveal_manual_speaker_assignments_for_read(data, uid)
         return data
 
     if isinstance(data['transcript_segments'], str):
@@ -127,22 +129,64 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
+    _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
+
+
+def _protect_json_value(value: Any, uid: str, level: str) -> Any:
+    payload = json.dumps(value)
+    compressed = zlib.compress(payload.encode('utf-8'))
+    if level == 'enhanced':
+        return encryption.encrypt(compressed.hex(), uid)
+    return compressed
+
+
+def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, str):
+        payload = encryption.decrypt(raw, uid)
+        if compressed:
+            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+        return json.loads(payload)
+    if isinstance(raw, bytes) and compressed:
+        return json.loads(zlib.decompress(raw).decode('utf-8'))
+    raise ValueError(f'undecodable json blob: {type(raw).__name__} compressed={compressed}')
+
+
+def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> dict:
+    if raw is None:
+        return {}
+    parsed = _reveal_json_value(raw, uid, compressed)
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) -> None:
+    if 'manual_speaker_assignments' not in data:
+        return
+    try:
+        data['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+            uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+        )
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
+        logger.error(f"{error} {uid}")
+        data['manual_speaker_assignments'] = {}
 
 
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
-        segments_json = json.dumps(data['transcript_segments'])
-        compressed_segments_bytes = zlib.compress(segments_json.encode('utf-8'))
+        data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
-
-        if level == 'enhanced':
-            encrypted_segments = encryption.encrypt(compressed_segments_bytes.hex(), uid)
-            data['transcript_segments'] = encrypted_segments
+    if 'manual_speaker_assignments' in data and isinstance(data['manual_speaker_assignments'], dict):
+        receipt = data['manual_speaker_assignments']
+        if receipt:
+            data['manual_speaker_assignments'] = _protect_json_value(receipt, uid, level)
+            data['manual_speaker_assignments_compressed'] = True
         else:
-            data['transcript_segments'] = compressed_segments_bytes
+            data.pop('manual_speaker_assignments', None)
+            data.pop('manual_speaker_assignments_compressed', None)
     return data
 
 
@@ -321,6 +365,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 logger.error(e)
                 pass
 
+    _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
 
@@ -2028,6 +2073,84 @@ def bind_client_processing(
     return _bind(client.transaction())
 
 
+def assign_conversation_speaker(
+    uid: str,
+    conversation_id: str,
+    *,
+    person_id=None,
+    is_user=False,
+    segment_ids=None,
+    speaker_id=None,
+    segment_index=None,
+    use_for_speech_training=True,
+    firestore_client=None,
+):
+    """Commit the manual edit, provenance and invalidation in one transaction."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def assign(transaction):
+        raw = ref.get(transaction=transaction).to_dict()
+        if not raw or raw.get('deleted'):
+            raise LookupError('Conversation not found')
+        if raw.get('is_locked'):
+            raise PermissionError('Conversation is locked')
+        current = copy.deepcopy(raw)
+        current['id'] = conversation_id
+        current['transcript_segments'] = _decode_transcript_segments_strict(
+            uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+        )
+        current['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+        )
+        before = copy.deepcopy(current['transcript_segments'])
+        segments, receipt, resolved, previous = manual_assignment(
+            current,
+            person_id=person_id,
+            is_user=is_user,
+            segment_ids=segment_ids,
+            speaker_id=speaker_id,
+            segment_index=segment_index,
+            use_for_speech_training=use_for_speech_training,
+        )
+        # Read every person before any write; corrections fence in-flight profiles
+        # in the same transaction as the label, not in a later background task.
+        people = {}
+        for pid in previous | ({person_id} if person_id else set()):
+            person_ref = user_ref.collection('people').document(pid)
+            people[pid] = (person_ref, person_ref.get(transaction=transaction).to_dict())
+        if person_id and not people[person_id][1]:
+            raise LookupError('Person not found')
+        removed = []
+        for pid in previous:
+            person_ref, person = people[pid]
+            if not person:
+                continue
+            update = {'updated_at': datetime.now(timezone.utc)}
+            source = person.get('speech_sample_source') or {}
+            if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(resolved):
+                removed.extend(person.get('speech_samples', []))
+                update.update(
+                    speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
+                )
+            transaction.update(person_ref, update)
+        payload = _prepare_conversation_for_write(
+            {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
+            uid,
+            raw.get('data_protection_level', 'standard'),
+        )
+        _invalidate_client_processing(payload)
+        transaction.update(ref, payload)
+        current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
+        for field in PROJECTION_FAMILY_FIELDS:
+            current.pop(field, None)
+        return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
+
+    return run_transactional(client, assign)
+
+
 def update_conversation_segments(
     uid: str,
     conversation_id: str,
@@ -2038,6 +2161,10 @@ def update_conversation_segments(
     started_at: datetime = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
+    return_segments: bool = False,
+    preserve_unseen: bool = False,
+    removed_segment_ids: Optional[List[str]] = None,
+    absorbed_into: Optional[Dict[str, str]] = None,
 ):
     """Replace a conversation's transcript segments.
 
@@ -2057,18 +2184,35 @@ def update_conversation_segments(
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
     @firestore.transactional
-    def _write_segments(transaction) -> bool:
+    def _write_segments(transaction):
         doc_snapshot = doc_ref.get(transaction=transaction)
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
         doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        receipt = decode_manual_speaker_assignments(
+            uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
+        )
+        remap = dict(absorbed_into or {})
+        if remap:
+            receipt = remap_absorbed_receipt(receipt, remap)
+        incoming = list(segments)
+        if preserve_unseen:
+            known = {s.get('id') for s in incoming} | set(removed_segment_ids or [])
+            persisted = _decode_transcript_segments_strict(
+                uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+            )
+            incoming.extend(s for s in persisted if s.get('id') not in known)
+            incoming.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
+        accepted = apply_manual_assignments(incoming, receipt)
         update_payload = {
-            'transcript_segments': segments,
+            'transcript_segments': accepted,
             # Once a live generation has received content, empty cleanup must
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(segments),
         }
+        if remap:
+            update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
             update_payload['finished_at'] = finished_at
         if started_at:
@@ -2082,7 +2226,7 @@ def update_conversation_segments(
             # with finalize) must still be cleared in this same write.
             _invalidate_client_processing(prepared_payload)
         transaction.update(doc_ref, prepared_payload)
-        return True
+        return accepted if return_segments else True
 
     return run_transactional(client, _write_segments)
 
@@ -2430,6 +2574,12 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         result['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
+        if raw.get('manual_speaker_assignments') is not None:
+            result['manual_speaker_assignments'] = decode_manual_speaker_assignments(
+                uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+            )
+        else:
+            result.pop('manual_speaker_assignments', None)
         return result
 
     @firestore.transactional

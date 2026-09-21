@@ -483,6 +483,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   List<String> segmentIds, {
   bool? isUser,
   String? personId,
+  int? speakerId,
 }) async {
   String assignType;
   String? value;
@@ -495,13 +496,17 @@ Future<bool> assignBulkConversationTranscriptSegments(
   }
 
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
+    url: speakerId == null
+        ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
   );
   if (response == null) return false;
-  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 

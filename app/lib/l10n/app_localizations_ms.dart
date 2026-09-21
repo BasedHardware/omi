@@ -10119,4 +10119,24 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Suara sedia untuk pengecaman',
+        'saved_sample_awaiting_embedding': 'Sampel disimpan; pemprosesan suara masih diperlukan',
+        'not_learned': 'Suara belum dipelajari',
+        'other': 'Status suara tidak diketahui',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan kemudian daripada penceramah ini';
+
+  @override
+  String get updateSummaryWithNewNames => 'Kemas kini ringkasan dengan nama baharu';
 }

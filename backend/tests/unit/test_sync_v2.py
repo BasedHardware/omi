@@ -9,6 +9,8 @@ v1 remains completely unchanged.
 """
 
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 
 import asyncio
 import json
@@ -1317,6 +1319,12 @@ class TestAsyncCoordinatorBehavioral:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1463,6 +1471,14 @@ class TestAsyncCoordinatorBehavioral:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3154,6 +3170,12 @@ class TestV2EndpointExecution:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3298,6 +3320,14 @@ class TestV2EndpointExecution:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.

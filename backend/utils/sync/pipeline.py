@@ -909,6 +909,7 @@ def identify_speakers_for_segments(
     audio_bytes: Optional[bytes],
     person_embeddings_cache: Dict[str, dict],
     uid: str,
+    language: Optional[str] = None,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
 
@@ -997,7 +998,7 @@ def identify_speakers_for_segments(
         if speaker_id in speaker_to_person_map:
             continue
         for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
+            detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
@@ -1079,6 +1080,7 @@ def process_segment(
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
+    speaker_scope: Optional[str] = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1146,6 +1148,7 @@ def process_segment(
                 audio_bytes if person_embeddings_cache else None,
                 person_embeddings_cache or {},
                 uid,
+                language=language,
             )
         except Exception as e:
             logger.warning(
@@ -1163,6 +1166,10 @@ def process_segment(
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
+        # The content identity survives job-directory changes and retry. Direct
+        # legacy callers retain a capture-time scope, never one shared by all WALs.
+        for segment in transcript_segments:
+            segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
         segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
         # Target eligibility (including live stubs and tombstones) is resolved
         # inside the same transaction as temporal assignment.
@@ -2096,6 +2103,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
+                    speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
                     client_device_id=client_device_id,

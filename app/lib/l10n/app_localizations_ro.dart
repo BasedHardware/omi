@@ -10139,4 +10139,24 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voce pregătită pentru recunoaștere',
+        'saved_sample_awaiting_embedding': 'Probă salvată; mai este necesară procesarea vocii',
+        'not_learned': 'Vocea nu a fost învățată',
+        'other': 'Starea vocii este necunoscută',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etichetează și vorbirea ulterioară a acestui vorbitor';
+
+  @override
+  String get updateSummaryWithNewNames => 'Actualizează rezumatul cu numele noi';
 }

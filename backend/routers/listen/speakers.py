@@ -55,12 +55,19 @@ class SpeakerMatcher:
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._generation = 0
         self.tasks: set[asyncio.Task[Any]] = set()
+        self._profile_conversation_id: Optional[str] = None
+        self._profile_lock = asyncio.Lock()
 
-    async def load_and_run(self) -> None:
-        state = self.host.state
-        if not state.speaker_id_enabled:
-            state.speaker_id_done.set()
-            return
+    async def refresh_for_conversation(self, conversation_id: str) -> None:
+        async with self._profile_lock:
+            if self._profile_conversation_id == conversation_id:
+                return
+            self.clear()
+            self._profile_conversation_id = conversation_id
+            if self.host.state.speaker_id_enabled:
+                await self._load_profiles()
+
+    async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:
             try:
                 embedding = await self.host.persistence.call(user_db.get_user_speaker_embedding, self.host.request.uid)
@@ -100,11 +107,19 @@ class SpeakerMatcher:
                     self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
+            return
+
+    async def load_and_run(self) -> None:
+        state = self.host.state
+        if not state.speaker_id_enabled:
             state.speaker_id_done.set()
             return
-        if not self.person_embeddings:
-            state.speaker_id_done.set()
-            return
+        # prepare() may already have loaded the first conversation's profiles.
+        # Keep the loop alive even with zero enrolled people so a later
+        # refresh_for_conversation can load a newly taught profile and still
+        # consume the queue in this socket session.
+        if self._profile_conversation_id is None:
+            await self._load_profiles()
         while True:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
@@ -163,14 +178,23 @@ class SpeakerMatcher:
             return None
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
+        conversation_id = self._profile_conversation_id
+        if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
+            return
         generation = self._generation
         lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
         async with lock:
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
-            await self._match_unmapped(speaker_id, segment, generation)
+            await self._match_unmapped(speaker_id, segment, generation, conversation_id)
 
-    async def _match_unmapped(self, speaker_id: int, segment: dict[str, Any], generation: int) -> None:
+    async def _match_unmapped(
+        self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
+    ) -> None:
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
             if ring_buffer is None or segment['duration'] < self.host.limits.speaker_id_min_audio:
@@ -223,7 +247,11 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
             # Reserve only successful embeddings: a failed request may be retried.
             covered.append((extract_start, extract_end))
@@ -256,6 +284,12 @@ class SpeakerMatcher:
                 decision.runner_up_distance,
                 decision.accepted,
             )
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
+                return
             if decision.person_id is not None:
                 best_id = decision.person_id
                 best_name = self.person_embeddings[best_id]['name']
@@ -278,7 +312,7 @@ class SpeakerMatcher:
 
     def clear(self) -> None:
         self._generation += 1
-        self._speaker_locks.clear()
+        self._profile_conversation_id = None
         self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

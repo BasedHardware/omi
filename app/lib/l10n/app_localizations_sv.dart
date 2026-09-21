@@ -10097,4 +10097,24 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Rösten är redo för igenkänning',
+        'saved_sample_awaiting_embedding': 'Prov sparat, röstbearbetning behövs fortfarande',
+        'not_learned': 'Rösten har inte lärts in',
+        'other': 'Röststatus okänd',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Märk även senare tal från den här talaren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Uppdatera sammanfattningen med de nya namnen';
 }

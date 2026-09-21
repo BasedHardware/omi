@@ -10094,4 +10094,24 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Ääni on valmis tunnistettavaksi',
+        'saved_sample_awaiting_embedding': 'Näyte tallennettu, äänen käsittelyä tarvitaan vielä',
+        'not_learned': 'Ääntä ei ole opittu',
+        'other': 'Äänen tila tuntematon',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merkitse myös tämän puhujan myöhempi puhe';
+
+  @override
+  String get updateSummaryWithNewNames => 'Päivitä yhteenveto uusilla nimillä';
 }

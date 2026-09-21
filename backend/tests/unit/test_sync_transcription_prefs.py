@@ -51,7 +51,7 @@ def _make_assigned_conversation():
     }
 
 
-def _detect_speaker_from_text(text: str):
+def _detect_speaker_from_text(text: str, language=None):
     match = re.search(r'\b(?:my name is|i am)\s+([a-z][a-z-]*)', text, re.IGNORECASE)
     return match.group(1).capitalize() if match else None
 
@@ -203,9 +203,10 @@ def _build_fakes() -> dict:
 def _build_intake_fakes() -> dict:
     """Lifecycle stub the refactored pipeline imports at its intake seam.
 
-    ``utils.sync.assignment``, ``utils.sync.merge_dedupe``, and
-    ``utils.conversations.deterministic_minimum`` are dependency-free, so the
-    real implementations are exec'd into ``fakes`` by the fixture instead.
+    ``utils.sync.assignment``, ``utils.sync.merge_dedupe``,
+    ``utils.conversations.deterministic_minimum``, ``utils.manual_speaker_assignments``,
+    and ``utils.stt.speaker_identity`` are dependency-free, so the real
+    implementations are exec'd into ``fakes`` by the fixture instead.
     ``utils.conversations.lifecycle`` carries heavyweight database imports, so
     it is AutoMocked here and tests patch ``ingest_sync_conversation`` at this
     local-import site.
@@ -243,9 +244,13 @@ def sync_module():
 
     # The new seam's pure imports (merge_dedupe, deterministic_minimum, assignment)
     # are dependency-free production code: exec the real modules so they bind the
-    # real models.* (pydantic-only, importable here) instead of mocks.
+    # real models.* (pydantic-only, importable here) instead of mocks. Assignment
+    # also imports the receipt-policy and allocator modules at scope; load those
+    # for real first so a stubbed utils tree cannot substitute MagicMocks.
     _load_real('utils.sync.merge_dedupe', 'utils/sync/merge_dedupe.py')
     _load_real('utils.conversations.deterministic_minimum', 'utils/conversations/deterministic_minimum.py')
+    _load_real('utils.manual_speaker_assignments', 'utils/manual_speaker_assignments.py')
+    _load_real('utils.stt.speaker_identity', 'utils/stt/speaker_identity.py')
     _load_real('utils.sync.assignment', 'utils/sync/assignment.py')
 
     try:

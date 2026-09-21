@@ -10162,4 +10162,24 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Η φωνή είναι έτοιμη για αναγνώριση',
+        'saved_sample_awaiting_embedding': 'Αποθηκευμένο δείγμα, αναμένεται επεξεργασία φωνής',
+        'not_learned': 'Η φωνή δεν έχει μαθευτεί',
+        'other': 'Άγνωστη κατάσταση φωνής',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ενημέρωση περίληψης με τα νέα ονόματα';
 }

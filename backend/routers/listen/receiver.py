@@ -8,6 +8,8 @@ import json
 import logging
 import time
 import uuid
+
+from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -37,7 +39,6 @@ from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
-from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
     MAX_STT_FAILOVERS,
     PendingLiveFailover,
@@ -868,29 +869,43 @@ class ListenReceiver:
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
-        speaker = self.host.speakers
-        updated = update_speaker_assignment_maps(
-            cast(int, payload.get('speaker_id')),
-            cast(str, payload.get('person_id')),
-            cast(str, payload.get('person_name')),
-            segment_ids,
-            speaker.speaker_to_person,
-            speaker.segment_assignments,
-        )
-        if not updated:
+        conversation_id = self.host.state.current_conversation_id
+        if not conversation_id or not isinstance(segment_ids, list) or not all(isinstance(s, str) for s in segment_ids):
             return
+        # REST owns the mutation. A socket payload only wakes the persisted edit;
+        # it cannot expand a selected edit into a speaker-wide inference map.
+        conversation = await self.host.transcripts.cache.get(conversation_id, force_refresh=True)
+        if not conversation:
+            return
+        receipt = conversation.get('manual_speaker_assignments') or {}
+        if not isinstance(receipt, dict):
+            receipt = {}
+        by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
+        speakers = receipt.get('speakers') or {}
+        overrides = receipt.get('segments') or {}
+        for sid in segment_ids:
+            segment = by_id.get(sid) or {}
+            override = overrides.get(sid)
+            covering = speakers.get(str(segment.get('speaker_id')))
+            decisions = [value for value in (override, covering) if value]
+            if not decisions:
+                continue
+            decision = max(decisions, key=lambda value: value.get('generation', 0))
+            self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
+        self.host.state.speaker_map_dirty = True
+        person_id = payload.get('person_id')
         if (
-            payload.get('person_id')
-            and payload.get('person_id') != 'user'
+            isinstance(person_id, str)
+            and person_id
+            and person_id != 'user'
+            and acknowledged_teaching(conversation, person_id, segment_ids)
             and self.host.private_cloud_sync_enabled
             and self.host.send_speaker_sample_request
-            and self.host.state.current_conversation_id
-            and any(self.host.transcripts.current_session_segments.get(segment_id) for segment_id in segment_ids)
         ):
             self.host.spawn(
                 self.host.send_speaker_sample_request(
-                    person_id=payload['person_id'],
-                    conv_id=self.host.state.current_conversation_id,
+                    person_id=person_id,
+                    conv_id=conversation_id,
                     segment_ids=segment_ids,
                 ),
                 name='speaker_sample_request',

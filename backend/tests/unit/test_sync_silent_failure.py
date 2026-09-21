@@ -780,16 +780,26 @@ class TestProcessSegmentReal:
 
     @classmethod
     def setup_class(cls):
+        from utils import manual_speaker_assignments as actual_manual_assignments
+        from utils.stt import speaker_identity as actual_speaker_identity
+
         # Save originals
         cls._saved_modules = {name: sys.modules.get(name) for name in _STUB_MODULES}
         # Also save pipeline if already imported
         cls._saved_modules['utils.sync.pipeline'] = sys.modules.get('utils.sync.pipeline')
         cls._saved_modules['utils.sync'] = sys.modules.get('utils.sync')
+        cls._saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
+        cls._saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
 
         # Install stubs
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
         sys.modules['models'].__path__ = []
+        # Keep receipt policy + allocator real: assignment.py imports them at
+        # module scope, and the stubbed models.transcript_segment is not a package
+        # that can load the policy's real TranscriptSegment binding.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
 
         class _Geolocation:
             def model_dump(self):

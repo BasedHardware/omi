@@ -1,7 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Dict, List, Literal, Optional, Union
-import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -23,7 +22,7 @@ from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
 from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
@@ -392,12 +391,7 @@ class Conversation(BaseModel):
                 if isinstance(raw_segment, Mapping):
                     segment = dict(raw_segment)
                     if not segment.get('id'):
-                        segment['id'] = str(
-                            uuid.uuid5(
-                                uuid.NAMESPACE_URL,
-                                f'omi/conversations/{conversation_id}/transcript-segments/{index}',
-                            )
-                        )
+                        segment['id'] = legacy_conversation_segment_id(conversation_id, index)
                     normalized_segments.append(segment)
                 else:
                     normalized_segments.append(raw_segment)

@@ -10146,4 +10146,24 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Гласот е подготвен за препознавање',
+        'saved_sample_awaiting_embedding': 'Примерокот е зачуван, се чека обработка на гласот',
+        'not_learned': 'Гласот не е научен',
+        'other': 'Статусот на гласот е непознат',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Означи го и подоцнежниот говор на овој говорник';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ажурирај го резимето со новите имиња';
 }

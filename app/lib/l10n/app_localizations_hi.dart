@@ -10071,4 +10071,24 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'आवाज़ पहचान के लिए तैयार है',
+        'saved_sample_awaiting_embedding': 'नमूना सहेजा गया; आवाज़ संसाधन अभी बाकी है',
+        'not_learned': 'आवाज़ सीखी नहीं गई',
+        'other': 'आवाज़ की स्थिति अज्ञात है',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'इस वक्ता की बाद की बात भी टैग करें';
+
+  @override
+  String get updateSummaryWithNewNames => 'नए नामों के साथ सारांश अपडेट करें';
 }

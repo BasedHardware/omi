@@ -1,3 +1,6 @@
+from utils.sync import pipeline
+from routers.listen import transcripts
+
 """Speaker-sample verification must not silently default to English (#12899).
 
 extract_speaker_samples() runs while the conversation is still live, before
@@ -89,3 +92,40 @@ def test_uses_conversation_language_without_consulting_user_preference(monkeypat
     )
 
     assert captured['language'] == "de"
+
+
+def test_sync_name_detection_receives_selected_language(monkeypatch):
+    from utils.sync import pipeline
+    from models.transcript_segment import TranscriptSegment
+
+    seen = []
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda text, language=None: seen.append(language))
+    pipeline.identify_speakers_for_segments(
+        [TranscriptSegment(id='s', text='Texto sintético', is_user=False, start=0, end=5)],
+        None,
+        {},
+        'synthetic',
+        language='pt',
+    )
+    assert seen == ['pt']
+
+
+def test_live_name_detection_receives_session_language(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from routers.listen import transcripts
+    from models.transcript_segment import TranscriptSegment
+
+    seen = []
+    processor = object.__new__(transcripts.TranscriptProcessor)
+    processor.suggested_segments = set()
+    processor.host = SimpleNamespace(
+        language='ja',
+        state=SimpleNamespace(speaker_id_enabled=False),
+        speakers=SimpleNamespace(speaker_to_person={}, person_embeddings={}),
+    )
+    monkeypatch.setattr(transcripts, 'detect_speaker_from_text', lambda text, language=None: seen.append(language))
+    asyncio.run(
+        processor._speaker_detection([TranscriptSegment(id='s', text='合成テキスト', is_user=False, start=0, end=5)], 0)
+    )
+    assert seen == ['ja']

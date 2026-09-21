@@ -9,10 +9,12 @@ from copy import deepcopy
 import re
 from typing import TYPE_CHECKING, Callable, Optional
 
+from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 from utils.conversation_continuity import intervals_connect
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 if TYPE_CHECKING:
     from google.cloud.firestore_v1 import transaction as firestore_transaction
@@ -155,9 +157,15 @@ def assign_in_transaction(
         if len(matched) == before:
             break
 
-    canonical = target_id or (
-        min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
-    )
+    labeled = [cid for cid, row in matched.items() if row.get('manual_speaker_assignments')]
+    if labeled and not target_id:
+        canonical = min(labeled, key=lambda cid: (matched[cid]['started_at'], cid))
+        for cid in [cid for cid in matched if cid != canonical and matched[cid].get('manual_speaker_assignments')]:
+            del matched[cid]
+    else:
+        canonical = target_id or (
+            min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
+        )
     current = matched.get(canonical)
     created = current is None
     records = [decode(raw) for _, raw in sorted(matched.items())]
@@ -170,27 +178,41 @@ def assign_in_transaction(
         result['created_at'] = extent['started_at']
     origin = extent['started_at'].timestamp()
     existing = []
-    for row in records:
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(result.get('transcript_segments', []) if current else [])
+    for row in sorted(records, key=lambda row: row['id'] != canonical):
         new = deepcopy(row.get('transcript_segments', []))
         for segment in new:
             segment['timestamp'] = row['started_at'].timestamp() + segment['start']
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - origin
             segment['end'] = segment['start'] + duration
-        existing += dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+        retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+        if row['id'] != canonical:
+            for segment in retained:
+                if not segment.get('speaker_id_scope'):
+                    segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
+                allocator.assign(segment)
+        existing += retained
     new = deepcopy(incoming['transcript_segments'])
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
     survivors = dedupe_segments_for_merge(
         origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
     )
+    for segment in survivors:
+        allocator.assign(segment)
     segments = existing + deepcopy(survivors)
     segments.sort(key=lambda s: (s['timestamp'], s['end'] - s['start'], s.get('text', '')))
     for segment in segments:
         duration = segment['end'] - segment['start']
         segment['start'] = segment.pop('timestamp') - origin
         segment['end'] = segment['start'] + duration
-    result.update(started_at=extent['started_at'], finished_at=extent['finished_at'], transcript_segments=segments)
+    result.update(
+        started_at=extent['started_at'],
+        finished_at=extent['finished_at'],
+        transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
+    )
     result['has_content'] = bool(segments)
     result['discarded'] = False  # sync relevance demotes visibly; it never discards capture
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
