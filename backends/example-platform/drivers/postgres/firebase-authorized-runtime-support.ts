@@ -61,6 +61,8 @@ export type PostgresFirebaseRuntimeCapability =
   | "memories.read"
   | "memories.write"
   | "memories.export"
+  | "memories.work.accept"
+  | "memories.work.execute"
   | "tasks.read"
   | "tasks.write"
   | "listen.capture.write"
@@ -72,6 +74,8 @@ const POSTGRES_FIREBASE_RUNTIME_CAPABILITIES: ReadonlySet<string> = new Set([
   "memories.read",
   "memories.write",
   "memories.export",
+  "memories.work.accept",
+  "memories.work.execute",
   "tasks.read",
   "tasks.write",
   "listen.capture.write",
