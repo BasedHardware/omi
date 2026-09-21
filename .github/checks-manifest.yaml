@@ -1246,6 +1246,21 @@ checks:
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: shopify-create-order-disambiguation-tests
+    command: ["python3", "plugins/omi-shopify-app/test_create_order_disambiguation.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13999: create_order took the first product at whichever fuzzy tier matched and always ordered variants[0], so a line item could be charged and receipted for a product the customer did not name; the suite existed on main with no lane running it"
+  - id: shopify-create-order-pagination-tests
+    command: ["python3", "plugins/omi-shopify-app/test_create_order_pagination.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "create_order read a single /products.json page and silently missed catalog items beyond it, so a real product was reported as not found; the suite existed on main with no lane running it"
+  - id: shopify-oauth-callback-auth-tests
+    command: ["python3", "plugins/omi-shopify-app/test_oauth_callback_auth.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14442: the callback computed the Shopify HMAC but never checked it and used the raw uid as state, so a valid foreign grant could be rebound onto any account; the suite existed on main with no lane running it"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
