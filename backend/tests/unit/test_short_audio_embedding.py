@@ -15,6 +15,7 @@ from utils.stt.speaker_embedding import (
     MIN_EMBEDDING_AUDIO_DURATION,
     _get_wav_duration,
     extract_embedding_from_bytes,
+    speaker_embedding_configured,
 )
 
 
@@ -104,3 +105,40 @@ class TestExtractEmbeddingFromBytesValidation:
         # The actual env var is read at import time, so we verify the default
         assert MIN_EMBEDDING_AUDIO_DURATION >= 0.1  # Sane minimum
         assert MIN_EMBEDDING_AUDIO_DURATION <= 5.0  # Sane maximum
+
+
+class TestSpeakerEmbeddingConfiguration:
+    def test_unset_url_is_not_configured(self, monkeypatch):
+        import utils.stt.speaker_embedding as embedding
+
+        monkeypatch.delenv('HOSTED_SPEAKER_EMBEDDING_API_URL', raising=False)
+        monkeypatch.setattr(embedding, '_UNCONFIGURED_WARNED', False)
+        assert speaker_embedding_configured() is False
+
+    def test_unset_url_warns_and_records_fallback_once(self, monkeypatch):
+        import utils.stt.speaker_embedding as embedding
+
+        calls: list[dict[str, str]] = []
+
+        def _record_fallback(**kwargs: object) -> None:
+            calls.append({key: str(value) for key, value in kwargs.items() if key != 'log'})
+
+        monkeypatch.delenv('HOSTED_SPEAKER_EMBEDDING_API_URL', raising=False)
+        monkeypatch.setattr(embedding, '_UNCONFIGURED_WARNED', False)
+        monkeypatch.setattr(embedding, 'record_fallback', _record_fallback)
+
+        assert speaker_embedding_configured() is False
+        assert speaker_embedding_configured() is False
+        assert calls == [
+            {
+                'component': 'other',
+                'from_mode': 'speaker_embedding',
+                'to_mode': 'unlabeled',
+                'reason': 'config_incomplete',
+                'outcome': 'degraded',
+            }
+        ]
+
+    def test_set_url_is_configured(self, monkeypatch):
+        monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://diarizer.example:80')
+        assert speaker_embedding_configured() is True

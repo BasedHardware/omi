@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-13 (cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
+> Last updated: 2026-09-21 (Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -679,6 +679,10 @@ means audio exists but processing is still needed, not that a job is running;
 `not_learned` means no samples; missing/legacy/malformed evidence is `unknown`.
 Live v3 embedding recovery remains available. Offline matching still uses the
 longest clip with a 1s gate; this PR does not change that policy divergence.
+Offline sync on Cloud Run calls the same Embedding API through
+`HOSTED_SPEAKER_EMBEDDING_API_URL`. That binding must be the diarizer
+GCE-internal ILB hostname used by GKE backend-listen and pusher — not the
+in-cluster `*.svc.cluster.local` URL that only in-cluster Parakeet can reach.
 
 `is_user` remains the compatibility projection, while
 `speaker_identity_status` preserves its evidence state: `user`, `not_user`,

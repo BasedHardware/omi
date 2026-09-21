@@ -119,7 +119,11 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_embedding import (
+    compare_embeddings,
+    extract_embedding_from_bytes,
+    speaker_embedding_configured,
+)
 from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
@@ -916,7 +920,8 @@ def identify_speakers_for_segments(
     Modifies segments in-place by assigning person_id and is_user fields.
 
     Steps:
-    1. Voice embedding matching (requires audio_bytes and non-empty cache):
+    1. Voice embedding matching (requires audio_bytes, a non-empty cache, and
+       HOSTED_SPEAKER_EMBEDDING_API_URL):
        For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
        get embedding, match against person_embeddings_cache.
     2. Text-based detection ("I am X") runs independently for all unmatched speakers.
@@ -936,7 +941,7 @@ def identify_speakers_for_segments(
     # (diarization tells us speakers are distinct — no person can be two speakers).
     matched_person_ids: set = set()
 
-    if audio_bytes and person_embeddings_cache:
+    if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
         # Sort speakers by best single segment duration (longest first) — this is the clip
         # actually used for embedding, so it determines match quality.
         # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
