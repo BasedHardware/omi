@@ -265,3 +265,42 @@ def test_sync_bridge_retraction_does_not_claim_the_account_destructive_gate(monk
     monkeypatch.setattr(merge, 'delete_vector', MagicMock())
     merge.retract_sync_bridge_source('u', 'donor')
     assert seen.get('claim_destructive_gate') is False
+
+
+def test_bridge_failure_log_includes_bounded_reason(system, caplog):
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    retract.side_effect = RuntimeError('canonical retraction conflicted repeatedly')
+    with caplog.at_level('ERROR'):
+        with pytest.raises(RuntimeError, match='canonical retraction conflicted repeatedly'):
+            ingest(2)
+    assert any(
+        'event=sync_bridge outcome=failed' in record.message
+        and 'exception_type=RuntimeError' in record.message
+        and 'reason=canonical retraction conflicted repeatedly' in record.message
+        for record in caplog.records
+    )
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    assert 'sync_bridge_cleaned_revision' not in donor
+    copy.assert_not_called()
+
+
+def test_bare_assertion_failure_logs_empty_reason_and_does_not_receipt(system, caplog):
+    """A stripped AssertionError must be diagnosable as reason=empty, not silent."""
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    retract.side_effect = AssertionError()
+    with caplog.at_level('ERROR'):
+        with pytest.raises(AssertionError):
+            ingest(2)
+    assert any(
+        'event=sync_bridge outcome=failed' in record.message
+        and 'exception_type=AssertionError' in record.message
+        and 'reason=empty' in record.message
+        for record in caplog.records
+    )
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    assert 'sync_bridge_cleaned_revision' not in donor
+    copy.assert_not_called()
