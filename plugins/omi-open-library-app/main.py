@@ -310,8 +310,8 @@ async def search_books(payload: dict[str, Any]):
             heading_parts.append(f"subject {subject}")
         heading = "Books for " + ", ".join(heading_parts)
         return ChatToolResponse(result=heading + ":\n\n" + "\n\n".join(_format_book(doc, i + 1) for i, doc in enumerate(docs)))
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"Open Library search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Open Library search failed.")
 
 
 @app.post("/tools/get_book_details", response_model=ChatToolResponse)
@@ -384,9 +384,9 @@ async def get_book_details(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             return ChatToolResponse(result="No matching Open Library record found.")
-        return ChatToolResponse(error=f"Open Library details request failed: {exc}")
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"Open Library details request failed: {exc}")
+        return ChatToolResponse(error=f"Open Library details request failed with status {exc.response.status_code}.")
+    except Exception:
+        return ChatToolResponse(error="Open Library details request failed.")
 
 
 @app.post("/tools/search_subject", response_model=ChatToolResponse)
@@ -410,6 +410,6 @@ async def search_subject(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             return ChatToolResponse(result=f"No Open Library subject found for {subject}.")
-        return ChatToolResponse(error=f"Open Library subject search failed: {exc}")
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"Open Library subject search failed: {exc}")
+        return ChatToolResponse(error=f"Open Library subject search failed with status {exc.response.status_code}.")
+    except Exception:
+        return ChatToolResponse(error="Open Library subject search failed.")
