@@ -10,27 +10,24 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 
-ServerConversation conversation({
-  ConversationStatus status = ConversationStatus.completed,
-  String overview = 'Summary',
-}) => ServerConversation(
-  id: 'c',
-  createdAt: DateTime(2026),
-  structured: Structured('Title', overview),
-  status: status,
-  transcriptSegments: [
-    TranscriptSegment(
-      id: 's',
-      text: 'Synthetic speech',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      translations: [],
-      start: 0,
-      end: 3,
-    ),
-  ],
-);
+ServerConversation conversation(
+        {ConversationStatus status = ConversationStatus.completed, String overview = 'Summary'}) =>
+    ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('Title', overview),
+        status: status,
+        transcriptSegments: [
+          TranscriptSegment(
+              id: 's',
+              text: 'Synthetic speech',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              translations: [],
+              start: 0,
+              end: 3)
+        ]);
 
 void select(ConversationDetailProvider provider, ServerConversation value) {
   provider.selectedDate = value.createdAt;
@@ -44,12 +41,10 @@ void main() {
   });
   test('transport exception preserves identity and permits an acknowledged retry', () async {
     var fail = true;
-    final provider = ConversationDetailProvider(
-      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
-        if (fail) throw StateError('synthetic transport failure');
-        return true;
-      },
-    );
+    final provider = ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
+      if (fail) throw StateError('synthetic transport failure');
+      return true;
+    });
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
     expect(provider.conversation.transcriptSegments.single.personId, isNull);
@@ -65,9 +60,8 @@ void main() {
     for (final status in [ConversationStatus.completed, ConversationStatus.in_progress]) {
       for (final overview in ['Summary', '']) {
         var saved = false;
-        final provider = ConversationDetailProvider(
-          assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => saved,
-        );
+        final provider =
+            ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => saved);
         select(provider, conversation(status: status, overview: overview));
         expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
         expect(provider.conversation.transcriptSegments.single.personId, isNull);
@@ -89,28 +83,23 @@ void main() {
     provider.dispose();
   });
 
-  testWidgets('explicit action runs once, retains label and retry after failure, replaces detail on success', (
-    tester,
-  ) async {
+  testWidgets('explicit action runs once, retains label and retry after failure, replaces detail on success',
+      (tester) async {
     final result = Completer<ServerConversation?>();
     int requests = 0;
     bool fail = true;
     final provider = ConversationDetailProvider(
-      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-      reprocess: (id, {appId}) async {
-        requests++;
-        return fail ? await result.future : conversation(overview: 'Named summary');
-      },
-    );
+        assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+        reprocess: (id, {appId}) async {
+          requests++;
+          return fail ? await result.future : conversation(overview: 'Named summary');
+        });
     select(provider, conversation());
     await provider.assignSpeaker(['s'], 'new');
-    await tester.pumpWidget(
-      MaterialApp(
+    await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: SpeakerSummaryAction(provider: provider)),
-      ),
-    );
+        home: Scaffold(body: SpeakerSummaryAction(provider: provider))));
     expect(requests, 0);
     await tester.tap(find.byKey(const ValueKey('speaker-summary-refresh')));
     await tester.pump();
@@ -135,12 +124,11 @@ void main() {
     final saved = Completer<bool>();
     int reprocessCalls = 0;
     final provider = ConversationDetailProvider(
-      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => saved.future,
-      reprocess: (id, {appId}) async {
-        reprocessCalls++;
-        return null;
-      },
-    );
+        assignSpeaker: (id, ids, {isUser, personId, speakerId}) => saved.future,
+        reprocess: (id, {appId}) async {
+          reprocessCalls++;
+          return null;
+        });
     select(provider, conversation());
     final assignment = provider.assignSpeaker(['s'], 'new');
     expect(await provider.reprocessConversation(), isFalse);
