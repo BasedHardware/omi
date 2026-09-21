@@ -160,9 +160,9 @@ async def test_listen_sample_collects_a_final_segment_that_lands_after_one_failo
 
 @pytest.mark.asyncio
 async def test_listen_sample_still_fails_closed_when_the_phrase_never_lands(monkeypatch, probe):
-    """A provider that never delivers the phrase must keep failing the probe at
-    the bounded window: extending the tail tolerates one failover, not a dead
-    pipeline."""
+    """A provider that never delivers the phrase must keep failing the probe:
+    the live window reports no match, and the durable readback rejects a
+    completed conversation whose transcript lacks the fixture phrase."""
     clock = [0.0]
     socket = _FailoverListenSocket('conversation-1', 90.0, clock)
     _install_fake_timeline(monkeypatch, probe, clock)
@@ -173,7 +173,91 @@ async def test_listen_sample_still_fails_closed_when_the_phrase_never_lands(monk
         expected_phrase='he began a confused complaint against the wizard',
     )
 
-    with pytest.raises(probe.ProbeError, match='transcript_mismatch'):
-        await probe._listen_sample('https://api.example.invalid', 'token', fixture, 'conversation-1')
+    matched, transcript = await probe._listen_sample('https://api.example.invalid', 'token', fixture, 'conversation-1')
 
-    assert not socket.closed
+    assert matched is False
+    # The failover socket delivered a partial early segment only; the phrase
+    # as a whole never landed inside the live window.
+    assert 'complaint against the wizard' not in transcript
+    # The socket closes gracefully; acceptance is decided by the durable
+    # readback below, not by the live window.
+    assert socket.closed
+
+    responses = iter(
+        [
+            (
+                200,
+                {
+                    'status': 'completed',
+                    'terminal': True,
+                    'terminal_outcome': 'success',
+                    'fanout_status': 'completed',
+                },
+            ),
+            (
+                200,
+                {'id': 'conversation-1', 'status': 'completed', 'transcript_segments': [{'text': 'unrelated words'}]},
+            ),
+        ]
+    )
+    monkeypatch.setattr(probe, '_http_json', lambda *_args: next(responses))
+    with pytest.raises(probe.ProbeError, match='transcript_mismatch'):
+        await probe._terminal_readback(
+            'https://api.example.invalid', 'token', 'conversation-1', 1, expected_phrase=fixture.expected_phrase
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('durable_segments', 'should_pass'),
+    [
+        ([{'text': 'He began a confused complaint against the wizard who had vanished.'}], True),
+        ([{'text': 'partial audio only'}], False),
+    ],
+)
+async def test_terminal_readback_enforces_the_fixture_phrase_in_the_durable_transcript(
+    monkeypatch, probe, durable_segments, should_pass
+):
+    """The durable completed conversation is the release contract: the fixture
+    phrase must appear in its transcript segments regardless of whether the
+    live streaming window or the batch finalization path produced it."""
+    responses = iter(
+        [
+            (
+                200,
+                {
+                    'status': 'completed',
+                    'terminal': True,
+                    'terminal_outcome': 'success',
+                    'fanout_status': 'completed',
+                },
+            ),
+            (
+                200,
+                {
+                    'id': 'conversation-1',
+                    'status': 'completed',
+                    'transcript_segments': durable_segments,
+                },
+            ),
+        ]
+    )
+    monkeypatch.setattr(probe, '_http_json', lambda *_args: next(responses))
+
+    if should_pass:
+        await probe._terminal_readback(
+            'https://api.example.invalid',
+            'token',
+            'conversation-1',
+            1,
+            expected_phrase='he began a confused complaint against the wizard',
+        )
+    else:
+        with pytest.raises(probe.ProbeError, match='transcript_mismatch'):
+            await probe._terminal_readback(
+                'https://api.example.invalid',
+                'token',
+                'conversation-1',
+                1,
+                expected_phrase='he began a confused complaint against the wizard',
+            )

@@ -135,7 +135,7 @@ async def _receive_json(websocket: Any, deadline: float) -> Any:
 
 async def _listen_sample(
     base_url: str, token: str, fixture: Fixture, conversation_id: str, *, allow_local_http: bool = False
-) -> None:
+) -> tuple[bool, str]:
     parsed = urllib.parse.urlparse(base_url)
     local_http = allow_local_http and parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
     if (parsed.scheme != "https" and not local_http) or not parsed.netloc or parsed.path not in {"", "/"}:
@@ -211,10 +211,15 @@ async def _listen_sample(
             await receiver
         except asyncio.CancelledError:
             pass
-        combined = _normalize(" ".join(transcripts))
-        if fixture.expected_phrase not in combined:
-            raise ProbeError("transcript_mismatch")
+        # Live-window segment delivery is recorded as a diagnostic, not an
+        # acceptance gate: the development desktop listen path finalizes STT
+        # through a batch provider call that can land at/after the window
+        # close (runs 35513163118/35517257170/35560625558), and the durable
+        # contract is asserted below via the terminal finalization readback
+        # and the completed conversation's transcript segments.
+        live_window_combined = _normalize(" ".join(transcripts))
         await websocket.close(code=1000, reason="release_probe_complete")
+        return fixture.expected_phrase in live_window_combined, live_window_combined
 
 
 def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
@@ -236,7 +241,9 @@ def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
     return status, payload if isinstance(payload, dict) else None
 
 
-async def _terminal_readback(base_url: str, token: str, conversation_id: str, timeout_seconds: int) -> None:
+async def _terminal_readback(
+    base_url: str, token: str, conversation_id: str, timeout_seconds: int, *, expected_phrase: str | None = None
+) -> None:
     quoted_id = urllib.parse.quote(conversation_id, safe="")
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -265,6 +272,20 @@ async def _terminal_readback(base_url: str, token: str, conversation_id: str, ti
         or not conversation.get("transcript_segments")
     ):
         raise ProbeError("consumer_readback")
+    if expected_phrase is not None:
+        # The durable transcript is the release contract: every recognized
+        # pipeline (live streaming or batch finalization) must have produced
+        # the fixture phrase in the completed conversation.
+        segments = conversation.get("transcript_segments") or []
+        durable_text = _normalize(
+            " ".join(
+                str(segment.get("text", ""))
+                for segment in segments
+                if isinstance(segment, dict) and segment.get("text")
+            )
+        )
+        if expected_phrase not in durable_text:
+            raise ProbeError("transcript_mismatch")
 
 
 async def _observe_candidate_pusher(
@@ -327,6 +348,8 @@ def _receipt(
     ended_at: str,
     candidate_pod_count: int,
     failure_stage: str | None,
+    live_window_matched: bool | None = None,
+    live_window_transcript: str = "",
 ) -> dict[str, Any]:
     image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
     receipt: dict[str, Any] = {
@@ -350,6 +373,10 @@ def _receipt(
             "candidate_pod_count": candidate_pod_count,
         },
         "consumer_readback": {"status": "PASS" if status == "PASS" else "FAIL"},
+        "live_segment_window": {
+            "matched": live_window_matched,
+            "segment_text_chars": len(live_window_transcript),
+        },
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
@@ -361,6 +388,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     evidence_id = f"pusher-dev-{args.run_id}-{uuid.uuid4().hex}"
     failure_stage: str | None = None
     candidate_pod_count = 0
+    receipt_kwargs: dict[str, Any] = {}
     try:
         token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
@@ -374,16 +402,26 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             ).hexdigest()
         )
         conversation_id = str(uuid.uuid4())
-        await _listen_sample(
+        live_window_matched, live_window_transcript = await _listen_sample(
             args.api_url.rstrip("/"), token, fixture, conversation_id, allow_local_http=args.allow_local_http
         )
-        await _terminal_readback(args.api_url.rstrip("/"), token, conversation_id, args.finalization_timeout_seconds)
+        await _terminal_readback(
+            args.api_url.rstrip("/"),
+            token,
+            conversation_id,
+            args.finalization_timeout_seconds,
+            expected_phrase=fixture.expected_phrase,
+        )
         candidate_pod_count = await _observe_candidate_pusher(
             deployment_receipt,
             conversation_id=conversation_id,
             project=args.project,
             namespace=args.namespace,
         )
+        receipt_kwargs = {
+            "live_window_matched": live_window_matched,
+            "live_window_transcript": live_window_transcript,
+        }
     except (OSError, json.JSONDecodeError, ProbeError) as error:
         failure_stage = error.stage if isinstance(error, ProbeError) else "deployment_receipt"
         deployment_receipt = locals().get("deployment_receipt", {})
@@ -403,6 +441,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             ended_at=ended_at,
             candidate_pod_count=candidate_pod_count,
             failure_stage=failure_stage,
+            **receipt_kwargs,
         ),
         passed,
     )
