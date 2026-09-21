@@ -7,8 +7,11 @@ Use this recipe to analyze and organize your Omi memories in Excel, Google Sheet
 Export your memories in JSON format:
 
 ```bash
-omi --json memory list > memories.json
+omi --json memory list --limit 200 > memories.json
 ```
+
+The default limit is 25 items. Use `--limit` to export more — raise the value
+as needed, or page through results with `--offset` for large accounts.
 
 Or pipe directly into the converter script without saving an intermediate file.
 
