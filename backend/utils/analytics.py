@@ -8,6 +8,7 @@ def billable_transcription_seconds(
     last_usage_record_timestamp: Optional[float],
     last_audio_received_time: Optional[float],
     current_time: float,
+    last_audio_resume_time: Optional[float] = None,
 ) -> int:
     """Listening seconds to bill since the last usage record, clamped to the last
     audio byte actually received (#4700).
@@ -16,11 +17,19 @@ def billable_transcription_seconds(
     stops sending audio; counting raw wall-clock time then accrues phantom
     listening minutes for hours. No audio streamed also means no STT vendor cost,
     so idle socket time must not be billed.
+
+    `last_audio_resume_time` floors the window start: flushes that fired while
+    no audio was arriving advance `last_usage_record_timestamp` through silence,
+    so the first flush after audio resumes would otherwise bill the silent gap
+    between that flush and the resume point (#15263).
     """
     if not last_usage_record_timestamp:
         return 0
+    billable_from = last_usage_record_timestamp
+    if last_audio_resume_time is not None and last_audio_resume_time > billable_from:
+        billable_from = last_audio_resume_time
     billable_until = min(current_time, last_audio_received_time or current_time)
-    return max(0, int(billable_until - last_usage_record_timestamp))
+    return max(0, int(billable_until - billable_from))
 
 
 def record_usage(
