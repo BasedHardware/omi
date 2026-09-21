@@ -1,5 +1,14 @@
 import type { DesktopReadOutcomes } from "../../../react-native/src/desktopReadClient";
 
+// Example output for a synthetic profile, not a live AI response.
+export const previewDailyIdea = {
+  interests: ["Walking", "Creative projects"],
+  title: "Take your ideas on a detour.",
+  body: "On your next walk, take one unfamiliar turn and notice three things you usually miss. Bring one back as an idea for your next project.",
+  prompt:
+    "Give me a playful 10-minute walking challenge that combines getting outside with noticing design details. Keep it low-key and easy to try today.",
+};
+
 // Synthetic, local-only data. Never connected to an account or persisted.
 export function previewOutcomes(empty = false): DesktopReadOutcomes {
   const now = new Date();
