@@ -255,6 +255,29 @@ test('Settings exposes real native app permissions even if cloud account reads f
   }
 });
 
+test('web Settings distinguishes an unavailable producer from a generic 503', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 503,
+    body: JSON.stringify({error: 'service_unavailable'}),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain(
+      'Account profile is unavailable until an owner-backed producer exists',
+    );
+    expect(textOf(renderer)).not.toContain('service-settings-read');
+    expect(textOf(renderer)).not.toContain('503');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
 test('web Settings hides request details and offers a real retry after failure', async () => {
   const originalPlatform = Platform.OS;
   Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});

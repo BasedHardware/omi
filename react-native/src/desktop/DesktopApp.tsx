@@ -225,7 +225,9 @@ export function DesktopApp({
           if (next === 'Recall') {
             setRoute('Rewind');
           } else if (next === 'Search') {
-            if (route === 'Chat' || route === 'Rewind') {
+            if (route === 'Chat') {
+              setRoute(beforeChat.current.route);
+            } else if (route === 'Rewind') {
               setRoute('Home');
             }
           } else if (route === 'Rewind') {

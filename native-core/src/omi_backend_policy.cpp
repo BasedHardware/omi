@@ -36,6 +36,75 @@ bool starts_with(std::string_view value, std::string_view prefix) {
   return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
 }
 
+bool ends_with(std::string_view value, std::string_view suffix) {
+  return value.size() >= suffix.size() &&
+         value.substr(value.size() - suffix.size()) == suffix;
+}
+
+bool is_dns_hyphen_label(std::string_view value) {
+  if (value.empty()) {
+    return false;
+  }
+  for (char c : value) {
+    const unsigned char ch = static_cast<unsigned char>(c);
+    if (!(std::islower(ch) || std::isdigit(ch) || c == '-')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool is_reviewed_dev_run_hostname(std::string_view host) {
+  constexpr std::string_view prefix = "omi-platform-dev-";
+  constexpr std::string_view a_run = ".a.run.app";
+  constexpr std::string_view regional = ".us-central1.run.app";
+  if (!starts_with(host, prefix)) {
+    return false;
+  }
+  if (ends_with(host, a_run) && host.size() > prefix.size() + a_run.size()) {
+    return is_dns_hyphen_label(
+        host.substr(prefix.size(), host.size() - prefix.size() - a_run.size()));
+  }
+  if (ends_with(host, regional) &&
+      host.size() > prefix.size() + regional.size()) {
+    return is_dns_hyphen_label(host.substr(
+        prefix.size(), host.size() - prefix.size() - regional.size()));
+  }
+  return false;
+}
+
+bool example_platform_device_session(std::string_view method,
+                                     std::string_view route) {
+  constexpr std::string_view prefix = "/v1/device-sessions";
+  if (route == prefix) {
+    return method == "POST";
+  }
+  if (!starts_with(route, "/v1/device-sessions/")) {
+    return false;
+  }
+  const std::string_view rest = route.substr(std::strlen("/v1/device-sessions/"));
+  if (rest.empty() || rest.front() == '/') {
+    return false;
+  }
+  if (method == "GET" && rest == "ownership") {
+    return true;
+  }
+  const size_t slash = rest.find('/');
+  if (slash == std::string_view::npos) {
+    return method == "GET";
+  }
+  const std::string_view id = rest.substr(0, slash);
+  const std::string_view tail = rest.substr(slash + 1);
+  if (id.empty() || id.find('/') != std::string_view::npos) {
+    return false;
+  }
+  if (method == "GET") {
+    return tail == "transcript";
+  }
+  return method == "POST" &&
+         (tail == "audio" || tail == "complete" || tail == "transcribe");
+}
+
 bool is_capture_route(std::string_view route) {
   return route == "/v1/settings" || route == "/v1/live/sessions" ||
          route == "/v1/chat-messages" || starts_with(route, "/v1/chat-generations/") ||
@@ -108,12 +177,18 @@ int32_t omi_backend_example_platform_supported(const char* method,
   }
   const std::string_view route = strip_route(path);
   if (std::strcmp(method, "GET") == 0) {
-    return (route == "/v1/conversations" || route == "/v1/memories" ||
-            route == "/v1/tasks")
-               ? 1
-               : 0;
+    if (route == "/v1/settings" || route == "/v1/chat-messages" ||
+        route == "/v1/conversations" || route == "/v1/memories" ||
+        route == "/v1/tasks") {
+      return 1;
+    }
+    return example_platform_device_session("GET", route) ? 1 : 0;
   }
   if (std::strcmp(method, "POST") == 0 && route == "/v1/tasks/ops") {
+    return 1;
+  }
+  if (std::strcmp(method, "POST") == 0 &&
+      example_platform_device_session("POST", route)) {
     return 1;
   }
   return 0;
@@ -152,6 +227,9 @@ int32_t omi_backend_is_allowed_v5_hostname(const char* hostname) {
         std::tolower(static_cast<unsigned char>(*p))));
   }
   std::string_view host = normalize_host(lower);
+  if (is_reviewed_dev_run_hostname(host)) {
+    return 1;
+  }
   constexpr std::string_view suffix = ".workers.dev";
   return (host.size() > suffix.size() &&
           host.substr(host.size() - suffix.size()) == suffix)

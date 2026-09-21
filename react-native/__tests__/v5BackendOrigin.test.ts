@@ -52,6 +52,25 @@ test('http and credentialed V5 URLs are rejected', () => {
   ).toEqual({ok: false, reason: 'rejected'});
 });
 
+test('reviewed Cloud Run DEV hosts are allowed and other run.app tenants are not', () => {
+  const reviewed = 'https://omi-platform-dev-abcdef012345-uc.a.run.app';
+  expect(validateV5BackendUrl(reviewed)?.origin).toBe(reviewed);
+  expect(
+    validateV5BackendUrl(
+      'https://omi-platform-dev-abcdef012345.us-central1.run.app',
+    )?.origin,
+  ).toBe('https://omi-platform-dev-abcdef012345.us-central1.run.app');
+  expect(
+    resolveNativeRequestOrigin({
+      path: '/v1/chat-messages',
+      softwarePlane: 'new',
+      v5BackendUrl: reviewed,
+    }),
+  ).toEqual({ok: true, origin: reviewed});
+  expect(validateV5BackendUrl('https://other-service-uc.a.run.app')).toBeNull();
+  expect(validateV5BackendUrl('https://omi-platform-prod-uc.a.run.app')).toBeNull();
+});
+
 test('random hosts are rejected', () => {
   expect(validateV5BackendUrl('https://evil.example')).toBeNull();
   expect(validateV5BackendUrl('https://example.com')).toBeNull();

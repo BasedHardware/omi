@@ -39,8 +39,14 @@ public final class BackendTransportTest {
     assert !OmiBackendTransport.softwarePlaneIsNew("old");
     assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/tasks?limit=2");
     assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks/ops");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/settings");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/chat-messages?limit=50");
+    assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/device-sessions/ownership");
+    assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/device-sessions");
     assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/tasks/ops");
     assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks");
+    assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/chat-messages");
+    assert !OmiBackendTransport.examplePlatformSupported("GET", "/v1/chat-generations/one/events");
     OmiBackendTransport.RequestPlan transcribe = OmiBackendTransport.planRequest(
       "POST", "/v1/device-sessions/id/transcribe");
     assert transcribe.valid;

@@ -54,7 +54,7 @@ import {
   projectDeviceTranscription,
   type TranscriptionAI,
 } from "./device-transcriptions";
-import { parseTaskLimit, readTasks } from "./tasks";
+
 import {
   backendError,
   isChatCreate,
@@ -444,10 +444,16 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  const accountId = context.get("accountId");
+  // Firebase sessions have no owner-backed Settings producer here. Staging
+  // client partitions may still show explicit staging labels.
+  if (accountId.startsWith("firebase:")) {
+    return backendError("service_unavailable", "retry", 503, true);
+  }
   return json(
     await readSettings(
       db,
-      context.get("accountId"),
+      accountId,
       {
         displayName: context.env.STAGING_DISPLAY_NAME,
         email: context.env.STAGING_EMAIL,
@@ -885,35 +891,18 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
 
 export async function handleTasks(context: CoreContext): Promise<Response> {
   const query = new URL(context.req.url).searchParams;
-  if (context.env.CANONICAL_SERVICE !== undefined) {
-    const contractVersion = context.req.header("x-omi-contract-version");
-    return requestCanonicalTasks({
-      service: context.env.CANONICAL_SERVICE,
-      caller: {
-        accountId: context.get("accountId"),
-        authorization: context.req.header("authorization"),
-        stagingApiToken: context.env.API_TOKEN,
-      },
-      method: "GET",
-      query,
-      ...(contractVersion === undefined ? {} : { contractVersion }),
-    });
-  }
-  if (
-    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
-    query.getAll("limit").length > 1 ||
-    query.getAll("cursor").length > 1
-  ) {
-    return backendError("bad_request", "edit_request", 400);
-  }
-  const db = context.env.DB;
-  if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
-  const limit = parseTaskLimit(query.get("limit"));
-  const cursor = query.get("cursor") ?? undefined;
-  // Match conversations/memories: empty cursor / invalid limit are bad requests.
-  if (limit === null || cursor === "")
-    return backendError("bad_request", "edit_request", 400);
-  return json(await readTasks(db, context.get("accountId"), limit, cursor));
+  const contractVersion = context.req.header("x-omi-contract-version");
+  return requestCanonicalTasks({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    method: "GET",
+    query,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
 }
 
 export async function handleTaskWrite(context: CoreContext): Promise<Response> {

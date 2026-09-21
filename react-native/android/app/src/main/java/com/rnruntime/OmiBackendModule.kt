@@ -579,10 +579,15 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     return host?.lowercase(Locale.US) == "api.omi.me"
   }
 
+  private fun isReviewedDevRunHost(host: String): Boolean {
+    return Regex("^omi-platform-dev-[a-z0-9-]+\\.a\\.run\\.app$").matches(host) ||
+      Regex("^omi-platform-dev-[a-z0-9-]+\\.us-central1\\.run\\.app$").matches(host)
+  }
+
   private fun isAllowedV5Host(host: String): Boolean {
     val normalized = host.lowercase(Locale.US)
     val loopback = normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1"
-    if (loopback || isCloudHost(normalized)) return true
+    if (loopback || isCloudHost(normalized) || isReviewedDevRunHost(normalized)) return true
     return normalized.endsWith(".workers.dev") && normalized.length > ".workers.dev".length
   }
 

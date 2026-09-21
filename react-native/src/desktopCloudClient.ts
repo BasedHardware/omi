@@ -111,7 +111,22 @@ async function cloudRequest(
     throw unauthorized;
   }
   if (response.status !== 200) {
-    throw new Error(`${id} failed (${response.status})`);
+    const failed = new Error(`${id} failed (${response.status})`) as Error & {
+      code?: string;
+      status?: number;
+    };
+    failed.status = response.status;
+    if (response.status === 503 && typeof response.body === 'string') {
+      try {
+        const parsed = JSON.parse(response.body) as {error?: unknown};
+        if (parsed.error === 'service_unavailable') {
+          failed.code = 'service_unavailable';
+        }
+      } catch {
+        // Keep the generic transport failure copy.
+      }
+    }
+    throw failed;
   }
   return {status: response.status, body: parseJson(response.body, id)};
 }

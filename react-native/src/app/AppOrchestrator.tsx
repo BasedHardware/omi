@@ -186,6 +186,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     refreshReads,
     refreshTasks,
     conversationsLoadingMore,
+    conversationsExtended,
     conversationNotice,
     loadMoreConversations,
   } = useDesktopReads({
@@ -941,8 +942,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               currentItems.map(item => (
                 <ProjectionRow home item={item} key={item.id} />
               ))
-            ) : readsPhase === 'initial-loading' ? (
+            ) : readsPhase === 'initial-loading' ||
+              readsPhase === 'refreshing' ? (
               <Text style={styles.homeHint}>Loading Currents…</Text>
+            ) : readsPhase === 'unavailable' ||
+              readsPhase === 'saved-but-refresh-failed' ? (
+              <Text style={styles.homeHint}>
+                Currents could not be loaded. Retry from Home.
+              </Text>
             ) : (
               <Text style={styles.homeHint}>Nothing current right now.</Text>
             )}
@@ -1053,6 +1060,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             setLoadingOlderChat(false);
             setChatHistorySettled(false);
             setActiveGenerationId(null);
+            setActiveOmiRequestId(null);
+            omiRequestRef.current = null;
+            sendInFlightRef.current = null;
             stableChatMessageIds.clear();
             animatedChatMessageIds.clear();
             resetReads();
@@ -1156,14 +1166,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               setMobileMode(next);
               if (next === 'Search' && homeChatOpen) {
                 setHomeChatOpen(false);
-                setRoute('Home');
+                setRoute(beforeMobileChat.current.route);
               }
             }}
             value={draft}
             onChange={setDraft}
             inputRef={composerRef}
             busy={chatBusy}
-            canStop={activeGenerationId !== null}
+            canStop={(activeGenerationId ?? activeOmiRequestId) !== null}
             onStop={() => {
               void stopGeneration();
             }}
@@ -1224,6 +1234,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               void loadMoreConversations();
             }}
             loadingMore={conversationsLoadingMore}
+            preserveLoadedPages={conversationsExtended}
             notice={conversationNotice}
             outcome={readOutcomes?.conversations ?? null}
             loading={
@@ -1234,9 +1245,31 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
         settingsContent={
           <SettingsPage
+            chatBusy={chatBusy}
             onOpenApps={() => setRoute('Connectors')}
             onSignIn={signInAndRefresh}
             onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+            onWorkspaceReload={() => {
+              chatSessionEpochRef.current += 1;
+              chatMutationSeqRef.current += 1;
+              setChatError(null);
+              setDraft('');
+              setMessages([]);
+              setOlderChatCursor(null);
+              setHasOlderChat(false);
+              setChatBusy(false);
+              setLoadingOlderChat(false);
+              setChatHistorySettled(false);
+              setActiveGenerationId(null);
+              setActiveOmiRequestId(null);
+              omiRequestRef.current = null;
+              sendInFlightRef.current = null;
+              stableChatMessageIds.clear();
+              animatedChatMessageIds.clear();
+              resetReads();
+              refreshReads(true).catch(() => undefined);
+              setChatEpoch(current => current + 1);
+            }}
             signingIn={signingIn}
           />
         }
@@ -1673,6 +1706,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       void loadMoreConversations();
                     }}
                     loadingMore={conversationsLoadingMore}
+                    preserveLoadedPages={conversationsExtended}
                     notice={conversationNotice}
                     loading={
                       readsPhase === 'initial-loading' ||
@@ -1699,8 +1733,30 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   />
                 ) : (
                   <SettingsPage
+                    chatBusy={chatBusy}
                     onSignIn={signInAndRefresh}
                     onSignOut={signOutAndRefresh}
+                    onWorkspaceReload={() => {
+                      chatSessionEpochRef.current += 1;
+                      chatMutationSeqRef.current += 1;
+                      setChatError(null);
+                      setDraft('');
+                      setMessages([]);
+                      setOlderChatCursor(null);
+                      setHasOlderChat(false);
+                      setChatBusy(false);
+                      setLoadingOlderChat(false);
+                      setChatHistorySettled(false);
+                      setActiveGenerationId(null);
+                      setActiveOmiRequestId(null);
+                      omiRequestRef.current = null;
+                      sendInFlightRef.current = null;
+                      stableChatMessageIds.clear();
+                      animatedChatMessageIds.clear();
+                      resetReads();
+                      refreshReads(true).catch(() => undefined);
+                      setChatEpoch(current => current + 1);
+                    }}
                     signingIn={signingIn}
                   />
                 )}

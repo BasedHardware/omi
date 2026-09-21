@@ -376,6 +376,37 @@ describe("D1-authoritative chat persistence", () => {
     };
     expect(eventPayload.kind).toBe("cancelled");
   });
+
+  test("complete after cancel keeps the cancelled terminal and no assistant row", async () => {
+    const { completeGeneration } = await import("../src/chat");
+    const admissionResponse = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-cancel-then-complete")),
+    });
+    const admissionBody = (await admissionResponse.json()) as {
+      generation: { id: string };
+    };
+    const generationId = admissionBody.generation.id;
+    const cancelled = await fetchWorker(`/v1/chat-generations/${generationId}`, {
+      method: "DELETE",
+      headers: authenticatedHeaders,
+    });
+    expect(cancelled.status).toBe(202);
+    const completed = await completeGeneration(
+      env.DB,
+      "test-account",
+      generationId,
+      "should not persist",
+    );
+    expect(completed.kind).toBe("cancelled");
+    const assistant = await env.DB.prepare(
+      "SELECT id FROM chat_messages WHERE account_id = ? AND sender = 'ai'",
+    )
+      .bind("test-account")
+      .first<{ id: string }>();
+    expect(assistant).toBeNull();
+  });
 });
 
 describe("D1 chat projects an honest conversation list", () => {

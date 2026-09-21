@@ -96,13 +96,57 @@ export function isExamplePlatformRequestSupported(
   const url = new URL(assertLocalProxyPath(path), 'http://127.0.0.1');
   const backendPath = rewriteLocalProxyPath(`${url.pathname}${url.search}`);
   const backendUrl = new URL(backendPath, 'http://127.0.0.1');
+  const route = backendUrl.pathname;
+  if (
+    method === 'GET' &&
+    (route === '/v1/settings' ||
+      route === '/v1/chat-messages' ||
+      route === '/v1/conversations' ||
+      route === '/v1/memories' ||
+      route === '/v1/tasks')
+  ) {
+    return true;
+  }
+  if (method === 'POST' && route === '/v1/tasks/ops') {
+    return true;
+  }
+  return isExamplePlatformDeviceSession(method, route);
+}
+
+function isExamplePlatformDeviceSession(
+  method: string | undefined,
+  route: string,
+): boolean {
+  if (route === '/v1/device-sessions') {
+    return method === 'POST';
+  }
+  if (!route.startsWith('/v1/device-sessions/')) {
+    return false;
+  }
+  const rest = route.slice('/v1/device-sessions/'.length);
+  if (rest.length === 0 || rest.startsWith('/')) {
+    return false;
+  }
+  if (method === 'GET' && rest === 'ownership') {
+    return true;
+  }
+  const slash = rest.indexOf('/');
+  if (slash < 0) {
+    return method === 'GET';
+  }
+  if (slash === 0) {
+    return false;
+  }
+  const tail = rest.slice(slash + 1);
+  if (tail.includes('/')) {
+    return false;
+  }
+  if (method === 'GET') {
+    return tail === 'transcript';
+  }
   return (
-    (method === 'GET' &&
-      (backendUrl.pathname === '/v1/settings' ||
-        backendUrl.pathname === '/v1/conversations' ||
-        backendUrl.pathname === '/v1/memories' ||
-        backendUrl.pathname === '/v1/tasks')) ||
-    (method === 'POST' && backendUrl.pathname === '/v1/tasks/ops')
+    method === 'POST' &&
+    (tail === 'audio' || tail === 'complete' || tail === 'transcribe')
   );
 }
 

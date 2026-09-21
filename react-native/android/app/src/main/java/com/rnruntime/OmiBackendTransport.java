@@ -303,8 +303,29 @@ public final class OmiBackendTransport {
     } catch (IllegalArgumentException error) {
       return false;
     }
-    return (method.equals("GET") && ("/v1/conversations".equals(route) ||
-      "/v1/memories".equals(route) || "/v1/tasks".equals(route))) ||
-      (method.equals("POST") && "/v1/tasks/ops".equals(route));
+    if (route == null) return false;
+    if (method.equals("GET") && ("/v1/settings".equals(route) ||
+      "/v1/chat-messages".equals(route) || "/v1/conversations".equals(route) ||
+      "/v1/memories".equals(route) || "/v1/tasks".equals(route))) {
+      return true;
+    }
+    if (method.equals("POST") && "/v1/tasks/ops".equals(route)) return true;
+    return examplePlatformDeviceSession(method, route);
+  }
+
+  static boolean examplePlatformDeviceSession(String method, String route) {
+    if ("/v1/device-sessions".equals(route)) return "POST".equals(method);
+    if (!route.startsWith("/v1/device-sessions/")) return false;
+    String rest = route.substring("/v1/device-sessions/".length());
+    if (rest.isEmpty() || rest.charAt(0) == '/') return false;
+    if ("GET".equals(method) && "ownership".equals(rest)) return true;
+    int slash = rest.indexOf('/');
+    if (slash < 0) return "GET".equals(method);
+    if (slash == 0) return false;
+    String tail = rest.substring(slash + 1);
+    if (tail.contains("/")) return false;
+    if ("GET".equals(method)) return "transcript".equals(tail);
+    return "POST".equals(method) &&
+      ("audio".equals(tail) || "complete".equals(tail) || "transcribe".equals(tail));
   }
 }

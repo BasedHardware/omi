@@ -93,12 +93,40 @@ static void test_example_platform() {
          "GET conversations");
   expect(omi_backend_example_platform_supported("GET", "/v1/memories") == 1,
          "GET memories");
+  expect(omi_backend_example_platform_supported("GET", "/v1/settings") == 1,
+         "GET settings");
+  expect(omi_backend_example_platform_supported("GET", "/v1/chat-messages?limit=50") ==
+             1,
+         "GET chat-messages");
+  expect(omi_backend_example_platform_supported("GET", "/v1/device-sessions/ownership") ==
+             1,
+         "GET ownership");
+  expect(omi_backend_example_platform_supported(
+             "GET", "/v1/device-sessions/11111111-2222-3333-4444-555555555555") == 1,
+         "GET session");
+  expect(omi_backend_example_platform_supported(
+             "GET",
+             "/v1/device-sessions/11111111-2222-3333-4444-555555555555/transcript") == 1,
+         "GET transcript");
+  expect(omi_backend_example_platform_supported("POST", "/v1/device-sessions") == 1,
+         "POST open");
+  expect(omi_backend_example_platform_supported(
+             "POST",
+             "/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio") == 1,
+         "POST audio");
   expect(omi_backend_example_platform_supported("POST", "/v1/tasks/ops") == 1,
          "POST tasks/ops");
   expect(omi_backend_example_platform_supported("DELETE", "/v1/tasks/ops") == 0,
          "DELETE tasks/ops");
   expect(omi_backend_example_platform_supported("POST", "/v1/tasks") == 0,
          "POST tasks");
+  expect(omi_backend_example_platform_supported("POST", "/v1/chat-messages") == 0,
+         "POST chat-messages");
+  expect(omi_backend_example_platform_supported("GET", "/v1/chat-generations/one/events") ==
+             0,
+         "GET generation SSE");
+  expect(omi_backend_example_platform_supported("POST", "/v1/chat-attachments") == 0,
+         "POST attachments");
 }
 
 static void test_hosts() {
@@ -111,6 +139,14 @@ static void test_hosts() {
          "workers");
   expect(omi_backend_is_allowed_v5_hostname("workers.dev") == 0,
          "bare workers.dev");
+  expect(omi_backend_is_allowed_v5_hostname(
+             "omi-platform-dev-abcdef012345-uc.a.run.app") == 1,
+         "reviewed run.app");
+  expect(omi_backend_is_allowed_v5_hostname(
+             "omi-platform-dev-abcdef012345.us-central1.run.app") == 1,
+         "reviewed regional run.app");
+  expect(omi_backend_is_allowed_v5_hostname("other-service-uc.a.run.app") == 0,
+         "other run.app");
   expect(omi_backend_is_allowed_v5_hostname("untrusted.invalid") == 0,
          "untrusted");
 }

@@ -93,6 +93,7 @@ export function ConversationsPage({
   onRefresh,
   onLoadMore,
   loadingMore = false,
+  preserveLoadedPages = false,
   notice = null,
 }: {
   search?: {value: string; onChange: (value: string) => void};
@@ -102,6 +103,7 @@ export function ConversationsPage({
   onRefresh?: () => void;
   onLoadMore?: () => void;
   loadingMore?: boolean;
+  preserveLoadedPages?: boolean;
   notice?: string | null;
 }) {
   const compact = useWindowDimensions().width < 720;
@@ -124,7 +126,7 @@ export function ConversationsPage({
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
   const scrolledAway = useRef(false);
-  const paginated = useRef(false);
+  const paginated = useRef(preserveLoadedPages);
   const refreshState = useRef({onRefresh, loading, loadingMore, selectedId});
   refreshState.current = {onRefresh, loading, loadingMore, selectedId};
   const refreshEnabled = onRefresh !== undefined;
