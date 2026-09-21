@@ -10,6 +10,8 @@
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
+* [`agent_quickstart.lo.md`](agent_quickstart.lo.md) — omi-cli ສຳລັບຕົວແທນ
+  (Lao agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
