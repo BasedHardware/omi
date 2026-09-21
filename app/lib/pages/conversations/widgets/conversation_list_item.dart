@@ -170,7 +170,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 ConversationDetailPage(
                   conversation: widget.conversation,
                   isFromOnboarding: widget.isFromOnboarding,
-                  initialTabIndex: seek != null ? 0 : 1,
+                  // Search matches explicitly open Transcript. Other rows
+                  // let detail choose Transcript for retained fragments that
+                  // have no generated summary after hydration.
+                  initialTabIndex: seek != null ? 0 : null,
                   initialSeekStart: seek?.start,
                   initialSeekEnd: seek?.end,
                 ),

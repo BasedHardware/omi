@@ -76,5 +76,18 @@ void main() {
       final conv = _conversation(startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0));
       expect(conv.getDurationInSeconds(), 0);
     });
+
+    test('keeps a positive subsecond transcript visible as one second', () {
+      final conv = _conversation(segments: [_segment(start: 0.24, end: 0.32)]);
+      expect(conv.getDurationInSeconds(), 1);
+    });
+
+    test('keeps a positive subsecond timestamp-only capture visible as one second', () {
+      final conv = _conversation(
+        startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0),
+        finishedAt: DateTime.utc(2026, 1, 1, 12, 0, 0, 0, 200000),
+      );
+      expect(conv.getDurationInSeconds(), 1);
+    });
   });
 }

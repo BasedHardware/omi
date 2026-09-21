@@ -62,11 +62,30 @@ import 'widgets/speaker_summary_action.dart';
 /// so the bar never sits lower than the inset the window reports.
 double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
+/// Chooses the first useful detail tab for a conversation.
+///
+/// A caller-supplied tab is authoritative: search deep links and adjacent
+/// conversation navigation use it to preserve the user's context. When no
+/// tab was requested, a completed conversation with transcript text but no
+/// generated summary opens on the transcript so retained fragment data is
+/// immediately visible.
+int conversationDetailInitialTabIndex(ServerConversation conversation, {int? requestedTabIndex}) {
+  if (requestedTabIndex != null) return requestedTabIndex;
+  if (conversation.status != ConversationStatus.completed) return 1;
+
+  final hasTranscript = conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty);
+  final hasSummary = ConversationSummarySelection.select(conversation).kind != ConversationSummaryKind.empty;
+  return hasTranscript && !hasSummary ? 0 : 1;
+}
+
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
   final bool openShareToContactsOnLoad;
-  final int initialTabIndex;
+
+  /// Null lets the page choose the first useful tab after detail hydration.
+  /// A non-null value preserves an explicit deep link or navigation context.
+  final int? initialTabIndex;
 
   /// When set (e.g. from search match snippet), open transcript and play this moment.
   final double? initialSeekStart;
@@ -77,7 +96,7 @@ class ConversationDetailPage extends StatefulWidget {
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
-    this.initialTabIndex = 1, // Default to summary tab
+    this.initialTabIndex,
     this.initialSeekStart,
     this.initialSeekEnd,
   });
@@ -102,6 +121,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
   bool _didInitialSeek = false;
+  bool _hasExplicitTabSelection = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -180,8 +200,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
-    selectedTab = switch (widget.initialTabIndex) {
+    // The supplied conversation can be a list projection whose app results
+    // are hydrated after the first frame. Start on Summary, then select the
+    // transcript only once the final summary state is known.
+    final initialTabIndex = widget.initialTabIndex ?? 1;
+    _controller = TabController(length: 3, vsync: this, initialIndex: initialTabIndex);
+    selectedTab = switch (initialTabIndex) {
       0 => ConversationTab.transcript,
       2 => ConversationTab.actionItems,
       _ => ConversationTab.summary,
@@ -244,15 +268,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           // holding the destination's startup sequence on this request. The
           // provider re-locates the conversation by ID after the await because
           // refreshes can reorder or replace the grouped list meanwhile.
-          unawaited(
-            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
-              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
-              provider.updateConversation(conversationId, provider.selectedDate);
-            }),
-          );
+          unawaited(_refreshDetailsAndSelectInitialTab(conversationProvider, provider, conversationId));
         } else {
           provider.updateConversation(provider.conversation.id, provider.selectedDate);
+          _selectInitialTabIfNeeded(provider.conversation);
         }
+      } else {
+        _selectInitialTabIfNeeded(provider.conversation);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -277,6 +299,32 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
+  }
+
+  Future<void> _refreshDetailsAndSelectInitialTab(
+    ConversationProvider conversationProvider,
+    ConversationDetailProvider provider,
+    String conversationId,
+  ) async {
+    try {
+      await conversationProvider.updateSearchedConvoDetails(conversationId);
+    } catch (_) {
+      // The list projection is still valid enough to render. Apply the same
+      // fallback selection below if the detail refresh is unavailable.
+    }
+    if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+    provider.updateConversation(conversationId, provider.selectedDate);
+    _selectInitialTabIfNeeded(provider.conversation);
+  }
+
+  void _selectInitialTabIfNeeded(ServerConversation conversation) {
+    if (!mounted || widget.initialTabIndex != null || _hasExplicitTabSelection || _controller?.index != 1) return;
+    final index = conversationDetailInitialTabIndex(conversation);
+    if (index == 1) return;
+    setState(() {
+      selectedTab = ConversationTab.transcript;
+    });
+    _controller?.animateTo(index);
   }
 
   @override
@@ -1184,6 +1232,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                           });
                         },
                         onTabSelected: (tab) {
+                          _hasExplicitTabSelection = true;
                           int index;
                           switch (tab) {
                             case ConversationTab.transcript:
