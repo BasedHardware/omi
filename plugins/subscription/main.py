@@ -1,11 +1,9 @@
-from fastapi import APIRouter, Request, Response, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 import logging
 import re
-from datetime import datetime
-from urllib.parse import quote
 
 router = APIRouter(
     prefix="/subscription",
