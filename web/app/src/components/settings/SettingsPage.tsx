@@ -3369,7 +3369,9 @@ export function SettingsPage() {
         ...webhooks,
         [type]: {
           enabled,
-          url: url || webhooks[type as keyof DeveloperWebhooks]?.url || '',
+          // Mirror what was sent: audio_bytes keeps its interval in the URL, and
+          // storing the bare URL here made the interval field fall back to 5.
+          url: webhookUrl || webhooks[type as keyof DeveloperWebhooks]?.url || '',
         },
       });
     } catch (error) {
