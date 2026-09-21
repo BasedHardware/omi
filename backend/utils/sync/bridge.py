@@ -1,16 +1,38 @@
 """Replayable external bridge effects, always outside assignment transactions.
 
-Ancestry is persisted with the transcript. Failure propagates to the sync job's
-existing retry path; original audio and redirect tombstones are never removed.
+Ancestry is persisted with the transcript. Donor retraction that collides with
+the exclusive destructive-operation gate is deferred onto the revision-fenced
+receipt and retried on a later append; original audio and redirect tombstones
+are never removed. Copy and checkpoint failures still propagate to the job
+retry path.
 """
 
+from __future__ import annotations
+
+import logging
 from _thread import LockType
 from typing import NotRequired, TypedDict
 
 from database import conversations as conversations_db
+from database.legal_holds import (
+    DestructiveOperationInProgress,
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+)
 from database.sync_bridges import mark_sync_bridge_cleaned
-from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
+from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
+from utils.observability.fallback import record_fallback
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
+from utils.sync.telemetry import bounded_exception_type
+
+logger = logging.getLogger(__name__)
+
+_DEFERRED_RETRACTION_REASONS: dict[type[BaseException], str] = {
+    DestructiveOperationInProgress: 'gate_busy',
+    LegalHoldActive: 'hold_active',
+    LegalHoldAuthorityUnavailable: 'authority_unavailable',
+}
 
 
 class SyncBridgeAssignment(TypedDict):
@@ -26,8 +48,22 @@ class SyncSegmentResponse(TypedDict):
     _merged: NotRequired[dict[str, str | None]]
 
 
+def _record_bridge_retraction(outcome: str, reason: str = 'none') -> None:
+    try:
+        OMI_SYNC_BRIDGE_RETRACTION_TOTAL.labels(outcome=outcome, reason=reason).inc()
+    except Exception:
+        pass
+
+
+def _deferred_retraction_reason(error: BaseException) -> str | None:
+    for error_type, reason in _DEFERRED_RETRACTION_REASONS.items():
+        if isinstance(error, error_type):
+            return reason
+    return None
+
+
 def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
-    visited = set()
+    visited: set[str] = set()
     while True:
         if conversation_id in visited:
             raise SyncAssignmentConflict('sync redirect cycle')
@@ -48,8 +84,40 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             needs_copy = audio_target and (
                 needs_cleanup or source.get('sync_bridge_audio_target') != audio_target or source_id == audio_source_id
             )
+            cleanup_deferred = False
             if needs_cleanup:
-                retract_sync_bridge_source(uid, source_id)
+                _record_bridge_retraction('attempted')
+                logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
+                try:
+                    retract_sync_bridge_source(uid, source_id)
+                except Exception as error:
+                    reason = _deferred_retraction_reason(error)
+                    if reason is None:
+                        _record_bridge_retraction('failed', 'other')
+                        logger.error(
+                            'event=sync_bridge outcome=failed exception_type=%s uid=%s source_id=%s',
+                            bounded_exception_type(error),
+                            uid,
+                            source_id,
+                        )
+                        raise
+                    cleanup_deferred = True
+                    _record_bridge_retraction('deferred', reason)
+                    logger.info(
+                        'event=sync_bridge outcome=deferred reason=%s exception_type=%s uid=%s source_id=%s',
+                        reason,
+                        bounded_exception_type(error),
+                        uid,
+                        source_id,
+                    )
+                    record_fallback(
+                        component='sync_dispatch',
+                        from_mode='retract',
+                        to_mode='deferred',
+                        reason='other',
+                        outcome='degraded',
+                        log=logger,
+                    )
             if needs_copy:
                 # Invalidate an older copy receipt before late audio copying:
                 # if copying fails, a retry without this worker's source hint
@@ -58,8 +126,14 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                     if not mark_sync_bridge_cleaned(uid, source_id, revision, None):
                         raise RuntimeError('sync bridge completion revision changed')
                 copy_sync_bridge_audio(uid, source_id, conversation_id)
-            if (needs_cleanup or needs_copy) and not mark_sync_bridge_cleaned(uid, source_id, revision, audio_target):
-                raise RuntimeError('sync bridge completion revision changed')
+            if cleanup_deferred:
+                continue
+            if needs_cleanup or needs_copy:
+                if not mark_sync_bridge_cleaned(uid, source_id, revision, audio_target):
+                    raise RuntimeError('sync bridge completion revision changed')
+                if needs_cleanup:
+                    _record_bridge_retraction('converged')
+                    logger.info('event=sync_bridge outcome=converged uid=%s source_id=%s', uid, source_id)
         current = conversations_db.get_conversation(uid, conversation_id)
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
