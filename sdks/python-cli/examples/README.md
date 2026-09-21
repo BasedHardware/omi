@@ -10,6 +10,8 @@
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
+* [`agent_quickstart.es.md`](agent_quickstart.es.md) — guía omi-cli para 
+  agentes (Spanish agent guide).
 * [`agent_quickstart.sq.md`](agent_quickstart.sq.md) — omi-cli për agjentët
   (Albanian agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
