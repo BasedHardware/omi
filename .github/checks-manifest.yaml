@@ -1154,6 +1154,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
 
+  - id: twitter-chat-tools-app-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14881: escape OAuth error and username parameters in HTML response templates"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
