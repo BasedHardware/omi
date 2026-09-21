@@ -163,8 +163,8 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
             raise ValueError("CoinGecko returned a response that was not valid JSON.")
     except httpx.TimeoutException:
         raise ValueError("Request to CoinGecko timed out. Please try again.")
-    except httpx.HTTPError as exc:
-        raise ValueError(f"CoinGecko network error: {exc}")
+    except httpx.HTTPError:
+        raise ValueError("CoinGecko network error occurred.")
 
 
 @app.exception_handler(RequestValidationError)
@@ -360,8 +360,8 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
         return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error fetching crypto prices: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Failed to fetch cryptocurrency prices due to an internal error.")
 
 
 @app.post("/tools/search_crypto_coins", response_model=ChatToolResponse)
@@ -388,8 +388,8 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
         return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error searching crypto coins: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Failed to search cryptocurrency coins due to an internal error.")
 
 
 @app.post("/tools/get_trending_crypto", response_model=ChatToolResponse)
@@ -421,8 +421,8 @@ async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
         return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error retrieving trending crypto: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Failed to retrieve trending cryptocurrencies due to an internal error.")
 
 
 @app.post("/tools/get_crypto_market_overview", response_model=ChatToolResponse)
@@ -462,5 +462,5 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
         return ChatToolResponse(error=str(exc))
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error retrieving market overview: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Failed to retrieve market overview due to an internal error.")
