@@ -61,6 +61,7 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 omi --json memory list | jq '.[] | {id, content}'
 ```
 
+> Looking for localized guides? See the [Aragonés (Aragonese Quickstart)](examples/quickstart.an.md).
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.

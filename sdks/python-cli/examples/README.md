@@ -48,6 +48,7 @@
 * [`quickstart.as.md`](quickstart.as.md) — omi-cli ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart).
 * [`quickstart.sd.md`](quickstart.sd.md) — سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart).
 * [`quickstart.af.md`](quickstart.af.md) — Begin met omi-cli (Afrikaans Quickstart).
+* [`quickstart.an.md`](quickstart.an.md) — primers pasos con omi-cli en aragonés (Aragonese Quickstart).
 * [`quickstart.az.md`](quickstart.az.md) — omi-cli ilə İlk Addımlar (Azerbaijani Quickstart).
 * [`quickstart.be.md`](quickstart.be.md) — omi-cli Кіраўніцтва па хуткім старце (Belarusian Quickstart).
 * [`quickstart.cy.md`](quickstart.cy.md) — Canllaw Cychwyn Cyflym omi-cli (Welsh Quickstart).
