@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.373",
+      "date": "2026-09-21",
+      "changes": [
+        "Fixed long conversations sometimes getting no on-device summary"
+      ]
+    },
+    {
       "version": "0.12.372",
       "date": "2026-09-21",
       "changes": [

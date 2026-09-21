@@ -33,10 +33,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Sequence
 
-from utils.release_probe import RELEASE_PROBE_UID
-
+# This script runs standalone (`python3 backend/scripts/...` from the repo
+# root), so it cannot import the backend package. Keep the probe uid in
+# exact lockstep with backend/utils/release_probe.py:RELEASE_PROBE_UID —
+# tests/unit/test_release_probe_exemption.py asserts the two literals match.
+PROBE_UID = 'omi-release-probe'
 FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
-PROBE_UID = RELEASE_PROBE_UID
 CUSTOM_TOKEN_AUDIENCE = 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit'
 IAM_CREDENTIALS_URL = 'https://iamcredentials.googleapis.com/v1'
 IDENTITY_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken'
