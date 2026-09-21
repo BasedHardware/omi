@@ -1,6 +1,7 @@
 """Semantic Scholar no-auth chat tools app for Omi."""
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict
 from urllib.parse import quote, unquote
@@ -23,6 +24,8 @@ app = FastAPI(
     description="No-auth Semantic Scholar chat tools for Omi",
     version="1.0.0",
 )
+
+logger = logging.getLogger(__name__)
 
 
 _BARE_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
@@ -251,11 +254,14 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
             )
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
+        logger.warning("Semantic Scholar HTTP status error: %s", exc)
         return ChatToolResponse(error=f"Semantic Scholar API error: {exc.response.status_code}")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
+        logger.warning("Semantic Scholar request failed: %s", exc)
+        return ChatToolResponse(error="Semantic Scholar request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+        logger.exception("Unexpected error in search_papers: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
 
 
 @app.post("/tools/get_semantic_scholar_paper", response_model=ChatToolResponse)
@@ -292,11 +298,14 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
         code = exc.response.status_code
         if code == 404:
             return ChatToolResponse(error="Paper not found.")
+        logger.warning("Semantic Scholar HTTP status error: %s", exc)
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
+        logger.warning("Semantic Scholar request failed: %s", exc)
+        return ChatToolResponse(error="Semantic Scholar request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+        logger.exception("Unexpected error in get_paper: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
 
 
 @app.post("/tools/get_semantic_scholar_author_papers", response_model=ChatToolResponse)
@@ -334,11 +343,14 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         code = exc.response.status_code
         if code == 404:
             return ChatToolResponse(error="Author not found.")
+        logger.warning("Semantic Scholar HTTP status error: %s", exc)
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
+        logger.warning("Semantic Scholar request failed: %s", exc)
+        return ChatToolResponse(error="Semantic Scholar request failed.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+        logger.exception("Unexpected error in get_author_papers: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
 
 
 @app.get("/")
