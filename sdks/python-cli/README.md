@@ -53,6 +53,7 @@ omi conversation list --limit 5
 omi action-item list --open
 omi goal list
 ```
+> Looking for localized guides? See the [Na Vosa Vakaviti (Fijian Quickstart)](examples/quickstart.fj.md).
 
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
