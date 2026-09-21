@@ -183,6 +183,32 @@ def test_tools_rest_temporal_list_bounds_empty_continuation_pages(monkeypatch):
     assert "bounded scan reached its safety limit" in result
 
 
+def test_tools_rest_temporal_list_accepts_older_page_shape_without_truncated(monkeypatch):
+    memory = SimpleNamespace(
+        id="legacy-page",
+        memory_id="legacy-page",
+        content="legacy page shape",
+        created_at=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        is_locked=False,
+        arguments={},
+    )
+
+    class _UniversalService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read_page(self, *_args, **_kwargs):
+            return SimpleNamespace(memories=[memory], next_cursor=None)
+
+    monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
+    monkeypatch.setattr(memory_services, "belief_model_enabled", lambda: True)
+
+    result = memory_services.get_memories_text(uid="uid", view="history", limit=1)
+
+    assert '"legacy page shape"' in result
+    assert "Error retrieving memories" not in result
+
+
 def test_tools_rest_temporal_ranges_use_evidence_date_for_delayed_sources(monkeypatch):
     captured_at = datetime(2026, 7, 10, tzinfo=timezone.utc)
     processed_at = datetime(2026, 9, 14, tzinfo=timezone.utc)

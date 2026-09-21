@@ -93,7 +93,7 @@ def get_memories_text(
                     as_of=as_of,
                 )
                 batch = page.memories
-                scan_truncated = scan_truncated or page.truncated
+                scan_truncated = scan_truncated or getattr(page, 'truncated', False)
                 cursor = page.next_cursor
                 if not batch:
                     if not cursor:
