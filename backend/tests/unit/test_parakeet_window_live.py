@@ -868,11 +868,11 @@ async def test_ingest_agc_does_not_compound_posted_agc(monkeypatch):
     assert posted == once
     assert posted != quiet
     assert posted != twice
-    assert sock.raw._ingest_normalized is True
     assert sock.raw._agc_last_gain == 4.0
     assert sock.raw._agc_peak == 1000.0
     if sock.raw._buf:
-        assert int(np.frombuffer(bytes(sock.raw._buf), dtype=np.int16).max()) == 4000
+        # Buffer stays original; posted AGC is the only 4× the model sees.
+        assert int(np.frombuffer(bytes(sock.raw._buf), dtype=np.int16).max()) == 1000
     await sock.drain_and_close()
 
 
@@ -914,9 +914,46 @@ async def test_posted_agc_still_runs_when_ingest_is_disabled(monkeypatch):
     await _wait_requests(client, 1)
     posted = _posted_pcm(client.requests[0][1])
     assert posted == _agc(quiet)
-    assert sock.raw._ingest_normalized is False
     if sock.raw._buf:
         assert int(np.frombuffer(bytes(sock.raw._buf), dtype=np.int16).max()) == 1000
+    await sock.drain_and_close()
+
+
+@pytest.mark.asyncio
+async def test_posted_window_is_uniform_when_ingest_gain_moves(monkeypatch):
+    """Quiet then loud chunks must not store a ramp; POST is one scale."""
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
+    sock = await LiveChainSession(receiver()).connect(16000)
+    quiet = (np.int16(1000) * np.ones(16000 * 3, dtype=np.int16)).tobytes()
+    loud = (np.int16(8000) * np.ones(16000 * 3, dtype=np.int16)).tobytes()
+    ingest = window.SessionPcmGain()
+    first_gain_chunk = ingest.apply(quiet[:640])
+    assert window.pcm16_peak(first_gain_chunk) == 4000.0
+    assert sock.send(quiet)
+    assert sock.send(loud)
+    await _wait_requests(client, 1)
+    posted = np.frombuffer(_posted_pcm(client.requests[0][1]), dtype=np.int16)
+    half = 16000 * 3
+    assert posted.size >= 2 * half
+    first_half, second_half = posted[:half], posted[half : 2 * half]
+    # Uniform scale preserves the original 8:1 ratio. A stored ingest ramp
+    # would be 4000 then ~26214 (ratio ~6.55) because the quiet half was
+    # already 4× when the envelope was still at the cap.
+    orig_ratio = 8000 / 1000
+    posted_ratio = float(second_half[0]) / float(first_half[0])
+    assert abs(posted_ratio - orig_ratio) < 0.02
+    assert len(set(int(x) for x in first_half[::1600])) == 1
+    assert len(set(int(x) for x in second_half[::1600])) == 1
+    expected, gain = window.bounded_agc_pcm16(quiet + loud, peak=8000.0)
+    assert bytes(posted[: 2 * half]) == expected
+    assert gain == pytest.approx(window.WINDOW_AGC_TARGET_PEAK * 32767.0 / 8000.0)
+    if sock.raw._buf:
+        buf = np.frombuffer(bytes(sock.raw._buf), dtype=np.int16)
+        assert int(buf.max()) == 8000
+        assert int(buf[0]) == 1000
     await sock.drain_and_close()
 
 
