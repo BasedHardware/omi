@@ -17,6 +17,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 | Product behavior / UI | `PRODUCT.md`, `product/invariants/` |
 | Shared client behavior | `contracts/parity/README.md` |
 | Released-client compatibility | `contracts/client-compat/` |
+| Spoken agent routing / adapters | `.github/agent-docs/desktop-agent-routing.md` |
 | Fallbacks / fail-open paths | `.github/agent-docs/fallback-telemetry.md` |
 | Plan catalog | `.github/agent-docs/plan-catalog.md` |
 | App E2E | `app/e2e/SKILL.md`, `desktop/macos/e2e/SKILL.md` |
