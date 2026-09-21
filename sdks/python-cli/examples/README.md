@@ -55,6 +55,7 @@
 * [`quickstart.el.md`](quickstart.el.md) — Πρώτα βήματα με το omi-cli (Greek Quickstart).
 * [`quickstart.eo.md`](quickstart.eo.md) — Komencante per omi-cli (Esperanto Quickstart).
 * [`quickstart.et.md`](quickstart.et.md) — omi-cli Kiirjuhend (Estonian Quickstart).
+* [`quickstart.sc.md`](quickstart.sc.md) — Primos passos cun omi-cli (Sardinian Quickstart).
 * [`quickstart.eu.md`](quickstart.eu.md) — Hasteko Gida Azkarra: omi-cli (Basque Quickstart).
 * [`quickstart.fa.md`](quickstart.fa.md) — گام‌های نخست با omi-cli (Persian Quickstart).
 * [`quickstart.fi.md`](quickstart.fi.md) — Ensiaskeleet omi-cli-työkalun kanssa (Finnish Quickstart).
