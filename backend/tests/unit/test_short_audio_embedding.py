@@ -112,7 +112,7 @@ class TestSpeakerEmbeddingConfiguration:
         import utils.stt.speaker_embedding as embedding
 
         monkeypatch.delenv('HOSTED_SPEAKER_EMBEDDING_API_URL', raising=False)
-        monkeypatch.setattr(embedding, '_UNCONFIGURED_WARNED', False)
+        monkeypatch.setattr(embedding, '_unconfigured_warned', False)
         assert speaker_embedding_configured() is False
 
     def test_unset_url_warns_and_records_fallback_once(self, monkeypatch):
@@ -124,7 +124,7 @@ class TestSpeakerEmbeddingConfiguration:
             calls.append({key: str(value) for key, value in kwargs.items() if key != 'log'})
 
         monkeypatch.delenv('HOSTED_SPEAKER_EMBEDDING_API_URL', raising=False)
-        monkeypatch.setattr(embedding, '_UNCONFIGURED_WARNED', False)
+        monkeypatch.setattr(embedding, '_unconfigured_warned', False)
         monkeypatch.setattr(embedding, 'record_fallback', _record_fallback)
 
         assert speaker_embedding_configured() is False

@@ -48,7 +48,7 @@ def _get_wav_duration(audio_data: bytes) -> float:
         return 0.0
 
 
-_UNCONFIGURED_WARNED = False
+_unconfigured_warned = False
 
 
 def _speaker_embedding_url() -> str:
@@ -58,10 +58,10 @@ def _speaker_embedding_url() -> str:
 
 def _warn_unconfigured() -> None:
     """Emit one process-wide warning when speaker embedding is off due to config."""
-    global _UNCONFIGURED_WARNED
-    if _UNCONFIGURED_WARNED:
+    global _unconfigured_warned
+    if _unconfigured_warned:
         return
-    _UNCONFIGURED_WARNED = True
+    _unconfigured_warned = True
     logger.warning('HOSTED_SPEAKER_EMBEDDING_API_URL is unset; speaker embedding is disabled on this process')
     record_fallback(
         component='other',
