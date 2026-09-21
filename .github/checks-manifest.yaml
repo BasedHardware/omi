@@ -44,6 +44,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
+  - id: shipbob-error-handling-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_error_handling.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "make_shipbob_request, oauth_callback, and all 7 chat tools must never leak raw internal exception strings or sensitive database/network traces to clients"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -1286,11 +1291,6 @@ checks:
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
-  - id: shipbob-error-handling-tests
-    command: ["python3", "plugins/omi-shipbob-app/test_error_handling.py"]
-    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "make_shipbob_request, oauth_callback, and all 7 chat tools must never leak raw internal exception strings or sensitive database/network traces to clients"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
