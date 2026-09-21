@@ -1,7 +1,7 @@
 # Convert a conversation-list export to a SQLite database
 
 Use this recipe when you want to query your Omi conversations with SQL — filter
-by category, search titles, or join against action-items and memories. It reads
+by category, search titles, or join against action-items. It reads
 one or more saved JSON exports, makes no network requests, and complements
 [`conversations_csv.md`](conversations_csv.md) and
 [`conversations_xlsx.md`](conversations_xlsx.md).
