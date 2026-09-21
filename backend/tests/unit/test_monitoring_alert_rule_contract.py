@@ -718,7 +718,8 @@ def test_stt_fallback_leg_dead_alert_zero_fills_legs_with_no_recovered_series():
         assert math_nodes == ["$A >= 50 && $B < 1"], export_name
         assert "evaluated_bad" in rule["annotations"], export_name
         assert "recovered=0" in rule["annotations"]["evaluated_bad"], export_name
-        assert "stt_live_session" in exprs[0], export_name
+        assert 'component=~"stt_selection|stt_live_session"' in exprs[0], export_name
+        assert 'component="other"' not in exprs[0], export_name
         assert rule["annotations"]["__panelId__"] == "16"
 
 
@@ -747,6 +748,20 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
         assert rule["annotations"]["__panelId__"] == "18"
 
 
+# Cloud Logging tokens counted by Grafana rules, mapped to the Cloud Run
+# services that actually emit them. A query that pins resource.labels.service_name
+# to a set that is not exactly those emitters either watches a service that
+# never produces the numerator (permanently 0) or drops the service that does.
+# Measured 2026-09-21 00:00–18:00Z on based-hardware:
+#   created: 9626, all backend-sync-backfill; backend-sync created = 0
+#   merged:  21482 backend-sync-backfill + 757 backend-sync
+CLOUD_LOGGING_TOKEN_EMITTERS = {
+    "omi_sync_intake outcome=created": frozenset({"backend-sync-backfill"}),
+    "omi_sync_intake outcome=merged": frozenset({"backend-sync", "backend-sync-backfill"}),
+}
+_SERVICE_NAME_PIN = re.compile(r'resource\.labels\.service_name="([^"]+)"')
+
+
 def test_sync_intake_fragmentation_alert_uses_cloud_logging_until_scrape_exists():
     """backend-sync is not in the Cloud Run metrics exporter allowlist, so a
     Prometheus alert on omi_sync_intake_total would be permanently empty=healthy.
@@ -759,14 +774,45 @@ def test_sync_intake_fragmentation_alert_uses_cloud_logging_until_scrape_exists(
         queries = [d for d in rule["data"] if d.get("datasourceUid") == "deuxlwt1d569sb"]
         assert len(queries) == 2, export_name
         created, merged = (q["model"]["queryText"] for q in queries)
-        assert 'service_name="backend-sync"' in created and 'service_name="backend-sync"' in merged
+        created_services = set(_SERVICE_NAME_PIN.findall(created))
+        merged_services = set(_SERVICE_NAME_PIN.findall(merged))
+        assert created_services == {"backend-sync-backfill"}, export_name
+        assert merged_services == {"backend-sync", "backend-sync-backfill"}, export_name
         assert 'omi_sync_intake outcome=created' in created
         assert 'omi_sync_intake outcome=merged' in merged
         assert "jsonPayload.message" in created and "textPayload" in created
         math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
         assert math_nodes == ["$C >= 100 && $C / ($C + $D + 0.001) > 0.80"], export_name
-        assert "no production history" in rule["annotations"]["evaluated_bad"], export_name
+        assert "9626" in rule["annotations"]["evaluated_good"], export_name
+        assert "0.302" in rule["annotations"]["evaluated_good"], export_name
         assert rule["annotations"]["__panelId__"] == "17"
+
+
+def test_cloud_logging_alert_filters_pin_only_services_that_emit_the_counted_token():
+    """A Logging count whose service_name pin is not the token's emitters cannot fire.
+
+    omi-sync-intake-fragmented watched backend-sync for
+    ``omi_sync_intake outcome=created``. That service emitted zero created
+    lines (measured 2026-09-21 00:00–18:00Z); the numerator was permanently 0.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                datasource = model.get("datasource") or {}
+                if datasource.get("type") != "googlecloud-logging-datasource":
+                    continue
+                query = model.get("queryText") or ""
+                pinned = set(_SERVICE_NAME_PIN.findall(query))
+                if not pinned:
+                    continue
+                for token, emitters in CLOUD_LOGGING_TOKEN_EMITTERS.items():
+                    if token not in query:
+                        continue
+                    assert pinned == emitters, (
+                        f"{export_name}:{uid} log filter for {token!r} pins "
+                        f"{sorted(pinned)} but emitters are {sorted(emitters)}"
+                    )
 
 
 def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():

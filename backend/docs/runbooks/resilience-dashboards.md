@@ -104,12 +104,15 @@ panel 16 that `to_mode` recovered share is no longer zero.
 
 `ingest_sync_conversation` increments `omi_sync_intake_total{outcome="created|merged"}`
 and logs `omi_sync_intake outcome=…`. Prometheus does not scrape Cloud Run
-`backend-sync` today (exporter allowlist is `backend` + `desktop-backend`),
-so the alert evaluates Cloud Logging counts of that line. Brand-new series:
-no production history. Expected created share ~1.0 in a per-chunk storm
-(2026-09-19: 107 shards / 121 conversations for one account) versus `1/N`
-for an N-chunk continuous recording. Assignment continuity is a separate PR;
-this alert only makes the symptom visible.
+`backend-sync` or `backend-sync-backfill` today (exporter allowlist is
+`backend` + `desktop-backend`), so the alert evaluates Cloud Logging counts of
+that line. Created is emitted by `backend-sync-backfill` only; merged by both
+`backend-sync-backfill` and `backend-sync`. Measured 2026-09-21 00:00-18:00Z:
+created 9626/9626 from backfill (backend-sync created=0); merged 21482 backfill
++ 757 backend-sync; fleet created share 0.302. Expected created share ~1.0 in a
+per-chunk storm (2026-09-19: 107 shards / 121 conversations for one account)
+versus `1/N` for an N-chunk continuous recording. Assignment continuity is a
+separate PR; this alert only makes the symptom visible.
 
 ## PostHog — desktop fallback insight
 
