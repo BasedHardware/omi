@@ -919,7 +919,18 @@ class ListenReceiver:
                     if len(data) <= 2:
                         continue
                     now = time.time()
+                    prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
+                    # A usage flush that fired while no audio was arriving moved the billing
+                    # window start past the last byte; without a floor the next flush bills
+                    # that silent gap. This byte is a resume exactly when the window start
+                    # outran the previous audio timestamp.
+                    if (
+                        prev_audio_received is not None
+                        and self.host.state.last_usage_record_timestamp is not None
+                        and prev_audio_received < self.host.state.last_usage_record_timestamp
+                    ):
+                        self.host.state.last_audio_resume_time = now
                     if self.host.is_multi_channel:
                         # `_handle_multi_channel_audio` marks first audio only
                         # after the channel prefix is known-good (and an opus
