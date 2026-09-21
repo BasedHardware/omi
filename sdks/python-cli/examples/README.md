@@ -53,6 +53,7 @@
 * [`quickstart.cy.md`](quickstart.cy.md) — Canllaw Cychwyn Cyflym omi-cli (Welsh Quickstart).
 * [`quickstart.doi.md`](quickstart.doi.md) — omi-cli डोगरी शुरूआती मार्गदर्शिका (Dogri Quickstart).
 * [`quickstart.el.md`](quickstart.el.md) — Πρώτα βήματα με το omi-cli (Greek Quickstart).
+* [`quickstart.st.md`](quickstart.st.md) — Mehato ea pele le omi-cli (Southern Sotho Quickstart).
 * [`quickstart.eo.md`](quickstart.eo.md) — Komencante per omi-cli (Esperanto Quickstart).
 * [`quickstart.et.md`](quickstart.et.md) — omi-cli Kiirjuhend (Estonian Quickstart).
 * [`quickstart.eu.md`](quickstart.eu.md) — Hasteko Gida Azkarra: omi-cli (Basque Quickstart).
