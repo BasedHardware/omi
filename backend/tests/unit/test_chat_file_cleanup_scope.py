@@ -8,10 +8,9 @@ import pytest
 
 import utils.other.chat_file as chat_file
 
-SESSIONS = {
-    'session-a': {'id': 'session-a', 'file_ids': ['file-a'], 'created_at': datetime.now(timezone.utc)},
-    'session-b': {'id': 'session-b', 'file_ids': ['file-b'], 'created_at': datetime.now(timezone.utc)},
-}
+
+def _session(session_id, file_ids):
+    return {'id': session_id, 'file_ids': file_ids, 'created_at': datetime.now(timezone.utc)}
 
 
 class _ChatDb:
@@ -22,9 +21,14 @@ class _ChatDb:
             'file-a': {'id': 'file-a', 'openai_file_id': 'openai-a'},
             'file-b': {'id': 'file-b', 'openai_file_id': 'openai-b'},
         }
+        self.sessions = {
+            'session-a': _session('session-a', ['file-a']),
+            'session-b': _session('session-b', ['file-b']),
+            'session-empty': _session('session-empty', []),
+        }
 
     def get_chat_session_by_id(self, _uid, session_id):
-        return SESSIONS.get(session_id)
+        return self.sessions.get(session_id)
 
     def get_chat_files(self, _uid, files_id=None):
         if not files_id:
@@ -60,9 +64,8 @@ def test_clearing_one_chat_keeps_the_other_sessions_files(chat_db):
 
 def test_clearing_a_chat_without_files_deletes_nothing(chat_db):
     fake, deleted = chat_db
-    SESSIONS['session-c'] = {'id': 'session-c', 'file_ids': [], 'created_at': datetime.now(timezone.utc)}
 
-    chat_file.FileChatTool('u1', 'session-c').cleanup()
+    chat_file.FileChatTool('u1', 'session-empty').cleanup()
 
     assert sorted(fake.files) == ['file-a', 'file-b']
     assert deleted == []
