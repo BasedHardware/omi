@@ -318,6 +318,10 @@ from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+
+app.add_middleware(FirestoreTierMiddleware)
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
