@@ -44,6 +44,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
+  - id: twitter-chat-tools-app-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14881: escape OAuth error and username parameters in HTML response templates"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -1257,11 +1262,6 @@ checks:
     lanes: ["local", "ci"]
     reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
   - id: twitter-chat-tools-max-results-tests
-  - id: twitter-chat-tools-app-tests
-    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py"]
-    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#14881: escape OAuth error and username parameters in HTML response templates"
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
