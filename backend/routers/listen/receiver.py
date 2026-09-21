@@ -925,10 +925,11 @@ class ListenReceiver:
                     # window start past the last byte; without a floor the next flush bills
                     # that silent gap. This byte is a resume exactly when the window start
                     # outran the previous audio timestamp.
+                    usage_record_ts = self.host.state.last_usage_record_timestamp
                     if (
                         prev_audio_received is not None
-                        and self.host.state.last_usage_record_timestamp is not None
-                        and prev_audio_received < self.host.state.last_usage_record_timestamp
+                        and usage_record_ts is not None
+                        and prev_audio_received < usage_record_ts
                     ):
                         self.host.state.last_audio_resume_time = now
                     if self.host.is_multi_channel:
