@@ -1284,13 +1284,13 @@ checks:
   - id: shipbob-create-wro-disambiguation-tests
     command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
   - id: shipbob-error-handling-tests
     command: ["python3", "plugins/omi-shipbob-app/test_error_handling.py"]
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "make_shipbob_request and all 7 chat tools must never leak raw internal exception strings or sensitive provider/network traces to clients"
-    lanes: ["local", "ci"]
-    reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
+    reason: "make_shipbob_request, oauth_callback, and all 7 chat tools must never leak raw internal exception strings or sensitive database/network traces to clients"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
