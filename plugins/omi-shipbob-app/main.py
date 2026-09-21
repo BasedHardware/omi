@@ -231,7 +231,7 @@ def make_shipbob_request(
             return {"error": response.text, "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
-        return {"error": str(e)}
+        return {"error": "Request failed"}
 
 
 def get_channels(uid: str) -> List[Dict]:
@@ -581,7 +581,7 @@ async def handle_shipbob_callback(
         log(f"OAuth error: {e}")
         return templates.TemplateResponse(
             "setup.html",
-            {"request": request, "authenticated": False, "error": f"Failed to exchange authorization code: {str(e)}"},
+            {"request": request, "authenticated": False, "error": "Failed to exchange authorization code"},
         )
 
 
@@ -680,7 +680,7 @@ async def tool_get_inventory(request: Request):
 
     except Exception as e:
         log(f"Error getting inventory: {e}")
-        return ChatToolResponse(error=f"Failed to get inventory: {str(e)}")
+        return ChatToolResponse(error="Failed to get inventory")
 
 
 @app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -724,7 +724,7 @@ async def tool_get_products(request: Request):
 
     except Exception as e:
         log(f"Error getting products: {e}")
-        return ChatToolResponse(error=f"Failed to get products: {str(e)}")
+        return ChatToolResponse(error="Failed to get products")
 
 
 @app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -880,7 +880,7 @@ async def tool_create_wro(request: Request):
 
         log(f"Error creating WRO: {e}")
         log(traceback.format_exc())
-        return ChatToolResponse(error=f"Failed to create WRO: {str(e)}")
+        return ChatToolResponse(error="Failed to create WRO")
 
 
 @app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -937,7 +937,7 @@ async def tool_get_wros(request: Request):
 
     except Exception as e:
         log(f"Error getting WROs: {e}")
-        return ChatToolResponse(error=f"Failed to get WROs: {str(e)}")
+        return ChatToolResponse(error="Failed to get WROs")
 
 
 @app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -977,7 +977,7 @@ async def tool_cancel_wro(request: Request):
 
     except Exception as e:
         log(f"Error cancelling WRO: {e}")
-        return ChatToolResponse(error=f"Failed to cancel WRO: {str(e)}")
+        return ChatToolResponse(error="Failed to cancel WRO")
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -1039,7 +1039,7 @@ async def tool_get_orders(request: Request):
 
     except Exception as e:
         log(f"Error getting orders: {e}")
-        return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
+        return ChatToolResponse(error="Failed to get orders")
 
 
 @app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
@@ -1081,7 +1081,7 @@ async def tool_get_fulfillment_centers(request: Request):
 
     except Exception as e:
         log(f"Error getting fulfillment centers: {e}")
-        return ChatToolResponse(error=f"Failed to get fulfillment centers: {str(e)}")
+        return ChatToolResponse(error="Failed to get fulfillment centers")
 
 
 # ============================================
