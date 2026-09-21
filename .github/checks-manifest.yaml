@@ -1231,6 +1231,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
+  - id: hive-search-tasks-multi-project-tests
+    command: ["python3", "plugins/omi-hive-app/test_search_tasks_multi_project.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "search_tasks fetched a single workspaces/{id}/actions?limit=50 -- a cap on the 50 most recently touched actions across the whole workspace, not per project -- so a task outside that window was silently unfindable by exact name no matter how small its own project was, breaking update_task_status and create_task's parent-task lookup on any workspace with more than 50 actions in flight; it now scans every project the same way get_project_tasks already does"
   - id: hive-create-task-ambiguous-target-tests
     command: ["python3", "plugins/omi-hive-app/test_create_task_ambiguous_target.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
