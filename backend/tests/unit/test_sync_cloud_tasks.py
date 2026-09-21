@@ -1127,7 +1127,9 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
-    sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+    sys.modules['utils.subscription'].should_lock_synced_conversation_for_missing_credits = MagicMock(
+        return_value=False
+    )
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
     saved_modules['utils.sync'] = prior_utils_sync
     sync_pkg = types.ModuleType('utils.sync')
@@ -2351,7 +2353,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
         module.claim_sync_content.assert_not_called()
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
-        module.has_transcription_credits.assert_not_called()
+        module.should_lock_synced_conversation_for_missing_credits.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

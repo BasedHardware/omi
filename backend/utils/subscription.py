@@ -1745,6 +1745,26 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     return resolve_transcription_allowance(uid, source).managed
 
 
+# Reasons the resolver treats as a durable "no credits", as opposed to a lookup
+# it could not trust. Locking a synced conversation is durable — nothing but a
+# subscription transition clears `is_locked` — so that decision must not fail
+# closed on a transient reason the way a live socket correctly does (#15232).
+_DURABLE_NO_CREDITS_REASONS = frozenset({'subscription_inactive', 'trial_paywalled', 'plan_allowance_exhausted'})
+
+
+def should_lock_synced_conversation_for_missing_credits(uid: str, source: Optional[str] = None) -> bool:
+    """Whether a freshly synced conversation should be durably locked for lack of managed-transcription credits.
+
+    Unlike :func:`has_transcription_credits`, this backs a lock persisted onto
+    the conversation (``is_locked``): a lookup failure here must not paywall the
+    conversation forever, only a resolved, durable "no credits" reason may.
+    """
+    allowance = resolve_transcription_allowance(uid, source)
+    if allowance.managed:
+        return False
+    return allowance.reason in _DURABLE_NO_CREDITS_REASONS
+
+
 CONVERSATION_PROCESSING_MODE_ALLOWED = 'allowed'
 CONVERSATION_PROCESSING_MODE_SKIPPED = 'skipped'
 

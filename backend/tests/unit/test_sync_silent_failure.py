@@ -894,7 +894,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
-        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.subscription'].should_lock_synced_conversation_for_missing_credits = MagicMock(
+            return_value=False
+        )
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
         class _ConversationSource:

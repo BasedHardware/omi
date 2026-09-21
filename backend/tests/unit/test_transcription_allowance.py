@@ -224,6 +224,25 @@ def test_no_caller_can_observe_the_two_legacy_answers_disagreeing(
     assert has_credits == (remaining_seconds is None or remaining_seconds > 0), label
 
 
+@pytest.mark.parametrize('label, situation, mode, remaining, reason', MATRIX, ids=[row[0] for row in MATRIX])
+def test_the_sync_lock_only_fires_for_a_durable_no_credits_reason(
+    monkeypatch, sub, label, situation, mode, remaining, reason
+) -> None:
+    """`should_lock_synced_conversation_for_missing_credits` backs a lock persisted onto the
+    conversation forever (nothing but a subscription change clears `is_locked`), unlike the
+    live-socket question `has_transcription_credits` answers. It must not fail closed on a
+    reason that only means "the lookup could not be trusted right now" (#15232)."""
+    _situate(monkeypatch, sub, **situation)
+    should_lock = sub.should_lock_synced_conversation_for_missing_credits('uid', source='desktop')
+    durable_no_credits = reason in {'subscription_inactive', 'trial_paywalled', 'plan_allowance_exhausted'}
+    assert should_lock == durable_no_credits, label
+    if reason in {'allowance_unavailable', 'usage_invalid'}:
+        # The defect: a lookup failure must not durably paywall the conversation,
+        # even though the live-socket question correctly still says no credits.
+        assert sub.has_transcription_credits('uid', source='desktop') is False, label
+        assert should_lock is False, label
+
+
 def test_an_inactive_subscription_has_no_managed_minutes_for_either_question(monkeypatch, sub) -> None:
     """The defect: `has_transcription_credits` said no, `get_remaining_transcription_seconds` said
     "the basic plan's minutes". A subscription the lookup calls invalid (an inactive basic account)
