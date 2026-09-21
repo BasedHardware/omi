@@ -230,7 +230,20 @@ async def _listen_sample(
             # finalizer's persist->fanout-claim window and fences the
             # conversation (run 35573952966). Hold the session open until
             # the durable readback finishes, mirroring the client contract.
-            await hold_open.wait()
+            #
+            # The session also dies if inbound audio goes quiet: the listen
+            # heartbeat tears a session down when last_activity_time is
+            # >90s stale, and only received audio refreshes it (run
+            # 35576101770: lifetime_done exactly 100s after connect). While
+            # holding, stream near-silence at the fixture rate exactly like
+            # a real client's quiet audio path.
+            silence_chunk = b"\x00" * chunk_bytes
+            while not hold_open.is_set():
+                await websocket.send(silence_chunk)
+                try:
+                    await asyncio.wait_for(hold_open.wait(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
         await websocket.close(code=1000, reason="release_probe_complete")
         return fixture.expected_phrase in live_window_combined, live_window_combined
 
