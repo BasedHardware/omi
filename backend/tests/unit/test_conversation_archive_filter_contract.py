@@ -193,6 +193,7 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.encryption": AutoMockModule("utils.encryption"),
+        "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
