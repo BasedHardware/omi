@@ -2270,9 +2270,8 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 // ============================================================================
 
 /**
- * Get custom vocabulary words from transcription preferences
- */
-/**
+ * Get custom vocabulary words from transcription preferences.
+ *
  * Returns null when the list could not be fetched, so a failure is not read as
  * an empty vocabulary. The save path replaces the whole list.
  */
