@@ -186,6 +186,7 @@ def _build_fakes() -> dict:
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_audio_merge_cloud_tasks_oidc = MagicMock(return_value=0)
     cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
     fakes['utils.cloud_tasks'] = cloud_tasks
 
