@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
+  - id: notion-id-sanitization-tests
+    command: ["python3", "plugins/omi-notion-app/test_notion_id_sanitization.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
