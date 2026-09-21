@@ -1257,6 +1257,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hive_create_task resolved project_name and parent_task_name by returning the first candidate that matched a name, so an ambiguous project name created the task under whichever project get_user_projects listed first, and a parent task name matching a task in a different project was used as a fallback instead of refused; both now require a single unambiguous candidate"
+  - id: hive-error-handling-tests
+    command: ["python3", "plugins/omi-hive-app/test_error_handling.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hive_graphql_request returned str(e) verbatim on a request failure and the tool handlers surfaced that message to callers, reflecting internal socket errors, filesystem paths and provider details into chat-tool responses; the suite drives the real helper and handlers against raising seams and asserts no exception text reaches a response"
   - id: gcal-event-id-round-trip-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_event_ids.py"]
     triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
