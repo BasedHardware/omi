@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, cast
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from google.cloud.firestore import ArrayUnion, ArrayRemove
 
-from ulid import ULID
 
 from models.app import App, UsageHistoryType
 from .redis_db import get_generic_cache, set_generic_cache
