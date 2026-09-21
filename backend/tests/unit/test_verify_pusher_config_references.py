@@ -187,6 +187,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "FREE_TIER_EMERGENCY_STOP": "false",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
