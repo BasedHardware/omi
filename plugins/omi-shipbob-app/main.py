@@ -581,7 +581,7 @@ async def handle_shipbob_callback(
         log(f"OAuth error: {e}")
         return templates.TemplateResponse(
             "setup.html",
-            {"request": request, "authenticated": False, "error": "Failed to exchange authorization code. Please try again."},
+            {"request": request, "authenticated": False, "error": "Failed to exchange authorization code"},
         )
 
 
