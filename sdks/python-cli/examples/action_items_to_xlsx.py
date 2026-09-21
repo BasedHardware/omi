@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
-FIELDS = ("id", "description", "completed", "created_at", "updated_at", "conversation_id")
+FIELDS = ("id", "description", "completed", "due_at", "created_at", "updated_at", "conversation_id")
 DATETIME_FORMAT = "yyyy-mm-dd hh:mm:ss"
 
 
@@ -92,6 +92,7 @@ def convert(source, destination):
             cell_text(item.get("id")),
             cell_text(item.get("description")),
             "Yes" if completed_val else "No",
+            cell_datetime(item.get("due_at")),
             created,
             updated,
             cell_text(item.get("conversation_id")),

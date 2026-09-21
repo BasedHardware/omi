@@ -1,6 +1,6 @@
 # Convert an action-items list export to an Excel workbook (.xlsx)
 
-Use this recipe when you want the action items list in Excel with real cell types: `created_at` / `updated_at` become datetime cells you can sort and filter, the `completed` status is clearly presented, the header row is frozen, and an AutoFilter is enabled. It reads a saved JSON export, makes no network requests, and complements [`action_items_csv.md`](action_items_csv.md).
+Use this recipe when you want the action items list in Excel with real cell types: `created_at` / `updated_at` become datetime cells you can sort and filter, the `completed` status is clearly presented, the header row is frozen, and an AutoFilter is enabled. It reads a saved JSON export, makes no network requests, and complements [`action_items_sqlite.md`](action_items_sqlite.md).
 
 You need Python 3.10+, an authenticated `omi-cli` for the initial export, and [`openpyxl`](https://pypi.org/project/openpyxl/):
 

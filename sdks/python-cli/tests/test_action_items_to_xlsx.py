@@ -27,6 +27,7 @@ class TestActionItemsToXlsx(unittest.TestCase):
                 "id": "act_001",
                 "description": "Send follow-up email to stakeholders",
                 "completed": False,
+                "due_at": "2026-09-25T09:00:00Z",
                 "created_at": "2026-09-18T10:00:00Z",
                 "updated_at": "2026-09-18T10:30:00Z",
                 "conversation_id": "conv_abc_123",
@@ -35,6 +36,7 @@ class TestActionItemsToXlsx(unittest.TestCase):
                 "id": "act_002",
                 "description": "=1+1 formula test",
                 "completed": True,
+                "due_at": None,
                 "created_at": "2026-09-19T14:15:00Z",
                 "updated_at": "2026-09-19T15:00:00Z",
                 "conversation_id": "conv_def_456",
@@ -54,9 +56,10 @@ class TestActionItemsToXlsx(unittest.TestCase):
             self.assertEqual(wb.sheetnames, ["action_items"])
             ws = wb["action_items"]
 
-            # Header verification
+            # Header verification — due_at is col D, created_at is col E
             self.assertEqual(ws["A1"].value, "id")
-            self.assertEqual(ws["D1"].value, "created_at (UTC)")
+            self.assertEqual(ws["D1"].value, "due_at (UTC)")
+            self.assertEqual(ws["E1"].value, "created_at (UTC)")
             self.assertEqual(ws.freeze_panes, "A2")
             self.assertIsNotNone(ws.auto_filter.ref)
 
@@ -64,11 +67,18 @@ class TestActionItemsToXlsx(unittest.TestCase):
             self.assertEqual(ws["A2"].value, "act_001")
             self.assertEqual(ws["C2"].value, "No")
 
+            # due_at stored as datetime cell
+            from datetime import datetime
+            self.assertIsInstance(ws["D2"].value, datetime)
+
             # Row 3 verification (act_002, formula safety)
             self.assertEqual(ws["A3"].value, "act_002")
             self.assertEqual(ws["B3"].value, "=1+1 formula test")
             self.assertEqual(ws["B3"].data_type, "s")
             self.assertEqual(ws["C3"].value, "Yes")
+            # due_at=None → None cell
+            self.assertIsNone(ws["D3"].value)
+
 
     def test_refuse_overwrite(self):
         with tempfile.TemporaryDirectory() as tmpdir:
