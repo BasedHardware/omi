@@ -180,27 +180,6 @@ body {
   color: var(--muted-foreground);
   font-size: 14px;
 }
-.daily-idea {
-  flex-direction: row;
-  align-items: center;
-  margin-bottom: 24px;
-}
-.daily-idea-copy {
-  flex: 1;
-  min-width: 0;
-}
-.daily-idea-label {
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--muted-foreground);
-}
-.daily-idea-body {
-  max-width: 620px;
-  margin-top: 8px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--muted-foreground);
-}
 .home-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -362,13 +341,6 @@ button:not(:disabled),
   }
   .brief p {
     font-size: 13px;
-  }
-  .daily-idea {
-    flex-direction: column;
-  }
-  .daily-idea > button {
-    width: 100%;
-    min-height: 44px;
   }
   .home-columns {
     grid-template-columns: 1fr;
