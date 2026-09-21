@@ -101,7 +101,7 @@ jobs:
           # wastes the whole lane on a run that cannot pass; a rotated
           # credential for the wrong service account fails this same check, so
           # fail fast with the resolved caller and both possible causes.
-          caller="$(gcloud auth list --filter=status:ACTIVE --format=value(account))"
+          caller="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
           signing_permissions="$(gcloud iam service-accounts test-iam-permissions \
             --project=based-hardware \
             --permissions=iam.serviceAccounts.signJwt \

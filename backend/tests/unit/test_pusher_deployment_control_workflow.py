@@ -2,12 +2,77 @@
 
 from __future__ import annotations
 
+import re
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 MANUAL = (ROOT / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
 AUTO = (ROOT / ".github/workflows/gcp_backend_pusher_auto_deploy.yml").read_text(encoding="utf-8")
+
+
+def _bash5() -> str | None:
+    """Resolve a bash >= 5, or None when the host has none.
+
+    macOS still ships /bin/bash 3.2, which ACCEPTS the unquoted
+    parenthesized ``--format=value(account)`` that bash 5 rejects at
+    parse time -- the exact false negative that let run 35536072843's
+    regression reach main. Parsing is only meaningful under a bash new
+    enough to match the ubuntu runner's.
+    """
+    candidates = [
+        shutil.which("bash"),
+        "/opt/homebrew/bin/bash",
+        "/usr/local/bin/bash",
+        "/usr/bin/bash",
+        "/bin/bash",
+    ]
+    for candidate in dict.fromkeys(entry for entry in candidates if entry):
+        version = subprocess.run([candidate, "--version"], capture_output=True, text=True, check=False).stdout
+        match = re.search(r"version (\d+)\.", version)
+        if match and int(match.group(1)) >= 5:
+            return candidate
+    return None
+
+
+def test_embedded_step_scripts_parse_under_the_runners_bash() -> None:
+    """Run 35536072843 (2026-09-20): the signer preflight died at bash PARSE
+    time -- ``--format=value(account)`` unquoted inside ``$( )`` is a syntax
+    error on the ubuntu runner's bash 5 -- before gcloud ever executed, and
+    PR checks never run this deploy job's script, so no pre-merge surface
+    executed it. Every embedded ``run:`` block must at least parse. macOS's
+    /bin/bash 3.2 accepts the construct, so the check runs only under a
+    resolved bash >= 5 and skips where none exists; CI's ubuntu runners
+    always have one, which is where the enforcement bites."""
+    bash = _bash5()
+    if bash is None:
+        pytest.skip(
+            "no bash >= 5 found: macOS /bin/bash 3.2 accepts the unquoted "
+            "parenthesized gcloud formats the runner's bash 5 rejects"
+        )
+
+    parsed_blocks = 0
+    for label, workflow_text in (("auto", AUTO), ("manual", MANUAL)):
+        workflow = yaml.safe_load(workflow_text)
+        for job_id, job in workflow["jobs"].items():
+            for step in job.get("steps") or []:
+                script = step.get("run")
+                if not isinstance(script, str) or not str(step.get("shell", "bash")).startswith("bash"):
+                    continue
+                parsed_blocks += 1
+                parsed = subprocess.run([bash, "-n"], input=script, capture_output=True, text=True, check=False)
+                assert (
+                    parsed.returncode == 0
+                ), f"{label} jobs.{job_id} [{step.get('name', '?')}]: {parsed.stderr.strip()}"
+
+    # 15 auto + 31 manual blocks at introduction; the floor keeps a YAML
+    # reshape from silently scanning nothing.
+    assert parsed_blocks >= 40
 
 
 def test_dev_bake_records_exact_live_identity_only_after_rollout_success() -> None:
