@@ -56,7 +56,7 @@ def read_max_context_seconds() -> float:
 
 
 def buffer_cap_seconds(pace: float, max_context: float) -> float:
-    return max_context + 2.0 * pace
+    return 2.0 * max_context + 2.0 * pace
 
 
 def is_terminal_sentence(segment: RawSegment) -> bool:
@@ -97,26 +97,40 @@ def decide_window(
     *,
     force: bool,
     pause: bool = False,
+    empty_cap_slide: float = 0.0,
 ) -> WindowDecision:
     at_cap = duration >= max_context
-    force = force or at_cap
+    if force:
+        if not segments:
+            return WindowDecision((), duration, forced_cut=False)
+        return WindowDecision(tuple(segments), duration, forced_cut=False)
+    emit = _held_emit(segments, duration, pause=pause)
+    if at_cap:
+        if not segments:
+            slide = min(max(0.0, empty_cap_slide), duration)
+            return WindowDecision((), slide if slide > 0.0 else None, forced_cut=True)
+        if len(segments) == 1:
+            only = segments[0]
+            return WindowDecision((only,), only.end, forced_cut=True)
+        new_anchor = emit[-1].end if emit else None
+        return WindowDecision(tuple(emit), new_anchor, forced_cut=False)
     if not segments:
-        if force:
-            return WindowDecision((), duration, forced_cut=at_cap)
         return WindowDecision((), None, forced_cut=False)
-    emit: list[RawSegment] = list(segments) if force else list(segments[:-1])
-    if not force:
-        last = segments[-1]
-        if pause:
-            if is_terminal_sentence(last):
-                emit = list(segments)
-        elif is_trailing_complete(last, duration):
-            emit = list(segments)
-    if emit:
-        new_anchor = duration if force else emit[-1].end
-    else:
-        new_anchor = duration if force else None
-    return WindowDecision(tuple(emit), new_anchor, forced_cut=at_cap)
+    new_anchor = emit[-1].end if emit else None
+    return WindowDecision(tuple(emit), new_anchor, forced_cut=False)
+
+
+def _held_emit(segments: list[RawSegment], duration: float, *, pause: bool) -> list[RawSegment]:
+    if not segments:
+        return []
+    emit = list(segments[:-1])
+    last = segments[-1]
+    if pause:
+        if is_terminal_sentence(last):
+            return list(segments)
+    elif is_trailing_complete(last, duration):
+        return list(segments)
+    return emit
 
 
 def _read_clamped(name: str, default: float, clamp: Callable[[float], float]) -> float:

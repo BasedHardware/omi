@@ -31,6 +31,7 @@ from utils.stt.window_anchor import (
     LEAD_IN_SECONDS,
     SILENCE_FLUSH_SECONDS,
     RawSegment,
+    buffer_cap_seconds,
     decide_window,
     parse_tdt_segments,
     read_max_context_seconds,
@@ -149,7 +150,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._next_send_speech = True
 
     def _buffer_cap(self) -> int:
-        return self._max_context_bytes + 2 * self._pace_bytes
+        return int(buffer_cap_seconds(self._pace_seconds, self._max_context_seconds) * self._sample_rate) * 2
 
     def send(self, data: bytes) -> bool:
         if self._closed or self._dead:
@@ -222,11 +223,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 try:
                     if timeout is None:
                         await self._wake.wait()
-                    else:
+                    elif timeout > 0.0:
                         await asyncio.wait_for(self._wake.wait(), timeout=timeout)
                 except TimeoutError:
                     pass
                 self._wake.clear()
+                posted = False
                 while not self._dead and self._has_unemitted_speech():
                     if not self._closed:
                         # Pace before selecting: a context captured before the wait would be stale.
@@ -236,10 +238,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     job = self._next_job()
                     if job is None or self._dead:
                         break
+                    posted = True
                     self._next_post = asyncio.get_running_loop().time() + self._pace_seconds
                     await self._run_job(job)
                 if self._closed:
                     return
+                if timeout == 0.0 and not posted:
+                    await self._wake.wait()
+                    self._wake.clear()
         except asyncio.CancelledError:
             self._dead = True
             self._dead_reason = 'cancelled'
@@ -255,7 +261,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         segments = await self._post_and_parse(job.pcm, job.duration)
         if self._dead:
             return
-        decision = decide_window(segments, job.duration, self._max_context_seconds, force=job.force, pause=job.pause)
+        decision = decide_window(
+            segments,
+            job.duration,
+            self._max_context_seconds,
+            force=job.force,
+            pause=job.pause,
+            empty_cap_slide=self._pace_seconds,
+        )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
         emitted = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
@@ -305,12 +318,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 stepped = self._anchor_bytes + self._pace_bytes
             closing = self._closed
             pause = False
-            if at_cap or silence_flush or idle_flush:
+            if silence_flush or idle_flush:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = True
             elif closing:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = end >= received
+            elif at_cap:
+                end = min(received, self._anchor_bytes + self._max_context_bytes)
+                force = False
+                pause = self._pause_requested
             elif self._pause_requested:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = False
@@ -321,13 +338,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = False
             if end <= self._anchor_bytes:
-                if idle_flush:
-                    self._idle_flushed = True
                 return None
             if not force and self._anchor_bytes == self._last_post_anchor and end <= self._last_post_end:
                 self._pause_requested = False
                 return None
-            if idle_flush:
+            if idle_flush and end >= received:
                 self._idle_flushed = True
             if self._pause_requested and (pause or force or end >= received):
                 self._pause_requested = False

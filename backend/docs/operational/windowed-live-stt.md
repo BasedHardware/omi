@@ -68,18 +68,27 @@ the gate has already stripped silence from the timeline. Treating every
 `finalize()` as a forced cut re-anchors at a breath and the next POST starts
 mid-sentence, which is the empty-clip failure mode.
 
-Forced flush (emit everything, re-anchor at `now`) happens only on max-context,
-close / `drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
+Forced flush (emit everything, re-anchor at `now`) happens only on close /
+`drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
 callers), or **wall-clock idle**: no audio accepted by `send()` for ≥2.0 s
 while unemitted speech remains after the anchor. Idle fires once per idle
-period. Under the gate no audio arrives during silence, so the pump waits on
-`asyncio.wait_for(self._wake.wait(), timeout=…)` when held audio exists and
-does not arm a timer when nothing is held. An empty model response that still
-contained VAD speech keeps the anchor so a later POST can recover the text.
-The same `[anchor, end]` context is not POSTed again unless the request is
-forced. Max-context (default 24 s, clamped to [6, 30]) force-emits whatever
-is there and counts `omi_stt_window_forced_cuts_total`. After a force flush
-the next context starts at the next speech onset with ~0.3 s of lead-in.
+period, but only after a forced job that reached `received`; a capped idle
+POST leaves `_idle_flushed` false so the pump takes another paced forced job
+for the remainder. Under the gate no audio arrives during silence, so the
+pump waits on `asyncio.wait_for(self._wake.wait(), timeout=…)` when held
+audio exists and does not arm a timer when nothing is held.
+
+Max-context (default 24 s, clamped to [6, 30]) is **not** a force flush:
+`decide_window` owns the cap. Two or more segments behave like a paced POST
+(emit all but the last, plus trailing-complete) and re-anchor at the last
+emitted sentence end. A single run-on segment is emitted and the anchor
+moves to that segment's end (not `now`); an empty cap response slides the
+anchor forward by one pace interval instead of discarding the clip. Those
+one-segment and empty cap paths count `omi_stt_window_forced_cuts_total`.
+An empty model response that is not at cap keeps the anchor so a later POST
+can recover the text. The same `[anchor, end]` context is not POSTed again
+unless the request is forced. After a true force flush the next context
+starts at the next speech onset with ~0.3 s of lead-in.
 Pure non-speech never extends a context and is never POSTed. Segment
 `start`/`end` are anchor + relative times, clamped into `[anchor, now]` and never
 earlier than the previously emitted end. Only emitted segments run speaker
@@ -90,9 +99,10 @@ posted context.
 
 One slot per one-process listen pod means at most 12 sessions at 12 replicas or
 60 sessions at 60 replicas. Each session has one in-flight POST. The PCM buffer
-holds the current context plus two pace intervals of cushion: default
-`24 + 2×6 = 36` s of mono PCM16, **≤ ~1.2 MB at 16 kHz**. That cushion absorbs a
-transient slow-but-200 POST (6–8 s) without killing a healthy session. Growing
+holds two max-context windows plus two pace intervals of cushion: default
+`2×24 + 2×6 = 60` s of mono PCM16, **≤ ~1.9 MB at 16 kHz**. That cushion absorbs a
+catch-up burst while one POST is in flight without killing a healthy session.
+The at-cap job already drains backlog 24 s per paced POST. Growing
 windows re-post overlapping context as `now` advances, so GPU audio per session
 is about **2.0×** fixed 6 s slicing. A minimum `PARAKEET_WINDOW_PACE_SECONDS`
 (default 6) interval between POST starts still bounds sustained traffic; delivery
@@ -115,7 +125,7 @@ A windowed socket proves recovery only on its first successful POST; local
 construction cannot close a half-open circuit. Generation-scoped callbacks
 release cancelled probes without erasing a newer failure. There are no POST
 retries or teardown retries against the failed provider. Sustained buffer
-overflow (the max-context + two-pace cap exceeded) fails the leg with `capacity_full` **and**
+overflow (the two-max-context + two-pace cap exceeded) fails the leg with `capacity_full` **and**
 opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
@@ -127,9 +137,11 @@ the managed chain behave like today's `GatedSTTSocket`: they honour
 `vad_gate_override` / `VAD_GATE_MODE`, and a VAD inference error fails open to
 raw send. Flag-on with allocation 0 therefore changes chain order and breakers
 only, not audio gating. A VAD `finalize()` after the 300 ms hangover is a soft
-pause POST, not a cut. Forced flush is reserved for max-context, close,
+pause POST, not a cut. Forced flush is reserved for close,
 ≥1.5 s of ungated non-speech bytes, and 2 s of wall-clock idle with held
-speech. Repeated short utterances still cannot defeat the
+speech. Hitting max-context re-anchors at the last emitted sentence (or
+slides one pace when the model returned nothing); it does not treat the cut
+as a new utterance onset. Repeated short utterances still cannot defeat the
 per-session POST limit: pacing applies between POST *starts*, and teardown
 skips that delay for the final flush. Admission is released as soon as drain
 starts; the final POST may finish without holding the slot. Cancellation

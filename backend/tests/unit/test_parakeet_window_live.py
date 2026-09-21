@@ -532,6 +532,27 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
     assert window.admission.active == 0
 
 
+class GateFirstClient:
+    """Block only the first POST so a burst can land while one request is in flight."""
+
+    def __init__(self, payloads=None):
+        self.payloads = list(payloads) if payloads is not None else [{'text': 'ok'}]
+        self.requests = []
+        self.started = asyncio.Event()
+        self.gate: asyncio.Future[None] | None = None
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        data = self.payloads[min(len(self.requests) - 1, len(self.payloads) - 1)]
+        if callable(data):
+            data = data(len(self.requests), kwargs)
+        if self.gate is None:
+            self.gate = asyncio.get_running_loop().create_future()
+            self.started.set()
+            await self.gate
+        return httpx.Response(200, json=data, request=httpx.Request('POST', url))
+
+
 class HoldClient:
     def __init__(self):
         self.gates: list[asyncio.Future[None]] = []
@@ -717,13 +738,22 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     empty_keep = decide_window([], 6.0, 24.0, force=False)
     assert empty_keep.emit == ()
     assert empty_keep.new_anchor is None
-    empty_cut = decide_window([], 24.0, 24.0, force=False)
-    assert empty_cut.new_anchor == 24.0
+    empty_cut = decide_window([], 24.0, 24.0, force=False, empty_cap_slide=6.0)
+    assert empty_cut.emit == ()
+    assert empty_cut.new_anchor == 6.0
     assert empty_cut.forced_cut is True
+    cap_two = decide_window([first, held], 24.0, 24.0, force=False)
+    assert cap_two.emit == (first,)
+    assert cap_two.new_anchor == 2.0
+    assert cap_two.forced_cut is False
     forced = decide_window([held], 24.0, 24.0, force=False)
     assert forced.emit == (held,)
-    assert forced.new_anchor == 24.0
+    assert forced.new_anchor == 5.0
     assert forced.forced_cut is True
+    force_all = decide_window([held], 24.0, 24.0, force=True)
+    assert force_all.emit == (held,)
+    assert force_all.new_anchor == 24.0
+    assert force_all.forced_cut is False
 
     paused_mid = decide_window([held], 2.0, 24.0, force=False, pause=True)
     assert paused_mid.emit == ()
@@ -739,8 +769,8 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
 def test_default_buffer_cap_fits_documented_memory():
     from utils.stt.window_anchor import buffer_cap_seconds
 
-    assert buffer_cap_seconds(6.0, 24.0) == 36.0
-    assert int(36.0 * 16000 * 2) <= 1_200_000
+    assert buffer_cap_seconds(6.0, 24.0) == 60.0
+    assert int(60.0 * 16000 * 2) <= 1_920_000
 
 
 def test_pace_and_max_context_env_clamps(monkeypatch):
@@ -815,7 +845,11 @@ async def test_empty_response_keeps_anchor_and_later_post_recovers(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_max_context_forced_cut_emits_held_sentence(monkeypatch):
+async def test_max_context_run_on_sentence_reanchors_at_sentence_end(monkeypatch):
+    """A run-on sentence at the cap is the one case that must cut: emit it and re-anchor at its
+    END, not at `now`. Anchoring at `now` would start the next context mid-utterance, which is the
+    empty-output failure mode. The session stays open so this takes the cap path; a closing session
+    force-flushes instead and is covered by the drain tests."""
     posted = []
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '6')
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
@@ -826,9 +860,18 @@ async def test_max_context_forced_cut_emits_held_sentence(monkeypatch):
     sock = window.connect_window(posted.extend, 16000)
     sock.mark_speech()
     sock.send(b'\x01\x00' * 16000 * 6)
-    await sock.drain_and_close()
+    await _wait_requests(client, 1)
+    deadline = asyncio.get_running_loop().time() + 2
+    while not posted:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError('run-on sentence was never emitted at the cap')
+        await _REAL_SLEEP(0)
     assert [s['text'] for s in posted] == ['Still going']
     assert WINDOW_FORCED_CUTS._value.get() >= before + 1
+    # 5.8 s (the sentence end), not 6.0 s (`now`).
+    assert 5.0 * 16000 * 2 < sock._anchor_bytes < 6.0 * 16000 * 2
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -1063,3 +1106,131 @@ async def test_nonspeech_audio_is_never_posted(monkeypatch):
     await sock.drain_and_close()
     assert client.requests == []
     assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+async def test_cap_cut_next_post_starts_at_emitted_sentence_end(monkeypatch):
+    posted = []
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '6')
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    first, second = b'\x01\x00' * 16000 * 6, b'\x02\x00' * 16000 * 6
+    client = SeqClient(
+        [
+            {
+                'segments': [
+                    {'text': 'One.', 'start': 0.0, 'end': 2.0},
+                    {'text': 'Two', 'start': 2.0, 'end': 5.8},
+                ]
+            },
+            {
+                'segments': [
+                    {'text': 'Two.', 'start': 0.0, 'end': 4.0},
+                    {'text': 'Three', 'start': 4.0, 'end': 9.0},
+                ]
+            },
+        ]
+    )
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(posted.extend, 16000)
+    sock.mark_speech()
+    sock.send(first)
+    await _wait_requests(client, 1)
+    sock.mark_speech()
+    sock.send(second)
+    await _wait_requests(client, 2)
+    anchor = 2 * 16000 * 2
+    body1 = client.requests[0][1]['files']['file'][1][44:]
+    body2 = client.requests[1][1]['files']['file'][1][44:]
+    assert body1 == first
+    assert body2.startswith(first[anchor:])
+    assert [s['text'] for s in posted][0] == 'One.'
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_at_cap_slides_pace_and_later_post_recovers(monkeypatch):
+    posted = []
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    empty, later = b'\x01\x00' * 16000 * 24, b'\x02\x00' * 16000 * 6
+    before = WINDOW_FORCED_CUTS._value.get()
+    client = SeqClient([{'text': ''}, {'segments': [{'text': 'Recovered.', 'start': 0.0, 'end': 4.0}]}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(posted.extend, 16000)
+    sock.mark_speech()
+    sock.send(empty)
+    await _wait_requests(client, 1)
+    sock.mark_speech()
+    sock.send(later)
+    await sock.drain_and_close()
+    slide = 6 * 16000 * 2
+    body1 = client.requests[0][1]['files']['file'][1][44:]
+    body2 = client.requests[1][1]['files']['file'][1][44:]
+    assert body1 == empty
+    assert body2.startswith(empty[slide:])
+    assert b'\x02\x00' in body2
+    assert [s['text'] for s in posted] == ['Recovered.']
+    assert WINDOW_FORCED_CUTS._value.get() >= before + 1
+
+
+@pytest.mark.asyncio
+async def test_catchup_burst_does_not_shed_and_posts_max_context_jobs(monkeypatch):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = GateFirstClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    head, tail = b'\x01\x00' * 16000 * 6, b'\x02\x00' * 16000 * 34
+    sock.mark_speech()
+    assert sock.send(head)
+    await client.started.wait()
+    sock.mark_speech()
+    assert sock.send(tail)
+    assert not sock.is_connection_dead
+    assert st._parakeet_circuit.state == 'closed'
+    assert client.gate is not None
+    client.gate.set_result(None)
+    await sock.drain_and_close()
+    assert st._parakeet_circuit.state == 'closed'
+    assert client.requests
+    assert all(_wav_duration(kw) <= 24.0 + 1e-6 for _, kw in client.requests)
+    last_body = client.requests[-1][1]['files']['file'][1][44:]
+    assert (head + tail).endswith(last_body)
+    assert b'\x02\x00' in last_body
+
+
+@pytest.mark.asyncio
+async def test_idle_remainder_posts_without_close(monkeypatch):
+    from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
+
+    posted = []
+    clock = {'now': 1000.0}
+    monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = GateFirstClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(posted.extend, 16000)
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 6)
+    await client.started.wait()
+    sock.mark_speech()
+    sock.send(b'\x02\x00' * 16000 * 21)
+    clock['now'] += IDLE_FLUSH_SECONDS
+    assert client.gate is not None
+    client.gate.set_result(None)
+    deadline = asyncio.get_running_loop().time() + 2
+    while len(client.requests) < 3:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError(f'idle remainder never posted, got {len(client.requests)} POSTs')
+        await _REAL_SLEEP(0)
+    durs = [_wav_duration(kw) for _, kw in client.requests]
+    assert durs[-1] < 6.0
+    assert durs[-1] > 0.0
+    n_posts = len(client.requests)
+    clock['now'] += IDLE_FLUSH_SECONDS
+    for _ in range(8):
+        sock._wake.set()
+        await _REAL_SLEEP(0)
+    assert len(client.requests) == n_posts
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
