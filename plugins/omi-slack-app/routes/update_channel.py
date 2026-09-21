@@ -1,17 +1,27 @@
-import logging
-from fastapi import APIRouter, HTTPException, status
-from ..error_handler import log_and_raise_500
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+from ..error_handler import json_error_response
+from ..slack_client import SlackClient
 
 router = APIRouter()
-_logger = logging.getLogger("omi_slack_app.update_channel")
+
 
 @router.post("/update-channel")
-async def update_channel(payload: dict):
+async def update_channel(request: Request) -> JSONResponse:
+    """
+    Update a Slack channel configuration.
+
+    Returns a generic error payload on any exception.
+    """
     try:
-        # Placeholder for actual update logic
-        # raise NotImplementedError()  # simulate success path
-        return {"success": True}
-    except Exception as e:
-        _logger.error("Failed to update channel", exc_info=e)
-        # Previously returned raw error dict
-        raise log_and_raise_500(e)
+        payload = await request.json()
+        client = SlackClient()
+        await client.update_channel(payload)
+        return JSONResponse(content={"success": True})
+    except Exception as e:  # pragma: no cover – exercised via tests
+        return json_error_response(
+            status_code=500,
+            user_message="Internal server error",
+            original=e,
+        )

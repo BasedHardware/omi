@@ -1,14 +1,14 @@
 import logging
-from pathlib import Path
 
-# Create a logger for the Slack app plugin
+# Configure a module‑level logger for the plugin.
 logger = logging.getLogger("omi_slack_app")
 if not logger.handlers:
-    logger.setLevel(logging.INFO)
-    log_path = Path(__file__).resolve().parent / "slack_app.log"
-    handler = logging.FileHandler(log_path, encoding="utf-8")
+    # Prevent duplicate handlers in case of multiple imports.
+    handler = logging.StreamHandler()
     formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+        fmt="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    logger.setLevel(logging.INFO)

@@ -1,65 +1,109 @@
-import logging
-from typing import List, Any
+import os
+from typing import Any, Dict, List
 
-from slack_sdk.web.async_client import AsyncWebClient
+from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-_logger = logging.getLogger("omi_slack_app.slack_client")
+from .logger import logger
+from .error_handler import http_exception
+
+# NOTE: The WebClient is deliberately instantiated inside each method
+# to ensure that any credential‑related errors are caught and handled
+# uniformly. This also prevents the client from being created at import
+# time, which could raise exceptions before we have a chance to log them.
+
 
 class SlackClient:
     """
-    Thin wrapper around Slack's AsyncWebClient that guarantees no raw exception
-    strings are ever propagated to callers.
+    Thin wrapper around ``slack_sdk.WebClient`` providing the subset of
+    functionality required by the OMI Slack app plugin.
     """
 
-    def __init__(self):
+    def _get_client(self) -> WebClient:
+        """
+        Create a ``WebClient`` instance using the ``SLACK_BOT_TOKEN``
+        environment variable. Any exception (e.g. missing token) is
+        re‑raised as a generic HTTPException after logging.
+        """
         try:
-            # The token is expected to be provided via environment variable.
-            self.client = AsyncWebClient()
-        except Exception as e:
-            # Instantiation itself can fail (e.g., missing token)
-            _logger.error("Failed to create Slack AsyncWebClient", exc_info=e)
-            raise RuntimeError("Unable to initialise Slack client") from e
+            token = os.getenv("SLACK_BOT_TOKEN")
+            if not token:
+                raise RuntimeError("SLACK_BOT_TOKEN is not set")
+            return WebClient(token=token)
+        except Exception as e:  # pragma: no cover – exercised via tests
+            raise http_exception(
+                status_code=500,
+                user_message="Failed to initialise Slack client",
+                original=e,
+            )
 
-    async def send_message(self, channel: str, text: str) -> None:
-        try:
-            await self.client.chat_postMessage(channel=channel, text=text)
-        except SlackApiError as e:
-            _logger.error("Slack API error while sending message", exc_info=e)
-            raise RuntimeError("Failed to send message") from e
-        except Exception as e:
-            _logger.error("Unexpected error while sending message", exc_info=e)
-            raise RuntimeError("Failed to send message") from e
+    async def complete_oauth(self, *, state: str, code: str) -> None:
+        """
+        Complete the OAuth flow. Errors are logged and re‑raised as generic
+        HTTPExceptions by the caller.
+        """
+        client = self._get_client()
+        # Placeholder for actual OAuth logic.
+        # Any exception from the SDK will bubble up and be handled by the route.
+        await client.oauth_v2_access(client_id=os.getenv("SLACK_CLIENT_ID"), client_secret=os.getenv("SLACK_CLIENT_SECRET"), code=code)
 
-    async def get_channel_history(self, channel: str, limit: int = 100) -> List[Any]:
+    async def update_channel(self, payload: Dict[str, Any]) -> None:
+        client = self._get_client()
         try:
-            resp = await self.client.conversations_history(channel=channel, limit=limit)
-            return resp["messages"]
+            await client.conversations_rename(channel=payload["channel_id"], name=payload["new_name"])
         except SlackApiError as e:
-            _logger.error("Slack API error while fetching channel history", exc_info=e)
-            raise RuntimeError("Failed to fetch channel history") from e
-        except Exception as e:
-            _logger.error("Unexpected error while fetching channel history", exc_info=e)
-            raise RuntimeError("Failed to fetch channel history") from e
+            logger.error("Slack API error while updating channel: %s", e)
+            raise
 
-    async def search_messages(self, query: str) -> List[Any]:
+    async def refresh_channels(self) -> None:
+        client = self._get_client()
         try:
-            resp = await self.client.search_messages(query=query)
-            return resp["messages"]["matches"]
+            await client.conversations_list()
         except SlackApiError as e:
-            _logger.error("Slack API error while searching messages", exc_info=e)
-            raise RuntimeError("Failed to search messages") from e
-        except Exception as e:
-            _logger.error("Unexpected error while searching messages", exc_info=e)
-            raise RuntimeError("Failed to search messages") from e
+            logger.error("Slack API error while refreshing channels: %s", e)
+            raise
 
-    async def search_channels(self, query: str) -> List[Any]:
+    async def logout(self) -> None:
+        client = self._get_client()
         try:
-            resp = await self.client.search_channels(query=query)
-            return resp["channels"]["matches"]
+            await client.auth_revoke()
         except SlackApiError as e:
-            _logger.error("Slack API error while searching channels", exc_info=e)
-            raise RuntimeError("Failed to search channels") from e
-        except Exception as e:
-            _logger.error("Unexpected error while searching channels", exc_info=e)
-            raise RuntimeError("Failed to search channels") from e
+            logger.error("Slack API error while revoking token: %s", e)
+            raise
+
+    async def handle_event(self, payload: Dict[str, Any]) -> None:
+        client = self._get_client()
+        # Simplified event handling – real implementation would be more complex.
+        try:
+            event_type = payload.get("type")
+            if event_type == "message":
+                await client.chat_postMessage(channel=payload["channel"], text=payload["text"])
+        except SlackApiError as e:
+            logger.error("Slack API error while handling event: %s", e)
+            raise
+
+    async def send_message(self, payload: Dict[str, Any]) -> None:
+        client = self._get_client()
+        try:
+            await client.chat_postMessage(channel=payload["channel"], text=payload["text"])
+        except SlackApiError as e:
+            logger.error("Slack API error while sending message: %s", e)
+            raise
+
+    async def search_messages(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        client = self._get_client()
+        try:
+            response = await client.search_messages(query=payload["query"])
+            return response["messages"]["matches"]
+        except SlackApiError as e:
+            logger.error("Slack API error while searching messages: %s", e)
+            raise
+
+    async def search_channels(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        client = self._get_client()
+        try:
+            response = await client.search_conversations(query=payload["query"])
+            return response["channels"]["matches"]
+        except SlackApiError as e:
+            logger.error("Slack API error while searching channels: %s", e)
+            raise

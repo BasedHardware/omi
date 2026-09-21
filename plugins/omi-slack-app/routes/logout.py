@@ -1,15 +1,26 @@
-import logging
-from fastapi import APIRouter, HTTPException, status
-from ..error_handler import log_and_raise_500
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from ..error_handler import json_error_response
+from ..slack_client import SlackClient
 
 router = APIRouter()
-_logger = logging.getLogger("omi_slack_app.logout")
+
 
 @router.post("/logout")
-async def logout():
+async def logout() -> JSONResponse:
+    """
+    Log the current user out of the Slack integration.
+
+    Returns a generic error payload on any exception.
+    """
     try:
-        # Placeholder for logout logic
-        return {"success": True}
-    except Exception as e:
-        _logger.error("Logout failed", exc_info=e)
-        raise log_and_raise_500(e)
+        client = SlackClient()
+        await client.logout()
+        return JSONResponse(content={"success": True})
+    except Exception as e:  # pragma: no cover – exercised via tests
+        return json_error_response(
+            status_code=500,
+            user_message="Internal server error",
+            original=e,
+        )

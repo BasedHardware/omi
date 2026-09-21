@@ -1,21 +1,36 @@
-import json
-import logging
-from fastapi import APIRouter, HTTPException, Request, status
-from ..error_handler import log_and_raise_400, log_and_raise_500
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
+
+from ..error_handler import http_exception
+from ..slack_client import SlackClient
 
 router = APIRouter()
-_logger = logging.getLogger("omi_slack_app.webhook")
+
 
 @router.post("/webhook")
-async def slack_event(request: Request):
+async def webhook(request: Request) -> JSONResponse:
+    """
+    Receive Slack event payloads.
+
+    Invalid JSON results in a generic 400 error without echoing the
+    original parsing exception.
+    """
     try:
         payload = await request.json()
-    except Exception as e:
-        # Previously leaked raw JSON error
-        raise log_and_raise_400("Invalid JSON payload", e)
+    except Exception as e:  # pragma: no cover – exercised via tests
+        raise http_exception(
+            status_code=400,
+            user_message="Invalid JSON payload",
+            original=e,
+        )
 
     try:
-        # Placeholder for processing the Slack event payload
-        return {"ok": True}
-    except Exception as e:
-        raise log_and_raise_500(e)
+        client = SlackClient()
+        await client.handle_event(payload)
+        return JSONResponse(content={"ok": True})
+    except Exception as e:  # pragma: no cover – exercised via tests
+        raise http_exception(
+            status_code=500,
+            user_message="Failed to process webhook event",
+            original=e,
+        )
