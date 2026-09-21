@@ -20,6 +20,10 @@ final class BleAudioService: ObservableObject {
   @Published private(set) var audioLevel: Float = 0.0
   @Published private(set) var isDecodeDegraded = false
 
+  /// The connection currently feeding this session. Weak so a teardown that
+  /// drops the stream task also drops the last service-side retain.
+  private(set) weak var processingConnection: DeviceConnection?
+
   // MARK: - Properties
 
   private let logger = Logger(subsystem: "me.omi.desktop", category: "BleAudioService")
@@ -32,7 +36,9 @@ final class BleAudioService: ObservableObject {
   /// bumps it. A Stop/disconnect that lands during the codec await therefore
   /// aborts the resumed start instead of re-arming `isProcessing` with the
   /// handlers already torn down (or clobbering a newer session).
-  private var processingGeneration = 0
+  /// Bumped on every `startProcessing`. Readable so a test can pin that a
+  /// session was never torn down and restarted underneath it.
+  private(set) var processingGeneration = 0
 
   // Audio delivery
   private var transcriptionService: TranscriptionService?
@@ -74,6 +80,7 @@ final class BleAudioService: ObservableObject {
     isProcessing = true
     processingGeneration &+= 1
     let generation = processingGeneration
+    processingConnection = connection
 
     self.transcriptionService = transcriptionService
     self.audioDataHandler = audioDataHandler
@@ -167,6 +174,7 @@ final class BleAudioService: ObservableObject {
     cancellables.removeAll()
 
     isProcessing = false
+    processingConnection = nil
     transcriptionService = nil
     audioDataHandler = nil
     conversationAudioHandler = nil
