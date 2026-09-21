@@ -8,7 +8,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -22,14 +23,14 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
-    {bool? isUser, String? personId, int? speakerId});
+typedef SpeakerAssignmentCall =
+    Future<bool> Function(String, List<String>, {bool? isUser, String? personId, int? speakerId});
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   ConversationDetailProvider({SpeakerAssignmentCall? assignSpeaker, ConversationReprocessCall? reprocess})
-      : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _reprocess = reprocess ?? reProcessConversationServer;
+    : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+      _reprocess = reprocess ?? reProcessConversationServer;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   String? _speakerSummaryConversationId;
@@ -39,13 +40,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool get offerSpeakerSummaryRefresh =>
       _speakerSummaryConversationId != null && _speakerSummaryConversationId == conversationOrNull?.id;
 
-  Future<bool> assignSpeaker(List<String> segmentIds, String personId,
-      {int? speakerId, String? expectedConversationId}) async {
+  Future<bool> assignSpeaker(
+    List<String> segmentIds,
+    String personId, {
+    int? speakerId,
+    String? expectedConversationId,
+  }) async {
     final target = conversation;
     if (_savingSpeaker ||
         loadingReprocessConversation ||
         segmentIds.isEmpty ||
-        (expectedConversationId != null && target.id != expectedConversationId)) return false;
+        (expectedConversationId != null && target.id != expectedConversationId))
+      return false;
     final selected = target.transcriptSegments
         .where((s) => speakerId == null ? segmentIds.contains(s.id) : s.speakerId == speakerId)
         .toList();
@@ -55,8 +61,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     _savingSpeaker = true;
     try {
-      final saved =
-          await _assignSpeaker(target.id, List.of(segmentIds), isUser: self, personId: person, speakerId: speakerId);
+      final bool saved;
+      try {
+        saved = await _assignSpeaker(
+          target.id,
+          List.of(segmentIds),
+          isUser: self,
+          personId: person,
+          speakerId: speakerId,
+        );
+      } catch (_) {
+        return false;
+      }
       if (!saved) return false;
       for (final segment in selected) {
         segment.isUser = self;
@@ -467,15 +483,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
-    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-    if (segmentIdx == -1) return;
-    conversation.transcriptSegments[segmentIdx].isUser = false;
-    conversation.transcriptSegments[segmentIdx].personId = null;
-    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
-    notifyListeners();
-  }
-
   /// Returns the explicit source and body used by every summary surface.
   ConversationSummarySelection getSummarySelection() {
     return ConversationSummarySelection.select(conversation);
@@ -525,8 +532,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);

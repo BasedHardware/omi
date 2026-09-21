@@ -160,7 +160,7 @@ final class LocalSummaryEvalCorpusTests: XCTestCase {
     let wrapper = ConversationChunkSummarizer.estimatedTokens(
       ConversationChunkSummarizer.mapPrompt("", index: 1, total: 1)
     )
-    let reserve = ConversationChunkSummarizer.completionReserveTokens
+    let reserve = ConversationChunkSummarizer.completionReserve(windowTokens: smallestSelectedWindow)
 
     for scenario in LocalSummaryEvalCorpus.scenarios {
       let tokens = scenario.estimatedTokens

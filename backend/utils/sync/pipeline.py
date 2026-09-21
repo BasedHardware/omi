@@ -29,7 +29,7 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
-from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,

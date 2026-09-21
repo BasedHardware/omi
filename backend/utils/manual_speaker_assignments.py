@@ -4,6 +4,7 @@ The receipt authorizes best-effort teaching; it is not an enrollment job.
 Inference must never create or replace these explicit user decisions.
 """
 
+from dataclasses import dataclass
 from typing import Optional
 import uuid
 
@@ -60,9 +61,24 @@ def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict
     """Move segment overrides from absorbed ids onto the surviving segment."""
     if not absorbed_into:
         return receipt
+    survivors: dict[str, str] = {}
+    for absorbed_id in absorbed_into:
+        path: list[str] = []
+        seen: set[str] = set()
+        current = absorbed_id
+        while current in absorbed_into and current not in survivors:
+            if current in seen:
+                raise ValueError('Cyclic transcript segment absorption')
+            seen.add(current)
+            path.append(current)
+            current = absorbed_into[current]
+        survivor_id = survivors.get(current, current)
+        for sid in path:
+            survivors[sid] = survivor_id
+
     segments = dict(receipt.get('segments') or {})
     changed = False
-    for absorbed_id, survivor_id in absorbed_into.items():
+    for absorbed_id, survivor_id in survivors.items():
         entry = segments.pop(absorbed_id, None)
         if entry is None:
             continue
@@ -177,3 +193,35 @@ def acknowledged_teaching(conversation: dict, person_id: str, segment_ids: list[
         ):
             return False
     return True
+
+
+@dataclass(frozen=True)
+class LiveTranscriptMerge:
+    """Accepted storage payload and client delta from one transaction attempt."""
+
+    segments: list[dict]
+    updated_ids: set[str]
+    removed_ids: list[str]
+    absorbed_into: dict[str, str]
+
+
+def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict) -> LiveTranscriptMerge:
+    """Plan only the mutable tail and fresh batch against the transaction's receipt.
+
+    Reconstruct models on every attempt: combine_segments mutates its inputs.
+    Historical segments stay dictionaries, avoiding full model hydration per tick.
+    """
+    tail = [TranscriptSegment(**persisted[-1])] if persisted else []
+    incoming = [TranscriptSegment(**segment) for segment in fresh]
+    covered = set(receipt.get('segments') or {})
+    speakers = receipt.get('speakers') or {}
+    covered.update(s.id for s in [*tail, *incoming] if str(s.speaker_id) in speakers and s.id)
+    combined = TranscriptSegment.combine_segments(tail, incoming, protected_segment_ids=covered)
+    result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
+    result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
+    return LiveTranscriptMerge(
+        result,
+        {s.id for s in combined.joined if s.id},
+        combined.removed_ids,
+        combined.absorbed_into,
+    )

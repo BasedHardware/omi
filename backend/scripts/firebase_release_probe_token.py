@@ -33,8 +33,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Sequence
 
+from utils.release_probe import RELEASE_PROBE_UID
+
 FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
-PROBE_UID = 'omi-release-probe'
+PROBE_UID = RELEASE_PROBE_UID
 CUSTOM_TOKEN_AUDIENCE = 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit'
 IAM_CREDENTIALS_URL = 'https://iamcredentials.googleapis.com/v1'
 IDENTITY_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken'
