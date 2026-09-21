@@ -1257,6 +1257,11 @@ checks:
     lanes: ["local", "ci"]
     reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
   - id: twitter-chat-tools-max-results-tests
+  - id: twitter-chat-tools-app-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14881: escape OAuth error and username parameters in HTML response templates"
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
@@ -1361,11 +1366,6 @@ checks:
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#12661 changed client display projection wire models; adopted released decoder inputs must remain immutable and used request/response shapes compatible"
-  - id: twitter-chat-tools-app-tests
-    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_html_escaping.py"]
-    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#14881: escape OAuth error and username parameters in HTML response templates"
   - id: composio-backend-route-auth-tests
     command: ["python3", "plugins/composio/test_tools_auth.py"]
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
