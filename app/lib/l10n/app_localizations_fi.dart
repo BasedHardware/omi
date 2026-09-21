@@ -10114,4 +10114,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Päivitä yhteenveto uusilla nimillä';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
 }

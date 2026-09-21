@@ -10113,4 +10113,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'به‌روزرسانی خلاصه با نام‌های جدید';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
 }

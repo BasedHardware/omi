@@ -10169,4 +10169,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Actualitza el resum amb els noms nous';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
 }

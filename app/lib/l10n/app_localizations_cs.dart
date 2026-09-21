@@ -10112,4 +10112,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Aktualizovat souhrn s novými jmény';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk nelze přečíst — synchronizace není možná';
 }

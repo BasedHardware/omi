@@ -10055,4 +10055,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'อัปเดตสรุปด้วยชื่อใหม่';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
 }

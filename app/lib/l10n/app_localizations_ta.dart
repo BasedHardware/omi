@@ -10183,4 +10183,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
 }

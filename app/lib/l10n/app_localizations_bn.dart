@@ -10118,4 +10118,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'নতুন নাম দিয়ে সারাংশ আপডেট করুন';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়';
 }

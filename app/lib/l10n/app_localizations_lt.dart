@@ -10132,4 +10132,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Atnaujinti santrauką su naujais vardais';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Nepavyko nuskaityti garso — sinchronizuoti negalima';
 }

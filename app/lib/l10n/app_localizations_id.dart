@@ -10122,4 +10122,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Perbarui ringkasan dengan nama baru';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak terbaca — tidak bisa disinkronkan';
 }

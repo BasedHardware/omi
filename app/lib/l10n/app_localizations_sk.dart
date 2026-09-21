@@ -10104,4 +10104,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Aktualizovať súhrn s novými menami';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk sa nedá prečítať — synchronizácia nie je možná';
 }

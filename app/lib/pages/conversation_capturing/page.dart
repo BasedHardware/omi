@@ -833,7 +833,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   bool _isTerminalWalState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
-      state == WalSyncDisplayState.outsideRecoveryWindow;
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio;
 
   String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;

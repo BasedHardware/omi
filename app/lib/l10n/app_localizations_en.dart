@@ -10103,4 +10103,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Update summary with new names';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio couldn\'t be read — can\'t be synced';
 }

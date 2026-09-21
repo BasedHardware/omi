@@ -18692,6 +18692,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update summary with new names'**
   String get updateSummaryWithNewNames;
+
+  /// Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio couldn\'t be read — can\'t be synced'**
+  String get syncStatusUnsupportedAudio;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

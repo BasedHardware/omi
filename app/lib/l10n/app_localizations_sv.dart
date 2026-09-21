@@ -10117,4 +10117,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Uppdatera sammanfattningen med de nya namnen';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ljudet kunde inte läsas — kan inte synkroniseras';
 }

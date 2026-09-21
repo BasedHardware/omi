@@ -10032,4 +10032,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'עדכן את הסיכום עם השמות החדשים';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
 }

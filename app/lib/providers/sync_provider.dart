@@ -117,7 +117,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
-      } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
+      } else if (w.status == WalStatus.corrupted ||
+          w.status == WalStatus.outsideRecoveryWindow ||
+          w.status == WalStatus.unsupportedAudio) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -227,7 +229,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         (s) =>
             s == WalSyncDisplayState.failed ||
             s == WalSyncDisplayState.corrupted ||
-            s == WalSyncDisplayState.outsideRecoveryWindow,
+            s == WalSyncDisplayState.outsideRecoveryWindow ||
+            s == WalSyncDisplayState.unsupportedAudio,
       );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
@@ -241,6 +244,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         case WalDisplayFilter.pending:
           return w.status != WalStatus.corrupted &&
               w.status != WalStatus.outsideRecoveryWindow &&
+              w.status != WalStatus.unsupportedAudio &&
               w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;

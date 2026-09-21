@@ -10159,4 +10159,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Actualizează rezumatul cu numele noi';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
 }

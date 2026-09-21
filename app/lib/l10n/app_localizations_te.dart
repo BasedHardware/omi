@@ -10160,4 +10160,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు';
 }

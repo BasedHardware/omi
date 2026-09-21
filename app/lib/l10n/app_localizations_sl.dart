@@ -10143,4 +10143,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Posodobi povzetek z novimi imeni';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča';
 }

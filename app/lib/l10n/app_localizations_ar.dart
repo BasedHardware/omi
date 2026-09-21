@@ -10053,4 +10053,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'تحديث الملخص بالأسماء الجديدة';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'تعذّرت قراءة الصوت — لا يمكن مزامنته';
 }

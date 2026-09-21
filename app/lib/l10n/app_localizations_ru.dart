@@ -10149,4 +10149,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Обновить сводку с новыми именами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не удалось прочитать аудио — синхронизация невозможна';
 }

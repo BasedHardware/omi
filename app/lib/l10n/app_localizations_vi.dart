@@ -10107,4 +10107,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Cập nhật tóm tắt với tên mới';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
 }

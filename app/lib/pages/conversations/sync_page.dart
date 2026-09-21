@@ -80,6 +80,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusFileUnavailable);
       case WalSyncDisplayState.outsideRecoveryWindow:
         return (Colors.redAccent, l.syncStatusTooOld);
+      case WalSyncDisplayState.unsupportedAudio:
+        return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -107,6 +109,35 @@ class WalListItem extends StatelessWidget {
           child: Text(
             context.l10n.retry,
             style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    }
+    // No upload can resolve these, so offer removal rather than a chevron that
+    // leads to a detail page with nothing actionable on it.
+    if (state == WalSyncDisplayState.corrupted ||
+        state == WalSyncDisplayState.outsideRecoveryWindow ||
+        state == WalSyncDisplayState.unsupportedAudio) {
+      return GestureDetector(
+        onTap: () async {
+          final confirmed = await OmiConfirmDialog.show(
+            context,
+            title: context.l10n.deleteRecording,
+            message: context.l10n.thisCannotBeUndone,
+            confirmLabel: context.l10n.delete,
+            confirmColor: Colors.red,
+          );
+          if (confirmed == true) await syncProvider.deleteWal(wal);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(
+            context.l10n.delete,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ),
       );

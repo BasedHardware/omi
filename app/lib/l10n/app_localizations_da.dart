@@ -10097,4 +10097,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Opdater resuméet med de nye navne';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke læses — kan ikke synkroniseres';
 }

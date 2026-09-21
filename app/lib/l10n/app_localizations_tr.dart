@@ -10125,4 +10125,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Özeti yeni adlarla güncelle';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ses okunamadı — eşitlenemiyor';
 }

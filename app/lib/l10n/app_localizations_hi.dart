@@ -10091,4 +10091,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'नए नामों के साथ सारांश अपडेट करें';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता';
 }
