@@ -13,10 +13,12 @@ for MIT attribution. No Hana code or runtime token mutation remains.
 
 The daily brief uses the same `homeBriefing` function as native Desktop Home.
 Completing a fixture task updates the priority. Search filters the local tasks
-and conversation titles/summaries. Home's glance strip shows incomplete tasks
-due on the local calendar day, completed/loaded task counts, and usable completed
-conversation counts. Counts describe loaded data, not unseen pages; unsettled or
-failed reads show a dash rather than zero. Each cell opens its corresponding list.
+and conversation titles/summaries. Home replaces the metrics strip with a
+"For you today" idea. Its copy and interests are an explicitly labelled sample
+profile/output fixture, not an account-profile read or a live AI generation.
+"Explore with Omi" switches to Ask and focuses an editable prompt without sending
+it. No idea appears in empty, loading or unavailable preview states; search
+results also omit it. Real profile-based daily generation is not wired here.
 Tabs support keyboard navigation. Settings owns Apps and can change the preview
 theme. Ask, desktop Recall and connections explicitly report
 their preview limitations; there are no account requests, capture, telemetry,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
@@ -19,6 +19,7 @@ import { OmiAvatar } from "../../../react-native/src/ui/OmiAvatar";
 import { useReduceMotion } from "../../../react-native/src/app/useReduceMotion.web";
 import type { ReadsPhase } from "../../../react-native/src/app/useDesktopReads";
 import type { DesktopReadOutcomes } from "../../../react-native/src/desktopReadClient";
+import type { previewDailyIdea } from "./fixtures";
 import {
   Button,
   Input,
@@ -44,12 +45,15 @@ const routes = [
 export function Preview({
   initialOutcomes,
   initialPhase = "ready",
+  dailyIdea = null,
   mobile = false,
 }: {
   initialOutcomes: DesktopReadOutcomes;
   initialPhase?: ReadsPhase;
+  dailyIdea?: typeof previewDailyIdea | null;
   mobile?: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [outcomes, setOutcomes] = useState(initialOutcomes);
   const [route, setRoute] = useState("Home");
   const [mode, setMode] = useState(mobile ? "Search" : "Ask");
@@ -77,17 +81,6 @@ export function Preview({
   const tasksReady = ready && outcomes.tasks.status === "success";
   const conversationsReady =
     ready && outcomes.conversations.status === "success";
-  const today = new Date().toDateString();
-  const dueToday = tasks.filter(
-    (task) =>
-      !task.completed &&
-      task.dueAt !== null &&
-      new Date(task.dueAt).toDateString() === today
-  ).length;
-  const completed = tasks.filter((task) => task.completed).length;
-  const captured = conversations.filter(
-    (item) => !item.discarded && !item.locked && item.status === "completed"
-  ).length;
   const navigation = (
     <TabsList aria-label="Main navigation" className="main-nav">
       {routes
@@ -317,6 +310,7 @@ export function Preview({
               ))}
           </div>
           <Input
+            ref={inputRef}
             aria-label={
               mode === "Ask"
                 ? "Ask Omi"
@@ -367,48 +361,28 @@ export function Preview({
                   : brief.subtitle}
               </p>
             </div>
-            {!searching && (
-              <section className="glance" aria-label="At a glance">
-                <div className="glance-heading">
-                  <h2>At a glance</h2>
-                  <p>From loaded tasks and conversations</p>
+            {!searching && ready && dailyIdea && (
+              <Card className="daily-idea" aria-label="For you today">
+                <div className="daily-idea-copy">
+                  <p className="daily-idea-label">For you today</p>
+                  <CardTitle>{dailyIdea.title}</CardTitle>
+                  <p className="daily-idea-body">{dailyIdea.body}</p>
+                  <p className="meta">
+                    Example · Sample profile: {dailyIdea.interests.join(" + ")}
+                  </p>
                 </div>
-                <div className="glance-grid">
-                  {[
-                    {
-                      label: "Due today",
-                      value: tasksReady ? String(dueToday) : "—",
-                      destination: "Tasks",
-                    },
-                    {
-                      label: "Done",
-                      value: tasksReady
-                        ? `${completed} of ${tasks.length}`
-                        : "—",
-                      destination: "Tasks",
-                    },
-                    {
-                      label: "Recent context",
-                      value: conversationsReady ? String(captured) : "—",
-                      destination: "Conversations",
-                    },
-                  ].map(({ label, value, destination }) => (
-                    <Button
-                      key={label}
-                      variant="ghost"
-                      className="glance-item"
-                      aria-label={`${label}: ${
-                        value === "—" ? "not loaded" : value
-                      }. Open ${destination.toLowerCase()}`}
-                      onClick={() => setRoute(destination)}
-                    >
-                      <span className="glance-label">{label}</span>
-                      <span className="glance-value">{value}</span>
-                      <ArrowUpRight aria-hidden="true" />
-                    </Button>
-                  ))}
-                </div>
-              </section>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMode("Ask");
+                    setQuery(dailyIdea.prompt);
+                    setNotice("");
+                    inputRef.current?.focus();
+                  }}
+                >
+                  Explore with Omi <ArrowUpRight aria-hidden="true" />
+                </Button>
+              </Card>
             )}
             <div className="home-columns">
               {taskList}

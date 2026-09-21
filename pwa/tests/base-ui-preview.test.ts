@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import type { previewDailyIdea } from "../src/base-ui/fixtures";
 
 let directory: string;
 let render: (props: {
@@ -10,9 +11,8 @@ let render: (props: {
   completeFirst?: boolean;
   initialPhase?: string;
   mobile?: boolean;
-  mixedDates?: boolean;
   failedReads?: boolean;
-  partial?: boolean;
+  dailyIdea?: typeof previewDailyIdea | null;
 }) => string;
 
 // Like chat-markdown.test, resolve real React instead of the PWA's type-only
@@ -31,37 +31,17 @@ beforeAll(async () => {
     import {Preview} from ${JSON.stringify(
       join(root, "pwa/src/base-ui/Preview.tsx")
     )};
-    import {previewOutcomes} from ${JSON.stringify(
+    import {previewDailyIdea, previewOutcomes} from ${JSON.stringify(
       join(root, "pwa/src/base-ui/fixtures.ts")
     )};
-    export function render({empty, completeFirst, mixedDates, failedReads, partial, ...props}) {
+    export function render({empty, completeFirst, failedReads, dailyIdea = empty ? null : previewDailyIdea, ...props}) {
       const initialOutcomes = previewOutcomes(empty);
       if (completeFirst) initialOutcomes.tasks.value.items[0].completed = true;
-      if (mixedDates) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const original = initialOutcomes.tasks.value.items[0];
-        initialOutcomes.tasks.value.items = [
-          {dueAt: today.getTime(), completed: false},
-          {dueAt: tomorrow.getTime() - 1, completed: false},
-          {dueAt: today.getTime() - 1, completed: false},
-          {dueAt: tomorrow.getTime(), completed: false},
-          {dueAt: today.getTime(), completed: true},
-          {dueAt: null, completed: false},
-        ].map((item, index) => ({...original, ...item, id: String(index)}));
-        const conversation = initialOutcomes.conversations.value.items[0];
-        initialOutcomes.conversations.value.items = [
-          {}, {locked: true}, {discarded: true}, {status: "processing"},
-        ].map((item, index) => ({...conversation, ...item, id: String(index)}));
-      }
-      if (partial) initialOutcomes.tasks.value.page = {...initialOutcomes.tasks.value.page, complete: false, hasMore: true};
       if (failedReads) {
         initialOutcomes.tasks = {status: "error"};
         initialOutcomes.conversations = {status: "error"};
       }
-      return renderToStaticMarkup(React.createElement(Preview, {...props, initialOutcomes}));
+      return renderToStaticMarkup(React.createElement(Preview, {...props, initialOutcomes, dailyIdea}));
     }
   `
   );
@@ -186,38 +166,41 @@ test.each([false, true])(
     const html = render({ mobile });
     expect(html).not.toContain("Screen history");
     expect(html).not.toContain(">Apps</span>");
-    expect(html).toContain('aria-label="At a glance"');
+    expect(html).not.toContain('aria-label="At a glance"');
+    expect(html).toContain('aria-label="For you today"');
   }
 );
 
-test("glance counts use the local day boundaries and exclude finished tasks and unavailable context", () => {
-  const html = render({ mixedDates: true, partial: true });
-  expect(html).toContain('aria-label="Due today: 2. Open tasks"');
-  expect(html).toContain('aria-label="Done: 1 of 6. Open tasks"');
-  expect(html).toContain('aria-label="Recent context: 1. Open conversations"');
-  expect(html).toContain("From loaded tasks and conversations");
-  const updated = render({ completeFirst: true });
-  expect(updated).toContain('aria-label="Due today: 0. Open tasks"');
-  expect(updated).toContain('aria-label="Done: 2 of 3. Open tasks"');
+test("daily idea renders supplied copy and profile interests instead of hardcoded metrics", () => {
+  const html = render({
+    dailyIdea: {
+      interests: ["Cooking", "Music"],
+      title: "Give dinner a soundtrack.",
+      body: "Pick one song and make a snack before it ends.",
+      prompt: "Suggest a quick snack and a song.",
+    },
+  });
+  expect(html).toContain("Give dinner a soundtrack.");
+  expect(html).toContain("Pick one song and make a snack before it ends.");
+  expect(html).toContain("Example · Sample profile: Cooking + Music");
+  expect(html).toContain("Explore with Omi");
+  expect(html).not.toContain("Take your ideas on a detour.");
+  expect(html).not.toContain("Recent context");
+  expect(html).not.toContain("1 of 3");
 });
 
-test("unsettled or failed glance reads do not become zero; successful empty reads do", () => {
+test("no daily idea is fabricated when absent, loading or unavailable", () => {
   for (const props of [
+    { dailyIdea: null },
+    { empty: true },
     { initialPhase: "initial-loading" },
     { initialPhase: "unavailable" },
-    { failedReads: true },
   ]) {
     const html = render(props);
-    expect(html).toContain('aria-label="Due today: not loaded. Open tasks"');
-    expect(html).toContain('aria-label="Done: not loaded. Open tasks"');
-    expect(html).toContain(
-      'aria-label="Recent context: not loaded. Open conversations"'
-    );
-    expect(html).not.toContain("No tasks yet.");
-    expect(html).not.toContain("Nothing captured yet.");
+    expect(html).not.toContain('aria-label="For you today"');
+    expect(html).not.toContain("Explore with Omi");
   }
-  const html = render({ empty: true });
-  expect(html).toContain('aria-label="Due today: 0. Open tasks"');
-  expect(html).toContain('aria-label="Done: 0 of 0. Open tasks"');
-  expect(html).toContain('aria-label="Recent context: 0. Open conversations"');
+  const failed = render({ failedReads: true });
+  expect(failed).toContain("Tasks are not loaded yet.");
+  expect(failed).toContain("Conversations are not loaded yet.");
 });
