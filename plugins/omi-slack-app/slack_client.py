@@ -183,13 +183,12 @@ class SlackClient:
         With user tokens, messages automatically post as the user.
         Returns message data if successful.
         """
-        client = WebClient(token=access_token)
-        
-        # Debug: Check token type
-        token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
-        print(f"🔑 Sending with {token_type} token", flush=True)
-        
         try:
+            client = WebClient(token=access_token)
+            
+            # Debug: Check token type
+            token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
+            print(f"🔑 Sending with {token_type} token", flush=True)
             # Note: as_user parameter is deprecated and not needed with user tokens
             # User tokens automatically post messages as the authenticated user
             result = client.chat_postMessage(
@@ -235,7 +234,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error sending message"
             }
     
     def get_channel_history(
@@ -250,9 +249,8 @@ class SlackClient:
         Use this for getting recent messages (like today's messages).
         Requires channels:history scope.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
             params = {
                 "channel": channel_id,
                 "limit": limit
@@ -288,7 +286,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error getting channel history"
             }
     
     async def search_messages(
@@ -302,9 +300,9 @@ class SlackClient:
         For recent messages in a specific channel, prefers using channel history.
         Returns list of matching messages.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
+            
             # If searching in a specific channel and query is simple (like "today" or empty),
             # use channel history instead of search API for better results
             if channel:
@@ -425,7 +423,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error searching messages"
             }
     
     def search_channels(

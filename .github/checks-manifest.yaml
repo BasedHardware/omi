@@ -1156,6 +1156,11 @@ checks:
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "escapes Slack channel and workspace names at HTML boundaries, percent-encodes reflected uid parameter to prevent attribute breakout and URL query corruption in setup and OAuth callback pages"
+  - id: slack-error-handling-tests
+    command: ["python3", "plugins/omi-slack-app/test_error_handling.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "prevents internal exception traces, database paths, and secrets from leaking into client HTTP responses across all Slack app endpoints"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
