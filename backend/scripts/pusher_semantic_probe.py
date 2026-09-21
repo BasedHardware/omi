@@ -47,6 +47,12 @@ FIXTURE_CODEC = "pcm16"
 # landed by the bounded deadline.
 TRANSCRIPT_SETTLE_SECONDS = 20
 TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
+# The product's discard policy hard-keeps any transcript above 100 words;
+# below that, an LLM applies a <2-minute "higher bar" that fences a generic
+# fixture phrase. Streaming the fixture this many times (17 words/pass)
+# crosses the deterministic keep line, so acceptance never depends on an
+# LLM discard verdict.
+DISCARD_KEEP_AUDIO_PASSES = 8
 
 
 class ProbeError(RuntimeError):
@@ -206,11 +212,17 @@ async def _listen_sample(
                     )
 
         receiver = asyncio.create_task(receive_transcripts())
-        for offset in range(0, len(fixture.pcm), chunk_bytes):
-            chunk = fixture.pcm[offset : offset + chunk_bytes]
-            if len(chunk) != chunk_bytes:
-                break
-            await websocket.send(chunk)
+        # The discard policy hard-keeps only transcripts above the 100-word
+        # line; a single 17-word fixture pass reads as generic filler under
+        # the <2-minute higher bar and the conversation fences as discarded
+        # (run 35580455756). Loop the fixture so the durable transcript
+        # crosses the deterministic keep threshold before finalization.
+        for _ in range(DISCARD_KEEP_AUDIO_PASSES):
+            for offset in range(0, len(fixture.pcm), chunk_bytes):
+                chunk = fixture.pcm[offset : offset + chunk_bytes]
+                if len(chunk) != chunk_bytes:
+                    break
+                await websocket.send(chunk)
         await asyncio.sleep(TRANSCRIPT_SETTLE_SECONDS)
         receiver.cancel()
         try:
