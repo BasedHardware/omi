@@ -5,6 +5,7 @@ Includes: Audio processing, Hume AI integration, Omi notifications, etc.
 
 import os
 import json
+import logging
 import tempfile
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -245,9 +246,8 @@ async def send_omi_notification(
             return {"success": False, "error": error_msg}
 
     except Exception as e:
-        error_msg = f"Failed to send Omi notification: {str(e)}"
-        print(f"✗ {error_msg}")
-        return {"success": False, "error": error_msg}
+        logging.error(f"Failed to send Omi notification: {e}", exc_info=True)
+        return {"success": False, "error": "Failed to send Omi notification"}
 
 
 async def create_omi_memory(
@@ -301,9 +301,8 @@ async def create_omi_memory(
             return {"success": False, "error": error_msg}
 
     except Exception as e:
-        error_msg = f"Failed to create Omi memory: {str(e)}"
-        print(f"✗ {error_msg}")
-        return {"success": False, "error": error_msg}
+        logging.error(f"Failed to create Omi memory: {e}", exc_info=True)
+        return {"success": False, "error": "Failed to create Omi memory"}
 
 
 def generate_emotion_summary() -> Dict[str, Any]:
@@ -501,13 +500,10 @@ async def analyze_text_with_hume(text: str) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"✗ Hume text analysis failed: {e}")
-        import traceback
-        traceback.print_exc()
-
+        logging.error(f"Hume text analysis failed: {e}", exc_info=True)
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume text analysis failed.",
             "predictions": []
         }
 
@@ -590,13 +586,10 @@ async def analyze_audio_with_hume(wav_file_path: str) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"✗ Audio chunking failed: {e}")
-        import traceback
-        traceback.print_exc()
-
+        logging.error(f"Audio chunking failed: {e}", exc_info=True)
         return {
             "success": False,
-            "error": str(e),
+            "error": "Audio chunking failed.",
             "predictions": []
         }
 
@@ -646,8 +639,9 @@ async def _analyze_single_audio(wav_file_path: str, hume_api_key: str) -> Dict[s
             }
 
     except Exception as e:
+        logging.error(f"Audio analysis failed: {e}", exc_info=True)
         return {
             "success": False,
-            "error": str(e),
+            "error": "Audio analysis failed.",
             "predictions": []
         }

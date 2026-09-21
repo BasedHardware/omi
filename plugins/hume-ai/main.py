@@ -13,6 +13,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+
 # FastAPI imports
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -245,10 +247,8 @@ async def handle_audio_stream(
         )
 
     except Exception as e:
-        print(f"Error processing audio: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logging.error(f"Error processing audio: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error occurred while processing audio.")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -373,10 +373,8 @@ async def analyze_text_emotion(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error analyzing text: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logging.error(f"Error analyzing text: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error occurred while analyzing text.")
 
 
 @app.get("/emotion-config")
@@ -461,8 +459,8 @@ async def update_emotion_config(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error updating config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error updating config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update configuration.")
 
 
 @app.post("/reset-stats")
@@ -491,8 +489,8 @@ async def reset_stats(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error resetting stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error resetting stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to reset statistics.")
 
 
 @app.post("/save-emotion-memory")
