@@ -1306,6 +1306,11 @@ checks:
     triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Stack Overflow search, question retrieval, and answer reading must safely parse full URLs, normalize question targets, guard against NoneType in answer owners, and handle API errors gracefully"
+  - id: stack-overflow-error-handling-tests
+    command: ["python3", "plugins/omi-stack-overflow-app/test_error_handling.py"]
+    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Stack Overflow plugin must prevent internal exception details from leaking into chat tool responses"
   - id: gcal-uid-reflection-encoding-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_uid_reflection.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]

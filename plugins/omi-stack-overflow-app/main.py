@@ -452,8 +452,8 @@ async def search_questions(payload: dict[str, Any]):
         return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange search failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Stack Exchange search failed.")
 
 
 @app.post("/tools/get_question", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -512,8 +512,8 @@ async def get_question(payload: dict[str, Any]):
         return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange question request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Stack Exchange question request failed.")
 
 
 @app.post("/tools/get_top_answers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -560,5 +560,5 @@ async def get_top_answers(payload: dict[str, Any]):
         return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange answers request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Stack Exchange answers request failed.")
