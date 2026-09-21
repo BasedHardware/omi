@@ -1246,6 +1246,11 @@ checks:
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: shipbob-create-wro-disambiguation-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
