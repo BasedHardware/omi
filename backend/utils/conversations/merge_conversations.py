@@ -628,6 +628,18 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
 
+    folder_id = row.get('folder_id')
+    if folder_id:
+        # conversation_count is derived state the folder tabs render. Nothing
+        # else recomputes it after a delete, so a folder keeps counting a
+        # conversation the user removed.
+        try:
+            from database.folders import update_folder_conversation_count
+
+            update_folder_conversation_count(uid, str(folder_id))
+        except Exception as e:
+            logger.error(f"Error refreshing folder {folder_id} count after deleting {conversation_id}: {e}")
+
 
 def _delete_conversation_and_related_data(
     uid: str,
