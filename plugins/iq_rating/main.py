@@ -1782,8 +1782,8 @@ async def iq_rating_api(uid: str = Query(..., description="User ID")):
         })
         
     except Exception as e:
-        logger.error(f"Error getting IQ ratings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting IQ ratings: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error processing IQ ratings")
 
 
 @router.post("/iq/hide")
