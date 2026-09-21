@@ -387,6 +387,7 @@ bash release.sh --build-only
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+- [isiNdebele (Northern Ndebele)](examples/quickstart.nd.md)
 
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
 - [Furlan (Friulian)](examples/quickstart.fur.md)
