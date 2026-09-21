@@ -102,6 +102,7 @@ _INDEXED_FIRESTORE_FIELDS = (
     "structured",
     "created_at",
     "discarded",
+    "deleted",
     "started_at",
     "finished_at",
     "geolocation",
@@ -377,6 +378,10 @@ def _sync_conversation_index_after_write(
         # The Firestore document is gone (deleted since the write that queued
         # this sync); converge the index to absence instead of upserting stale
         # content — the race the extension's delete trigger otherwise covered.
+        return delete_conversation_index_doc(uid, conversation_id)
+    if data.get("deleted"):
+        # Redirect tombstones must not stay searchable, including after a later
+        # discarded=True write that would otherwise upsert them again.
         return delete_conversation_index_doc(uid, conversation_id)
     document = build_conversation_index_document(uid, data)
     if document is None:

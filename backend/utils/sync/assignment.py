@@ -252,6 +252,10 @@ def assign_in_transaction(
                 collection.document(cid),
                 {
                     'deleted': True,
+                    # Hide the redirect from discarded==False list indexes. Distinct
+                    # from user discard: include_discarded=True readers still drop
+                    # these rows via is_soft_deleted, and restore must not revive them.
+                    'discarded': True,
                     'sync_merged_into': canonical,
                     'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
                 },

@@ -65,6 +65,7 @@ _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 _MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'id',
     'discarded',
+    'deleted',
     'created_at',
     'started_at',
     'finished_at',
@@ -463,6 +464,161 @@ def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
 # *****************************
 
 
+def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
+    """Whether a conversation is a soft-deleted tombstone.
+
+    A tombstone is invisible to the user, so any content operation that reads it
+    and writes derived state — merging its segments, or reprocessing to
+    regenerate structured data, action items, memories and embeddings —
+    resurrects data the user deleted. Such operations must reject a tombstone.
+
+    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
+    merge #10262, reprocess, list/count/search after #15193 donor redirects).
+    Deliberately distinct from `discarded`, which stays revivable: the merge and
+    reprocess paths intentionally revive a discarded row. Redirect tombstones
+    also stamp `discarded=True` so the indexed `discarded == False` filter hides
+    them; `include_discarded=True` readers still consult this predicate.
+    """
+    return bool(conversation) and bool(conversation.get('deleted'))
+
+
+def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
+    """Whether a stored conversation may be put in front of a user or downstream job."""
+    if not conversation:
+        return False
+    if is_soft_deleted(conversation):
+        return False
+    if conversation.get('discarded') and not include_discarded:
+        return False
+    return True
+
+
+def _conversation_matches_list_predicates(
+    data: Mapping[str, Any],
+    *,
+    include_discarded: bool,
+    statuses: Optional[List[str]] = None,
+    sources: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+    date_field: str = 'created_at',
+) -> bool:
+    if not include_discarded and data.get('discarded'):
+        return False
+    if statuses and data.get('status') not in statuses:
+        return False
+    if sources and data.get('source') not in sources:
+        return False
+    if categories:
+        structured = data.get('structured') if isinstance(data.get('structured'), dict) else {}
+        if (structured or {}).get('category') not in categories:
+            return False
+    if folder_id is not None and data.get('folder_id') != folder_id:
+        return False
+    if starred is not None and bool(data.get('starred')) != starred:
+        return False
+    stamp = data.get(date_field)
+    if start_date is not None and (stamp is None or stamp < start_date):
+        return False
+    if end_date is not None and (stamp is None or stamp > end_date):
+        return False
+    return True
+
+
+def _count_matching_tombstones(
+    collection: Any,
+    *,
+    include_discarded: bool,
+    statuses: Optional[List[str]] = None,
+    sources: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+) -> int:
+    """Count `deleted==True` rows that would have matched the list query.
+
+    Equality on `deleted` only matches documents that have the field, so
+    pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
+    per user are few; this avoids a composite index on every list-filter combo.
+    """
+    matching = 0
+    for doc in collection.where(filter=FieldFilter('deleted', '==', True)).stream():
+        data = doc.to_dict() or {}
+        if _conversation_matches_list_predicates(
+            data,
+            include_discarded=include_discarded,
+            statuses=statuses,
+            sources=sources,
+            start_date=start_date,
+            end_date=end_date,
+            categories=categories,
+            folder_id=folder_id,
+            starred=starred,
+        ):
+            matching += 1
+    return matching
+
+
+def _collect_visible_conversation_page(
+    conversations_ref: Any,
+    *,
+    limit: int,
+    offset: int,
+    include_discarded: bool,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Dict[str, Any]]:
+    """Page visible rows. `include_discarded=True` cannot use Firestore offset.
+
+    Flutter lists with `include_discarded=True`, so donor tombstones would steal
+    page slots if we `limit`/`offset` then drop `deleted` in Python. Scan and
+    fill visible rows instead. `include_discarded=False` keeps server-side
+    offset so the list-read budget still charges the skipped prefix without
+    iterating it; `discarded=True` on donors (and the backfill) keeps those
+    rows out of that indexed query.
+    """
+    if include_discarded:
+        skipped_visible = 0
+        conversations: List[Dict[str, Any]] = []
+        try:
+            for doc in budgeted_stream_iter(conversations_ref, budget):
+                conversation = _document_data_with_revision(doc)
+                if conversation is None or not is_visible_conversation(
+                    conversation, include_discarded=include_discarded
+                ):
+                    continue
+                if skipped_visible < offset:
+                    skipped_visible += 1
+                    continue
+                conversations.append(conversation)
+                if len(conversations) >= limit:
+                    break
+        except ListReadBudgetExhausted:
+            pass
+        return conversations
+
+    if budget is not None and offset > 0:
+        try:
+            budget.charge(offset)
+        except ListReadBudgetExhausted:
+            return []
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    conversations: List[Dict[str, Any]] = []
+    try:
+        for doc in budgeted_stream_iter(conversations_ref, budget):
+            conversation = _document_data_with_revision(doc)
+            if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
+                continue
+            conversations.append(conversation)
+    except ListReadBudgetExhausted:
+        pass
+    return conversations
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
@@ -767,12 +923,9 @@ def get_conversations(
     sort_field = date_field if (start_date or end_date) else 'created_at'
     conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
 
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
-
-    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
-    conversations = [conversation for conversation in conversations if conversation is not None]
-    return conversations
+    return _collect_visible_conversation_page(
+        conversations_ref, limit=limit, offset=offset, include_discarded=include_discarded
+    )
 
 
 def get_conversations_count(
@@ -814,7 +967,19 @@ def get_conversations_count(
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
-    return int(result[0][0].value)
+    matching = int(result[0][0].value)
+    matching -= _count_matching_tombstones(
+        db.collection('users').document(uid).collection(conversations_collection),
+        include_discarded=include_discarded,
+        statuses=statuses,
+        sources=sources,
+        start_date=start_date,
+        end_date=end_date,
+        categories=categories,
+        folder_id=folder_id,
+        starred=starred,
+    )
+    return matching
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -877,28 +1042,13 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    if budget is not None and offset > 0:
-        # Charge the skipped prefix before querying: Firestore streams (and
-        # bills) every offset row even though none is yielded here.
-        try:
-            budget.charge(offset)
-        except ListReadBudgetExhausted:
-            return []
-
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
-
-    conversations = []
-    try:
-        for doc in budgeted_stream_iter(conversations_ref, budget):
-            conversations.append(_document_data_with_revision(doc))
-    except ListReadBudgetExhausted:
-        # Deadline or allowance ended mid-page: rows already fetched stay in
-        # the list as an honest created_at-DESC prefix; the budget remains
-        # flagged truncated so the route marks the response (#11831).
-        pass
-    conversations = [conversation for conversation in conversations if conversation is not None]
-    return conversations
+    return _collect_visible_conversation_page(
+        conversations_ref,
+        limit=limit,
+        offset=offset,
+        include_discarded=include_discarded,
+        budget=budget,
+    )
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -938,6 +1088,8 @@ def get_mcp_conversation_cards(
         conversation = _document_data_with_revision(doc)
         if conversation is None:
             continue
+        if is_soft_deleted(conversation):
+            continue
         conversation.setdefault('id', doc.id)
         conversations.append(conversation)
     return conversations
@@ -965,7 +1117,7 @@ def get_mcp_conversations_by_id(
         data = _document_data_with_revision(doc)
         if data is None:
             continue
-        if data.get('discarded') and not include_discarded:
+        if not is_visible_conversation(data, include_discarded=include_discarded):
             continue
         data.setdefault('id', doc.id)
         conversations_by_id[str(data['id'])] = data
@@ -992,6 +1144,8 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         for doc in snapshots:
             conv = doc.to_dict()
             conv = _prepare_conversation_for_read(conv, uid) or conv
+            if not is_visible_conversation(conv, include_discarded=include_discarded):
+                continue
             batch.append(conv)
         yield from batch
         if len(snapshots) < batch_size:
@@ -1398,7 +1552,7 @@ def _get_conversations_by_id(
         if doc.exists:
             hits += 1
             data = doc.to_dict()
-            if data.get('discarded') and not include_discarded:
+            if not is_visible_conversation(data, include_discarded=include_discarded):
                 continue
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
@@ -1538,10 +1692,11 @@ def get_in_progress_conversation(uid: str):
         user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', 'in_progress'))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(1)
+        .limit(8)
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
-    conversation = docs[0] if docs else None
+    conversations = [conversation for conversation in docs if conversation and not is_soft_deleted(conversation)]
+    conversation = conversations[0] if conversations else None
     return conversation
 
 
@@ -1556,7 +1711,7 @@ def get_processing_conversations(uid: str):
     # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
     # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
     # back to pusher for background processing — that would defeat the freemium cost saving.
-    conversations = [c for c in conversations if not c.get('deferred')]
+    conversations = [c for c in conversations if not c.get('deferred') and not is_soft_deleted(c)]
     return conversations
 
 
@@ -1571,6 +1726,8 @@ def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
     """
     stale = []
     for conversation in conversations:
+        if is_soft_deleted(conversation):
+            continue
         finished_at = conversation.get('finished_at')
         if isinstance(finished_at, datetime) and finished_at < cutoff:
             stale.append(conversation)
@@ -1627,7 +1784,12 @@ def get_conversations_finished_after(
         .order_by('finished_at', direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    return [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations: List[Dict[str, Any]] = []
+    for doc in conversations_ref.stream():
+        data = doc.to_dict()
+        if data and not is_soft_deleted(data):
+            conversations.append(data)
+    return conversations
 
 
 def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict, *, firestore_client=None) -> bool:
@@ -1646,7 +1808,7 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         primary_row = primary_ref.get(transaction=transaction).to_dict()
         secondary_row = secondary_ref.get(transaction=transaction).to_dict()
         for row, expected in ((primary_row, primary), (secondary_row, secondary)):
-            if not row or row.get('discarded') or row.get('status') != 'completed':
+            if not row or row.get('discarded') or row.get('deleted') or row.get('status') != 'completed':
                 return False
             if any(row.get(field) != getattr(expected, field) for field in ('started_at', 'finished_at', 'source')):
                 return False
@@ -1720,6 +1882,14 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    snapshot = conversation_ref.get()
+    if not snapshot.exists:
+        return
+    current = snapshot.to_dict() or {}
+    if is_soft_deleted(current):
+        # Redirect tombstones reuse discarded=True for the indexed hide. Restoring
+        # them would put a merged-away donor back on discarded==False lists.
+        return
     conversation_ref.update({'discarded': False})
     _sync_conversation_search_index(uid, conversation_id)
 
@@ -1769,6 +1939,8 @@ def get_action_items(
     conversations = []
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
+        if is_soft_deleted(conversation_data):
+            continue
 
         # Check if conversation has action items
         structured = conversation_data.get('structured', {})
@@ -2599,23 +2771,11 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         )
 
     result = run_transactional(client, assign)
-    _sync_conversation_search_index(uid, result[0]['id'])
+    conversation = result[0]
+    for donor_id in conversation.get('sync_merged_from') or []:
+        _delete_conversation_search_index(uid, str(donor_id))
+    _sync_conversation_search_index(uid, conversation['id'])
     return result
-
-
-def is_soft_deleted(conversation: Optional[dict]) -> bool:
-    """Whether a conversation is a soft-deleted tombstone.
-
-    A tombstone is invisible to the user, so any content operation that reads it
-    and writes derived state — merging its segments, or reprocessing to
-    regenerate structured data, action items, memories and embeddings —
-    resurrects data the user deleted. Such operations must reject a tombstone.
-
-    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
-    merge #10262, reprocess). Deliberately distinct from `discarded`, which stays
-    revivable: the merge and reprocess paths intentionally revive a discarded row.
-    """
-    return bool(conversation) and bool(conversation.get('deleted'))
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:
@@ -2688,8 +2848,12 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
         .collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(1)
+        .limit(8)
     )
-    conversations = [doc.to_dict() for doc in query.stream()]
+    conversations: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        data = doc.to_dict()
+        if data and not is_soft_deleted(data):
+            conversations.append(data)
     conversation = conversations[0] if conversations else None
     return conversation

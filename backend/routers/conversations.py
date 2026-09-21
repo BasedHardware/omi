@@ -125,6 +125,9 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 

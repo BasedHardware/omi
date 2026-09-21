@@ -72,3 +72,20 @@ def test_tripwire_allows_the_single_service_and_atomic_storage_primitive():
         )
         == []
     )
+
+
+def test_tripwire_allows_assignment_tombstone_discard_with_redirect_fields():
+    errors = violations(
+        "transaction.update(collection.document(cid), {'deleted': True, 'discarded': True, 'sync_merged_into': canonical})\n",
+        'backend/utils/sync/assignment.py',
+    )
+    assert errors == []
+
+
+def test_tripwire_rejects_assignment_discard_without_redirect_fields():
+    errors = violations(
+        "transaction.update(collection.document(cid), {'discarded': True})\n",
+        'backend/utils/sync/assignment.py',
+    )
+    assert len(errors) == 1
+    assert 'raw lifecycle fields' in errors[0]

@@ -43,6 +43,30 @@ LIFECYCLE_FIELDS = {
 }
 
 
+def _dict_keys(node: ast.AST) -> set[str]:
+    if not isinstance(node, ast.Dict):
+        return set()
+    keys: set[str] = set()
+    for key in node.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value)
+    return keys
+
+
+def _is_sync_donor_tombstone_discard(relative_path: str, node: ast.Call) -> bool:
+    """Assignment may stamp discarded=True only as part of a redirect tombstone.
+
+    User discard stays owned by the lifecycle service. A donor write that also
+    sets deleted + sync_merged_into is the indexed hide for merge redirects,
+    not a second discard authority.
+    """
+    if relative_path != 'backend/utils/sync/assignment.py':
+        return False
+    payloads = [_dict_keys(argument) for argument in node.args]
+    payloads.extend(_dict_keys(keyword.value) for keyword in node.keywords)
+    return any({'deleted', 'discarded', 'sync_merged_into'} <= keys for keys in payloads)
+
+
 def _literal_lifecycle_fields(node: ast.AST) -> set[str]:
     if not isinstance(node, ast.Dict):
         return set()
@@ -126,6 +150,7 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
                 fields
                 and self.relative_path not in RAW_STORAGE_ALLOWLIST
                 and (is_transaction_write or writes_conversation_ref)
+                and not _is_sync_donor_tombstone_discard(self.relative_path, node)
             ):
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: raw lifecycle fields {sorted(fields)}; '
