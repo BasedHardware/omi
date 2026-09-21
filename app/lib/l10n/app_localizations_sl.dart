@@ -10123,4 +10123,27 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Glas je pripravljen za prepoznavanje',
+        'saved_sample_awaiting_embedding': 'Vzorec shranjen, potrebna je še obdelava glasu',
+        'not_learned': 'Glas ni naučen',
+        'other': 'Stanje glasu ni znano',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označi tudi poznejši govor tega govorca';
+
+  @override
+  String get updateSummaryWithNewNames => 'Posodobi povzetek z novimi imeni';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča';
 }

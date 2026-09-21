@@ -7,6 +7,10 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+
 import asyncio
 import hashlib
 import json
@@ -978,6 +982,8 @@ def _load_sync_router_for_fast_path():
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
     from utils.stt import speaker_match as actual_speaker_match
+    from utils.stt import speaker_identity as actual_speaker_identity
+    from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes
 
     saved_modules = {}
@@ -1016,6 +1022,7 @@ def _load_sync_router_for_fast_path():
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.other',
@@ -1189,6 +1196,8 @@ def _load_sync_router_for_fast_path():
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
+    saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
@@ -1199,6 +1208,10 @@ def _load_sync_router_for_fast_path():
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.
     sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+    # Keep allocator + receipt policy real: assignment.py imports both at module
+    # scope, and MagicMock parents for utils / utils.stt are not packages.
+    sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
     saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
     # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
     # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.

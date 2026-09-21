@@ -11914,5 +11914,20 @@
                 "type": "String"
             }
         }
+    },
+    "voiceRecognitionStatus": "{status, select, ready{Voice ready for recognition} saved_sample_awaiting_embedding{Sample saved; voice processing still needed} not_learned{Voice not learned} other{Voice status unknown}}",
+    "@voiceRecognitionStatus": {
+        "description": "Stored voice readiness only; no guarantee of a queued learning job.",
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker",
+    "updateSummaryWithNewNames": "Update summary with new names",
+    "syncStatusUnsupportedAudio": "Audio couldn't be read — can't be synced",
+    "@syncStatusUnsupportedAudio": {
+        "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
     }
 }

@@ -9925,4 +9925,27 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '음성 인식 준비 완료',
+        'saved_sample_awaiting_embedding': '샘플 저장됨; 음성 처리가 더 필요합니다',
+        'not_learned': '음성 학습 안 됨',
+        'other': '음성 상태 알 수 없음',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => '이 화자의 이후 발화도 태그하기';
+
+  @override
+  String get updateSummaryWithNewNames => '새 이름으로 요약 업데이트';
+
+  @override
+  String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 }

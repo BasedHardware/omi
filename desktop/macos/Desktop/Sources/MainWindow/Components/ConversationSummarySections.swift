@@ -23,23 +23,94 @@ struct ConversationSummaryBody: View {
     ConversationSummarySelection.primarySummary(for: conversation)
   }
 
+  private var attribution: ConversationSummaryProvenanceState.Attribution? {
+    ConversationSummaryProvenanceState.attribution(
+      localSummaryRuntime: conversation.localSummary?.runtime,
+      hasSummaryBody: selection.kind != .empty
+    )
+  }
+
   var body: some View {
-    if selection.kind == .sections {
-      ConversationSummarySections(
-        sections: conversation.structured.sections,
-        transcriptSegments: conversation.transcriptSegments,
-        onOpenSources: onOpenSources
-      )
-      .padding(.horizontal, OmiSpacing.lg)
-    } else {
-      OmiMarkdown(
-        text: selection.content,
-        sender: .ai,
-        appKitProseSelection: true,
-        documentProse: true
-      )
-      .frame(maxWidth: .infinity, alignment: .leading)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      // `.empty` previously fell through to the markdown branch and rendered an
+      // empty string: a title followed by blank space, with nothing said about
+      // whether a summary had failed, was still coming, or would never arrive.
+      if selection.kind == .empty {
+        ConversationSummaryEmptyStateView(
+          state: ConversationSummaryProvenanceState.empty(
+            deferred: conversation.deferred,
+            localSummaryRuntime: conversation.localSummary?.runtime,
+            isProcessing: conversation.status == .processing
+          )
+        )
+        .padding(.horizontal, OmiSpacing.lg)
+      } else if selection.kind == .sections {
+        ConversationSummarySections(
+          sections: conversation.structured.sections,
+          transcriptSegments: conversation.transcriptSegments,
+          onOpenSources: onOpenSources
+        )
+        .padding(.horizontal, OmiSpacing.lg)
+      } else {
+        OmiMarkdown(
+          text: selection.content,
+          sender: .ai,
+          appKitProseSelection: true,
+          documentProse: true
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+
+      if let attribution, attribution.isWorthDisplaying {
+        ConversationSummaryAttributionBadge(attribution: attribution)
+          .padding(.horizontal, OmiSpacing.lg)
+      }
     }
+  }
+}
+
+/// Where this particular summary was produced.
+///
+/// Per conversation, never per tier: free mobile conversations are summarized in
+/// the cloud today (`free_tier_processing_policy` returns `process_normally` for
+/// every non-desktop source), so a tier-wide "processed on your device" claim on
+/// this surface would be false for the same account on another platform.
+struct ConversationSummaryAttributionBadge: View {
+  let attribution: ConversationSummaryProvenanceState.Attribution
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      Image(systemName: attribution.systemImage)
+        .imageScale(.small)
+      Text(attribution.label)
+    }
+    .font(.caption)
+    .foregroundColor(Ink.tertiary)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(attribution.label)
+  }
+}
+
+/// Shown instead of an empty summary body.
+///
+/// The transcript is mentioned in every message because it is the thing the
+/// reader still has, and on this surface it is immediately below.
+struct ConversationSummaryEmptyStateView: View {
+  let state: ConversationSummaryProvenanceState.Empty
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      Text(state.title)
+        .font(.subheadline.weight(.medium))
+        .foregroundColor(Ink.secondary)
+      Text(state.message)
+        .font(.callout)
+        .foregroundColor(Ink.tertiary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(state.title). \(state.message)")
   }
 }
 

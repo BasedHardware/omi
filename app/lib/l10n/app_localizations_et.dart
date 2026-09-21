@@ -10086,4 +10086,27 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hääl on tuvastamiseks valmis',
+        'saved_sample_awaiting_embedding': 'Näidis salvestatud, hääle töötlemine on ootel',
+        'not_learned': 'Hääl pole õpitud',
+        'other': 'Hääle olek teadmata',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Märgi ka selle kõneleja hilisem kõne';
+
+  @override
+  String get updateSummaryWithNewNames => 'Uuenda kokkuvõtet uute nimedega';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 }

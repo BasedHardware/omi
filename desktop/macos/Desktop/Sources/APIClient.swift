@@ -366,7 +366,11 @@ actor APIClient {
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
-      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+      throw RealtimeTokenMintError(
+        statusCode: httpResponse.statusCode,
+        healthError: healthError,
+        payload: payload,
+        responseBody: data)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -686,6 +690,21 @@ struct RealtimeTokenMintError: LocalizedError {
   let statusCode: Int
   let healthError: CredentialHealthError
   let payload: APIErrorPayload?
+  /// Raw HTTP body so `ManagedPlanGateHTTP` can read FastAPI nested `detail.error`
+  /// (`plan_gated`) that `APIErrorPayload` cannot decode as a string.
+  let responseBody: Data
+
+  init(
+    statusCode: Int,
+    healthError: CredentialHealthError,
+    payload: APIErrorPayload?,
+    responseBody: Data = Data()
+  ) {
+    self.statusCode = statusCode
+    self.healthError = healthError
+    self.payload = payload
+    self.responseBody = responseBody
+  }
 
   var errorDescription: String? {
     var description = healthError.localizedDescription

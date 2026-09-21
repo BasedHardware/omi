@@ -10033,4 +10033,27 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'الصوت جاهز للتعرّف',
+        'saved_sample_awaiting_embedding': 'عينة محفوظة بانتظار معالجة الصوت',
+        'not_learned': 'لم يتم تعلّم الصوت',
+        'other': 'حالة الصوت غير معروفة',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'وسم الكلام اللاحق من هذا المتحدث أيضًا';
+
+  @override
+  String get updateSummaryWithNewNames => 'تحديث الملخص بالأسماء الجديدة';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'تعذّرت قراءة الصوت — لا يمكن مزامنته';
 }

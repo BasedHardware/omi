@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from starlette.requests import Request
 
 import routers.apps as apps_router
 from tests.unit.test_oauth_token_async_boundaries import _loaded_oauth_router
@@ -51,7 +52,13 @@ def _enable(setup_completed_url: str) -> list[str]:
         patch.object(apps_router, 'enable_app', lambda _uid, _app_id: None),
         patch.object(apps_router, 'increase_app_installs_count', lambda _app_id: None),
     ):
-        assert asyncio.run(apps_router.enable_app_endpoint(app_id='app-1', uid='user-1')) == {'status': 'ok'}
+        # Minimal ASGI-scope Request double: record_product_event only reads
+        # request.headers (fail-open otherwise), matching
+        # tests/unit/test_product_metrics.py's construction.
+        request = Request({'type': 'http', 'headers': []})
+        assert asyncio.run(apps_router.enable_app_endpoint(app_id='app-1', request=request, uid='user-1')) == {
+            'status': 'ok'
+        }
     return client.urls
 
 

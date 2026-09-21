@@ -51,6 +51,9 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
+        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+        {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
@@ -2664,3 +2667,46 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
     assert 'jobs' not in state  # no live job state → consumer skips job env checks
     assert 'backend' in state['services']  # services are still fetched + validated
     assert any('services' in cmd for cmd in described)
+
+
+def test_live_chain_ramp_accepts_policy_tokens_only_when_explicitly_enabled():
+    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+
+    env_map = {
+        'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
+        'STT_CONNECT_ORDER_FROM_CONFIG': {'value': 'true'},
+    }
+    config = {'gke': {'backend-listen': {'env': env_map}}}
+    assert _validate_stt_serving_model_policy('prod', config) == []
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'false'
+    assert _validate_stt_serving_model_policy('prod', config)
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'true'
+    env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
+    assert _validate_stt_serving_model_policy('prod', config)
+
+
+@pytest.mark.parametrize('binding', [{'env_var': 'COHORT', 'default': ''}, {'env_var': 'COHORT'}])
+@pytest.mark.parametrize('actual', [{}, {'value': ''}, {'valueFrom': {'secretKeyRef': {'name': 'COHORT'}}}])
+def test_only_explicit_optional_empty_defaults_admit_empty_values(binding, actual):
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='fixture',
+        expected={'COHORT': binding},
+        actual={'COHORT': actual},
+        strict_provisional=True,
+    )
+    assert (errors == []) is (binding.get('default') == '' and actual == {'value': ''})
+
+
+@pytest.mark.parametrize('cohort', ['uid:', 'pct:100', 'uid:fixture-a,'])
+def test_rendered_cloud_run_state_rejects_invalid_free_tier_cohort(monkeypatch, cohort):
+    validator = load_validator()
+    config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    state = render_cloud_run_state(config, monkeypatch)
+    for entry in state['services']['backend-sync-backfill']['env']:
+        if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT':
+            entry['value'] = cohort
+    errors = validator._validate_cloud_run(config, state, strict_provisional=False)
+    assert len(errors) == 1
+    assert errors[0].scope == 'cloud_run/backend-sync-backfill'
+    assert 'FREE_TIER_LOCAL_PROCESSING_COHORT' in errors[0].message

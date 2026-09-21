@@ -22,15 +22,15 @@ OMI_PRODUCT_EVENT_TOTAL = Counter(
     ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
 )
 
-OMI_PRODUCT_EVENT_USER_DAILY = Histogram(
-    'omi_product_event_user_daily',
+OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL = Counter(
+    'omi_product_event_user_daily_over_total',
     (
-        'Per-(uid, UTC-day) product-event tallies observed into a histogram. '
-        'Labels are only event and app_build — never uid. Per-pod; alert queries '
-        'must sum() across job=backend-listen-metrics to read p10/p90.'
+        'Pod-local uid-days whose product-event tally crossed a closed threshold. '
+        'Incremented once per (event, uid, UTC-day, threshold). Never labeled by uid. '
+        'sum() across pods counts pod-local crossings: a user split across pods may be '
+        'undercounted; a user who independently crosses on two pods is counted twice.'
     ),
-    ['event', 'app_build'],
-    buckets=(1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000),
+    ['event', 'threshold'],
 )
 
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
@@ -516,6 +516,17 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
+    'omi_sync_bridge_retraction_total',
+    (
+        'Sync-bridge donor retraction outcomes. Labels are a closed set: '
+        'outcome=attempted|deferred|converged|failed and '
+        'reason=none|gate_busy|hold_active|authority_unavailable|other. '
+        'Never labeled by uid, conversation id, or exception text.'
+    ),
+    ['outcome', 'reason'],
+)
+
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
     'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
@@ -543,6 +554,15 @@ OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     'omi_live_stt_misaligned_frames_total',
     'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
     ['provider', 'stage'],
+)
+
+# Vendor stream-close frames by bounded provider and bounded reason. Budget/quota
+# exhaustion is never a transient blip; the PAGE alert keys on
+# reason=provider_budget_exhausted. Raw vendor messages are not label values.
+OMI_STT_STREAM_CLOSE_TOTAL = Counter(
+    'omi_stt_stream_close_total',
+    'Live-STT provider stream-close frames by bounded provider and bounded reason',
+    ['provider', 'reason'],
 )
 
 OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
@@ -597,6 +617,73 @@ OMI_SYNC_INTAKE_TOTAL = Counter(
     'Sync conversation intake outcomes (created vs merged) by bounded outcome',
     ['outcome'],
 )
+
+# Conversation shape at first durable completed persist. source is a closed
+# 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
+# children are emitted from backend-sync, which is not scraped today; the
+# matching omi_conversation_shape log line is the Cloud Logging backup.
+CONVERSATION_SHAPE_SOURCES = (
+    'live',
+    'sync',
+    'import',
+    'integration',
+    'desktop',
+    'unknown',
+)
+CONVERSATION_DURATION_BUCKETS = (
+    5,
+    10,
+    15,
+    20,
+    30,
+    45,
+    60,
+    90,
+    120,
+    180,
+    300,
+    600,
+    1200,
+    1800,
+    3600,
+    7200,
+    14400,
+    28800,
+)
+CONVERSATION_SEGMENT_BUCKETS = (1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 5000)
+
+OMI_CONVERSATION_DURATION_SECONDS = Histogram(
+    'omi_conversation_duration_seconds',
+    (
+        'Wall-clock conversation duration (finished_at - started_at) at first durable '
+        'completed persist, by bounded source. Never labeled by uid. Sync is dark in '
+        'Prometheus until backend-sync is scraped; read omi_conversation_shape logs until then.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SPEECH_SECONDS = Histogram(
+    'omi_conversation_speech_seconds',
+    (
+        'Sum of transcript segment (end - start) at first durable completed persist, '
+        'by bounded source. Speech extent, not wall-clock. Never labeled by uid.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SEGMENTS = Histogram(
+    'omi_conversation_segments',
+    'Transcript segment count at first durable completed persist, by bounded source. Never labeled by uid.',
+    ['source'],
+    buckets=CONVERSATION_SEGMENT_BUCKETS,
+)
+
+for _shape_source in CONVERSATION_SHAPE_SOURCES:
+    OMI_CONVERSATION_DURATION_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SPEECH_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SEGMENTS.labels(source=_shape_source)
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',

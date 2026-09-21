@@ -109,17 +109,24 @@ def validate_live_route(
     if str(datasource.get("status", "")).upper() != "OK":
         errors.append("live Prometheus datasource health is not OK")
     up_results = up_query.get("data", {}).get("result", []) if up_query.get("status") == "success" else []
-    healthy_jobs = {
-        item.get("metric", {}).get("job")
-        for item in up_results
-        if isinstance(item, dict)
-        and isinstance(item.get("metric"), dict)
-        and isinstance(item.get("value"), list)
-        and len(item["value"]) == 2
-        and str(item["value"][1]) == "1"
-    }
+    observed_up: dict[str, str] = {}
+    for item in up_results:
+        if (
+            isinstance(item, dict)
+            and isinstance(item.get("metric"), dict)
+            and isinstance(item.get("value"), list)
+            and len(item["value"]) == 2
+        ):
+            job = item["metric"].get("job")
+            if isinstance(job, str):
+                observed_up.setdefault(job, str(item["value"][1]))
+    healthy_jobs = {job for job, value in observed_up.items() if value == "1"}
     if healthy_jobs != REQUIRED_JOBS:
-        errors.append("current Pusher and backend-listen Prometheus scrape targets are not both healthy")
+        observed = ", ".join(f"{job}={observed_up.get(job, 'absent')}" for job in sorted(REQUIRED_JOBS))
+        errors.append(
+            "current Pusher and backend-listen Prometheus scrape targets are not both healthy"
+            f" (observed min(up) by job: {observed})"
+        )
     results = metric_query.get("data", {}).get("result", []) if metric_query.get("status") == "success" else []
     observed_metrics = {
         (item.get("metric", {}).get("__name__"), item.get("metric", {}).get("job"))

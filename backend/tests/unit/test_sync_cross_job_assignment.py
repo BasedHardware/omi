@@ -56,7 +56,35 @@ def intake(store, incoming, *, candidate_id=None, target_id=None):
 
 
 def conversations(store):
-    return [value for key, value in store.rows.items() if key[2] == 'conversations']
+    return [value for key, value in store.rows.items() if key[2] == 'conversations' and not value.get('deleted')]
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
+    store = StrictFirestore()
+    chunks = [chunk('a', 1000), chunk('b', 1060)]
+    for item in chunks:
+        item['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:' + item['id'])
+    for item in reversed(chunks) if reverse else chunks:
+        result, _, _ = intake(store, item)
+    by_scope = {s['speaker_id_scope']: s['speaker_id'] for s in result['transcript_segments']}
+    assert len(set(by_scope.values())) == 2
+    for item in chunks:
+        result, _, survivors = intake(store, item)
+        assert not survivors
+        assert {s['speaker_id_scope']: s['speaker_id'] for s in result['transcript_segments']} == by_scope
+    assert all(s['speaker'] == 'SPEAKER_00' for s in result['transcript_segments'])
+
+
+def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
+    store = StrictFirestore()
+    live = chunk('live', 1000)
+    live['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id=98)
+    intake(store, live)
+    wal = chunk('wal', 1060)
+    wal['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:content')
+    result, _, _ = intake(store, wal, target_id='live')
+    assert [s['speaker_id'] for s in result['transcript_segments']] == [98, 100]
 
 
 def test_two_jobs_with_stale_empty_lookup_converge():
@@ -71,8 +99,9 @@ def test_two_jobs_with_stale_empty_lookup_converge():
     with ThreadPoolExecutor(2) as pool:
         jobs = [pool.submit(job, chunk(str(i), 1000 + i * 60)) for i in range(2)]
         results = [job.result(timeout=5) for job in jobs]
-    assert results[0][0]['id'] == results[1][0]['id']
-    assert sum(created for _, created, _ in results) == 1
+    assert len(conversations(store)) == 1
+    assert conversations(store)[0]['id'] in {'0', '1'}
+    assert all(result[0]['id'] in {'0', '1'} for result in results)
     assert len(conversations(store)[0]['transcript_segments']) == 2
 
 
@@ -91,13 +120,16 @@ def test_reverse_order_retry_and_deleted_target():
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
-    assert earlier['id'] == later['id']
+    assert earlier['id'] == later['id'] == 'later'
+    assert earlier['sync_merged_from'] == []
+    assert ('users', 'u', 'conversations', 'earlier') not in store.rows
+    assert not store.rows[('users', 'u', 'conversations', 'later')].get('deleted')
     assert [s['start'] for s in earlier['transcript_segments']] == [0, 60]
     retried, created, survivors = intake(store, chunk('retry', 1060))
     assert not created and not survivors and len(retried['transcript_segments']) == 2
-    store.rows[('users', 'u', 'conversations', later['id'])]['deleted'] = True
-    replacement, created, _ = intake(store, chunk('replacement', 1120), target_id=later['id'])
-    assert created and replacement['id'] != later['id']
+    store.rows[('users', 'u', 'conversations', earlier['id'])]['deleted'] = True
+    replacement, created, _ = intake(store, chunk('replacement', 1120), target_id=earlier['id'])
+    assert created and replacement['id'] != earlier['id']
 
 
 def test_gap_and_known_devices_keep_independent_recordings():
@@ -144,6 +176,9 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
     )
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     fakes['utils.conversations.lifecycle'] = lifecycle
+    bridge = AutoMockModule('utils.sync.bridge')
+    bridge.finish_sync_bridges = lambda uid, cid: cid
+    fakes['utils.sync.bridge'] = bridge
     with stub_modules(fakes):
         pipeline = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
@@ -163,8 +198,9 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
                 is_user=False,
             )
         ]
-        pipeline.identify_speakers_for_segments = lambda *a: None
+        pipeline.identify_speakers_for_segments = lambda *a, **kw: None
         pipeline.get_timestamp_from_path = float
+        pipeline.get_wav_duration = lambda path: 60
 
         def expose_failure(error, **kwargs):
             raise error
@@ -190,7 +226,8 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         assert errors == [[], []]
         assert len(conversations(store)) == 1
         assert len(conversations(store)[0]['transcript_segments']) == 2
-        assert len(responses[0]['new_memories'] | responses[1]['new_memories']) == 1
+        # Responses can name pre-bridge IDs; durable redirects converge to one row.
+        assert len(conversations(store)) == 1
 
         pipeline.conversations_db.get_conversation = lambda *a: {
             'sync_relevance': 'review',
@@ -239,3 +276,80 @@ def test_stale_processor_cannot_erase_new_chunks_or_remove_search_row(monkeypatc
     assert not persisted and ref.written is None
     sync.assert_called_once()
     remove.assert_not_called()
+
+
+def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
+    store = StrictFirestore()
+    a, b = chunk('a', 1000), chunk('b', 1240)
+    for item in [a, b]:
+        item['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:' + item['id'])
+        intake(store, item)
+    result, _, _ = intake(store, chunk('bridge', 1120))
+    mapped = {
+        s.get('speaker_id_scope'): s['speaker_id'] for s in result['transcript_segments'] if s.get('speaker_id_scope')
+    }
+    assert mapped['sync:a'] != mapped['sync:b']
+    replay, _, _ = intake(store, b)
+    assert {
+        s.get('speaker_id_scope'): s['speaker_id'] for s in replay['transcript_segments'] if s.get('speaker_id_scope')
+    } == mapped
+
+
+def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_donor():
+    store = StrictFirestore()
+    saved, _, _ = intake(store, chunk('manual', 1000))
+    saved['manual_speaker_assignments'] = {
+        'generation': 1,
+        'speakers': {'0': {'generation': 1, 'person_id': 'new', 'is_user': False}},
+    }
+    store.rows[('users', 'u', 'conversations', 'manual')] = saved
+    result, created, _ = intake(store, chunk('next', 1060))
+    assert not created and result['id'] == 'manual'
+    assert len(result['transcript_segments']) == 2
+    assert all(segment.get('person_id') == 'new' for segment in result['transcript_segments'])
+    assert not store.rows[('users', 'u', 'conversations', 'manual')].get('deleted')
+    assert ('users', 'u', 'conversations', 'next') not in store.rows
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_labeled_donor_does_not_extend_or_bridge_survivor(explicit):
+    store = StrictFirestore()
+    intake(store, chunk('a', 1000))
+    intake(store, chunk('b', 1240))
+    for cid in ('a', 'b'):
+        store.rows[('users', 'u', 'conversations', cid)]['manual_speaker_assignments'] = {
+            'segments': {cid: {'generation': 1, 'person_id': cid, 'is_user': False}}
+        }
+    donor = deepcopy(store.rows[('users', 'u', 'conversations', 'b')])
+    result, _, _ = intake(store, chunk('bridge', 1120), target_id='a' if explicit else None)
+    assert result['id'] == 'a'
+    assert result['finished_at'] == chunk('bridge', 1120)['finished_at']
+    assert result['sync_merged_from'] == []
+    assert store.rows[('users', 'u', 'conversations', 'b')] == donor
+
+
+def test_labeled_retry_retarget_is_terminal_without_writes():
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    store = StrictFirestore()
+    intake(store, chunk('a', 1000))
+    intake(store, chunk('b', 1240))
+    store.rows[('users', 'u', 'conversations', 'a')]['manual_speaker_assignments'] = {'generation': 1}
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded, match='manual speaker'):
+        intake(store, chunk('a', 1000), target_id='b')
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('donor_start,target_start', [(1000, 1240), (1240, 1000)])
+def test_unlabeled_explicit_target_excludes_labeled_donor_extent(donor_start, target_start):
+    store = StrictFirestore()
+    intake(store, chunk('donor', donor_start))
+    intake(store, chunk('target', target_start))
+    store.rows[('users', 'u', 'conversations', 'donor')]['manual_speaker_assignments'] = {'generation': 1}
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'donor')])
+    result, _, _ = intake(store, chunk('bridge', 1120), target_id='target')
+    assert result['id'] == 'target'
+    assert result['started_at'] == chunk('expected', min(target_start, 1120))['started_at']
+    assert result['finished_at'] == chunk('expected', max(target_start, 1120))['finished_at']
+    assert store.rows[('users', 'u', 'conversations', 'donor')] == before

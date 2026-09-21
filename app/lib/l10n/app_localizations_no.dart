@@ -10091,4 +10091,27 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Stemmen er klar for gjenkjenning',
+        'saved_sample_awaiting_embedding': 'Prøve lagret, stemmebehandling gjenstår',
+        'not_learned': 'Stemmen er ikke lært',
+        'other': 'Stemmestatus ukjent',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merk også senere tale fra denne taleren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Oppdater sammendraget med de nye navnene';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke leses — kan ikke synkroniseres';
 }

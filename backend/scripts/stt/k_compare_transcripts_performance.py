@@ -35,7 +35,7 @@ from utils.other.storage import upload_postprocessing_audio
 def add_model_result_segments(model: str, new_segments: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
     segments = [TranscriptSegment(**s) for s in result[model]]
     new_seg_objs = [TranscriptSegment(**s) for s in new_segments]
-    segments, _, _ = TranscriptSegment.combine_segments(segments, new_seg_objs)
+    segments = TranscriptSegment.combine_segments(segments, new_seg_objs).segments
     result[model] = [s.dict() for s in segments]
 
 

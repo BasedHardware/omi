@@ -10098,4 +10098,27 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'কণ্ঠ শনাক্তকরণের জন্য প্রস্তুত',
+        'saved_sample_awaiting_embedding': 'নমুনা সংরক্ষিত, কণ্ঠ প্রক্রিয়াকরণের অপেক্ষায়',
+        'not_learned': 'কণ্ঠ শেখা হয়নি',
+        'other': 'কণ্ঠের অবস্থা অজানা',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'এই বক্তার পরবর্তী কথাও ট্যাগ করুন';
+
+  @override
+  String get updateSummaryWithNewNames => 'নতুন নাম দিয়ে সারাংশ আপডেট করুন';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়';
 }

@@ -8,6 +8,12 @@ overlay:
   gke:
     backend-listen:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
@@ -79,6 +85,12 @@ overlay:
             key: MCP_OAUTH_CLIENTS_JSON
     pusher:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
@@ -140,6 +152,12 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      FREE_TIER_LOCAL_PROCESSING:
+        value: 'false'
+      FREE_TIER_LOCAL_PROCESSING_COHORT:
+        value: ''
+      FREE_TIER_EMERGENCY_STOP:
+        value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'false'
       BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
@@ -170,6 +188,12 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
@@ -252,6 +276,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -315,6 +345,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
@@ -374,6 +410,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           MEMORY_BELIEF_MODEL_ENABLED:

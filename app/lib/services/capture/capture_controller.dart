@@ -549,6 +549,7 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  final Map<int, String> _manualSpeakerDefaults = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -650,6 +651,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
@@ -1668,6 +1670,7 @@ class CaptureController extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -2392,8 +2395,18 @@ class CaptureController extends ChangeNotifier
       await _inProgressConversationLoader!();
       return;
     }
-    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    _conversation = convos.isNotEmpty ? convos.first : null;
+    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+  }
+
+  /// Install an acknowledged server snapshot. Shared by REST refresh and
+  /// hermetic capture scenarios that control the conversation boundary.
+  void applyInProgressConversation(ServerConversation? nextConversation) {
+    if (_conversation?.id != nextConversation?.id) {
+      suggestionsBySegmentId.clear();
+      _manualSpeakerDefaults.clear();
+    }
+    _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
       // Merge server photos with locally-captured temp photos to avoid losing
@@ -2670,15 +2683,20 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    if (event.speakerId < 0 || event.segmentId.isEmpty || event.personName.trim().isEmpty) return;
     // Tagging
     if (taggingSegmentIds.contains(event.segmentId)) {
       return;
     }
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
-    if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+    if (segment == null || segment.speakerId != event.speakerId || segment.personId != null || segment.isUser) return;
+    if (event.personId.isEmpty) {
+      suggestionsBySegmentId[event.segmentId] = event;
+      notifyListeners();
       return;
     }
+    suggestionsBySegmentId.remove(event.segmentId);
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
@@ -2686,12 +2704,18 @@ class CaptureController extends ChangeNotifier
       _preferences.addCachedPerson(
         Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
+      _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
     }
 
     // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
     if (event.personId.isNotEmpty) {
       for (var seg in segments) {
-        if (seg.speakerId == event.speakerId) {
+        if (seg.speakerId == event.speakerId &&
+            !seg.isUser &&
+            seg.personId == null &&
+            !taggingSegmentIds.contains(seg.id)) {
           seg.isUser = isUser;
           seg.personId = isUser ? null : event.personId;
         }
@@ -2701,71 +2725,51 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> assignSpeakerToConversation(
+  Future<bool> assignSpeakerToConversation(
     int speakerId,
     String personId,
     String personName,
-    List<String> segmentIds,
-  ) async {
-    if (segmentIds.isEmpty) return;
-
-    taggingSegmentIds = List.from(segmentIds);
+    List<String> segmentIds, {
+    bool applyToSpeaker = false,
+  }) async {
+    final conversationId = _conversation?.id;
+    final sessionId = activeCaptureSessionId;
+    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
+    final targets = List<String>.of(segmentIds);
+    taggingSegmentIds = targets;
     notifyListeners();
-
     try {
-      String finalPersonId = personId;
-
-      // Create person if new (old app path - calls idempotent API)
-      if (finalPersonId.isEmpty) {
-        Person? newPerson = await externalActions.createPerson(personName);
-        if (newPerson != null) {
-          finalPersonId = newPerson.id;
+      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
+      if (finalPersonId == null || finalPersonId.isEmpty) return false;
+      final saved = await externalActions.assignSpeaker(conversationId, targets, finalPersonId,
+          speakerId: applyToSpeaker ? speakerId : null);
+      if (!saved) return false;
+      if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
+      if (applyToSpeaker) {
+        _manualSpeakerDefaults[speakerId] = finalPersonId;
+      } else {
+        _manualSpeakerDefaults.remove(speakerId);
+      }
+      for (final segment in segments) {
+        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
+          segment.isUser = finalPersonId == 'user';
+          segment.personId = segment.isUser ? null : finalPersonId;
         }
       }
-
-      // Add person to local cache if not exists (backward compatibility for old apps)
-      if (finalPersonId.isNotEmpty && finalPersonId != 'user' && _preferences.getPersonById(finalPersonId) == null) {
-        _preferences.addCachedPerson(
-          Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        );
-      }
-
-      // Find conversation id
-      if (_conversation == null) return;
-
-      final isAssigningToUser = finalPersonId == 'user';
-
-      // Update all segments with this speakerId for UI consistency
-      for (var segment in segments) {
-        if (segment.speakerId == speakerId) {
-          segment.isUser = isAssigningToUser;
-          segment.personId = isAssigningToUser ? null : finalPersonId;
-        }
-      }
-      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
-
-      // Persist change
-      await assignBulkConversationTranscriptSegments(
-        _conversation!.id,
-        segmentIds,
-        isUser: isAssigningToUser,
-        personId: isAssigningToUser ? null : finalPersonId,
-      );
-
-      // Notify backend session
+      _segmentsPhotosVersion++;
       if (_socket?.state == SocketServiceState.connected) {
-        final payload = jsonEncode({
+        _socket?.send(jsonEncode({
           'type': 'speaker_assigned',
           'speaker_id': speakerId,
           'person_id': finalPersonId,
           'person_name': personName,
-          'segment_ids': segmentIds,
-        });
-        _socket?.send(payload);
+          'segment_ids': targets,
+        }));
       }
-
-      // Remove all suggestions for this speakerId
-      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      return true;
+    } catch (_) {
+      return false;
     } finally {
       taggingSegmentIds = [];
       notifyListeners();
@@ -2798,6 +2802,13 @@ class CaptureController extends ChangeNotifier
     }
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    for (final segment in remainSegments) {
+      final assigned = _manualSpeakerDefaults[segment.speakerId];
+      if (assigned != null && segment.personId == null && !segment.isUser) {
+        segment.isUser = assigned == 'user';
+        segment.personId = segment.isUser ? null : assigned;
+      }
+    }
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)

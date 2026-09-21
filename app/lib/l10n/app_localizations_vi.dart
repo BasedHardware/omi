@@ -10087,4 +10087,27 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Giọng nói đã sẵn sàng để nhận diện',
+        'saved_sample_awaiting_embedding': 'Đã lưu mẫu; vẫn cần xử lý giọng nói',
+        'not_learned': 'Chưa học giọng nói',
+        'other': 'Chưa rõ trạng thái giọng nói',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Gắn thẻ cả lời nói sau này của người nói này';
+
+  @override
+  String get updateSummaryWithNewNames => 'Cập nhật tóm tắt với tên mới';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
 }

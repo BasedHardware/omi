@@ -10116,4 +10116,27 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Balss ir gatava atpazīšanai',
+        'saved_sample_awaiting_embedding': 'Paraugs saglabāts, vēl jāapstrādā balss',
+        'not_learned': 'Balss nav apgūta',
+        'other': 'Balss statuss nav zināms',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Atzīmēt arī šī runātāja turpmāko runu';
+
+  @override
+  String get updateSummaryWithNewNames => 'Atjaunināt kopsavilkumu ar jaunajiem vārdiem';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
 }

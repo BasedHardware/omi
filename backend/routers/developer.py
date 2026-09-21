@@ -2235,7 +2235,11 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    # Lazy: keep developer routes off the merge/memory import graph so stubbed
+    # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
+    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+
+    delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
 

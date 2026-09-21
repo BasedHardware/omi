@@ -7,6 +7,16 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/logger.dart';
 
 class PeopleProvider extends BaseProvider {
+  PeopleProvider({
+    Future<bool> Function(String, String)? renamePerson,
+    Future<List<Person>?> Function()? loadPeople,
+    Future<bool> Function(String, int)? deleteSample,
+  })  : _renamePerson = renamePerson ?? updatePersonName,
+        _loadPeople = loadPeople ?? getAllPeople,
+        _deleteSample = deleteSample ?? deletePersonSpeechSample;
+  final Future<List<Person>?> Function() _loadPeople;
+  final Future<bool> Function(String, String) _renamePerson;
+  final Future<bool> Function(String, int) _deleteSample;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   Map<String, List<String>> samplesUrl = {};
 
@@ -33,7 +43,7 @@ class PeopleProvider extends BaseProvider {
   }
 
   setPeople() async {
-    final value = await getAllPeople();
+    final value = await _loadPeople();
     loading = false;
     if (value != null) {
       people = value;
@@ -100,7 +110,7 @@ class PeopleProvider extends BaseProvider {
     loading = true;
     notifyListeners();
 
-    final updated = await updatePersonName(person.id, name);
+    final updated = await _renamePerson(person.id, name);
     final index = people.indexWhere((p) => p.id == person.id);
     if (updated && index != -1) {
       people[index] = Person(
@@ -109,6 +119,10 @@ class PeopleProvider extends BaseProvider {
         createdAt: person.createdAt,
         updatedAt: DateTime.now(),
         speechSamples: person.speechSamples,
+        speechSampleTranscripts: person.speechSampleTranscripts,
+        speechSamplesVersion: person.speechSamplesVersion,
+        colorIdx: person.colorIdx,
+        voiceReadiness: person.voiceReadiness,
       );
       people.sort((a, b) => a.name.compareTo(b.name));
       SharedPreferencesUtil().cachedPeople = people;
@@ -121,10 +135,17 @@ class PeopleProvider extends BaseProvider {
   Future<void> deletePersonSample(int personIdx, int sampleIdx) async {
     String personId = people[personIdx].id;
 
-    bool success = await deletePersonSpeechSample(personId, sampleIdx);
+    bool success = await _deleteSample(personId, sampleIdx);
     if (success) {
       people[personIdx].speechSamples!.removeAt(sampleIdx);
+      if (people[personIdx].speechSamples!.isEmpty) {
+        people[personIdx] = Person.fromJson({
+          ...people[personIdx].toJson(),
+          'voice_readiness': 'not_learned',
+        });
+      }
       SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
+      await setPeople();
       notifyListeners();
     } else {
       Logger.debug('Failed to delete speech sample at index: $sampleIdx');

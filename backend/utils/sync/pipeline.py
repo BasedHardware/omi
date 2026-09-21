@@ -29,7 +29,7 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
-from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
@@ -123,6 +123,9 @@ from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_fr
 from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.capture import chunk_identity
+from utils.sync.bridge import finish_sync_segment
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -774,7 +777,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     """
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation_data:
+    if not conversation_data or conversation_data.get('deleted'):
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
@@ -906,6 +909,7 @@ def identify_speakers_for_segments(
     audio_bytes: Optional[bytes],
     person_embeddings_cache: Dict[str, dict],
     uid: str,
+    language: Optional[str] = None,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
 
@@ -994,7 +998,7 @@ def identify_speakers_for_segments(
         if speaker_id in speaker_to_person_map:
             continue
         for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
+            detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
@@ -1076,7 +1080,9 @@ def process_segment(
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
+    speaker_scope: Optional[str] = None,
 ):
+    conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     try:
@@ -1142,6 +1148,7 @@ def process_segment(
                 audio_bytes if person_embeddings_cache else None,
                 person_embeddings_cache or {},
                 uid,
+                language=language,
             )
         except Exception as e:
             logger.warning(
@@ -1153,30 +1160,24 @@ def process_segment(
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
 
-        # Conversation assignment must happen chronologically across the batch: wait until
-        # every earlier-timestamped segment has created/merged its conversation, otherwise
-        # the closest-conversation lookup races and adjacent chunks split into separate
-        # conversations.
+        # Chronological scheduling reduces bridge work; the transaction remains
+        # correct when independent jobs or a timed-out worker arrive out of order.
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
+        # The content identity survives job-directory changes and retry. Direct
+        # legacy callers retain a capture-time scope, never one shared by all WALs.
+        for segment in transcript_segments:
+            segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
         segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
-
-        # When a target conversation is specified (auto-sync from live capture),
-        # attach segments to it directly instead of searching by timestamp.
-        if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(
-                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
-            )
-            if not conversations_db.eligible_merge_target(closest_memory):
-                logger.warning(
-                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
-                )
-                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-        else:
-            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-
+        # Target eligibility (including live stubs and tombstones) is resolved
+        # inside the same transaction as temporal assignment.
+        closest_memory = (
+            None
+            if target_conversation_id
+            else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+        )
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
@@ -1191,7 +1192,7 @@ def process_segment(
             geolocation=geolocation,
         )
         incoming = Conversation(
-            id=str(uuid.uuid4()),
+            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
             created_at=started_at,
             structured=build_deterministic_minimum_structured(create_memory),
             **create_memory.model_dump(),
@@ -1222,6 +1223,14 @@ def process_segment(
                     data_protection_level=data_protection_level,
                     survivors=survivors,
                 )
+        finish_sync_segment(
+            uid,
+            assigned,
+            response,
+            lock,
+            language,
+            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
+        )
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=TranscriptionOutcome.SUCCESS,
@@ -1238,6 +1247,20 @@ def process_segment(
                 retryable=False,
             )
         return True
+    except SyncAssignmentSuperseded:
+        # Acknowledge user authority without failing the WAL or dropping siblings.
+        # False excludes this segment from content usage; the zero-error job still
+        # commits its durable completion ledger before the client sees completed.
+        if conversation_id:
+            with lock:
+                response['new_memories'].discard(conversation_id)
+                response['updated_memories'].discard(conversation_id)
+                response.get('_merged', {}).pop(conversation_id, None)
+        logger.info('event=sync_assignment outcome=superseded')
+        _set_deferred_segment_outcome(
+            deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
+        )
+        return False
     except SyncConversationPersistenceFenced:
         raise
     except Exception as e:
@@ -2080,6 +2103,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
+                    speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
                     client_device_id=client_device_id,
