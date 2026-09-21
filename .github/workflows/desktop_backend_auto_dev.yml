@@ -215,7 +215,7 @@ jobs:
       - name: Render desktop backend expected env state
         id: desktop-expected-env
         env:
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.FREE_TIER_LOCAL_PROCESSING_COHORT }}
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
         run: |
           set -euo pipefail
           python3 backend/scripts/render_backend_runtime_env.py \

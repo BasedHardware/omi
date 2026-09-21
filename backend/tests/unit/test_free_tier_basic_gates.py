@@ -262,9 +262,12 @@ def test_helm_source_values_carry_every_free_tier_binding(environment):
         assert entries['FREE_TIER_EMERGENCY_STOP']['value'] == 'false'
         cohort = entries['FREE_TIER_LOCAL_PROCESSING_COHORT']
         if environment == 'dev':
+            # `optional` is load-bearing: a pod that starts before the backend lane has
+            # written the key must start dark (unset == admit nobody), not fail to start.
             assert cohort['valueFrom']['configMapKeyRef'] == {
                 'name': 'dev-omi-backend-config',
                 'key': 'FREE_TIER_LOCAL_PROCESSING_COHORT',
+                'optional': True,
             }
         else:
             assert cohort['value'] == ''
@@ -274,7 +277,7 @@ def test_actions_variable_reaches_renderers_and_desktop_deploy_without_shell_int
     """Static wiring tripwire extending #14316's deployment assertions."""
     repo = BACKEND.parent
     key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
-    binding = '${{ vars.FREE_TIER_LOCAL_PROCESSING_COHORT }}'
+    binding = '${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}'
     action = yaml.safe_load((repo / '.github/actions/deploy-backend-stack/action.yml').read_text())
     steps = {step['name']: step for step in action['runs']['steps']}
     for name in (
@@ -303,7 +306,13 @@ def test_actions_variable_reaches_renderers_and_desktop_deploy_without_shell_int
         renderer = next(step for step in steps if step.get('id') == 'desktop-expected-env')
         deploy = next(step for step in steps if 'google-github-actions/deploy-cloudrun@' in step.get('uses', ''))
         assert steps.index(renderer) < steps.index(deploy)
-        assert renderer['env'][key] == binding
+        if environment == 'dev':
+            assert renderer['env'][key] == binding
+        else:
+            # `vars` falls back from environment to repository scope, so production
+            # must not read a cohort variable at all, under any name.
+            assert key not in renderer.get('env', {})
+            assert 'FREE_TIER_LOCAL_PROCESSING_COHORT }}' not in (repo / '.github/workflows' / filename).read_text()
         assert '"$GITHUB_OUTPUT"' in renderer['run']
         deployed = dict(line.strip().split('=', 1) for line in deploy['with']['env_vars'].splitlines() if '=' in line)
         assert deployed['FREE_TIER_LOCAL_PROCESSING'] == ('true' if environment == 'dev' else 'false')

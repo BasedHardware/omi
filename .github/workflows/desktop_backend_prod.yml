@@ -304,8 +304,10 @@ jobs:
       # restating it here, so the guard cannot drift from its source.
       - name: Render desktop backend expected env state
         id: desktop-expected-env
-        env:
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.FREE_TIER_LOCAL_PROCESSING_COHORT }}
+        # No cohort variable is passed here, on purpose. GitHub's `vars` context
+        # falls back from environment to repository scope, so the only way to make
+        # a development cohort structurally unable to reach production is for the
+        # production workflow never to read one. Prod renders literal empties.
         run: |
           set -euo pipefail
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
