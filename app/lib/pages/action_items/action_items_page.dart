@@ -1359,30 +1359,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-
-    if (item.dueAt == null) {
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-        return TaskCategory.overdue;
-      }
-      return TaskCategory.noDeadline;
-    }
-    final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfToday)) {
-      return TaskCategory.overdue;
-    } else if (dueDate.isBefore(startOfTomorrow)) {
-      return TaskCategory.today;
-    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-      return TaskCategory.tomorrow;
-    } else {
-      return TaskCategory.later;
-    }
-  }
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) =>
+      categoryForItem(item, Provider.of<ActionItemsProvider>(context, listen: false).showCompletedView);
 
   Widget _buildTaskItemContent(
     ActionItemWithMetadata item,
