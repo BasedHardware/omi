@@ -77,8 +77,6 @@ Contracts: [on-device speech](../.github/agent-docs/on-device-speech.md); [Omi +
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
 | Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
-Android: 27 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
-
 ## Test Strategy
 
 ### Test Structure
