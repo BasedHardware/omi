@@ -32,9 +32,12 @@ import {
   withAuthorizedSerializableConnectionTransaction,
 } from "./transaction";
 
+/** Unmounted chat.write attachment rows. Scanner is `dev-noop-scanner` only;
+ *  this is not a malware guarantee and does not expose generation content. */
 export interface ChatAttachmentStorage {
   stage(input: StageChatAttachmentInput): Promise<ChatAttachmentRecord>;
   advanceScan(id: string, clock: AttachmentScanClock): Promise<ChatAttachmentRecord | null>;
+  retryScan(id: string, clock: AttachmentScanClock): Promise<ChatAttachmentRecord | null>;
   bindToMessage(input: BindChatAttachmentsInput): Promise<ResolveChatAttachmentsOutcome>;
   resolveForAdmission(input: ResolveChatAttachmentsInput): Promise<ResolveChatAttachmentsOutcome>;
   removeUnbound(id: string, accountId: string): Promise<boolean>;
@@ -250,6 +253,27 @@ export async function withAuthorizedChatAttachments<Result>(
           });
           if (updated.rowCount !== 1) return fail();
           return readRow(id);
+        },
+
+        async retryScan(id, clock) {
+          const row = await readRow(id);
+          if (row === null || row.state === "bound" || row.state === "staged"
+            || row.state === "scanning" || row.state === "clean") return null;
+          const restarted = beginAttachmentScan({
+            scannerId: row.scannerId,
+            state: row.state,
+            scanningStartedAt: row.scanningStartedAt,
+            stagedAt: row.stagedAt,
+          }, { clock });
+          const updated = await connection.execute({
+            name: "chat.attachment_retry_scan",
+            text: `UPDATE omi_memory.chat_attachments
+              SET attachment_state=$1, scanning_started_at=$2
+              WHERE account_id=$3 AND id=$4 AND attachment_state IS DISTINCT FROM 'bound'`,
+            values: [restarted.state, restarted.scanningStartedAt, authority.account_id, id],
+          });
+          if (updated.rowCount !== 1) return fail();
+          return storage.advanceScan(id, clock);
         },
 
         async resolveForAdmission(input) {

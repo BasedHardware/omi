@@ -62,8 +62,13 @@ and conversation-list composition of `chat:chat-main`. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
 Unmounted PostgreSQL attachment staging (migration 0058) follows the existing
-sniff/bind/expiry/account contracts and `chat.write` RLS. Production GET still
-advertises `maxAttachmentsPerMessage: 0`. POST `/v1/chat-attachments` stays 404.
+sniff/bind/expiry/account contracts and `chat.write` RLS, including retryScan
+for failed terminals. The scanner identity is the existing `dev-noop-scanner`;
+it never claims antivirus coverage and this foundation adds no malware
+guarantee. There is no generation content port (`loadForGeneration`); bound
+bytes stay on the staging row until expiry/remove and are not a provider
+payload. Production GET still advertises `maxAttachmentsPerMessage: 0`.
+POST `/v1/chat-attachments` stays 404.
 Do not apply migrations 55-58 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
