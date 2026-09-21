@@ -2,6 +2,108 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.371",
+      "date": "2026-09-20",
+      "changes": [
+        "Stopped keeping a realtime voice session warm in the background when your plan doesn't include it"
+      ]
+    },
+    {
+      "version": "0.12.370",
+      "date": "2026-09-20",
+      "changes": [
+        "Conversations summarized on your Mac now say so",
+        "A conversation with no summary explains why instead of showing a blank space"
+      ]
+    },
+    {
+      "version": "0.12.369",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.368",
+      "date": "2026-09-20",
+      "changes": [
+        "A local summary that came back empty no longer replaces the basic conversation details with a blank page",
+        "Summaries of long conversations no longer lose the detail extracted from each part"
+      ]
+    },
+    {
+      "version": "0.12.367",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.366",
+      "date": "2026-09-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.365",
+      "date": "2026-09-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.364",
+      "date": "2026-09-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.363",
+      "date": "2026-09-18",
+      "changes": [
+        "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+        "Fixed on-device conversation summaries not appearing after sync"
+      ]
+    },
+    {
+      "version": "0.12.362",
+      "date": "2026-09-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.361",
+      "date": "2026-09-17",
+      "changes": [
+        "Live notes no longer retry on every sentence when your plan doesn't include AI notes"
+      ]
+    },
+    {
+      "version": "0.12.360",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed chat failing after long sessions or an offline period, and show sign-in recovery when a session expires",
+        "Fixed repeated meeting summaries, preserved cached notes and sources, and improved headings and lists"
+      ]
+    },
+    {
+      "version": "0.12.359",
+      "date": "2026-09-17",
+      "changes": [
+        "Fixed deferred realtime answers completing silently instead of becoming available to the next voice turn."
+      ]
+    },
+    {
+      "version": "0.12.358",
+      "date": "2026-09-17",
+      "changes": [
+        "Rewind opens faster by loading the app-filter list after the overlay is ready."
+      ]
+    },
+    {
       "version": "0.12.357",
       "date": "2026-09-17",
       "changes": [

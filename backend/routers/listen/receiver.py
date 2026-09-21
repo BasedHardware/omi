@@ -40,6 +40,7 @@ from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
     MAX_STT_FAILOVERS,
+    PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
@@ -50,6 +51,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_session,
 )
 from config.stt_provider_policy import provider_for_service
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
@@ -135,6 +137,7 @@ class ListenReceiver:
         self._stt_failed_providers: set[str] = set()
         self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self._pending_live_failover: Optional[PendingLiveFailover] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -193,19 +196,28 @@ class ListenReceiver:
         )
 
     def _serving_provider(self) -> str:
-        """Resolve the provider actually serving this session, read at use time.
-
-        ``_create_stt_socket`` can fall back from Parakeet to Modulate, so a
-        value snapshotted before the socket exists attributes a Modulate
-        failure to Parakeet (#11306).
-        """
+        """Read the actual provider after connection fallback, never the initial selection."""
         return getattr(self.host.stt_service, 'value', self.host.stt_service)
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
+        pending = self._pending_live_failover
+        if pending is not None:
+            pending.note_transcript(segments)
+            if pending.settled:
+                self._pending_live_failover = None
         self._capture('capture_inbound_stt', segments)
         self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
+
+    def _settle_pending_live_failover_failure(self, socket: Any = None) -> None:
+        pending = self._pending_live_failover
+        if pending is None:
+            return
+        self._pending_live_failover = None
+        target = socket if socket is not None else self.stt_socket
+        typed = getattr(target, 'typed_death_reason', None) if target is not None else None
+        pending.note_failure(typed if isinstance(typed, str) else None)
 
     def _telemetry_platform(self) -> Any:
         """Platform label for listen funnel counters; never part of the audio failure domain."""
@@ -256,9 +268,16 @@ class ListenReceiver:
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
     async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
+        if managed_chain_enabled(self.host):
+            from utils.stt.live_session import LiveChainSession
+
+            if not hasattr(self, '_managed_live_chain'):
+                self._managed_live_chain = LiveChainSession(self)
+            return await self._managed_live_chain.connect(sample_rate)
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.parakeet,
                 connect_primary=lambda: process_audio_parakeet(
                     callback,
@@ -296,6 +315,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.soniox,
                 connect_primary=lambda: process_audio_soniox(
                     modulate_callback or callback,
@@ -349,6 +369,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.modulate,
                 connect_primary=lambda: process_audio_modulate(
                     modulate_callback or callback,
@@ -380,6 +401,10 @@ class ListenReceiver:
                 )
 
             if not modulate_is_configured_fallback(self.host.stt_language):
+                # No leg to walk: Deepgram's own typed connection errors
+                # surface after a single attempt instead of a three-attempt
+                # ladder, and initialize_stt's terminal path handles them
+                # exactly like the exhaustion raise it replaces.
                 return await connect_deepgram()
 
             def connect_parakeet() -> Any:
@@ -394,6 +419,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.deepgram,
                 connect_primary=connect_deepgram,
                 connect_modulate=lambda: process_audio_modulate(
@@ -466,7 +492,9 @@ class ListenReceiver:
                         return False
                     self.stt_sockets_multi[index] = socket
                 return True
-            if should_initialize_vad_gate(override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()):
+            if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
+                override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
+            ):
                 try:
                     self.vad_gate = VADStreamingGate(
                         sample_rate=request.sample_rate,
@@ -500,7 +528,9 @@ class ListenReceiver:
                 return False
             passthrough = self.host.stt_service == STTService.modulate
             self.stt_socket = (
-                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough)
+                if self.vad_gate and not getattr(raw, 'manages_vad', False)
+                else raw
             )
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
@@ -519,22 +549,7 @@ class ListenReceiver:
             return False
 
     async def _failover_stt_socket(self) -> bool:
-        """Move a live session onto the next provider after its socket died.
-
-        Modulate accepts the WebSocket and only then sends an error frame, so its
-        outages land mid-session where ``connect_stt_socket_with_fallback`` — which
-        only runs at connect time — cannot help. Without this the chain is inert
-        against the failure it exists for: during the 2026-08-30 outage Velma failed
-        82% of sessions while Soniox and Deepgram served zero.
-
-        Single-channel only. Multi-channel holds several sockets whose segments are
-        stitched by channel, so swapping one mid-stream needs its own design.
-
-        Serialized: the death monitor and the audio send path can observe the same
-        death within milliseconds of each other, and the loser of the lock must
-        adopt the winner's replacement instead of burning another chain slot on a
-        second rebuild.
-        """
+        """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
@@ -547,29 +562,34 @@ class ListenReceiver:
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
+        # The hop we adopted last has now died without a transcript (or is
+        # about to be replaced). Settle it as a failed failover before the
+        # next provider is tried, otherwise connect-time recovered hid a
+        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        self._settle_pending_live_failover_failure()
+
         dead_provider = provider_for_service(self.host.stt_service)
         if dead_provider:
             self._stt_failed_providers.add(dead_provider)
-        if len(self._stt_failed_providers) > MAX_STT_FAILOVERS:
+        if len(self._stt_failed_providers) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
             return False
-        # A provider-level typed rejection (Soniox 402 balance-exhausted) is
-        # fleet-level evidence the failover would otherwise swallow: the session
-        # survives on the next provider, so the terminal path that normally
-        # feeds the selection circuit never runs for it, and the NEXT session is
-        # handed straight back to the provider that refuses every stream.
+        # Feed account/serve deaths even when failover prevents a terminal event.
         note_typed_provider_death(self.stt_socket, dead_provider)
 
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
             exclude=frozenset(self._stt_failed_providers),
+            **window_selection_kwargs(self.host, self.host.request.uid),
         )
         if service is None:
             return False
 
         parakeet_callback, modulate_callback, sample_rate = rebuild
         previous = self.stt_socket
+        previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
@@ -577,30 +597,35 @@ class ListenReceiver:
                 modulate_callback=modulate_callback,
             )
         except Exception:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             logger.exception('STT failover connect raised')
+            hop.note_failure(None)
             return False
         if raw is None:
+            hop.note_failure(None)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
-        # A provider can accept the upgrade and reject the stream ~150ms later;
-        # treating that as a heal would report recovery for a session that is
-        # already dead again.
+        hop.to_mode = self.host.stt_service.value
+        # A provider can reject shortly after upgrade; never adopt a dead leg.
         if not await fallback_socket_is_serving(raw):
+            raw_typed = getattr(raw, 'typed_death_reason', None)
+            hop.note_failure(raw_typed if isinstance(raw_typed, str) else None)
             close_rejected_socket(raw)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
         passthrough = self.host.stt_service == STTService.modulate
         self.stt_socket = (
-            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough)
+            if self.vad_gate and not getattr(raw, 'manages_vad', False)
+            else raw
         )
-        record_fallback(
-            component='stt_live_session',
-            from_mode=dead_provider or 'unknown',
-            to_mode=service.value,
-            reason='connection_lost',
-            outcome='recovered',
-        )
-        record_live_stt_failover_accepted(provider=service.value, platform=self._telemetry_platform())
-        logger.info(f'STT failover mid-session: {dead_provider} -> {service.value}')
+        self._pending_live_failover = hop
+        record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
         if previous is not None:
             try:
                 previous.finish()

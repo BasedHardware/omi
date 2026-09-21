@@ -217,9 +217,7 @@ class DeviceService {
     onStatusChanged(_status);
 
     // Stop all discoverers to prevent resource leaks and battery drain
-    for (final discoverer in _discoverers) {
-      discoverer.stop();
-    }
+    await stopDiscoverers();
 
     for (final deviceId in _connections.keys.toList()) {
       await _teardownConnection(deviceId);
@@ -227,6 +225,16 @@ class DeviceService {
 
     _subscriptions.clear();
     _devices.clear();
+  }
+
+  Future<void> stopDiscoverers() async {
+    for (final discoverer in _discoverers) {
+      try {
+        await discoverer.stop();
+      } catch (e) {
+        Logger.debug('DeviceService.stopDiscoverers: $e');
+      }
+    }
   }
 
   void onStatusChanged(DeviceServiceStatus status) {

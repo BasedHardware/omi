@@ -1040,7 +1040,9 @@ class AddAppProvider extends ChangeNotifier {
   Future<void> generateDescription() async {
     setIsGenratingDescription(true);
     var res = await getGenratedDescription(appNameController.text, appDescriptionController.text);
-    appDescriptionController.text = res.decodeString;
+    if (res.isNotEmpty) {
+      appDescriptionController.text = res.decodeString;
+    }
     checkValidity();
     setIsGenratingDescription(false);
     notifyListeners();

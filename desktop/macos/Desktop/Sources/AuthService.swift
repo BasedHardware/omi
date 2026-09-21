@@ -152,6 +152,7 @@ class AuthService {
 
   struct TokenRefreshHooks {
     var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
+    var now: () -> Date = Date.init
 
     nonisolated(unsafe) static let live = TokenRefreshHooks(dataForRequest: nil)
   }
@@ -1849,7 +1850,7 @@ class AuthService {
 
   func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) throws {
     // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
-    let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
+    let expiryTime = tokenRefreshHooks.now().addingTimeInterval(TimeInterval(expiresIn - 300))
     let tokens = StoredAuthTokens(
       idToken: idToken,
       refreshToken: refreshToken,
@@ -2134,7 +2135,7 @@ class AuthService {
   private var isTokenExpired: Bool {
     let expiryTime = storedTokens()?.expiryTime ?? 0
     guard expiryTime > 0 else { return true }
-    return Date().timeIntervalSince1970 > expiryTime
+    return tokenRefreshHooks.now().timeIntervalSince1970 >= expiryTime
   }
 
   // MARK: - Firebase REST API Token Exchange

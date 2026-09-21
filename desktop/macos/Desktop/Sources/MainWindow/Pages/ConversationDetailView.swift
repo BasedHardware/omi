@@ -851,18 +851,6 @@ struct ConversationDetailView: View {
       overviewSection
     }
 
-    // The backend's headed summary blocks. `overview` is only a compatibility paragraph now, so
-    // without these the pane shows a fraction of what was actually written.
-    //
-    // Shown only when Omi's own summary is the one on screen. `sections` belongs to the first-party
-    // structured summary, and a promoted app result already *replaces* that summary — rendering
-    // both stacks a second, unattributed Omi summary under the app's, which is also the one thing
-    // the Flutter client deliberately does not do.
-    if selection.appId == nil {
-      ConversationSummarySections(sections: displayConversation.structured.sections)
-        .padding(.horizontal, OmiSpacing.lg)
-    }
-
     ConversationPhotoGallery(
       conversationID: displayConversation.id,
       photos: displayConversation.photos)
@@ -1272,8 +1260,8 @@ struct ConversationDetailView: View {
           .foregroundColor(Ink.secondary)
 
         // The selected summarization app owns this section; say which one.
-        if let primaryApp {
-          Text(primaryApp.name)
+        if let appName = selection.appDisplayName(resolvedName: primaryApp?.name) {
+          Text(appName)
             .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
@@ -1290,7 +1278,7 @@ struct ConversationDetailView: View {
           HStack(spacing: OmiSpacing.xxs) {
             Image(systemName: "arrow.triangle.2.circlepath")
               .scaledFont(size: OmiType.caption)
-            Text(primaryApp == nil ? "Summary App" : "Change")
+            Text(selection.kind == .app ? "Change" : "Summary App")
               .scaledFont(size: OmiType.caption, weight: .medium)
           }
           .foregroundColor(Ink.secondary)
@@ -1309,8 +1297,16 @@ struct ConversationDetailView: View {
       // Selection is AppKit prose, not a SwiftUI native-selection modifier on an ancestor:
       // that wraps this tall block in SelectionOverlay and re-lays-out the visible portion
       // while the reader scrolls (FC-selection-overlay-layout-loop; same contract as chat).
-      OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      ConversationSummaryBody(
+        conversation: displayConversation,
+        onOpenSources: { sourceIDs in
+          ConversationDetailAutomationState.shared.requestOpen(
+            conversationId: displayConversation.id,
+            showTranscript: true,
+            transcriptSegmentIds: sourceIDs
+          )
+        }
+      )
     }
   }
 
@@ -1412,7 +1408,8 @@ struct ConversationDetailView: View {
         .disabled(isReprocessing)
       }
 
-      ForEach(ConversationSummarySelection.secondaryResults(for: displayConversation)) { result in
+      ForEach(ConversationSummarySelection.secondaryResults(for: displayConversation)) { row in
+        let result = row.result
         AppResultCard(
           result: result,
           app: appProvider.apps.first { $0.id == result.appId }
@@ -1581,16 +1578,18 @@ struct ConversationDetailView: View {
               addToTasksButton(for: item)
             }
 
+            let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
+              item.sourceSegmentIDs, segments: displayConversation.transcriptSegments)
             Button {
               ConversationDetailAutomationState.shared.requestOpen(
                 conversationId: displayConversation.id,
                 showTranscript: true,
-                transcriptSegmentIds: item.sourceSegmentIDs
+                transcriptSegmentIds: sourceIDs
               )
             } label: {
               HStack(spacing: OmiSpacing.xxs) {
                 Image(systemName: "text.quote")
-                Text(item.sourceSegmentIDs.isEmpty ? "Transcript" : "Source")
+                Text(sourceIDs.isEmpty ? "Transcript" : "Source")
               }
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
@@ -1733,14 +1732,12 @@ struct AppResultCard: View {
         .buttonStyle(.plain)
       }
 
-      // Content
-      if isExpanded || result.content.count < 200 {
-        OmiMarkdown(text: result.content, sender: .ai, appKitProseSelection: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      } else {
-        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai, appKitProseSelection: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
+      // Settled app output has the same document semantics as the primary summary.
+      let content =
+        isExpanded || result.content.count < 200
+        ? result.content : String(result.content.prefix(200)) + "\u{2026}"
+      OmiMarkdown(text: content, sender: .ai, appKitProseSelection: true, documentProse: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       // "Generated by" footer
       if let app = app {

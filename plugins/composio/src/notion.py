@@ -12,6 +12,7 @@ import asyncio
 
 from .db import store_notion_credentials, get_notion_credentials, store_memory
 from .omi_api import store_fact
+from .tools_auth import require_composio_tools_auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -308,7 +309,11 @@ async def search_notion(request: NotionSearchRequest):
 
 
 @router.post("/blocks/{block_id}")
-async def get_blocks(block_id: str, request: NotionBlocksRequest):
+async def get_blocks(
+    block_id: str,
+    request: NotionBlocksRequest,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get blocks from a Notion page or block"""
     creds = get_notion_credentials(request.uid)
     if not creds or not creds.get("notion_access_token"):
@@ -331,7 +336,11 @@ async def get_blocks(block_id: str, request: NotionBlocksRequest):
 
 
 @router.get("/page/{page_id}")
-async def get_page(page_id: str, uid: str):
+async def get_page(
+    page_id: str,
+    uid: str,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get content of a Notion page"""
     creds = get_notion_credentials(uid)
     if not creds or not creds.get("notion_access_token"):

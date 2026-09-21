@@ -64,7 +64,14 @@ def cleanup(saved):
     for name in [k for k in sys.modules if k not in saved]:
         del sys.modules[name]
     for name, module in saved.items():
-        sys.modules[name] = module
+        if module is None:
+            # The module was never imported before this suite stubbed it.
+            # Writing None back into sys.modules poisons every later import of
+            # that package for the rest of the shard process ( ImportModuleError
+            # "No module named 'database.read_boundary'" in unrelated files).
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 
 def wire_common_stubs(install) -> SimpleNamespace:
@@ -103,6 +110,13 @@ def wire_common_stubs(install) -> SimpleNamespace:
     # the duplicate descriptor registration, so stub it like its siblings.
     feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
     feedback_utils.record_chat_message_feedback = MagicMock()
+    # product_metrics reaches Firestore through its account-cutover/journeys
+    # import chain. Importing it inside a process that has stubbed
+    # google.cloud.firestore_v1 makes protobuf reject the duplicate descriptor
+    # registration (document.proto), so stub it like utils.feedback above.
+    product_metrics = install('utils.product_metrics', ModuleType('utils.product_metrics'))
+    product_metrics.extract_app_build = MagicMock(return_value='unknown')
+    product_metrics.record_product_event = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
@@ -178,9 +192,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
 
         instances = []
 
-        def __init__(self, journey, client_kind):
+        def __init__(self, journey, client_kind, app_build='unknown'):
             self.journey = journey
             self.client_kind = client_kind
+            self.app_build = app_build
             self.finished = False
             self.outcome = None
             self.issue_class = None

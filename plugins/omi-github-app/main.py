@@ -11,6 +11,15 @@ import time
 import secrets
 from urllib.parse import urlparse
 from fastapi import FastAPI, Request, HTTPException, Query
+try:
+    from fastapi import Depends
+except (ImportError, AttributeError):
+    Depends = lambda default=None, **kwargs: default
+
+try:
+    from .github_tools_auth import require_github_tools_auth
+except (ImportError, AttributeError):
+    from github_tools_auth import require_github_tools_auth
 from fastapi.responses import HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 
@@ -448,7 +457,12 @@ async def get_manifest_alias():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/create_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/create_issue",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_create_issue(request: Request):
     """
     Create a GitHub issue.
@@ -470,7 +484,11 @@ async def tool_create_issue(request: Request):
             labels = [str(l).strip() for l in raw_labels if l is not None and str(l).strip()]
         else:
             labels = []
-        auto_labels = body.get("auto_labels", True)
+        # The backend sends JSON null for an omitted optional parameter, and
+        # dict.get returns that null rather than the default, so fall back to
+        # the schema's documented default of true only when nothing was sent.
+        raw_auto_labels = body.get("auto_labels")
+        auto_labels = True if raw_auto_labels is None else bool(raw_auto_labels)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -542,7 +560,12 @@ async def tool_create_issue(request: Request):
         return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
 
 
-@app.post("/tools/list_repos", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_repos",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_repos(request: Request):
     """
     List user's GitHub repositories.
@@ -586,7 +609,12 @@ async def tool_list_repos(request: Request):
         return ChatToolResponse(error=f"Failed to list repositories: {str(e)}")
 
 
-@app.post("/tools/list_issues", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_issues",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_issues(request: Request):
     """
     List issues in a GitHub repository.
@@ -645,7 +673,12 @@ async def tool_list_issues(request: Request):
         return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
 
 
-@app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/get_issue",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_get_issue(request: Request):
     """
     Get details of a specific GitHub issue.
@@ -716,7 +749,12 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
 
 
-@app.post("/tools/list_labels", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_labels",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_labels(request: Request):
     """
     List available labels in a repository.
@@ -759,8 +797,18 @@ async def tool_list_labels(request: Request):
         return ChatToolResponse(error=f"Failed to list labels: {str(e)}")
 
 
-@app.post("/tools/add_issue_comment", tags=["chat_tools"], response_model=ChatToolResponse)
-@app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/add_issue_comment",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
+@app.post(
+    "/tools/add_comment",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_add_comment(request: Request):
     """
     Add a comment to a GitHub issue.
@@ -1722,7 +1770,12 @@ async def test_agent(request: Request):
         return {"success": False, "error": str(e)}
 
 
-@app.post("/tools/code_feature", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/code_feature",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_code_feature(request: Request):
     """
     AI-powered coding tool - implement features using Claude.

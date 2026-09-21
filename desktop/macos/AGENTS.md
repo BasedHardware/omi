@@ -203,11 +203,12 @@ do not hand-edit those paths to match a specific machine.
 ## Key Architecture Notes
 
 ### Authentication
-- Firebase Auth with Apple/Google Sign-In
-- Desktop apps should use backend OAuth flow: `/v1/auth/authorize`
+- Firebase (Apple/Google); desktop OAuth: `/v1/auth/authorize`
 - Apple Services ID: `me.omi.web` (shared across all apps)
 - iOS apps use native Sign-In, Desktop uses backend OAuth + custom token
 - Session death is owned by `AuthSessionCoordinator` (`INV-AUTH-1`); use `invalidateSession` for expired/revoked Firebase creds, not nuclear `signOut()`.
+
+- [Agent credentials](docs/agent-model-credentials.md).
 
 #### Session 401 vs BYOK/provider 401
 
@@ -229,7 +230,7 @@ do not hand-edit those paths to match a specific machine.
 - `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
-- Local embeddings (opt-in): [`ARCHITECTURE.md`](Desktop/Sources/LocalInference/ARCHITECTURE.md).
+- Local embeddings (opt-in): [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 

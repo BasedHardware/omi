@@ -1,4 +1,4 @@
-"""session-evidence-v1: the proposed session/evidence receipt contract.
+"""session-evidence-v1: the frozen session/evidence receipt contract.
 
 Executable form of ``contracts/session/session-evidence-v1.schema.json``.
 Consumers (C2 journeys, C3 capture replay, C4 verification, C5 device
@@ -7,8 +7,8 @@ re-implementing the rules. The schema file is the wire contract; this module
 adds the cross-field semantics a JSON Schema cannot express (artifact/source
 binding, honest accounting, credential-free keys, timestamps ordering).
 
-v1 is proposed, not frozen, until C2/C3/C4 consumers review it with the
-coordinator. Additive changes require consumer tests and a bumped version.
+V8 freezes validation structure; only documentation annotations may change.
+The optional live extension is reserved for the V1 builder; see contracts/session/README.md.
 """
 
 from __future__ import annotations
@@ -104,8 +104,30 @@ def source_identity(repo_root: Path) -> dict[str, str]:
 
 
 def file_sha256(path: Path) -> str:
+    """Identity of a built artifact.
+
+    APKs and PNGs are files. An iOS ``.app`` is a directory (bundle); hashing
+    it as a file raises ``IsADirectoryError``. Directory identity is the
+    sha256 of each contained regular file, in sorted relative-path order,
+    length-prefixed so path/content boundaries cannot alias.
+    """
+
+    target = Path(path)
     digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
+    if target.is_dir():
+        files = sorted(
+            (candidate for candidate in target.rglob("*") if candidate.is_file() and not candidate.is_symlink()),
+            key=lambda candidate: candidate.relative_to(target).as_posix(),
+        )
+        for file in files:
+            relative = file.relative_to(target).as_posix().encode("utf-8")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            with file.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        return digest.hexdigest()
+    with target.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -410,6 +432,10 @@ def validate_evidence(document: Mapping[str, Any]) -> list[str]:
                     for index, item in enumerate(value):
                         _validate_relative(item, f"artifacts.{key}[{index}]", errors)
 
+    if "live" in document:
+        from .live_session import validate_live_evidence
+
+        errors.extend(validate_live_evidence(document))
     errors.extend(_walk_credential_keys(document))
     return errors
 

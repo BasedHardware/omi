@@ -13,6 +13,8 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceRuntime.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalInferenceKillSwitches.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalServerInferenceAdapter.swift
+  - desktop/macos/Desktop/Sources/LocalInference/AFMLocalInferenceAdapter.swift
+  - desktop/macos/Desktop/Sources/LocalInference/AFMJSONSchemaBridge.swift
   - desktop/macos/Desktop/Sources/LocalInference/DeterministicConversationMinimum.swift
   # S10 summarizer + stored projection. S11 attaches the stored blob on
   # from-segments; XCTest is the behavioral proof.
@@ -24,6 +26,11 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalSummaryBenchmark.swift
   - desktop/macos/Desktop/Sources/LocalInference/FreeTierLocalProcessingFlag.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalProjectionFinalization.swift
+  # The read side of the same feature. Everything above produces and uploads the
+  # projection; this selects it at decode so `structured` consumers render it.
+  # Without it the produced summary is stored and never shown, which is what this
+  # flow's S5/S6 steps would see as a placeholder title on a free-tier account.
+  - desktop/macos/Desktop/Sources/Services/APIClient/ConversationProjectionRendering.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift

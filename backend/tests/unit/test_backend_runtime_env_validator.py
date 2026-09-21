@@ -2664,3 +2664,19 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
     assert 'jobs' not in state  # no live job state → consumer skips job env checks
     assert 'backend' in state['services']  # services are still fetched + validated
     assert any('services' in cmd for cmd in described)
+
+
+def test_live_chain_ramp_accepts_policy_tokens_only_when_explicitly_enabled():
+    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+
+    env_map = {
+        'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
+        'STT_CONNECT_ORDER_FROM_CONFIG': {'value': 'true'},
+    }
+    config = {'gke': {'backend-listen': {'env': env_map}}}
+    assert _validate_stt_serving_model_policy('prod', config) == []
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'false'
+    assert _validate_stt_serving_model_policy('prod', config)
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'true'
+    env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
+    assert _validate_stt_serving_model_policy('prod', config)

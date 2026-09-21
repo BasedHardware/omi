@@ -391,6 +391,18 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         # the one place the feature must be on, since running it is the whole point.
         "SCREEN_FRAME_EGRESS_ENABLED": "true",
         "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
+        # Same reasoning as SCREEN_FRAME_EGRESS_ENABLED. The free tier replaces
+        # managed summarization with an on-device projection; with this off the
+        # harness always processes normally and the local path is unreachable,
+        # so the one thing the harness exists to exercise never runs.
+        #
+        # `utils.free_tier_cohort` makes a lit flag mean "lit for the configured
+        # cohort" and admits nobody when the cohort is unset — a boolean alone
+        # lights no one. The harness has exactly one local account per instance
+        # against the Firebase emulator (project demo-omi-local), so pct:100 is
+        # every account that can exist here, and none of them is a real user.
+        "FREE_TIER_LOCAL_PROCESSING": "true",
+        "FREE_TIER_LOCAL_PROCESSING_COHORT": "pct:100",
         **LOCAL_STORAGE_BUCKET_ENV,
     }
 
@@ -411,6 +423,11 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
         # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
         # Pin a keyless chain so isolated sessions can boot without paid STT.
         env["STT_SERVICE_MODELS"] = "parakeet"
+        # Pre-recorded STT has no keyless chain: without the deterministic stub,
+        # uploaded captures dead-end at PrerecordedSTTConfigurationError and
+        # conversations never finalize. Stub output is self-declaring synthetic
+        # text and is double-gated to offline stages (utils.stt.prerecorded_stub).
+        env["OMI_STT_STUB"] = "1"
     return env
 
 

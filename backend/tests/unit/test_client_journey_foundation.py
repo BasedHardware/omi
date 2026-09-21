@@ -53,6 +53,41 @@ def test_label_coercion_collapses_unbounded_values_to_unknown():
     assert bounded_client_journey_outcome(raw) == 'unknown'
     assert bounded_client_journey_issue_class(raw) == 'unknown'
     assert bounded_client_kind(raw) == 'unknown'
+    from utils.journey_metrics_contract import bounded_app_build
+
+    assert bounded_app_build(raw) == 'unknown'
+    assert bounded_app_build('1.0.522+240') == 'unknown'
+    assert bounded_app_build('240') == '240'
+
+
+def test_client_journey_attempt_records_sanitized_app_build_not_raw_header(monkeypatch):
+    accepted, terminal, _issues, _duration = _install_client_journey_metrics(monkeypatch)
+    with journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos', app_build='240') as attempt:
+        attempt.succeed()
+    accepted.labels.assert_called_once_with(
+        journey='desktop_chat',
+        client_kind='desktop_macos',
+        app_build='240',
+    )
+    terminal.labels.assert_called_once_with(
+        journey='desktop_chat',
+        client_kind='desktop_macos',
+        app_build='240',
+        outcome='success',
+    )
+
+    accepted.reset_mock()
+    with journeys.ClientJourneyAttempt(
+        'desktop_chat',
+        'desktop_macos',
+        app_build='1.0.522+240',
+    ) as attempt:
+        attempt.succeed()
+    accepted.labels.assert_called_once_with(
+        journey='desktop_chat',
+        client_kind='desktop_macos',
+        app_build='unknown',
+    )
 
 
 @pytest.mark.parametrize(
@@ -117,10 +152,12 @@ def test_client_journey_metrics_zero_initialize_the_complete_bounded_contract():
     assert len(issues) == len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_ISSUE_CLASSES)
     assert len(duration) == len(CLIENT_JOURNEYS) * len(CLIENT_JOURNEY_OUTCOMES)
     assert (
+        ('app_build', 'unknown'),
         ('client_kind', 'pi_mono_unknown_os'),
         ('journey', 'desktop_chat'),
     ) in accepted
     assert (
+        ('app_build', 'unknown'),
         ('client_kind', 'desktop_macos'),
         ('journey', 'desktop_chat'),
         ('outcome', 'degraded'),
@@ -156,11 +193,13 @@ def test_streaming_attempt_records_failure_when_stream_breaks_after_success_cand
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
         issue_class='provider_error',
     )
     duration.labels.assert_called_once_with(journey='desktop_chat', outcome='failure')
@@ -192,6 +231,7 @@ def test_streaming_attempt_records_success_only_after_clean_exhaustion(monkeypat
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_windows',
+        app_build='unknown',
         outcome='success',
     )
     issues.labels.assert_not_called()
@@ -234,11 +274,13 @@ def test_streaming_attempt_error_frame_wins_over_later_done(monkeypatch):
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
+        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
+        app_build='unknown',
         issue_class='upstream_rejected',
     )
 

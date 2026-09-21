@@ -8,6 +8,8 @@ from utils.observability.transcription import (
     TranscriptionAttempt,
     record_live_stt_audio_seconds,
     record_live_stt_failure,
+    record_live_stt_pre_audio_failure,
+    record_sync_intake_outcome,
 )
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -314,3 +316,59 @@ def test_record_live_stt_audio_seconds_skips_nonpositive_deltas(mock_audio):
     record_live_stt_audio_seconds(provider='deepgram', platform='ios', seconds=-3.0)
 
     mock_audio.labels.assert_not_called()
+
+
+@patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_TOTAL')
+@patch('utils.observability.transcription.OMI_LIVE_STT_ACCEPTED_TOTAL')
+def test_pre_audio_failure_increments_accepted_and_initialization_terminal(mock_accepted, mock_terminal, monkeypatch):
+    accepted_child = MagicMock()
+    terminal_child = MagicMock()
+    mock_accepted.labels.return_value = accepted_child
+    mock_terminal.labels.return_value = terminal_child
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+    record_live_stt_pre_audio_failure(provider='deepgram', platform='ios', phase='initialization')
+
+    assert mock_accepted.labels.call_args.kwargs == {
+        'provider': 'deepgram',
+        'client_platform': 'ios',
+        'deployment_environment': 'prod',
+    }
+    assert mock_terminal.labels.call_args.kwargs == {
+        'provider': 'deepgram',
+        'client_platform': 'ios',
+        'deployment_environment': 'prod',
+        'outcome': 'failure',
+        'phase': 'initialization',
+    }
+    accepted_child.inc.assert_called_once_with()
+    terminal_child.inc.assert_called_once_with()
+
+
+@patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_TOTAL')
+@patch('utils.observability.transcription.OMI_LIVE_STT_ACCEPTED_TOTAL')
+def test_pre_audio_failure_buckets_unknown_phase_to_initialization(mock_accepted, mock_terminal):
+    mock_accepted.labels.return_value = MagicMock()
+    mock_terminal.labels.return_value = MagicMock()
+
+    record_live_stt_pre_audio_failure(provider='modulate', platform='android', phase='not-a-phase')
+
+    assert mock_terminal.labels.call_args.kwargs['phase'] == 'initialization'
+
+
+@patch('utils.observability.transcription.OMI_SYNC_INTAKE_TOTAL')
+def test_sync_intake_records_created_and_merged(mock_counter, caplog):
+    child = MagicMock()
+    mock_counter.labels.return_value = child
+
+    with caplog.at_level('INFO', logger='utils.observability.transcription'):
+        record_sync_intake_outcome(created=True)
+        record_sync_intake_outcome(created=False)
+
+    assert [call.kwargs for call in mock_counter.labels.call_args_list] == [
+        {'outcome': 'created'},
+        {'outcome': 'merged'},
+    ]
+    assert child.inc.call_count == 2
+    assert 'omi_sync_intake outcome=created' in caplog.text
+    assert 'omi_sync_intake outcome=merged' in caplog.text
