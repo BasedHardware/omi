@@ -6,11 +6,21 @@ You need Python 3.10+ and an authenticated `omi-cli`.
 
 ## 1. Export action items from Omi
 
-Export all action items:
+Export your action items (default limit is 100; use `--limit` and `--offset` to page through all of them):
 
 ```sh
-omi --json action-item list > action_items.json
+omi --json action-item list --limit 100 > action_items.json
 ```
+
+To export more than 100 items, page through them and combine the results:
+
+```sh
+omi --json action-item list --limit 100 --offset 0   > page1.json
+omi --json action-item list --limit 100 --offset 100 > page2.json
+# … repeat until an empty page is returned
+```
+
+> **Note:** One export page is not guaranteed to be a complete account backup if you have more than 100 action items.
 
 Or filter for open items only directly from the CLI:
 
