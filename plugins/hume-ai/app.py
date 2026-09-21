@@ -245,7 +245,7 @@ async def send_omi_notification(
             return {"success": False, "error": error_msg}
 
     except Exception as e:
-        error_msg = f"Failed to send Omi notification: {str(e)}"
+        error_msg = "Failed to send Omi notification"
         print(f"✗ {error_msg}")
         return {"success": False, "error": error_msg}
 
@@ -270,7 +270,11 @@ async def create_omi_memory(
         }
 
     try:
-        url = f"https://api.omi.me/v1/integrations/{app_id}/memories?uid={uid}"
+        # The backend only serves the v2 integration import route
+        # (POST /v2/integrations/{app_id}/user/memories); the old
+        # /v1/integrations/{app_id}/memories path 404s, so every
+        # emotion memory was silently dropped.
+        url = f"https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={uid}"
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -297,7 +301,7 @@ async def create_omi_memory(
             return {"success": False, "error": error_msg}
 
     except Exception as e:
-        error_msg = f"Failed to create Omi memory: {str(e)}"
+        error_msg = "Failed to create Omi memory"
         print(f"✗ {error_msg}")
         return {"success": False, "error": error_msg}
 
@@ -503,7 +507,7 @@ async def analyze_text_with_hume(text: str) -> Dict[str, Any]:
 
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume text analysis failed",
             "predictions": []
         }
 
@@ -592,7 +596,7 @@ async def analyze_audio_with_hume(wav_file_path: str) -> Dict[str, Any]:
 
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume audio analysis failed",
             "predictions": []
         }
 
@@ -644,6 +648,6 @@ async def _analyze_single_audio(wav_file_path: str, hume_api_key: str) -> Dict[s
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume audio analysis failed",
             "predictions": []
         }
