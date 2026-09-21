@@ -1,0 +1,3 @@
+{
+  "change": "The rating prompt\u2019s close button now has a real click target, so dismissing it works on the first try"
+}
