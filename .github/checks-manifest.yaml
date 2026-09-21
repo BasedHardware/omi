@@ -44,6 +44,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue 13162: exact-target Linear tools must never select or mutate a ranked search hit; find_state_by_name must refuse an ambiguous status name (partial match or a shared workflow type) instead of silently moving the issue to whichever state a team happens to list first"
+  - id: hume-ai-error-handling-tests
+    command: ["python3", "plugins/hume-ai/test_error_handling.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "app.py and main.py endpoints must never leak raw internal exception strings or sensitive network/service traces to clients"
   - id: github-app-coerce-tests
     command: ["python3", "plugins/omi-github-app/test_main.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -1177,11 +1182,6 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13915 get_page read only the first 50 block children and never followed has_more/next_cursor, silently dropping page content; later-page failures must stay errors"
   - id: hey-omi-question-extraction-tests
-  - id: hume-ai-error-handling-tests
-    command: ["python3", "plugins/hume-ai/test_error_handling.py"]
-    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "app.py and main.py endpoints must never leak raw internal exception strings or sensitive network/service traces to clients"
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
