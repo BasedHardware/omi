@@ -673,8 +673,7 @@ async def update_list(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": type(e).__name__}
-        
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/update-timezone")
@@ -690,7 +689,7 @@ async def update_timezone(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": type(e).__name__}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/refresh-lists")
@@ -725,7 +724,7 @@ async def refresh_lists(uid: str = Query(...)):
 
         return {"success": True, "lists_count": len(lists)}
     except Exception as e:
-        return {"success": False, "error": type(e).__name__}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/logout")
@@ -750,7 +749,7 @@ async def logout(uid: str = Query(...)):
 
         return {"success": True, "message": "Logged out successfully"}
     except Exception as e:
-        return {"success": False, "error": type(e).__name__}
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/webhook")
