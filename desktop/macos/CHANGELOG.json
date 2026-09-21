@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.372",
+      "date": "2026-09-21",
+      "changes": [
+        "Improved on-device conversation summaries by having the model write the title and overview before the details"
+      ]
+    },
+    {
       "version": "0.12.371",
       "date": "2026-09-20",
       "changes": [
