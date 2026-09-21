@@ -36,6 +36,7 @@ def load_linear_app():
             return lambda handler: handler
 
         post = get
+        mount = lambda *args, **kwargs: None
 
     def Query(default=None, **kwargs):
         return default
