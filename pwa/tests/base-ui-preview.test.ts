@@ -10,6 +10,9 @@ let render: (props: {
   completeFirst?: boolean;
   initialPhase?: string;
   mobile?: boolean;
+  mixedDates?: boolean;
+  failedReads?: boolean;
+  partial?: boolean;
 }) => string;
 
 // Like chat-markdown.test, resolve real React instead of the PWA's type-only
@@ -31,9 +34,33 @@ beforeAll(async () => {
     import {previewOutcomes} from ${JSON.stringify(
       join(root, "pwa/src/base-ui/fixtures.ts")
     )};
-    export function render({empty, completeFirst, ...props}) {
+    export function render({empty, completeFirst, mixedDates, failedReads, partial, ...props}) {
       const initialOutcomes = previewOutcomes(empty);
       if (completeFirst) initialOutcomes.tasks.value.items[0].completed = true;
+      if (mixedDates) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const original = initialOutcomes.tasks.value.items[0];
+        initialOutcomes.tasks.value.items = [
+          {dueAt: today.getTime(), completed: false},
+          {dueAt: tomorrow.getTime() - 1, completed: false},
+          {dueAt: today.getTime() - 1, completed: false},
+          {dueAt: tomorrow.getTime(), completed: false},
+          {dueAt: today.getTime(), completed: true},
+          {dueAt: null, completed: false},
+        ].map((item, index) => ({...original, ...item, id: String(index)}));
+        const conversation = initialOutcomes.conversations.value.items[0];
+        initialOutcomes.conversations.value.items = [
+          {}, {locked: true}, {discarded: true}, {status: "processing"},
+        ].map((item, index) => ({...conversation, ...item, id: String(index)}));
+      }
+      if (partial) initialOutcomes.tasks.value.page = {...initialOutcomes.tasks.value.page, complete: false, hasMore: true};
+      if (failedReads) {
+        initialOutcomes.tasks = {status: "error"};
+        initialOutcomes.conversations = {status: "error"};
+      }
       return renderToStaticMarkup(React.createElement(Preview, {...props, initialOutcomes}));
     }
   `
@@ -48,6 +75,9 @@ beforeAll(async () => {
         setup(build) {
           build.onResolve({ filter: /^react$/ }, () => ({
             path: join(root, "node_modules/react/index.js"),
+          }));
+          build.onResolve({ filter: /^react-native$/ }, () => ({
+            path: join(root, "node_modules/react-native-web/dist/cjs/index.js"),
           }));
         },
       },
@@ -98,6 +128,14 @@ test("mobile retains Search default and labels the local-only fixture boundary",
   expect(html).toContain('data-theme="dark"');
   expect(html).toContain("Edits stay in this preview");
   expect(html).not.toContain('aria-label="Ask Omi"');
+  expect(html).not.toContain("<header");
+  expect(html).not.toContain("Recall");
+  expect(html).not.toContain("omi-mark.svg");
+  const home = html.match(
+    /<button\b[^>]*role="tab"[^>]*>(.*?)Home<\/span><\/button>/s
+  );
+  expect(home?.[1]).toContain('data-testid="omi-dot-mark"');
+  expect(home?.[1]).not.toContain("<svg");
 });
 
 test("desktop chrome separates window decoration and icon actions from navigation", () => {
@@ -119,10 +157,12 @@ test("desktop chrome separates window decoration and icon actions from navigatio
 });
 
 test.each([false, true])(
-  "all three input modes are labelled icon-only buttons (mobile=%s)",
+  "supported input modes are labelled icon-only buttons (mobile=%s)",
   (mobile) => {
     const html = render({ mobile });
-    for (const mode of ["Ask", "Search", "Recall"]) {
+    for (const mode of mobile
+      ? ["Ask", "Search"]
+      : ["Ask", "Search", "Recall"]) {
       const button = html.match(
         new RegExp(
           `<button\\b[^>]*aria-label="${mode} mode"[^>]*>(.*?)<\\/button>`,
@@ -139,3 +179,45 @@ test.each([false, true])(
     if (mobile) expect(html).not.toContain('class="traffic-lights"');
   }
 );
+
+test.each([false, true])(
+  "Home has no Apps tab or screen-history card (mobile=%s)",
+  (mobile) => {
+    const html = render({ mobile });
+    expect(html).not.toContain("Screen history");
+    expect(html).not.toContain(">Apps</span>");
+    expect(html).toContain('aria-label="At a glance"');
+  }
+);
+
+test("glance counts use the local day boundaries and exclude finished tasks and unavailable context", () => {
+  const html = render({ mixedDates: true, partial: true });
+  expect(html).toContain('aria-label="Due today: 2. Open tasks"');
+  expect(html).toContain('aria-label="Done: 1 of 6. Open tasks"');
+  expect(html).toContain('aria-label="Recent context: 1. Open conversations"');
+  expect(html).toContain("From loaded tasks and conversations");
+  const updated = render({ completeFirst: true });
+  expect(updated).toContain('aria-label="Due today: 0. Open tasks"');
+  expect(updated).toContain('aria-label="Done: 2 of 3. Open tasks"');
+});
+
+test("unsettled or failed glance reads do not become zero; successful empty reads do", () => {
+  for (const props of [
+    { initialPhase: "initial-loading" },
+    { initialPhase: "unavailable" },
+    { failedReads: true },
+  ]) {
+    const html = render(props);
+    expect(html).toContain('aria-label="Due today: not loaded. Open tasks"');
+    expect(html).toContain('aria-label="Done: not loaded. Open tasks"');
+    expect(html).toContain(
+      'aria-label="Recent context: not loaded. Open conversations"'
+    );
+    expect(html).not.toContain("No tasks yet.");
+    expect(html).not.toContain("Nothing captured yet.");
+  }
+  const html = render({ empty: true });
+  expect(html).toContain('aria-label="Due today: 0. Open tasks"');
+  expect(html).toContain('aria-label="Done: 0 of 0. Open tasks"');
+  expect(html).toContain('aria-label="Recent context: 0. Open conversations"');
+});

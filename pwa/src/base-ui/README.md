@@ -13,16 +13,24 @@ for MIT attribution. No Hana code or runtime token mutation remains.
 
 The daily brief uses the same `homeBriefing` function as native Desktop Home.
 Completing a fixture task updates the priority. Search filters the local tasks
-and conversation titles/summaries. Tabs support keyboard navigation. Settings
-can change the preview theme. Ask, Recall and connections explicitly report
+and conversation titles/summaries. Home's glance strip shows incomplete tasks
+due on the local calendar day, completed/loaded task counts, and usable completed
+conversation counts. Counts describe loaded data, not unseen pages; unsettled or
+failed reads show a dash rather than zero. Each cell opens its corresponding list.
+Tabs support keyboard navigation. Settings owns Apps and can change the preview
+theme. Ask, desktop Recall and connections explicitly report
 their preview limitations; there are no account requests, capture, telemetry,
 or persisted edits. Glass remains a browser approximation.
 
 Desktop chrome shows non-interactive traffic lights and an icon-only Settings
 button beside the Recall capture toggle. The toggle switches a neutral monitor
 to a green monitor-with-dot, but only simulates state; it never starts capture.
-Ask, Search and Recall are labelled icon buttons inside the omnibar on both
-surfaces. Mobile retains its labelled bottom navigation and Search default.
+It does not add a status line. Ask, Search and Recall are labelled icon buttons
+inside the desktop omnibar; mobile has only Ask and Search. Mobile has no header
+or Recall surface and retains its Search default and labelled bottom navigation.
+The Home tab reuses the native `OmiAvatar` ink mark, breathing only while Home is
+active and becoming static when the live system Reduce Motion preference is on.
+Home has no Screen history card on either surface.
 
 The production entry and native components stay React Native. Vite's normal
 build excludes this HTML entry. Check with `bun run --cwd pwa typecheck`,

@@ -7,7 +7,6 @@ import {
   History,
   MessageCircle,
   MessageSquare,
-  Puzzle,
   Settings,
   Sun,
   Moon,
@@ -16,6 +15,8 @@ import {
   MonitorDot,
 } from "lucide-react";
 import { homeBriefing } from "../../../react-native/src/desktop/homeBriefing";
+import { OmiAvatar } from "../../../react-native/src/ui/OmiAvatar";
+import { useReduceMotion } from "../../../react-native/src/app/useReduceMotion.web";
 import type { ReadsPhase } from "../../../react-native/src/app/useDesktopReads";
 import type { DesktopReadOutcomes } from "../../../react-native/src/desktopReadClient";
 import {
@@ -37,7 +38,6 @@ const routes = [
   { label: "Conversations", icon: MessageCircle },
   { label: "Recall", icon: History, desktop: true },
   { label: "Tasks", icon: CheckCheck },
-  { label: "Apps", icon: Puzzle, desktop: true },
   { label: "Settings", icon: Settings },
 ];
 
@@ -57,6 +57,7 @@ export function Preview({
   const [notice, setNotice] = useState("");
   const [dark, setDark] = useState(mobile);
   const [recallEnabled, setRecallEnabled] = useState(false);
+  const reduceMotion = useReduceMotion();
   const brief = homeBriefing(outcomes, initialPhase);
   const searching = mode === "Search" && query.trim() !== "";
   const matches = (text: string) =>
@@ -73,6 +74,44 @@ export function Preview({
     matches(`${item.title} ${item.summary}`)
   );
   const ready = initialPhase === "ready";
+  const tasksReady = ready && outcomes.tasks.status === "success";
+  const conversationsReady =
+    ready && outcomes.conversations.status === "success";
+  const today = new Date().toDateString();
+  const dueToday = tasks.filter(
+    (task) =>
+      !task.completed &&
+      task.dueAt !== null &&
+      new Date(task.dueAt).toDateString() === today
+  ).length;
+  const completed = tasks.filter((task) => task.completed).length;
+  const captured = conversations.filter(
+    (item) => !item.discarded && !item.locked && item.status === "completed"
+  ).length;
+  const navigation = (
+    <TabsList aria-label="Main navigation" className="main-nav">
+      {routes
+        .filter(({ label, desktop }) =>
+          mobile ? !desktop : label !== "Settings"
+        )
+        .map(({ label, icon: Icon }) => (
+          <TabsTrigger key={label} value={label}>
+            {mobile && label === "Home" ? (
+              <OmiAvatar
+                tone="ink"
+                size={24}
+                inkColor="currentColor"
+                motion={route === "Home" ? "breathe" : undefined}
+                reduceMotion={reduceMotion}
+              />
+            ) : (
+              <Icon aria-hidden="true" />
+            )}
+            <span>{label}</span>
+          </TabsTrigger>
+        ))}
+    </TabsList>
+  );
   const taskList = (
     <Card aria-label="Tasks">
       <CardHeader>
@@ -83,7 +122,7 @@ export function Preview({
           </Button>
         )}
       </CardHeader>
-      {!ready ? (
+      {!tasksReady ? (
         <p className="muted">Tasks are not loaded yet.</p>
       ) : visibleTasks.length === 0 ? (
         <p className="muted">
@@ -149,7 +188,7 @@ export function Preview({
           </Button>
         )}
       </CardHeader>
-      {!ready ? (
+      {!conversationsReady ? (
         <p className="muted">Conversations are not loaded yet.</p>
       ) : visibleConversations.length === 0 ? (
         <p className="muted">
@@ -173,21 +212,6 @@ export function Preview({
       )}
     </Card>
   );
-  const recall = (
-    <Card>
-      <div className="recall-row">
-        <History className="recall-icon" aria-hidden="true" />
-        <div className="grow">
-          <CardTitle>Screen history</CardTitle>
-          <p className="muted mt-1">Find your way back to something you saw.</p>
-        </div>
-        <Button variant="ghost" onClick={() => setRoute("Recall")}>
-          Open Recall <ArrowUpRight />
-        </Button>
-      </div>
-    </Card>
-  );
-
   return (
     <div className={`preview-stage ${mobile ? "mobile-stage" : ""}`}>
       <p className="preview-notice">
@@ -202,13 +226,8 @@ export function Preview({
         className="omi-window"
         data-theme={dark ? "dark" : "light"}
       >
-        <header className="window-header">
-          {mobile ? (
-            <>
-              <img src="/omi-mark.svg" alt="Omi" width="26" height="26" />
-              <span className="mobile-wordmark">omi</span>
-            </>
-          ) : (
+        {!mobile && (
+          <header className="window-header">
             <div
               className="traffic-lights"
               role="img"
@@ -219,49 +238,27 @@ export function Preview({
               <span className="traffic-minimize" />
               <span className="traffic-zoom" />
             </div>
-          )}
-          <TabsList aria-label="Main navigation" className="main-nav">
-            {routes
-              .filter(({ label }) => mobile || label !== "Settings")
-              .map(({ label, icon: Icon, desktop }) => (
-                <TabsTrigger
-                  key={label}
-                  value={label}
-                  className={desktop ? "desktop-only" : ""}
-                >
-                  <Icon aria-hidden="true" />
-                  <span>{label}</span>
-                </TabsTrigger>
-              ))}
-          </TabsList>
-          <div className="header-actions">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="recall-toggle"
-              aria-label="Recall capture preview"
-              aria-pressed={recallEnabled}
-              title={
-                recallEnabled
-                  ? "Recall on — preview only"
-                  : "Recall off — preview only"
-              }
-              onClick={() => {
-                setRecallEnabled((value) => !value);
-                setNotice(
-                  `Recall preview ${
-                    recallEnabled ? "off" : "on"
-                  } — no screen capture is started.`
-                );
-              }}
-            >
-              {recallEnabled ? (
-                <MonitorDot aria-hidden="true" />
-              ) : (
-                <Monitor aria-hidden="true" />
-              )}
-            </Button>
-            {!mobile && (
+            {navigation}
+            <div className="header-actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="recall-toggle"
+                aria-label="Recall capture preview"
+                aria-pressed={recallEnabled}
+                title={
+                  recallEnabled
+                    ? "Recall on — preview only"
+                    : "Recall off — preview only"
+                }
+                onClick={() => setRecallEnabled((value) => !value)}
+              >
+                {recallEnabled ? (
+                  <MonitorDot aria-hidden="true" />
+                ) : (
+                  <Monitor aria-hidden="true" />
+                )}
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -275,9 +272,9 @@ export function Preview({
               >
                 <Settings aria-hidden="true" />
               </Button>
-            )}
-          </div>
-        </header>
+            </div>
+          </header>
+        )}
         <form
           className="omnibar"
           aria-label="Omi omnibar"
@@ -299,23 +296,25 @@ export function Preview({
               { value: "Ask", icon: MessageCircle },
               { value: "Search", icon: Search },
               { value: "Recall", icon: History },
-            ].map(({ value, icon: Icon }) => (
-              <Button
-                key={value}
-                variant="ghost"
-                size="icon"
-                aria-label={`${value} mode`}
-                title={value}
-                aria-pressed={mode === value}
-                className={mode === value ? "mode-active" : ""}
-                onClick={() => {
-                  setMode(value);
-                  setNotice("");
-                }}
-              >
-                <Icon aria-hidden="true" />
-              </Button>
-            ))}
+            ]
+              .filter(({ value }) => !mobile || value !== "Recall")
+              .map(({ value, icon: Icon }) => (
+                <Button
+                  key={value}
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`${value} mode`}
+                  title={value}
+                  aria-pressed={mode === value}
+                  className={mode === value ? "mode-active" : ""}
+                  onClick={() => {
+                    setMode(value);
+                    setNotice("");
+                  }}
+                >
+                  <Icon aria-hidden="true" />
+                </Button>
+              ))}
           </div>
           <Input
             aria-label={
@@ -331,9 +330,7 @@ export function Preview({
                   ? "Ask Omi…"
                   : "Ask about your day…"
                 : mode === "Recall"
-                ? mobile
-                  ? "Search screens…"
-                  : "Find a moment on your screen…"
+                ? "Find a moment on your screen…"
                 : mobile
                 ? "Search your day…"
                 : "Find something in your day…"
@@ -370,11 +367,53 @@ export function Preview({
                   : brief.subtitle}
               </p>
             </div>
+            {!searching && (
+              <section className="glance" aria-label="At a glance">
+                <div className="glance-heading">
+                  <h2>At a glance</h2>
+                  <p>From loaded tasks and conversations</p>
+                </div>
+                <div className="glance-grid">
+                  {[
+                    {
+                      label: "Due today",
+                      value: tasksReady ? String(dueToday) : "—",
+                      destination: "Tasks",
+                    },
+                    {
+                      label: "Done",
+                      value: tasksReady
+                        ? `${completed} of ${tasks.length}`
+                        : "—",
+                      destination: "Tasks",
+                    },
+                    {
+                      label: "Recent context",
+                      value: conversationsReady ? String(captured) : "—",
+                      destination: "Conversations",
+                    },
+                  ].map(({ label, value, destination }) => (
+                    <Button
+                      key={label}
+                      variant="ghost"
+                      className="glance-item"
+                      aria-label={`${label}: ${
+                        value === "—" ? "not loaded" : value
+                      }. Open ${destination.toLowerCase()}`}
+                      onClick={() => setRoute(destination)}
+                    >
+                      <span className="glance-label">{label}</span>
+                      <span className="glance-value">{value}</span>
+                      <ArrowUpRight aria-hidden="true" />
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            )}
             <div className="home-columns">
               {taskList}
               {conversationList}
             </div>
-            <div className="desktop-only">{recall}</div>
           </TabsContent>
           <TabsContent value="Tasks">
             <div className="brief">
@@ -390,26 +429,30 @@ export function Preview({
             </div>
             {conversationList}
           </TabsContent>
-          <TabsContent value="Chat">
-            <div className="brief">
-              <h1>Ask about your day.</h1>
-              <p>
-                Choose Ask in the omnibar. Questions are not sent in this
-                preview.
-              </p>
-            </div>
-          </TabsContent>
-          <TabsContent value="Recall">
-            <div className="brief">
-              <h1>Screen history</h1>
-              <p>Screen capture and Recall require the native Mac app.</p>
-            </div>
-            <Card>
-              <p className="muted">
-                No screen content is captured or stored here.
-              </p>
-            </Card>
-          </TabsContent>
+          {!mobile && (
+            <TabsContent value="Chat">
+              <div className="brief">
+                <h1>Ask about your day.</h1>
+                <p>
+                  Choose Ask in the omnibar. Questions are not sent in this
+                  preview.
+                </p>
+              </div>
+            </TabsContent>
+          )}
+          {!mobile && (
+            <TabsContent value="Recall">
+              <div className="brief">
+                <h1>Screen history</h1>
+                <p>Screen capture and Recall require the native Mac app.</p>
+              </div>
+              <Card>
+                <p className="muted">
+                  No screen content is captured or stored here.
+                </p>
+              </Card>
+            </TabsContent>
+          )}
           <TabsContent value="Apps">
             <div className="brief">
               <h1>Apps</h1>
@@ -449,6 +492,7 @@ export function Preview({
             </Card>
           </TabsContent>
         </main>
+        {mobile && navigation}
       </Tabs>
     </div>
   );
