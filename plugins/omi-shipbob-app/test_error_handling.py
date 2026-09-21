@@ -19,10 +19,14 @@ SENTINEL_ERROR = "INTERNAL_DB_DISCONNECTED_AT_10.240.0.1_PASSWORD_LEAK"
 
 
 class FakeRequest:
-    def __init__(self, data):
-        self._data = data
+    def __init__(self, data=None, method="GET"):
+        self._data = data or {}
+        self.method = method
 
     async def json(self):
+        return self._data
+
+    async def form(self):
         return self._data
 
 
@@ -55,6 +59,13 @@ def load_shipbob_app():
     )
     fastapi_mod.__path__ = []
 
+    class FakeTemplates:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def TemplateResponse(self, name, context):
+            return context
+
     stubs = {
         "requests": make_module("requests", RequestException=Exception, get=lambda *a, **k: None, post=lambda *a, **k: None),
         "dotenv": make_module("dotenv", load_dotenv=lambda *a, **k: None),
@@ -65,7 +76,7 @@ def load_shipbob_app():
             **{name: lambda *a, **k: object() for name in ("HTMLResponse", "JSONResponse", "RedirectResponse")},
         ),
         "fastapi.staticfiles": make_module("fastapi.staticfiles", StaticFiles=lambda *a, **k: object()),
-        "fastapi.templating": make_module("fastapi.templating", Jinja2Templates=lambda *a, **k: object()),
+        "fastapi.templating": make_module("fastapi.templating", Jinja2Templates=FakeTemplates),
         "db": make_module(
             "db",
             get_shipbob_tokens=lambda uid: {"access_token": "valid_token"},
@@ -95,9 +106,17 @@ def load_shipbob_app():
         "shipbob_tools_auth": make_module("shipbob_tools_auth", require_shipbob_tools_auth=lambda *a, **k: None),
     }
 
-    main_py_path = Path(__file__).parent / "shipbob_main_hardened.py"
-    if not main_py_path.exists():
-        main_py_path = Path(__file__).with_name("main.py")
+    # Search candidates for main.py
+    candidates = [
+        Path(__file__).parent / "main.py",
+        Path(__file__).parent / "shipbob_hardened_main.py",
+        Path("scratch/shipbob_hardened_main.py"),
+    ]
+    main_py_path = None
+    for c in candidates:
+        if c.exists():
+            main_py_path = c
+            break
 
     spec = importlib.util.spec_from_file_location("shipbob_main_app", main_py_path)
     module = importlib.util.module_from_spec(spec)
@@ -123,6 +142,18 @@ class TestShipbobErrorHandling(unittest.TestCase):
             self.assertIn("error", res)
             self.assertNotIn(SENTINEL_ERROR, res["error"])
             self.assertEqual(res["error"], "ShipBob API request failed")
+
+    def test_oauth_callback_does_not_leak_exception(self):
+        """handle_shipbob_callback masks raw Exception during OAuth code exchange."""
+        req = FakeRequest()
+        state_val = "uid123:valid_nonce_token"
+        with patch.object(self.app, "get_oauth_state", return_value=state_val):
+            with patch.object(self.app.requests, "post", side_effect=Exception(SENTINEL_ERROR)):
+                res = asyncio.run(self.app.handle_shipbob_callback(req, code="auth_code_123", state=state_val))
+                self.assertIsInstance(res, dict)
+                self.assertIn("error", res)
+                self.assertNotIn(SENTINEL_ERROR, res["error"])
+                self.assertEqual(res["error"], "Failed to exchange authorization code")
 
     def test_tool_get_inventory_does_not_leak_exception(self):
         """tool_get_inventory masks unexpected exceptions in ChatToolResponse."""
