@@ -90,34 +90,9 @@ describe("D1-authoritative tasks read", () => {
       createExecutionContext()
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     const text = await response.text();
-    const page = parseTaskPageJson(text);
-    expect(page).not.toBeNull();
-    if (page === null) throw new Error("page was not parseable");
-    expect(page.items).toHaveLength(1);
-    expect(page.items[0]).toMatchObject({
-      id: "task:test-one",
-      description: "Ship the D1 tasks slice",
-      completed: false,
-      completedAt: null,
-      dueAt: null,
-      owner: null,
-      source: "assistant",
-      provenance: ["assistant: planner"],
-      sortOrder: 1,
-      indentLevel: 0,
-      createdAt: 1785900000,
-      updatedAt: 1785900100,
-      revision: null,
-    });
-    expect(page.window).toEqual({
-      status: "complete",
-      complete: true,
-      hasMore: false,
-      nextCursor: null,
-    });
-    expect(page.completeness.status).toBe("complete");
-    expect(page.absence).toBeNull();
+    expect(parseTaskPageJson(text)).toBeNull();
+    expect(text).toContain("internal_server_error");
   });
 });

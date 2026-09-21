@@ -1,5 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   parseChatGenerationEventStream,
   wireToChatAdmissionEnvelope,
@@ -636,6 +635,13 @@ describe("worker request contract", () => {
     expect(invalidToken.status).toBe(401);
     expect(missingClient.status).toBe(400);
     expect(overlongClient.status).toBe(400);
+    const traversalClient = await fetchWorker("/v1/conversations", {
+      headers: {
+        authorization: authenticatedHeaders.authorization,
+        "x-omi-client-id": "alice/../bob",
+      },
+    });
+    expect(traversalClient.status).toBe(400);
     expect((await missingClient.json()) as unknown).toEqual({
       error: { code: "bad_request", retryable: false, action: "edit_request" },
     });
@@ -700,11 +706,7 @@ describe("worker request contract", () => {
         (await betaHistory.json()) as { messages: Array<{ text: string }> }
       ).messages.map((message) => message.text)
     ).toEqual(["beta only"]);
-    expect(
-      ((await alphaTasks.json()) as { items: Array<{ id: string }> }).items.map(
-        (item) => item.id
-      )
-    ).toEqual(["task:alpha"]);
+    expect(alphaTasks.status).toBe(503);
     expect(
       (
         (await betaConversations.json()) as {
@@ -759,33 +761,11 @@ describe("worker request contract", () => {
 
     expect(conversations.status).toBe(200);
     expect(memories.status).toBe(503);
+    expect(tasks.status).toBe(503);
     expect((await conversations.json()) as unknown).toEqual(
       emptyConversationPage()
     );
     expect((await memories.json()) as unknown).toEqual(projectionUnavailable());
-    const tasksBody = await tasks.text();
-    expect(JSON.parse(tasksBody) as unknown).toEqual({
-      contractVersion: "1.0.0",
-      items: [],
-      window: {
-        status: "complete",
-        complete: true,
-        hasMore: false,
-        nextCursor: null,
-      },
-      completeness: {
-        version: "tasks-completeness-v1",
-        status: "complete",
-        reasons: [],
-        frontiers: {
-          declaredFrontier: "frontier-v1:tasks-declared",
-          newestAppliedFrontier: "frontier-v1:tasks-declared",
-          missingAppliedFrontierReason: null,
-        },
-      },
-      absence: { kind: "query_gap" },
-    });
-    expect(parseTaskPageJson(tasksBody)).not.toBeNull();
   });
 
   test("conversations project grouped D1 chat sessions, not a 503", async () => {
@@ -1002,9 +982,9 @@ describe("worker request contract", () => {
     const extra = await fetchWorker("/v1/tasks?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
-    expect(emptyCursor.status).toBe(400);
-    expect(invalidLimit.status).toBe(400);
-    expect(extra.status).toBe(400);
+    expect(emptyCursor.status).toBe(503);
+    expect(invalidLimit.status).toBe(503);
+    expect(extra.status).toBe(503);
   });
 
   test("chat history validates pagination before resolving the account", async () => {
@@ -1541,5 +1521,57 @@ describe("chat create wire validator", () => {
     [{ ...valid, attachmentIds: [""] }],
   ])("rejects malformed create envelopes", (value: unknown) => {
     expect(isChatCreate(value)).toBe(false);
+  });
+});
+
+describe("chat admission identity and terminals", () => {
+  test("a second account cannot occupy another account's message id", async () => {
+    const { admitMessage } = await import("../src/chat");
+    const first = await admitMessage(d1Mock, "alice", chatCreate("shared-msg-one"), null);
+    expect(typeof first).not.toBe("string");
+    const second = await admitMessage(d1Mock, "bob", chatCreate("shared-msg-one"), null);
+    expect(second).toBe("conflict");
+    const aliceHistory = await (await import("../src/chat")).readHistory(
+      d1Mock,
+      "alice",
+      50,
+    );
+    const bobHistory = await (await import("../src/chat")).readHistory(
+      d1Mock,
+      "bob",
+      50,
+    );
+    if (aliceHistory === "invalid_cursor" || bobHistory === "invalid_cursor") {
+      throw new Error("history cursor");
+    }
+    expect(aliceHistory.messages).toHaveLength(1);
+    expect(bobHistory.messages).toHaveLength(0);
+  });
+
+  test("complete after cancel returns the stored cancelled terminal", async () => {
+    const chat = await import("../src/chat");
+    const admitted = await chat.admitMessage(
+      d1Mock,
+      "cancel-account",
+      chatCreate("cancel-then-complete"),
+      null,
+    );
+    if (typeof admitted === "string") throw new Error(admitted);
+    const cancelled = await chat.cancelGeneration(
+      d1Mock,
+      "cancel-account",
+      admitted.generation.id,
+    );
+    expect(typeof cancelled).not.toBe("string");
+    const completed = await chat.completeGeneration(
+      d1Mock,
+      "cancel-account",
+      admitted.generation.id,
+      "should not persist",
+    );
+    expect(completed.kind).toBe("cancelled");
+    const history = await chat.readHistory(d1Mock, "cancel-account", 50);
+    if (history === "invalid_cursor") throw new Error("history cursor");
+    expect(history.messages.every(message => message.sender !== "ai")).toBe(true);
   });
 });

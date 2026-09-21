@@ -178,11 +178,15 @@ export function SettingsPage({
   onSignIn,
   onSignOut,
   onOpenApps,
+  onWorkspaceReload,
+  chatBusy = false,
   signingIn = false,
 }: {
   onSignIn?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
   onOpenApps?: () => void;
+  onWorkspaceReload?: () => void;
+  chatBusy?: boolean;
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
@@ -261,12 +265,20 @@ export function SettingsPage({
         setServiceSettings(settings);
         setError(null);
         setPhase('ready');
-      } catch {
+      } catch (reason) {
         if (!current()) {
           return;
         }
         setServiceSettings(null);
-        setError('Settings could not be loaded. Try again.');
+        const code =
+          reason !== null && typeof reason === 'object' && 'code' in reason
+            ? String((reason as {code?: unknown}).code)
+            : '';
+        setError(
+          code === 'service_unavailable'
+            ? 'Account profile is unavailable until an owner-backed producer exists. Retry later.'
+            : 'Settings could not be loaded. Try again.',
+        );
         setPhase('error');
       }
       return;
@@ -325,7 +337,7 @@ export function SettingsPage({
 
   const selectSoftwarePlane = async (plane: SoftwarePlane) => {
     const backend = omiBackend;
-    if (backend?.setSoftwarePlane === undefined || pending !== null) {
+    if (backend?.setSoftwarePlane === undefined || pending !== null || chatBusy) {
       return;
     }
     setPending('software-plane');
@@ -333,6 +345,7 @@ export function SettingsPage({
     try {
       const next = parseSoftwarePlane(await backend.setSoftwarePlane(plane));
       setSoftwarePlane(next);
+      onWorkspaceReload?.();
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
@@ -632,7 +645,7 @@ export function SettingsPage({
           <Text style={styles.destinationSectionTitle}>AI & connection</Text>
           {softwarePlane !== null && (
             <BackendPlaneRow
-              busy={pending === 'software-plane'}
+              busy={pending === 'software-plane' || chatBusy}
               onSelect={plane => {
                 selectSoftwarePlane(plane).catch(() => undefined);
               }}

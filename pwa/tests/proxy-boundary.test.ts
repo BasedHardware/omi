@@ -195,10 +195,25 @@ test("example platform permits candidate reads and task operations", () => {
   expect(
     isExamplePlatformRequestSupported("POST", "/__omi/api/v1/tasks/ops")
   ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported("GET", "/__omi/api/v1/chat-messages?limit=50")
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported("GET", "/__omi/api/v1/device-sessions/ownership")
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/device-sessions/11111111-2222-3333-4444-555555555555/transcript",
+    )
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported("POST", "/__omi/api/v1/device-sessions")
+  ).toBe(true);
   for (const [method, path] of [
     ["DELETE", "/__omi/api/v1/tasks/ops"],
     ["POST", "/__omi/api/v1/tasks"],
-    ["GET", "/__omi/api/v1/chat-messages?limit=50"],
+    ["POST", "/__omi/api/v1/chat-messages"],
     ["POST", "/__omi/api/v1/settings"],
     ["POST", "/__omi/api/v1/chat-attachments"],
     ["GET", "/__omi/api/v1/chat-generations/one/events"],

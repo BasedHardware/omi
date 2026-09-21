@@ -24,6 +24,24 @@ export type ReadsPhase =
   | 'saved-but-refresh-failed'
   | 'unavailable';
 
+function mergeExtendedPage<T extends {items: Array<{id: string}>; page: unknown}>(
+  previous: T,
+  incoming: T,
+): T {
+  const incomingIds = new Set(incoming.items.map(item => item.id));
+  const previousFirstPage = new Set(
+    previous.items.slice(0, incoming.items.length).map(item => item.id),
+  );
+  const older = previous.items.filter(
+    item => !incomingIds.has(item.id) && !previousFirstPage.has(item.id),
+  );
+  return {
+    ...incoming,
+    items: [...incoming.items, ...older],
+    page: previous.page,
+  };
+}
+
 function mergeOutcome<T extends DomainReadOutcome<DesktopReadProjection>>(
   current: T,
   next: T,
@@ -57,6 +75,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const refreshPendingRef = useRef(false);
+  const conversationsExtendedRef = useRef(false);
+  const tasksExtendedRef = useRef(false);
+  const [conversationsExtended, setConversationsExtended] = useState(false);
+  const [tasksExtended, setTasksExtended] = useState(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
   // bumps it, so a refresh that started under a previous session (or before a
@@ -81,6 +103,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     readOutcomesRef.current = null;
     homeReadsLoadedRef.current = false;
     setReadOutcomes(null);
+    conversationsExtendedRef.current = false;
+    tasksExtendedRef.current = false;
+    setConversationsExtended(false);
+    setTasksExtended(false);
     setReadsPhase('initial-loading');
   }, []);
 
@@ -147,6 +173,29 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           return;
         }
         const previous = readOutcomesRef.current;
+        if (
+          conversationsExtendedRef.current &&
+          previous?.conversations.status === 'success' &&
+          outcomes.conversations.status === 'success'
+        ) {
+          outcomes.conversations = {
+            status: 'success',
+            value: mergeExtendedPage(
+              previous.conversations.value,
+              outcomes.conversations.value,
+            ),
+          };
+        }
+        if (
+          tasksExtendedRef.current &&
+          previous?.tasks.status === 'success' &&
+          outcomes.tasks.status === 'success'
+        ) {
+          outcomes.tasks = {
+            status: 'success',
+            value: mergeExtendedPage(previous.tasks.value, outcomes.tasks.value),
+          };
+        }
         const homeOutcomes = [
           outcomes.conversations,
           outcomes.memories,
@@ -274,6 +323,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       };
       readOutcomesRef.current = merged;
       setReadOutcomes(merged);
+      conversationsExtendedRef.current = !replace && items.length > next.items.length;
+      setConversationsExtended(conversationsExtendedRef.current);
       if (replace) {
         setConversationNotice(
           'Conversations changed. The list has been refreshed.',
@@ -353,6 +404,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       };
       readOutcomesRef.current = merged;
       setReadOutcomes(merged);
+      tasksExtendedRef.current = !replace && items.length > next.items.length;
+      setTasksExtended(tasksExtendedRef.current);
       if (replace) {
         setTaskNotice('Tasks changed. The list has been refreshed.');
       }
@@ -385,9 +438,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       if (sequence !== refreshSeqRef.current || previous === null) {
         return null;
       }
+      const previousTasks =
+        previous.tasks.status === 'success' ? previous.tasks.value : null;
+      const mergedTasks =
+        tasksExtendedRef.current && previousTasks !== null
+          ? mergeExtendedPage(previousTasks, tasks)
+          : tasks;
       const next: DesktopReadOutcomes = {
         ...previous,
-        tasks: {status: 'success', value: tasks},
+        tasks: {status: 'success', value: mergedTasks},
       };
       readOutcomesRef.current = next;
       setReadOutcomes(next);
@@ -465,6 +524,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     taskNotice,
     loadMoreTasks,
     conversationsLoadingMore,
+    conversationsExtended,
     conversationNotice,
     loadMoreConversations,
     allHomeReadsUnavailable,

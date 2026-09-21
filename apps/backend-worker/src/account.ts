@@ -51,10 +51,12 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     accountId: string,
     generationId: string
   ): Promise<"not_found" | "accepted" | "terminal"> {
-    const result = await cancelGeneration(this.env.DB, accountId, generationId);
-    if (result === "not_found" || result === "terminal") return result;
-    this.notifyWaiters(generationId, result);
-    return "accepted";
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const result = await cancelGeneration(this.env.DB, accountId, generationId);
+      if (result === "not_found" || result === "terminal") return result;
+      this.notifyWaiters(generationId, result);
+      return "accepted";
+    });
   }
 
   override async alarm(): Promise<void> {

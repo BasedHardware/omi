@@ -323,6 +323,45 @@ test('automatic refresh does not disturb scrolled lists, open details or loaded 
   act(() => tree.unmount());
 });
 
+test('automatic refresh after remount does not replace a loaded older page', () => {
+  const refresh = jest.fn();
+  const loadMore = jest.fn();
+  const page = (preserveLoadedPages: boolean) => (
+    <ConversationsPage
+      embedded
+      outcome={{
+        ...outcome,
+        value: {
+          ...outcome.value,
+          page: {...outcome.value.page, hasMore: true, nextCursor: 'older'},
+        },
+      }}
+      loading={false}
+      onRefresh={refresh}
+      onLoadMore={loadMore}
+      preserveLoadedPages={preserveLoadedPages}
+    />
+  );
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = ReactTestRenderer.create(page(false));
+  });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  act(() =>
+    tree.root
+      .findAllByProps({accessibilityLabel: 'Load more conversations'})[0]
+      .props.onPress(),
+  );
+  expect(loadMore).toHaveBeenCalledTimes(1);
+  act(() => tree.unmount());
+  act(() => {
+    tree = ReactTestRenderer.create(page(true));
+  });
+  act(() => jest.advanceTimersByTime(15000));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  act(() => tree.unmount());
+});
+
 test('the shared bottom search owns the query without a second page input', () => {
   const onChange = jest.fn();
   let tree!: ReactTestRenderer.ReactTestRenderer;

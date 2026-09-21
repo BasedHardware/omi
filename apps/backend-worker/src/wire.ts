@@ -29,7 +29,7 @@ export const CHAT_CAPABILITIES: ChatCapabilitiesWire = {
 export const MAX_CLIENT_ID_LENGTH = 128;
 
 export function isClientId(value: string): boolean {
-  return value.length > 0 && value.length <= MAX_CLIENT_ID_LENGTH;
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(value);
 }
 
 export const json = (
