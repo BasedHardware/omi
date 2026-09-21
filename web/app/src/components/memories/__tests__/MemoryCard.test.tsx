@@ -168,6 +168,23 @@ describe('MemoryCard layout', () => {
 });
 
 describe('MemoryCard delete', () => {
+  it('lets the user try again when the delete throws', async () => {
+    const onDelete = vi.fn().mockRejectedValue(new Error('network down'));
+    render(
+      <MemoryCard
+        memory={memory}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={onDelete}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('Delete memory'));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith(memory.id));
+    await waitFor(() => expect(screen.getByTitle('Delete memory')).not.toBeDisabled());
+  });
+
   it('lets the user try again when the delete is rejected', async () => {
     const onDelete = vi.fn().mockResolvedValue(false);
     render(
