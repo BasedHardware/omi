@@ -65,15 +65,8 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-from utils.conversations.duplicate_capture import (
-    CANDIDATE_PAGE_LIMIT,
-    DuplicateCaptureMatch,
-    MIN_CANDIDATE_WORDS,
-    capture_record,
-    find_duplicate_capture,
-    mark_duplicate_capture,
-)
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -97,8 +90,14 @@ from utils.observability.fallback import record_fallback
 from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
+from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.subscription import (
+    is_trial_paywalled,
+    should_defer_desktop_processing,
+    should_skip_omi_paid_postprocessing,
+)
+from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
 from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
     memory_formation_verdict,
@@ -134,6 +133,7 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
     get_conversation_notes,
+    validate_structured_source_segment_ids,
 )
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -381,48 +381,6 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
-def _detect_duplicate_capture(
-    uid: str, conversation: Union[Conversation, CreateConversation]
-) -> Optional[DuplicateCaptureMatch]:
-    """Another capture client's conversation that already carries this one (#3244).
-
-    Fails open: a candidate-read failure keeps this conversation on the ordinary
-    path, the pre-fix outcome of two visible conversations, never a lost one.
-    """
-    candidate = capture_record(conversation)
-    if candidate is None or len(candidate.words) < MIN_CANDIDATE_WORDS:
-        return None
-    try:
-        rows = [
-            row
-            for status in (ConversationStatus.completed.value, ConversationStatus.processing.value)
-            for row in conversations_db.get_conversations_finished_after(
-                uid, status=status, finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
-            )
-        ]
-    except Exception:
-        record_fallback(
-            component='conversation_finalization',
-            from_mode='duplicate_capture_check',
-            to_mode='keep_both_captures',
-            reason='other',
-            outcome='degraded',
-            log=logger,
-        )
-        return None
-    match = find_duplicate_capture(candidate, [record for record in map(capture_record, rows) if record is not None])
-    if match is not None:
-        logger.info(
-            'duplicate capture folded uid=%s conversation=%s primary=%s coverage=%.2f containment=%.2f',
-            uid,
-            getattr(conversation, 'id', None),
-            match.primary_conversation_id,
-            match.window_coverage,
-            match.transcript_containment,
-        )
-    return match
-
-
 def _get_structured(
     uid: str,
     language_code: str,
@@ -487,6 +445,7 @@ def _get_structured(
                             task_intelligence_capture=task_intelligence_capture,
                             existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
                         )
+                    validate_structured_source_segment_ids(structured, ())
                     return structured, False
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_transcript_structure(
@@ -497,6 +456,7 @@ def _get_structured(
                         uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        transcript_segment_ids=(),
                     )
                 with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                     structured.action_items = extract_action_items(
@@ -510,6 +470,7 @@ def _get_structured(
                         task_intelligence_capture=task_intelligence_capture,
                         primary_user_name=_primary_user_name(uid),
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.message:
@@ -522,17 +483,24 @@ def _get_structured(
                         ext_conv.text_source_spec,
                         output_language_code=user_language,
                     )
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             if ext_conv.text_source == ExternalIntegrationConversationSource.other:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = summarize_experience_text(ext_conv.text, ext_conv.text_source_spec, tz=tz)
+                validate_structured_source_segment_ids(structured, ())
                 return structured, False
 
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
+        transcript_segment_ids = [
+            segment_id
+            for segment_id in (getattr(segment, 'id', None) for segment in (main_conv.transcript_segments or []))
+            if isinstance(segment_id, str) and segment_id
+        ]
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
@@ -549,6 +517,7 @@ def _get_structured(
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
                     speaker_map=speaker_map,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -561,6 +530,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                         trusted_wake_word_markers=has_wake_word_marker,
                     )
+                validate_structured_source_segment_ids(structured, transcript_segment_ids)
                 return structured, False
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
@@ -571,6 +541,7 @@ def _get_structured(
                     tz_str,
                     photos=main_conv.photos,
                     output_language_code=user_language,
+                    transcript_segment_ids=transcript_segment_ids,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
@@ -585,18 +556,8 @@ def _get_structured(
                     trusted_wake_word_markers=has_wake_word_marker,
                     primary_user_name=_primary_user_name(uid),
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
-
-        # A second capture client already carrying this speech (#3244: Omi device
-        # on the phone + macOS microphone in the same room) is folded away here,
-        # before any LLM spend. It takes the same discard exit as a scrap, so the
-        # transcript and audio stay on the row and the primary is recorded in
-        # external_data. Deliberately ahead of the calendar override: the primary
-        # already holds that meeting.
-        duplicate_capture = _detect_duplicate_capture(uid, main_conv)
-        if duplicate_capture is not None:
-            mark_duplicate_capture(main_conv, duplicate_capture)
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Transcript span, not the wall window: `started_at` is the streaming-session
         # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
@@ -604,13 +565,24 @@ def _get_structured(
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-        with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(
-                discard_transcript,
-                main_conv.photos,
-                duration_seconds,
-                trusted_wake_word_markers=has_wake_word_marker,
-            )
+        # The discard verdict is a desktop post-processing gate, and the release
+        # probe's terminal contract only completes through a kept conversation,
+        # so the probe uid must skip it (gate convention, utils/release_probe.py).
+        # The probe's synthetic transcript cannot rely on the deterministic
+        # >100-word keep line: the trailing fixture passes flush late — at
+        # teardown, into the rollover generation — so the durably-present word
+        # count varies with STT yield, and the discard LLM fences the lane at
+        # terminal_failure (run 35583992730).
+        if is_release_probe_uid(uid):
+            discarded = False
+        else:
+            with track_usage(uid, Features.CONVERSATION_DISCARD):
+                discarded = should_discard_conversation(
+                    discard_transcript,
+                    main_conv.photos,
+                    duration_seconds,
+                    trusted_wake_word_markers=has_wake_word_marker,
+                )
         if discarded:
             # Calendar overlap outranks discard (SCA-381): a scrap recorded
             # inside a booked meeting is evidence, never noise. Only a positive
@@ -639,6 +611,7 @@ def _get_structured(
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
                 speaker_map=speaker_map,
+                transcript_segment_ids=transcript_segment_ids,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -651,6 +624,7 @@ def _get_structured(
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                     trusted_wake_word_markers=has_wake_word_marker,
                 )
+            validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = get_transcript_structure(
@@ -662,6 +636,7 @@ def _get_structured(
                 photos=main_conv.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                transcript_segment_ids=transcript_segment_ids,
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
@@ -677,6 +652,7 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
                 primary_user_name=_primary_user_name(uid),
             )
+        validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
         raise conversation_processing_http_exception(e) from e
@@ -688,7 +664,10 @@ def _get_conversation_obj(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
 ) -> Conversation:
-    discarded = structured.title == ''
+    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    # The empty-title fallback is the discard gate's second verdict and is
+    # covered by the same release-probe exemption as the LLM discard above:
+    # an LLM mood must not terminalize the probe lane's synthetic capture.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
@@ -878,6 +857,9 @@ def trigger_conversation_apps(
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
                     speaker_map=app_speaker_map,
+                    transcript_segment_ids=[
+                        getattr(segment, 'id', None) for segment in conversation.transcript_segments
+                    ],
                 )
             result = get_app_result(
                 transcript,
@@ -1054,7 +1036,11 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # §1.8: plan denial is a second early return in this same boundary, not a
     # parallel branch. Everything below spends `get_llm('memories')`, so the
     # gate has to sit above it rather than inside the extractor.
-    if free_tier_memory_suppression_enabled():
+    # Same contract as the S6 gate below: the cohort admits nobody when it is
+    # not told which account it is deciding about, so a bare call leaves this
+    # branch unreachable however the cohort is configured. The sweep and the
+    # connectors already pass `uid`; this site was the exception.
+    if free_tier_memory_suppression_enabled(uid):
         verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
         if verdict.suppressed:
             logger.info(
@@ -1531,6 +1517,7 @@ def _extract_memories_canonical(
                 calendar_context=calendar_context,
                 photos=conversation.photos,
                 speaker_map=prompt_speaker_map,
+                transcript_segment_ids=[getattr(segment, 'id', None) for segment in conversation.transcript_segments],
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
@@ -2547,14 +2534,27 @@ def process_conversation(
     def report_persistence(
         current: bool,
         *,
+        completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(derived_effects)
+        # Sync/REST callers finalize here; leased jobs defer this metadata work
+        # to finalizer.py after the fanout fence, including completed replays.
+        if current and completed is not None and not defer_derived_effects:
+            link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
+    # The synthetic release-probe identity (dev pusher release lane) is
+    # exempt from the desktop deferral gates below so the probe certifies
+    # the full terminal desktop path end to end. New desktop gates must
+    # check is_release_probe_uid(uid) (utils/release_probe.py) or the probe
+    # fails loudly in CI — that is intended.
+    probe_uid = is_release_probe_uid(uid)
+    if probe_uid:
+        logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -2566,6 +2566,7 @@ def process_conversation(
     if (
         hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and is_trial_paywalled(uid, 'macos')
     ):
         logger.info(
@@ -2593,9 +2594,15 @@ def process_conversation(
     # consulted the policy and continued to process_normally (paid upgrade).
     clear_stale_terminal_marker = False
     if (
-        free_tier_local_processing_enabled()
+        # `uid` is required, not optional: the flag is necessary but never
+        # sufficient, and `free_tier_local_processing_enabled(None)` is answered
+        # False while the flag is on, by design, so a boolean alone lights
+        # nobody. Calling it bare made this whole branch unreachable in every
+        # environment regardless of the configured cohort.
+        free_tier_local_processing_enabled(uid)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
     ):
         source_value = getattr(conversation.source, 'value', conversation.source)
         # Explicit ingest-time projection wins over a previously stored one.
@@ -2633,6 +2640,7 @@ def process_conversation(
             )
             report_persistence(
                 persisted,
+                completed=stored,
                 derived_effects=(
                     DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
                     if persisted
@@ -2658,6 +2666,7 @@ def process_conversation(
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and should_defer_desktop_processing(uid)
     ):
         deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
@@ -2669,7 +2678,9 @@ def process_conversation(
         return deferred
     # Eager-extraction gate (S14 proactivity half, flag-off): first-open
     # (force_process) and manual reprocess are the remaining eager managed
-    # spend for desktop conversations. An identified-basic deny lands at the
+    # spend for desktop conversations. Default off
+    # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
+    # no new terminal marker. When on, an identified-basic deny lands at the
     # same deterministic minimum the flag-on branch uses — no second pipeline;
     # identification failure fails open above it. Non-desktop sources never
     # reach this branch (the summary flip is a separate, held decision).
@@ -2677,6 +2688,7 @@ def process_conversation(
         (force_process or is_reprocess)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and basic_plan_gate_eager_extraction_enabled()
     ):
         eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
         if eager_basic_deny is not None:
@@ -2685,6 +2697,7 @@ def process_conversation(
             )
             report_persistence(
                 persisted,
+                completed=stored,
                 derived_effects=(
                     DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
                     if persisted
@@ -2692,6 +2705,39 @@ def process_conversation(
                 ),
             )
             return stored
+
+    # Custom-STT skips managed-STT credits at listen connect. The LLM work that
+    # follows (structure / summary / memory) still consults the processing
+    # budget so those sessions cannot run uncapped on Omi's bill (#7690).
+    # Paid unlimited plans and LLM BYOK stay allowed — this is not the
+    # #10962 blanket skip that removed summaries for every custom-STT user.
+    #
+    # After the unpaid desktop path (#14513): store_projection /
+    # deterministic_minimum already returned above. Consulting this gate
+    # earlier would complete a desktop custom-STT session without the
+    # on-device summary it would otherwise persist. Regular conversations
+    # never consult this gate — they are already bounded by STT credits at
+    # listen connect. Keep that contract at the call site so a stubbed/truthy
+    # helper cannot abort memory/task/goal fan-out.
+    custom_stt = bool(getattr(conversation, 'uses_custom_stt', False))
+    source_token = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
+    if custom_stt and should_skip_omi_paid_postprocessing(
+        uid,
+        uses_custom_stt=custom_stt,
+        source=source_token if isinstance(source_token, str) else None,
+    ):
+        logger.info(
+            "custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
+        if isinstance(conversation, Conversation):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        report_persistence(False)
+        return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
 
@@ -2728,7 +2774,7 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(persisted)
+    report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id

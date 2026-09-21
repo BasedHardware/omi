@@ -8,7 +8,7 @@ free-text line:
 | Frame | Typed reason | Owner | Severity |
 |---|---|---|---|
 | 400 `invalid_request` "No audio received" | `soniox_idle_timeout` | this session's VAD pattern | WARNING |
-| 402 `organization_balance_exhausted` | `soniox_account_state` | the provider/account | **ERROR** |
+| 402 `organization_balance_exhausted` / `organization_monthly_budget_exhausted` / `project_monthly_budget_exhausted` | `provider_budget_exhausted` | the provider/account | **ERROR** |
 | 413 `max_duration_reached` | `soniox_rotation` | documented protocol rotation | WARNING |
 
 ## What was broken
@@ -40,16 +40,20 @@ free-text line:
   reason so the VAD gate cannot erase it.
 - `live_stt_terminal_reason(socket, fallback)` lets every terminal funnel
   report the provider's type instead of its own vantage point.
-- Severity follows fault ownership: only a 402 account-state refusal stays at
+- Severity follows fault ownership: a 402 / monthly-budget refusal stays at
   ERROR (`Soniox streaming error:`); idle-timeout and rotation log
   `Soniox stream closed:` at WARNING. Never mute a signature without
   classifying fault origin first — see `ws-auth-rejection-severity.md` for the
-  same rule at the auth boundary.
+  same rule at the auth boundary. `organization_monthly_budget_exhausted`
+  used to miss the typed set and log at WARNING as `connection_lost`.
 - Fleet evidence: `note_typed_provider_death` at the failover seam (and
-  `soniox_account_state` in the terminal path) opens the provider's
+  `provider_budget_exhausted` in the terminal path) opens the provider's
   process-local selection circuit for one cooldown. Session-scoped reasons
   deliberately do not — an idle timeout is this session's VAD pattern, not a
   provider fault.
+- Vendor close frames increment `omi_stt_stream_close_total` with a bounded
+  `reason` (`provider_budget_exhausted`, idle/rotation/hint, else
+  `connection_lost`). Raw vendor messages are never label values.
 - `_fallback_failure_reason` classifies `exhausted`/`balance` text as `quota`;
   `bounded_provider` accepts the live-path provider tokens.
 

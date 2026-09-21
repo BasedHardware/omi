@@ -284,6 +284,18 @@ function prepare_mobile_build_env() {
   scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
 }
 
+# Bake git SHA + build number into the binary. Missing dart-defines become
+# 'unknown' in Dart; local dirty trees get OMI_GIT_DIRTY=true.
+# Prints one --dart-define per line. Bash 3.2 (macOS /bin/bash) has no namerefs.
+function build_provenance_define_lines() {
+  local script_dir script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script="$script_dir/scripts/build_provenance_dart_defines.sh"
+  if [[ -x "$script" ]]; then
+    "$script"
+  fi
+}
+
 # #######################
 # Set up Android Keystore
 # #######################
@@ -325,6 +337,10 @@ function run_build_android() {
   if [[ -n "$mode_flag" ]]; then
     flutter_args+=("$mode_flag")
   fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   flutter pub get \
     && dart run build_runner build \
     && flutter run "${flutter_args[@]}"
@@ -512,6 +528,10 @@ function run_build_ios() {
   if [[ -n "$mode_flag" ]]; then
     flutter_args+=("$mode_flag")
   fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   local device_id
   device_id=$(select_ios_device) || return 1
   local physical_device=0

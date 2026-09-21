@@ -111,6 +111,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN
@@ -163,6 +169,8 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -213,6 +221,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

@@ -1,9 +1,11 @@
 from datetime import datetime
+from enum import Enum
+import math
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SaveFcmTokenRequest(BaseModel):
@@ -57,6 +59,36 @@ class CreatePerson(BaseModel):
 # field today; GCS people_profiles/ is speech-sample audio only; the app uses
 # local speaker icons; unlike app/persona logos there is no person-photo URL or
 # upload pattern to mirror. Do not invent an optional photo string yet.
+class VoiceReadiness(str, Enum):
+    ready = 'ready'
+    saved_sample_awaiting_embedding = 'saved_sample_awaiting_embedding'
+    not_learned = 'not_learned'
+    unknown = 'unknown'
+
+
+def voice_readiness(data: Mapping[str, Any]) -> VoiceReadiness:
+    """Report stored recognition evidence, never infer a queued enrollment job."""
+    samples = data.get('speech_samples')
+    version = data.get('speech_samples_version')
+    if samples is None or not isinstance(samples, list):
+        return VoiceReadiness.unknown
+    if not samples:
+        return VoiceReadiness.not_learned
+    if not isinstance(version, int) or isinstance(version, bool) or version < 3:
+        return VoiceReadiness.unknown
+    vector = data.get('speaker_embedding')
+    if vector is None or vector == []:
+        return VoiceReadiness.saved_sample_awaiting_embedding
+    if (
+        not isinstance(vector, list)
+        or not vector
+        or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in vector)
+        or not any(v != 0 for v in vector)
+    ):
+        return VoiceReadiness.unknown
+    return VoiceReadiness.ready
+
+
 class Person(BaseModel):
     id: str
     name: str
@@ -65,6 +97,22 @@ class Person(BaseModel):
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
+    voice_readiness: VoiceReadiness = VoiceReadiness.unknown
+
+    @model_validator(mode='before')
+    @classmethod
+    def derive_voice_readiness(cls, data):
+        if isinstance(data, Mapping):
+            claimed = data.get('voice_readiness')
+            try:
+                VoiceReadiness(claimed)
+                claimed_valid = True
+            except (ValueError, TypeError):
+                claimed_valid = False
+            if claimed_valid and 'speaker_embedding' not in data:
+                return data
+            data = {**data, 'voice_readiness': voice_readiness(data)}
+        return data
 
     @classmethod
     def deserialize_many_safe(

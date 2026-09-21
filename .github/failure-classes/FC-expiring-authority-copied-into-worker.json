@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-expiring-authority-copied-into-worker",
+  "violated_contract": "A long-lived worker must obtain managed credentials at request time from their owner, never retain a startup copy whose validity depends on a separate refresher. Beta v0.12.356 ran for about 15 hours: an offline refresh terminated the bridge timer, and pi-mono kept a stale Firebase token while app API requests succeeded. Bare HTTP 401 status code (no body) was untyped and invited futile resends.",
+  "canonical_prevention": "Acquire owner-fenced headers for every HTTP attempt, refresh once on a managed pre-stream 401, classify numeric HTTP status before SDK stringification, and forbid startup credential environments and refresh-driven worker restarts. The interim request-scoped IPC must be replaced by a Swift HTTP relay for complete subprocess isolation.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/scripts/check-agent-credentials.py",
+    "desktop/macos/Desktop/Tests/AuthRefreshResilienceTests.swift",
+    "desktop/macos/agent/src/runtime/model-fetch.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Chat/**",
+    "desktop/macos/agent/**",
+    "desktop/macos/pi-mono-extension/**"
+  ],
+  "status": "open"
+}

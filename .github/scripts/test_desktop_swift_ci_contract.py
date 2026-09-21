@@ -66,9 +66,11 @@ MACOS_JOB_TIMEOUT_MINUTES = {
     # A notification-boundary change compiles release mode AND builds the
     # release test target for the regression (~50 min observed on
     # run 34239723019). Combined app/test build avoids the duplicate
-    # compilation in #13481; keep the existing release-compile ceiling until
-    # hosted timing proves otherwise.
-    "desktop-swift-release-compile": 60,
+    # compilation in #13481. A branch that grew the Desktop package pushed
+    # the whole-module compile to ~60 min — three attempts of #13456 were
+    # cancelled at the old 60m ceiling with the work already done (<1s
+    # before the kill), so the wedge-guard admits the grown branch.
+    "desktop-swift-release-compile": 90,
 }
 
 
@@ -601,12 +603,15 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # drift class. Keying the budget on the event type alone made
         # a re-baselined PR run the full suite against the PR number and
         # false-red at 2013s vs 1800s (run 34369508858). After Xcode 26.6,
-        # PR #13699 measured 2324s (run 34754454417). PR #14213 then
-        # measured 2778s (run 35134593036) on a cache-hit PR lane whose
-        # overrun was one 1500s batch ceiling plus isolation, so the PR
-        # lane is 3000s.
+        # PR #13699 measured 2324s (run 34754454417). PR #14213 measured
+        # 2778s (run 35134593036). Run 35106014508 (PR #14222) went red
+        # ONLY on this guard with all 836 executed suites green — one
+        # order-dependent batch (exit 1 at 78s) bisected into a green half
+        # (40s), a wedged half that burned its full 1500s batch ceiling,
+        # and ~1020s of isolated singles, 3923s step wall — so the PR lane
+        # admits one legitimate bisect cascade at 4400s.
         self.assertIn(
-            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '3000' || '4200' }}",
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '4400' || '4200' }}",
             verify_job,
         )
         self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)

@@ -257,6 +257,23 @@ def test_source_identity_git_failure_fails_closed(monkeypatch: pytest.MonkeyPatc
     def failing(*_args: object, **_kwargs: object) -> None:
         raise se.subprocess.CalledProcessError(128, ["git"], stderr="fatal: not a git repository")
 
-    monkeypatch.setattr(se.subprocess, "run", failing)
+        monkeypatch.setattr(se.subprocess, "run", failing)
     with pytest.raises(se.EvidenceError, match="git rev-parse"):
         se.source_identity(tmp_path)
+
+
+def test_file_sha256_hashes_an_ios_app_bundle_directory(tmp_path: Path) -> None:
+    bundle = tmp_path / "Runner.app"
+    (bundle / "Info.plist").parent.mkdir(parents=True)
+    (bundle / "Info.plist").write_bytes(b"plist")
+    nested = bundle / "Frameworks"
+    nested.mkdir()
+    (nested / "A.framework").write_bytes(b"fw")
+    digest = se.file_sha256(bundle)
+    assert len(digest) == 64
+    assert digest == se.file_sha256(bundle)
+    (nested / "A.framework").write_bytes(b"fw2")
+    assert se.file_sha256(bundle) != digest
+    apk = tmp_path / "app.apk"
+    apk.write_bytes(b"plist")
+    assert se.file_sha256(apk) != digest

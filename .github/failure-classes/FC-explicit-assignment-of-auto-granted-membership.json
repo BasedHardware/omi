@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "id": "FC-explicit-assignment-of-auto-granted-membership",
+ "violated_contract": "A store-distribution config must not perform an explicit assignment for a membership the platform grants automatically. Internal-type TestFlight groups receive every processed build by definition, so naming 'Internal' in Codemagic's beta_groups makes every iOS publishing task fail with Apple's 'Cannot add internal group to a build' while the build itself uploads and processes fine. Because the failure is one publishing sub-step, build-level success hid it: iOS ASC distribution tasks had failed on every build since Aug 25, 2026, and the hardened mobile distribution gate (mobile_distribution.py) requires every ASC task to succeed, so the iOS internal baseline stayed permanently pending.",
+ "canonical_prevention": "Before configuring a platform assignment surface, classify each target as auto-granted or explicit-only and name only explicit-only targets; watch the platform's post-publish task results (not just build status) when a distribution receipt is part of a release gate.",
+ "canonical_prevention_artifact": [
+  ".github/scripts/mobile_distribution.py"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  "codemagic.yaml",
+  ".github/scripts/mobile_distribution.py"
+ ],
+ "status": "open"
+}

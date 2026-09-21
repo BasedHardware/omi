@@ -42,7 +42,7 @@ export function TaskQuickAdd({
 
     setIsSubmitting(true);
     try {
-      const dueAt = dueDate ? new Date(dueDate).toISOString() : undefined;
+      const dueAt = dueDate ? new Date(dueDate + 'T12:00:00').toISOString() : undefined;
       await onAdd(value.trim(), dueAt);
       setValue('');
       setDueDate('');

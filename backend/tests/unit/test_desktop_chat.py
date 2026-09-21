@@ -2639,12 +2639,12 @@ def _capture_client_journeys(monkeypatch):
     monkeypatch.setattr(
         journeys,
         'record_client_journey_accepted',
-        lambda journey, client_kind: accepted.append((journey, client_kind)),
+        lambda journey, client_kind, app_build='unknown': accepted.append((journey, client_kind)),
     )
     monkeypatch.setattr(
         journeys,
         'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None, app_build='unknown': terminal.append(
             (journey, client_kind, outcome, issue_class)
         ),
     )

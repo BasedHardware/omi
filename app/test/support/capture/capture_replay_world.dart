@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
@@ -432,17 +433,20 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
-  /// Drain work started by timer callbacks and injections: coordinator
-  /// recovery passes (including unawaited cooldown wakes) and event-queue
-  /// IO. Quiescence is observed — no wall-clock sleeps.
+  /// Drain work started by timer callbacks and injections: WAL file writes
+  /// returned as Futures from async periodic callbacks, coordinator recovery
+  /// passes (including unawaited cooldown wakes), and event-queue microtasks.
+  /// Coordinator-idle is not durable I/O. Quiescence is observed — no sleeps.
   Future<void> settle({int maxTurns = 64}) async {
     for (var i = 0; i < maxTurns; i++) {
+      await scheduler.waitForCallbackIo();
       await coordinator.waitUntilIdle();
       await pumpEventQueue();
+      await scheduler.waitForCallbackIo();
       await coordinator.waitUntilIdle();
-      if (!coordinator.hasInFlight) return;
+      if (!coordinator.hasInFlight && !scheduler.hasInFlightIo) return;
     }
-    throw StateError('CaptureReplayWorld.settle: coordinator did not go idle after $maxTurns turns');
+    throw StateError('CaptureReplayWorld.settle: coordinator/timer IO did not go idle after $maxTurns turns');
   }
 
   /// Advance virtual time by [duration], firing due timers in order, then
@@ -483,7 +487,9 @@ class CaptureReplayWorld {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    // Finish in-flight drain/index writes before callers delete [tempDir].
+    // Finish timer-callback file writes and in-flight drain/index writes
+    // before callers delete [tempDir]. Coordinator-idle is not enough.
+    await scheduler.waitForCallbackIo();
     await coordinator.waitUntilIdle();
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();
@@ -539,6 +545,7 @@ class _ReplayCaptureController extends CaptureController {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     final transport = ScriptedPureSocket();
     transport.connectAllowed = () => world.connected;

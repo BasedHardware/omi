@@ -61,17 +61,21 @@ void main() {
 
     expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(1));
     final connectedProperties = analytics.eventProperties[analytics.events.indexOf('Device Connected')];
-    expect(connectedProperties['id'], device.id);
-    expect(connectedProperties['name'], device.name);
-    expect(connectedProperties['firmwareRevision'], device.firmwareRevision);
+    expect(connectedProperties.containsKey('id'), isFalse);
+    expect(connectedProperties.containsKey('name'), isFalse);
+    expect(connectedProperties.containsKey('serialNumber'), isFalse);
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(connectedProperties['hardware_family'], 'fieldy');
     expect(
-        connectedProperties['transport_device_id'], sha256.convert(utf8.encode(device.id)).toString().substring(0, 16));
+      connectedProperties['transport_device_id'],
+      sha256.convert(utf8.encode(device.id)).toString().substring(0, 16),
+    );
     expect(connectedProperties['transport_id_stability'], 'platform_dependent');
     expect(
-        connectedProperties['hardware_id'], sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16));
+      connectedProperties['hardware_id'],
+      sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16),
+    );
     expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
     expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
@@ -453,6 +457,9 @@ class _TestAnalyticsAdapter implements AnalyticsAdapter {
 
   @override
   void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void registerSuperProperties(Map<String, Object> properties) {}
 
   @override
   void enable() {}

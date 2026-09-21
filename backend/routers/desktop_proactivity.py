@@ -30,6 +30,8 @@ from utils.llm.providers import get_openai_api_key
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build
+from utils.free_tier_basic_gates import basic_plan_gate_proactivity_enabled
 from utils.managed_compute import Decision, authorize_managed_compute, funding_owner_for_feature
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
@@ -276,7 +278,11 @@ async def _enforce_proactive_plan_gate(uid: str, operation: ProactiveOperation) 
     Mirrors desktop_proxy._enforce_managed_plan_gate: 503 for an authorization
     outage, 402 plan_gated for every other deny. The offline stub path below
     stays reachable only for callers this gate admitted.
+
+    Default off (``BASIC_PLAN_GATE_PROACTIVITY_ENABLED``): no authorize call.
     """
+    if not basic_plan_gate_proactivity_enabled():
+        return
     feature = _OPERATION_GATE_FEATURES[operation.value]
     decision = await run_blocking(
         db_executor,
@@ -945,12 +951,14 @@ async def proactive_completion(
     response: Response,
     uid: str = Depends(_authorized_desktop_user),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> ProactiveCompletionEnvelope:
     await _enforce_proactive_plan_gate(uid, request.operation)
     attempt = ClientJourneyAttempt(
         'desktop_proactivity',
         _proactivity_client_kind(x_app_platform, user_agent),
+        app_build=extract_app_build({'x-app-version': x_app_version or ''}),
     )
     try:
         result = await _proactive_completion_unobserved(request, response, uid=uid)

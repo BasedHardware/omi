@@ -203,13 +203,16 @@ class DeveloperModeProvider extends BaseProvider {
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
+    var webhooksSaved = false;
     try {
-      Future.wait([w1, w2, w3, w4]);
-      prefs.webhookAudioBytes = webhookAudioBytes.text;
-      prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
-      prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
-      prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
-      prefs.webhookDaySummary = webhookDaySummary.text;
+      webhooksSaved = !(await Future.wait([w1, w2, w3, w4])).contains(false);
+      if (webhooksSaved) {
+        prefs.webhookAudioBytes = webhookAudioBytes.text;
+        prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+        prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
+        prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
+        prefs.webhookDaySummary = webhookDaySummary.text;
+      }
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
@@ -227,6 +230,13 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
+    if (!webhooksSaved) {
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.failedToSaveCheckConnection ??
+            'Failed to save. Please check your connection.',
+      );
+      return;
+    }
     AppSnackbar.showSnackbar(globalNavigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!');
   }
 

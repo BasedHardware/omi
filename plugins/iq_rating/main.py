@@ -1099,19 +1099,33 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
                     json_match = re.search(r'\[.*\]', answer, re.DOTALL)
                     if json_match:
                         scores = json.loads(json_match.group())
-                        for score in scores:
-                            name = score.get("name", "").lower()
-                            iq = score.get("iq", 100)
-                            is_name = score.get("is_name", True)
-                            
-                            # Find matching person
-                            for p in batch:
-                                if p["name"].lower() == name or p["name_lower"] == name:
-                                    iq_scores[p["name_lower"]] = {
-                                        "iq": max(70, min(160, int(iq))),
-                                        "is_name": is_name
-                                    }
-                                    break
+                        if isinstance(scores, list):
+                            for score in scores:
+                                if not isinstance(score, dict):
+                                    logger.warning(f"Skipping non-dict score element in AI response: {type(score).__name__}")
+                                    continue
+                                raw_name = score.get("name")
+                                if not isinstance(raw_name, str) or not raw_name.strip():
+                                    continue
+                                name = raw_name.strip().lower()
+
+                                raw_iq = score.get("iq", 100)
+                                try:
+                                    iq_val = int(raw_iq) if raw_iq is not None else 100
+                                except (ValueError, TypeError):
+                                    iq_val = 100
+
+                                raw_is_name = score.get("is_name", True)
+                                is_name = bool(raw_is_name) if raw_is_name is not None else True
+
+                                # Find matching person
+                                for p in batch:
+                                    if p["name"].lower() == name or p["name_lower"] == name:
+                                        iq_scores[p["name_lower"]] = {
+                                            "iq": max(70, min(160, iq_val)),
+                                            "is_name": is_name
+                                        }
+                                        break
                 except Exception as e:
                     logger.error(f"Error parsing AI response: {e}")
             else:

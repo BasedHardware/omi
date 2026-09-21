@@ -87,6 +87,24 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def resolve_evidence_dir(raw: str | None, *, cwd: Path | None = None) -> Path | None:
+    """Resolve an evidence directory against the invocation working directory.
+
+    Empty/unset becomes None so the caller can fall back to a temp dir.
+    Relative paths are joined to ``cwd`` (default: process cwd) and made
+    absolute before they are handed to the journey runner, which ``cd``s into
+    ``app/`` — a relative ``--evidence-dir`` would otherwise write receipts
+    under ``app/`` while aggregation looks next to the invocation.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None
+    path = Path(text)
+    if not path.is_absolute():
+        path = (cwd or Path.cwd()) / path
+    return path.resolve()
+
+
 def classify_log_text(text: str) -> str:
     """Classify a runner log tail into compile/infra/zero-execution/test/unknown."""
     if any(marker in text for marker in COMPILE_MARKERS):
@@ -591,13 +609,12 @@ def cmd_fast(repo_root: Path, args: argparse.Namespace, *, runner_path: Path | N
 
     import tempfile
 
-    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else None
+    evidence_dir = resolve_evidence_dir(args.evidence_dir)
     if evidence_dir is None:
         # Path("") is a truthy Path("."), so an unset/empty env var must become
         # None before Path() sees it — otherwise receipts misroute to the
         # process cwd and the lane fail-closes as zero-execution.
-        env_dir = (os.environ.get("OMI_VERIFY_EVIDENCE_DIR") or "").strip()
-        evidence_dir = Path(env_dir) if env_dir else None
+        evidence_dir = resolve_evidence_dir(os.environ.get("OMI_VERIFY_EVIDENCE_DIR"))
     if evidence_dir is None:
         evidence_dir = Path(tempfile.mkdtemp(prefix="mobile_verify_"))
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -639,6 +656,12 @@ def cmd_fast(repo_root: Path, args: argparse.Namespace, *, runner_path: Path | N
         except subprocess.TimeoutExpired as exc:
             log_text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
             status = -1
+        except OSError as exc:
+            # bash / the journey runner missing must be a classified blocked
+            # outcome, not a traceback — same contract as device doctor + adb.
+            log_text = f"{cmd[0]} not available: {exc}"
+            status = -1
+            blocked_class = "infrastructure"
         log_path.write_text(log_text, encoding="utf-8")
         logs[journey_id] = log_text
         if status == EXIT_SELECTION_DRIFT:
@@ -649,7 +672,10 @@ def cmd_fast(repo_root: Path, args: argparse.Namespace, *, runner_path: Path | N
             continue
         failure_class = classify_log_text(log_text[-8000:])
         if failure_class in {"compile", "infrastructure"} or status == -1:
-            blocked_class = failure_class if status != -1 else "timeout"
+            if status != -1:
+                blocked_class = failure_class
+            elif blocked_class is None:
+                blocked_class = "timeout"
             per_journey_failures.append(f"{journey_id}: {blocked_class} failure (not a test verdict) — rerun: {rerun}")
             break  # infra/compile failures stop the lane: later journeys would not be meaningful
         per_journey_failures.append(f"{journey_id}: test failures (exit {status}) — rerun: {rerun}")
@@ -756,7 +782,7 @@ def cmd_smoke(repo_root: Path, args: argparse.Namespace) -> int:
             as_json=args.json,
         )
         return EXIT_BLOCKED
-    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path(f"/tmp/mobile-verify-smoke-{session_id}")
+    evidence_dir = resolve_evidence_dir(args.evidence_dir) or Path(f"/tmp/mobile-verify-smoke-{session_id}")
     evidence_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         "bash",
@@ -883,6 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_fast.add_argument("--all", action="store_true", help="run the full hermetic suite")
     p_fast.add_argument("--runs", type=int, default=1)
     p_fast.add_argument("--evidence-dir")
+    p_fast.add_argument("--session", help="attach to an existing live session; never cold fallback")
     p_fast.add_argument("--journey-timeout", type=int, default=DEFAULT_JOURNEY_TIMEOUT_S)
 
     p_smoke = _add("smoke", help="bounded simulator smoke (fail-closed; not for ordinary CI)")
@@ -905,6 +932,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "smoke": cmd_smoke,
         "physical": cmd_physical,
     }
+    if args.command == "fast" and args.session:
+        from . import live_session
+
+        try:
+            return live_session.verify_live(repo_root, args)
+        except live_session.SessionError as exc:
+            print(f"blocked: {exc}", file=sys.stderr)
+            return EXIT_BLOCKED
     return handlers[args.command](repo_root, args)
 
 

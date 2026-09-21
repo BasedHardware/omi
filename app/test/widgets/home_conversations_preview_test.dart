@@ -9,12 +9,16 @@ import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
+import '../support/local_day.dart';
+
 void main() {
   testWidgets('home conversation preview shows the three newest filtered conversations', (tester) async {
     final provider = ConversationProvider(isSignedIn: () => false);
     addTearDown(provider.dispose);
 
-    final today = DateTime.now();
+    // Afternoon local, far from midnight: `now` minus one hour is still "today"
+    // in every timezone, so the preview's three-newest cut is stable.
+    final today = localCalendarDay(2026, 8, 12, 15);
     final yesterday = today.subtract(const Duration(days: 1));
     final conversations = [
       _conversation('newest', 'Newest', today),

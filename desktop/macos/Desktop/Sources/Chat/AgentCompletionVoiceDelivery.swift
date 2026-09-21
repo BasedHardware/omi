@@ -20,10 +20,18 @@ final class AgentCompletionVoiceDelivery {
   static let shared = AgentCompletionVoiceDelivery()
 
   /// Background surfaces whose terminal transitions can carry a user-facing
-  /// completion. Primary conversational surfaces (main_chat, realtime_voice,
-  /// task_chat, …) reach a terminal state on every ordinary answer and must
-  /// not trigger kernel delta reads.
+  /// completion. Primary conversational surfaces reach a terminal state on
+  /// every ordinary answer and must not trigger kernel delta reads.
   static let triggerSurfaceKinds: Set<String> = ["floating_bar", "service", "workstream"]
+
+  private static func canTriggerDelivery(_ surface: AgentSurfaceReference) -> Bool {
+    if triggerSurfaceKinds.contains(surface.surfaceKind) { return true }
+    // Realtime-owned runs use a run-scoped projection on the persisted shared
+    // chat surface. Ordinary floating/realtime chat projections use `chat` and
+    // must not wake the background-completion dispatcher.
+    return surface.externalRefKind == "run"
+      && ["floating_chat", "realtime_voice", "realtime"].contains(surface.surfaceKind)
+  }
 
   struct Delta {
     let ids: [String]
@@ -124,7 +132,7 @@ final class AgentCompletionVoiceDelivery {
         projection.status.isTerminal,
         previous != projection.status,
         previous?.isTerminal != true,
-        Self.triggerSurfaceKinds.contains(projection.surface.surfaceKind)
+        Self.canTriggerDelivery(projection.surface)
       else { continue }
       fired = true
     }

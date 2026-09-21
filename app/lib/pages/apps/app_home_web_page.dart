@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/browser.dart';
@@ -61,7 +62,7 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
         ),
       )
       ..loadRequest(
-        Uri.parse('${widget.app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}'),
+        Uri.parse(appSetupUrlWithUid(widget.app.externalIntegration?.appHomeUrl ?? '', SharedPreferencesUtil().uid)),
       );
   }
 
