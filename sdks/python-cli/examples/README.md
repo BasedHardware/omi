@@ -13,6 +13,7 @@
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
+* [`conversations_markdown.ar.md`](conversations_markdown.ar.md) - تصدير المحادثات إلى ملاحظات Markdown مهيكلة (Arabic conversations export recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
