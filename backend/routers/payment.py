@@ -38,6 +38,7 @@ from utils.subscription import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
+from utils.observability.subscription_events import emit_billing_product_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -1056,6 +1057,33 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             if new_subscription:
+                # Resolve the prior entitlement before reconciliation. The
+                # lifecycle projection is emitted only after the authoritative
+                # subscription write below succeeds; otherwise a stale Stripe
+                # deletion could be counted as churn while another paid sub is
+                # retained.
+                billing_owner_confirmed = False
+                previous_paid_id = None
+                try:
+                    owner = await run_blocking(db_executor, users_db.get_user_profile, uid)
+                    if owner:
+                        previous_subscription = await run_blocking(
+                            db_executor, users_db.get_existing_user_subscription, uid
+                        )
+                        billing_owner_confirmed = True
+                        if (
+                            previous_subscription
+                            and previous_subscription.stripe_subscription_id
+                            and previous_subscription.status == SubscriptionStatus.active
+                            and is_paid_plan(previous_subscription.plan)
+                        ):
+                            previous_paid_id = previous_subscription.stripe_subscription_id
+                except Exception:
+                    logger.warning(
+                        'Stripe billing product telemetry owner lookup skipped for event=%s',
+                        event.get('type'),
+                        exc_info=True,
+                    )
                 # Guard against a stale/old subscription's cancellation clobbering an
                 # active plan. If this event downgrades the user to a non-paid plan
                 # (e.g. an old sub got canceled) but they still have a *different*
@@ -1101,6 +1129,25 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                     )
+                    # Emit only after stale-subscription reconciliation and the
+                    # durable entitlement update. Adoption of an existing
+                    # replacement subscription is reconciliation, not a start
+                    # or churn attributable to this incoming Stripe event.
+                    if billing_owner_confirmed and not adopted_active_paid:
+                        emit_billing_product_event(
+                            uid=uid,
+                            stripe_event_id=str(event.get('id') or ''),
+                            stripe_event_created=event.get('created'),
+                            stripe_event_type=event['type'],
+                            subscription_obj=subscription_obj,
+                            previous_paid_subscription_id=previous_paid_id,
+                            resulting_paid_subscription_id=(
+                                new_subscription.stripe_subscription_id
+                                if new_subscription.status == SubscriptionStatus.active
+                                and is_paid_plan(new_subscription.plan)
+                                else None
+                            ),
+                        )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):

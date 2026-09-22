@@ -16,6 +16,126 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:uuid/uuid.dart';
+
+enum MobileFeedbackKind { summaryHelpfulness, recordingQuality }
+
+/// The server-owned object used to verify the feedback target. Recording
+/// quality can be attached to a conversation when the client only has the
+/// conversation projection; the server must then verify that conversation
+/// directly rather than guessing a recording-session identity.
+enum MobileFeedbackTargetKind { conversation, recording }
+
+enum MobileFeedbackReason {
+  summaryInaccurate,
+  summaryIncomplete,
+  summaryIrrelevant,
+  summaryWrongContext,
+  summaryOther,
+  recordingMissingAudio,
+  recordingPoorTranscription,
+  recordingWrongSpeaker,
+  recordingDelayedOrStuck,
+  recordingFragmentedOrDuplicated,
+  recordingOther,
+}
+
+String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
+      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+      MobileFeedbackKind.recordingQuality => 'recording_quality',
+    };
+
+String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
+      MobileFeedbackTargetKind.conversation => 'conversation',
+      MobileFeedbackTargetKind.recording => 'recording',
+    };
+
+String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
+      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+      MobileFeedbackReason.summaryOther => 'summary_other',
+      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+      MobileFeedbackReason.recordingOther => 'recording_other',
+    };
+
+/// Persist explicit, content-free mobile feedback through the idempotent
+/// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
+class MobileFeedbackReceipt {
+  const MobileFeedbackReceipt({required this.feedbackId, required this.eventId, required this.created});
+
+  final String feedbackId;
+  final String eventId;
+  final bool created;
+
+  /// Parses the server's durable-write receipt. A 201 alone is insufficient:
+  /// callers may only complete the product journey after the ledger confirms
+  /// persistence and returns its bounded event coordinate.
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
+    final feedbackId = payload['feedback_id'];
+    final eventId = payload['event_id'];
+    final created = payload['created'];
+    if (payload['schema_version'] != 'mobile_feedback_receipt.v1' ||
+        payload['persisted'] != true ||
+        feedbackId != expectedFeedbackId ||
+        eventId is! String ||
+        eventId.isEmpty ||
+        eventId.length > 128 ||
+        created is! bool) {
+      return null;
+    }
+    return MobileFeedbackReceipt(feedbackId: expectedFeedbackId, eventId: eventId, created: created);
+  }
+}
+
+Future<MobileFeedbackReceipt?> submitMobileFeedback({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+}) async {
+  if (targetId.isEmpty || (value != -1 && value != 1)) return null;
+  final id = feedbackId ?? correlationId ?? const Uuid().v4();
+  String appNamespace;
+  try {
+    appNamespace = PlatformManager.instance.appNamespace;
+  } catch (_) {
+    appNamespace = 'unknown';
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/mobile/feedback',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'schema_version': 'mobile_feedback.v1',
+      'feedback_id': id,
+      'kind': _mobileFeedbackKindValue(kind),
+      'target_kind': _mobileFeedbackTargetKindValue(targetKind),
+      'target_id': targetId,
+      'value': value,
+      'client_app_namespace': appNamespace,
+      'client_app_profile': Env.profile.name,
+      if (reason != null) 'reason': _mobileFeedbackReasonValue(reason),
+      if (correlationId != null) 'correlation_id': correlationId,
+    }),
+  );
+  if (response?.statusCode != 201 || response == null) return null;
+  try {
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return MobileFeedbackReceipt.fromJson(payload, expectedFeedbackId: id);
+  } catch (_) {
+    return null;
+  }
+}
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   var response = await makeApiCall(
