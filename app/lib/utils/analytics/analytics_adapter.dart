@@ -44,3 +44,15 @@ abstract class AnalyticsAdapter {
   /// Forget the current identity (e.g. on logout). Does not disable capture.
   void reset();
 }
+
+/// An acknowledged SDK handoff, not a server ingestion receipt. SDK persistence
+/// and delivery remain SDK-owned; production consumers also monitor ingestion.
+abstract interface class AnalyticsDeliveryAdapter {
+  Future<void> deliver({required String eventName, required Map<String, Object> properties});
+}
+
+abstract interface class AnalyticsIdentityAdapter {
+  /// Serializes reset/identify behind preceding SDK captures and resolves the
+  /// actual SDK distinct ID used for both assignments and product events.
+  Future<String> settleIdentity(String? identity, {required bool reset});
+}

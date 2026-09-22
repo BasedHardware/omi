@@ -103,4 +103,30 @@ final class ConversationProcessingProgressTests: XCTestCase {
     XCTAssertNil(ConversationProcessingProgress.provisionalTitle(from: []))
     XCTAssertNil(ConversationProcessingProgress.provisionalTitle(from: [segment("hi there"), segment("yes")]))
   }
+
+  // MARK: - Settling derived line
+
+  func test_showsSettlingDerived_onlyWhenTitledAndSettling() {
+    XCTAssertTrue(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .titled("Standup"), isSettling: true)
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .titled("Standup"), isSettling: false)
+    )
+  }
+
+  func test_showsSettlingDerived_neverForUntitledRecoverableOrFailed() {
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .untitledRecoverable, isSettling: true)
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .failed, isSettling: true)
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .untitledEmpty, isSettling: true)
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: .processing, isSettling: true)
+    )
+  }
 }
