@@ -11933,5 +11933,13 @@
     "syncStatusUnsupportedAudio": "Audio couldn't be read — can't be synced",
     "@syncStatusUnsupportedAudio": {
         "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
+    },
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "@conversationTitleDidntGenerate": {
+        "description": "Inline conversation-row hint when processing finished but the title pass produced nothing"
+    },
+    "conversationReprocess": "Reprocess",
+    "@conversationReprocess": {
+        "description": "Inline conversation-row action to rerun title and summary generation"
     }
 }

@@ -10150,4 +10150,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

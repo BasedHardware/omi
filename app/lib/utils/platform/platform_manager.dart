@@ -26,6 +26,8 @@ class PlatformManager {
   static PlatformManager get instance => _instance;
 
   // Service instances
+  String get appNamespace => _packageInfo.packageName;
+
   AnalyticsManager get analytics => AnalyticsManager();
   IntercomManager get intercom => IntercomManager.instance;
   CrashlyticsManager get crashReporter => CrashlyticsManager.instance;

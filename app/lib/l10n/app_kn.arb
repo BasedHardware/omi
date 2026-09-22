@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಗೆ ಸಿದ್ಧವಾಗಿದೆ} saved_sample_awaiting_embedding{ಮಾದರಿ ಉಳಿಸಲಾಗಿದೆ; ಧ್ವನಿ ಸಂಸ್ಕರಣೆ ಇನ್ನೂ ಅಗತ್ಯವಿದೆ} not_learned{ಧ್ವನಿಯನ್ನು ಕಲಿತಿಲ್ಲ} other{ಧ್ವನಿಯ ಸ್ಥಿತಿ ತಿಳಿದಿಲ್ಲ}}",
     "tagSpeakerIncludingLaterSpeech": "ಈ ಮಾತುಗಾರನ ನಂತರದ ಮಾತನ್ನು ಕೂಡ ಟ್ಯಾಗ್ ಮಾಡಿ",
     "updateSummaryWithNewNames": "ಹೊಸ ಹೆಸರುಗಳೊಂದಿಗೆ ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸಿ",
-    "syncStatusUnsupportedAudio": "ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು"
+    "syncStatusUnsupportedAudio": "ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

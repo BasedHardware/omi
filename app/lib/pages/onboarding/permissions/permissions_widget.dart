@@ -160,20 +160,13 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                     await provider.askForBackgroundPermissions();
                                   }
                                 }
-                                await Permission.notification.request().then((value) async {
-                                  if (value.isGranted) {
-                                    provider.updateNotificationPermission(true);
-                                  }
-                                  if (await Permission.location.serviceStatus.isEnabled) {
-                                    final res = await Permission.locationWhenInUse.request();
-                                    provider.updateLocationPermission(res.isGranted);
-                                    if (Platform.isIOS && res.isGranted) {
-                                      await provider.alwaysAllowLocation();
-                                    }
-                                  }
-                                  widget.goNext();
-                                  provider.setLoading(false);
-                                });
+                                await provider.askForNotificationPermissions();
+                                final (_, locationStatus) = await provider.askForLocationPermissions();
+                                if (Platform.isIOS && locationStatus.isGranted) {
+                                  await provider.alwaysAllowLocation();
+                                }
+                                widget.goNext();
+                                provider.setLoading(false);
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,

@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{స్వరాన్ని గుర్తించడానికి సిద్ధంగా ఉంది} saved_sample_awaiting_embedding{నమూనా సేవ్ అయింది; స్వర ప్రాసెసింగ్ ఇంకా అవసరం} not_learned{స్వరాన్ని నేర్చుకోలేదు} other{స్వరం స్థితి తెలియదు}}",
     "tagSpeakerIncludingLaterSpeech": "ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి",
     "updateSummaryWithNewNames": "కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి",
-    "syncStatusUnsupportedAudio": "ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు"
+    "syncStatusUnsupportedAudio": "ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

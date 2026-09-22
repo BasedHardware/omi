@@ -3347,5 +3347,7 @@
     "voiceRecognitionStatus": "{status, select, ready{A hang készen áll a felismerésre} saved_sample_awaiting_embedding{Minta mentve, a hang feldolgozása még szükséges} not_learned{A hang nincs megtanulva} other{A hang állapota ismeretlen}}",
     "tagSpeakerIncludingLaterSpeech": "Jelöld meg ennek a beszélőnek a későbbi beszédét is",
     "updateSummaryWithNewNames": "Összefoglaló frissítése az új nevekkel",
-    "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható"
+    "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

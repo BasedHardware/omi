@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GET } from '@/app/api/proxy/[...path]/route';
+import { GET, POST } from '@/app/api/proxy/[...path]/route';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -38,6 +38,41 @@ describe('authenticated proxy handler', () => {
       'https://api.omi.me/v1/static-map?pins=37.7749%2C-122.4194&width=320&height=200',
     );
   });
+
+  it('streams event-stream replies while the upstream is still sending', async () => {
+    let upstream!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        upstream = controller;
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (_input: RequestInfo | URL, _init?: RequestInit) =>
+          new Response(body, { headers: { 'content-type': 'text/event-stream' } }),
+      ),
+    );
+    upstream.enqueue(new TextEncoder().encode('data: first\n\n'));
+
+    const response = await POST(
+      new Request('https://app.example.com/api/proxy/v2/messages', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ text: 'hi' }),
+      }),
+    );
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(new TextDecoder().decode(first.value)).toBe('data: first\n\n');
+    upstream.close();
+    expect((await reader.read()).done).toBe(true);
+  }, 2000);
 
   it('refuses to forward a request without an Authorization header', async () => {
     const fetchMock = vi.fn();

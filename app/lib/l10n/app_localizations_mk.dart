@@ -10172,4 +10172,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Аудиото не може да се прочита — не може да се синхронизира';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

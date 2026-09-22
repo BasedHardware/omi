@@ -777,6 +777,49 @@ def test_pusher_template_semantics_normalize_kubernetes_probe_defaults_and_quant
     )
 
 
+def test_live_receipt_projection_drops_helm_empty_string_env_value(
+    receipt_builder: SimpleNamespace,
+) -> None:
+    """Helm renders `value: ""` (unset repo variable) but the API server stores
+    the env entry without the value key (omitempty marshalling). The rendered
+    projection must normalize to the API form before hashing (2026-09-22 prod
+    canary: FREE_TIER_LOCAL_PROCESSING_COHORT)."""
+    expected = {
+        "spec": {
+            "serviceAccountName": "prod-omi-pusher",
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+                    ],
+                }
+            ],
+        }
+    }
+    live = {
+        "spec": {
+            "serviceAccountName": "prod-omi-pusher",
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT"},
+                    ],
+                }
+            ],
+        }
+    }
+
+    assert receipt_builder.pod_template_semantic_projection(expected) == (
+        receipt_builder.pod_template_semantic_projection(live)
+    )
+
+
 def test_live_receipt_treats_helm_null_secret_ref_and_empty_pod_security_as_absent(
     receipt_builder: SimpleNamespace,
 ) -> None:

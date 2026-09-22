@@ -130,6 +130,11 @@ def _stub_budget(monkeypatch):
     monkeypatch.setattr(action_items_router, 'list_read_budget_for_request', lambda *a, **k: _Budget())
 
 
+@pytest.fixture(autouse=True)
+def _stale_client_refuse_off(monkeypatch):
+    monkeypatch.delenv(guard.STALE_CLIENT_REFUSE_ENV, raising=False)
+
+
 def test_repeat_poll_reads_zero_firestore_documents(fake_redis):
     with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
         first = _call(request=_request(), response=_Response())
@@ -323,3 +328,151 @@ def test_hot_client_ceiling_fails_open_when_redis_is_down(fake_redis, monkeypatc
 )
 def test_if_none_match_matching(header, etag, expected):
     assert ai_cache.if_none_match_matches(header, etag) is expected
+
+
+def _refused_count(*, client='stale_windows', decision='refuse') -> float:
+    from utils.metrics import OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL
+
+    return OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL.labels(client=client, decision=decision)._value.get()
+
+
+def _refuse_flag(monkeypatch, value):
+    monkeypatch.setattr(guard, 'ACTION_ITEMS_LIST_HOT_CLIENT_MAX', 0)
+    if value is None:
+        monkeypatch.delenv(guard.STALE_CLIENT_REFUSE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(guard.STALE_CLIENT_REFUSE_ENV, value)
+
+
+def test_stale_client_refusal_fires_for_exact_build_when_flag_is_on(fake_redis, monkeypatch):
+    from fastapi import HTTPException
+
+    _refuse_flag(monkeypatch, '1')
+    hot = _request({'User-Agent': 'omi-windows/1.0.0 Electron/39.8.10'})
+    before = _refused_count(decision='refuse')
+
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        with pytest.raises(HTTPException) as excinfo:
+            _call(request=hot, response=_Response())
+        assert db_call.call_count == 0
+
+    assert excinfo.value.status_code == 426
+    assert excinfo.value.detail == {
+        'error': 'upgrade_required',
+        'minimum_supported_build': 'omi-windows/1.0.35',
+        'message': guard.STALE_CLIENT_REFUSE_MESSAGE,
+    }
+    assert _refused_count(decision='refuse') == before + 1
+
+
+@pytest.mark.parametrize('on_value', ['1', 'on', 'true', 'YES'])
+def test_stale_client_refusal_accepts_the_documented_on_values(fake_redis, monkeypatch, on_value):
+    from fastapi import HTTPException
+
+    _refuse_flag(monkeypatch, on_value)
+    hot = _request({'User-Agent': 'omi-windows/1.0.0'})
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        with pytest.raises(HTTPException) as excinfo:
+            _call(request=hot, response=_Response())
+        assert db_call.call_count == 0
+    assert excinfo.value.status_code == 426
+
+
+@pytest.mark.parametrize(
+    'user_agent',
+    [
+        None,
+        '',
+        'Omi/12264 CFNetwork/3826.500.111.2.2 Darwin/24.6.0',
+        'Dart/3.11 (dart:io)',
+        'Mozilla/5.0 omi-windows/1.0.36 Electron/39.8.10',
+        'Mozilla/5.0 omi-windows/1.0.35 Electron/39.8.10',
+        'Mozilla/5.0 (Windows NT 10.0) Chrome/142',
+        'unknown-client/9.9.9',
+    ],
+)
+def test_stale_client_refusal_does_not_touch_unknown_absent_or_other_builds(fake_redis, monkeypatch, user_agent):
+    """The important one: a misclassification takes a working client's task list away."""
+    _refuse_flag(monkeypatch, 'on')
+    headers = {} if user_agent is None else {'User-Agent': user_agent}
+    refuse_before = _refused_count(decision='refuse')
+    allow_before = _refused_count(decision='allow')
+
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        result = _call(request=_request(headers), response=_Response())
+
+    assert db_call.call_count == 1
+    assert [i.id for i in result['action_items']] == ['one']
+    assert _refused_count(decision='refuse') == refuse_before
+    assert _refused_count(decision='allow') == allow_before
+
+
+@pytest.mark.parametrize('rollback', [None, '', '0', 'off', 'false', 'no'])
+def test_stale_client_refusal_env_rollback_restores_current_behaviour(fake_redis, monkeypatch, rollback):
+    _refuse_flag(monkeypatch, rollback)
+    hot = _request({'User-Agent': 'omi-windows/1.0.0'})
+    allow_before = _refused_count(decision='allow')
+    refuse_before = _refused_count(decision='refuse')
+
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        result = _call(request=hot, response=_Response())
+
+    assert db_call.call_count == 1
+    assert [i.id for i in result['action_items']] == ['one']
+    assert _refused_count(decision='refuse') == refuse_before
+    assert _refused_count(decision='allow') == allow_before + 1
+
+
+def test_stale_client_refusal_counter_never_labels_a_raw_user_agent(fake_redis, monkeypatch):
+    from fastapi import HTTPException
+    from utils.metrics import OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL
+
+    _refuse_flag(monkeypatch, 'true')
+    unique_ua = 'omi-windows/1.0.0 attacker-chosen-' + ('x' * 40)
+    hot = _request({'User-Agent': unique_ua})
+
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]):
+        with pytest.raises(HTTPException):
+            _call(request=hot, response=_Response())
+
+    labeled_clients = {labels[0] for labels in OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL._metrics}
+    labeled_decisions = {labels[1] for labels in OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL._metrics}
+    assert unique_ua not in labeled_clients
+    assert labeled_clients <= {'stale_windows', 'other'}
+    assert labeled_decisions <= {'allow', 'refuse', 'other'}
+
+
+def test_stale_client_refusal_typo_does_not_enable_the_flag(fake_redis, monkeypatch):
+    _refuse_flag(monkeypatch, 'enbale')
+    hot = _request({'User-Agent': 'omi-windows/1.0.0'})
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        _call(request=hot, response=_Response())
+    assert db_call.call_count == 1
+
+
+def test_stale_client_refusal_runs_before_the_hot_ceiling(fake_redis, monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setenv(guard.STALE_CLIENT_REFUSE_ENV, '1')
+    monkeypatch.setattr(guard, 'ACTION_ITEMS_LIST_HOT_CLIENT_MAX', 4)
+
+    def _never(*_a, **_k):
+        raise AssertionError('the extra ceiling must not run after a stale-build refusal')
+
+    monkeypatch.setattr(guard, 'check_rate_limit', _never)
+    hot = _request({'User-Agent': 'omi-windows/1.0.0'})
+    with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
+        with pytest.raises(HTTPException) as excinfo:
+            _call(request=hot, response=_Response())
+    assert excinfo.value.status_code == 426
+    assert db_call.call_count == 0
+
+
+def test_refused_counter_collapses_unknown_labels_to_a_closed_set():
+    from utils.metrics import OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL, record_action_items_list_refused
+
+    poison = 'omi-windows/1.0.0 raw-ua-' + ('z' * 40)
+    record_action_items_list_refused(client=poison, decision=poison)
+    keys = set(OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL._metrics)
+    assert (poison, poison) not in keys
+    assert ('other', 'other') in keys

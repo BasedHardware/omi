@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 /// Full-screen 3-step cancellation flow shown as a page (not a sheet).
 class CancelSubscriptionFlow extends StatefulWidget {
@@ -27,6 +28,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   final TextEditingController _detailsController = TextEditingController();
   bool _isCancelling = false;
   int _page = 0;
+  ProductAttempt? _cancelAttempt;
 
   @override
   void initState() {
@@ -83,20 +85,27 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     setState(() => _isCancelling = true);
     final provider = context.read<UsageProvider>();
     final details = _detailsController.text.trim().isNotEmpty ? _detailsController.text.trim() : null;
+    _cancelAttempt = ProductTelemetry.instance.start(
+      ProductJourney.subscriptionCancel,
+      surface: ProductSurface.settings,
+    );
     PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _selectedReason!, details: details);
 
     try {
       final success = await provider.cancelUserSubscription(reason: _selectedReason, reasonDetails: details);
       if (mounted) {
         if (success) {
+          _cancelAttempt?.complete(ProductOutcome.success);
           AppSnackbar.showSnackbar(context.l10n.subscriptionSetToCancel);
           Navigator.of(context).pop(true);
         } else {
+          _cancelAttempt?.complete(ProductOutcome.failure, failure: ProductFailure.server);
           AppSnackbar.showSnackbarError(context.l10n.failedToCancelSubscription);
           setState(() => _isCancelling = false);
         }
       }
     } catch (e) {
+      _cancelAttempt?.complete(ProductOutcome.failure, failure: ProductFailure.network);
       if (mounted) {
         AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
         setState(() => _isCancelling = false);

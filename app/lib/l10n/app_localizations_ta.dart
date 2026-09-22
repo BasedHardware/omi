@@ -10189,4 +10189,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

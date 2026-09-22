@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Balsas paruoštas atpažinti} saved_sample_awaiting_embedding{Pavyzdys išsaugotas, dar reikia apdoroti balsą} not_learned{Balsas neišmoktas} other{Balso būsena nežinoma}}",
     "tagSpeakerIncludingLaterSpeech": "Pažymėti ir vėlesnę šio kalbėtojo kalbą",
     "updateSummaryWithNewNames": "Atnaujinti santrauką su naujais vardais",
-    "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima"
+    "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

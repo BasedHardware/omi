@@ -10113,4 +10113,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

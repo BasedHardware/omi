@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Balss ir gatava atpazīšanai} saved_sample_awaiting_embedding{Paraugs saglabāts, vēl jāapstrādā balss} not_learned{Balss nav apgūta} other{Balss statuss nav zināms}}",
     "tagSpeakerIncludingLaterSpeech": "Atzīmēt arī šī runātāja turpmāko runu",
     "updateSummaryWithNewNames": "Atjaunināt kopsavilkumu ar jaunajiem vārdiem",
-    "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt"
+    "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

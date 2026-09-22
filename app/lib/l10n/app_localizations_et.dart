@@ -10112,4 +10112,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

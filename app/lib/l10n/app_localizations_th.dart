@@ -10061,4 +10061,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Голас гатовы да распазнавання} saved_sample_awaiting_embedding{Узор захаваны, чакае апрацоўкі голасу} not_learned{Голас не вывучаны} other{Стан голасу невядомы}}",
     "tagSpeakerIncludingLaterSpeech": "Таксама пазначыць пазнейшую мову гэтага спікера",
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
-    "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая"
+    "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

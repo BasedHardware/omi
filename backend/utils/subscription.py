@@ -1637,6 +1637,14 @@ def _closed(reason: str) -> TranscriptionAllowance:
     return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
 
 
+# resolve_transcription_allowance() reasons meaning "this lookup could not be
+# trusted", as opposed to "the plan's minutes are actually exhausted". Failing
+# closed on these is right for a live listen socket (refusing one costs
+# nothing) but wrong for a decision written durably to storage, since nothing
+# routinely re-checks it later (#15232 — see should_lock in routers/sync.py).
+TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset({'allowance_unavailable', 'usage_invalid'})
+
+
 def transcription_allowance_seconds(plan: PlanType) -> Optional[int]:
     """The plan's managed transcription allowance, from the catalog alone.
 

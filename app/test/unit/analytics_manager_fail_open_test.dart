@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -59,6 +60,188 @@ void main() {
       'app_build': '567',
     });
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
+  });
+
+  test('SDK setup completing after caller deadline recovers queued events', () async {
+    final adapter = _DelayedAdapter();
+    AnalyticsManager.configure(adapter);
+    AnalyticsManager().track('late-ready');
+    await AnalyticsManager.init(timeout: const Duration(milliseconds: 5));
+    expect(AnalyticsManager.healthSnapshot['ready'], false);
+    adapter.gate.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.map((e) => e.eventName), ['late-ready']);
+  });
+
+  test('awaited retry preserves occurrence identity and session context', () async {
+    final adapter = _DeliveryAdapter()..failures = 1;
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().setSessionContext('session-123');
+    AnalyticsManager().track('retried');
+    await AnalyticsManager.flushPending(force: true);
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.attempts, hasLength(2));
+    expect(adapter.attempts.first, adapter.attempts.last);
+    expect(adapter.attempts.last['app_session_id'], 'session-123');
+    expect(adapter.attempts.last['event_id'], isNotEmpty);
+    expect(adapter.attempts.last[r'$insert_id'], adapter.attempts.last['event_id']);
+    expect(DateTime.parse(adapter.attempts.last['occurred_at'] as String).isUtc, true);
+  });
+
+  test('switching account discards events that have not reached the SDK', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    AnalyticsManager().bindIdentity('old');
+    AnalyticsManager().track('old-identity');
+    AnalyticsManager().bindIdentity('new');
+    AnalyticsManager().track('new-identity');
+    await AnalyticsManager.init();
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.map((e) => e.eventName), ['new-identity']);
+  });
+
+  test('persisted opt out blocks queue and survives init', () async {
+    SharedPreferences.setMockInitialValues({'product_analytics_enabled': false});
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    AnalyticsManager().track('before-consent-loaded');
+    await AnalyticsManager.init();
+    AnalyticsManager().track('after-consent-loaded');
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events, isEmpty);
+    expect(AnalyticsManager.trackingEnabled, false);
+  });
+
+  test('cold boot waits for auth truth and resets persisted identified SDK state', () async {
+    final adapter = _IdentityAdapter();
+    AnalyticsManager.configure(adapter);
+    final ready = <String?>[];
+    AnalyticsManager.identityChanged = (identity, enabled) {
+      if (enabled) ready.add(identity);
+    };
+    await AnalyticsManager.init();
+    expect(adapter.transitions, isEmpty);
+    AnalyticsManager().bindIdentity(null);
+    expect(adapter.transitions.single.reset, true);
+    expect(adapter.transitions.single.identity, isNull);
+    AnalyticsManager().track('signed-out-event');
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events, isEmpty);
+    adapter.transitions.single.result.complete('fresh-anonymous');
+    await Future<void>.delayed(Duration.zero);
+    await AnalyticsManager.flushPending(force: true);
+    expect(ready, ['fresh-anonymous']);
+    expect(adapter.events.map((event) => event.eventName), ['signed-out-event']);
+  });
+
+  test('identity reset request survives delayed SDK initialization', () async {
+    final adapter = _IdentityAdapter();
+    AnalyticsManager.configure(adapter);
+    AnalyticsManager().bindIdentity('account-b');
+    expect(adapter.transitions, isEmpty);
+    final initialization = AnalyticsManager.init();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(adapter.transitions.single.identity, 'account-b');
+    expect(adapter.transitions.single.reset, true);
+    adapter.transitions.single.result.complete('account-b');
+    await initialization;
+  });
+
+  test('late A to B to A identity completions cannot enable stale assignment', () async {
+    final adapter = _IdentityAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    final ready = <String?>[];
+    AnalyticsManager.identityChanged = (identity, enabled) {
+      if (enabled) ready.add(identity);
+    };
+    AnalyticsManager().bindIdentity('account-a');
+    AnalyticsManager().bindIdentity('account-b');
+    AnalyticsManager().bindIdentity('account-a');
+    AnalyticsManager().track('current-a');
+    adapter.transitions[0].result.complete('account-a');
+    adapter.transitions[1].result.complete('account-b');
+    await Future<void>.delayed(Duration.zero);
+    expect(ready, isEmpty);
+    expect(adapter.events, isEmpty);
+    adapter.transitions[2].result.complete('account-a');
+    await Future<void>.delayed(Duration.zero);
+    await AnalyticsManager.flushPending(force: true);
+    expect(ready, ['account-a']);
+    expect(adapter.events.map((event) => event.eventName), ['current-a']);
+  });
+
+  test('stale preference identity and withdrawn consent cannot enqueue identify', () async {
+    final adapter = _IdentityAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().bindIdentity('account-b');
+    adapter.transitions.single.result.complete('account-b');
+    await Future<void>.delayed(Duration.zero);
+    SharedPreferencesUtil().uid = 'account-a';
+    AnalyticsManager().setUserProperty('example', true);
+    AnalyticsManager().identify();
+    expect(adapter.identifies, isEmpty);
+    SharedPreferencesUtil().uid = 'account-b';
+    AnalyticsManager().setUserProperty('example', true);
+    expect(adapter.identifies, ['account-b']);
+    AnalyticsManager().optOutTracking();
+    AnalyticsManager().setUserProperty('example', false);
+    AnalyticsManager().identify();
+    expect(adapter.identifies, ['account-b']);
+  });
+
+  test('attempt retains original exposure after context clears without leaking to next outcome', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    var context = <String, Object>{r'$feature/test-ui': 'compact'};
+    AnalyticsManager.experimentContext = () => context;
+    final telemetry = ProductTelemetry();
+    final attempt = telemetry.start(ProductJourney.summaryFeedback);
+    // Equivalent to lease disposal, TTL expiry or kill: subsequent context empty.
+    context = {};
+    attempt.complete(ProductOutcome.success);
+    telemetry.value(ProductValue.feedbackHelpful);
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
+        containsPair(r'$feature/test-ui', 'compact'));
+    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
+        isNot(contains(r'$feature/test-ui')));
+  });
+
+  test('attempt started without consent never emits after consent is restored', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().optOutTracking();
+    final attempt = ProductTelemetry().start(ProductJourney.summaryFeedback);
+    AnalyticsManager().optInTracking();
+    attempt.complete(ProductOutcome.success);
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.where((event) => event.eventName == 'Product Journey Outcome'), isEmpty);
+  });
+
+  test('asynchronous zone cannot carry previous account variant into new identity', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().bindIdentity('account-a');
+    final release = Completer<void>();
+    late Future<void> delayed;
+    AnalyticsManager.withExperimentContext({r'$feature/test-ui': 'compact'}, () {
+      delayed = release.future.then((_) => AnalyticsManager().track('Product Value'));
+    });
+    AnalyticsManager().bindIdentity('account-b');
+    release.complete();
+    await delayed;
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events, isEmpty);
+    AnalyticsManager().track('Product Value');
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.single.properties, isNot(contains(r'$feature/test-ui')));
   });
 
   test('page opens register context for native interaction events', () async {
@@ -356,4 +539,48 @@ class _InteractionContext {
 
   @override
   int get hashCode => Object.hash(screenName, target);
+}
+
+class _DelayedAdapter extends _FakeAnalyticsAdapter {
+  final gate = Completer<void>();
+  @override
+  Future<void> init() async {
+    await gate.future;
+    await super.init();
+  }
+}
+
+class _DeliveryAdapter extends _FakeAnalyticsAdapter implements AnalyticsDeliveryAdapter {
+  int failures = 0;
+  final attempts = <Map<String, Object>>[];
+  @override
+  Future<void> deliver({required String eventName, required Map<String, Object> properties}) async {
+    attempts.add(Map.of(properties));
+    await Future<void>.value();
+    if (failures-- > 0) throw StateError('async SDK failure');
+    track(eventName: eventName, properties: properties);
+  }
+}
+
+class _IdentityTransition {
+  _IdentityTransition(this.identity, this.reset);
+  final String? identity;
+  final bool reset;
+  final result = Completer<String>();
+}
+
+class _IdentityAdapter extends _FakeAnalyticsAdapter implements AnalyticsIdentityAdapter {
+  final transitions = <_IdentityTransition>[];
+  final identifies = <String>[];
+  @override
+  Future<String> settleIdentity(String? identity, {required bool reset}) {
+    final transition = _IdentityTransition(identity, reset);
+    transitions.add(transition);
+    return transition.result.future;
+  }
+
+  @override
+  void identify({required String userId, Map<String, Object>? userProperties}) {
+    identifies.add(userId);
+  }
 }

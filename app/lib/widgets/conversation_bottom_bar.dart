@@ -40,6 +40,7 @@ class ConversationBottomBar extends StatefulWidget {
   final bool hasActionItems;
   final ServerConversation? conversation;
   final Function(Future<void> Function(double start, double end))? onSeekFunctionReady;
+  final VoidCallback? onAudioInteraction;
 
   const ConversationBottomBar({
     super.key,
@@ -51,6 +52,7 @@ class ConversationBottomBar extends StatefulWidget {
     this.hasActionItems = true,
     this.conversation,
     this.onSeekFunctionReady,
+    this.onAudioInteraction,
   });
 
   @override
@@ -150,6 +152,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// (#4471). Requires the dense conversation artifact + spans; the per-part
   /// playlist fallback is not used for segment taps.
   Future<void> seekToTranscriptSegment(double segmentStartSeconds, double segmentEndSeconds) async {
+    widget.onAudioInteraction?.call();
     if (!_isAudioInitialized) {
       await _initAudioIfNeeded();
     }
@@ -313,6 +316,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Future<void> _togglePlayPause() async {
+    widget.onAudioInteraction?.call();
     if (!_isAudioInitialized && !_isAudioLoading) {
       await _initAudioIfNeeded();
     }
@@ -803,6 +807,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Future<void> _seekToCombinedPosition(Duration targetPosition, {bool invalidateSegmentStop = true}) async {
+    widget.onAudioInteraction?.call();
     if (_audioPlayer == null) return;
 
     // Scrubber seeks invalidate any in-flight segment end-handler.

@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Hääl on tuvastamiseks valmis} saved_sample_awaiting_embedding{Näidis salvestatud, hääle töötlemine on ootel} not_learned{Hääl pole õpitud} other{Hääle olek teadmata}}",
     "tagSpeakerIncludingLaterSpeech": "Märgi ka selle kõneleja hilisem kõne",
     "updateSummaryWithNewNames": "Uuenda kokkuvõtet uute nimedega",
-    "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik"
+    "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

@@ -10097,4 +10097,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

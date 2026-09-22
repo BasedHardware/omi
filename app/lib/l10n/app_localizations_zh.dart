@@ -9929,4 +9929,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

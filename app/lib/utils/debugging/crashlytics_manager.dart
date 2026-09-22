@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -77,7 +79,11 @@ class CrashlyticsManager {
 
   void setUserAttribute(String key, String value) {
     if (!_deliverable) return;
-    FirebaseCrashlytics.instance.setCustomKey(key, value);
+    try {
+      unawaited(FirebaseCrashlytics.instance.setCustomKey(key, value).catchError((Object _) {}));
+    } catch (_) {
+      // Diagnostics must not create a recursive uncaught-error report.
+    }
   }
 
   void setEnabled(bool isEnabled) {

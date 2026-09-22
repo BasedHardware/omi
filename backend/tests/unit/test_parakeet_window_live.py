@@ -790,6 +790,60 @@ def test_bounded_agc_caps_gain_skips_silence_and_does_not_attenuate():
     assert low == high == 4.0
 
 
+def test_posted_agc_deadband_spares_already_levelled_sessions_but_not_admission():
+    """Gain rescues quiet audio; on a session that is already loud it only costs accuracy.
+
+    The deadband is on the POSTED (decode) stage alone. Admission keeps gaining the copy
+    Silero scores unconditionally — that copy is what admits quiet far-field, and Silero
+    is not the thing the distortion hurts.
+    """
+    pcm = (np.int16(6000) * np.ones(320, dtype=np.int16)).tobytes()
+
+    # Measured peaks from the qualification clips.
+    assert window.window_needs_gain(8598.0)  # far-field, 0.26 of full scale
+    assert not window.window_needs_gain(17712.0)  # dense speech loud passage, 0.54
+    assert not window.window_needs_gain(22405.0)  # clean, 0.68
+
+    # Quiet passages *inside* that loud dense-speech clip. Judged on the session
+    # envelope (0.54) these are denied gain and go missing entirely; judged on
+    # their own peak they are rescued. This is the whole reason the rule is
+    # per-window rather than per-session.
+    assert window.window_needs_gain(12121.0)  # 0.370
+    assert window.window_needs_gain(12921.0)  # 0.394
+    assert not window.window_needs_gain(13828.0)  # 0.422, captured without gain
+
+    # The boundary belongs to the gained side; one count above it does not.
+    edge = window.WINDOW_AGC_DEADBAND_PEAK * 32767.0
+    assert window.window_needs_gain(edge)
+    assert not window.window_needs_gain(edge + 1.0)
+
+    # Equivalently: never apply less than 2x. Anything the deadband admits is
+    # boosted by at least that much, so the rule cannot silently become a no-op.
+    assert window.bounded_agc_pcm16(pcm, peak=edge)[1] >= 2.0
+
+    # A growing window spanning a level change: loud prefix, quiet tail. Judged on
+    # the whole window's peak (0.431) this reads "not quiet" and the tail is lost —
+    # measured on dev, that swung earnings WER between 0.155 and 0.262 depending
+    # only on where the anchor fell. Judged on the tail it is rescued, and the
+    # boost is capped so the loud prefix cannot clip.
+    rate = 16000
+    tail_bytes = int(window.WINDOW_AGC_TAIL_SECONDS * rate) * 2
+    loud = (np.int16(14120) * np.ones(rate * 30, dtype=np.int16)).tobytes()  # 0.431
+    quiet = (np.int16(12121) * np.ones(rate * 10, dtype=np.int16)).tobytes()  # 0.370
+    g = window.posted_window_gain(loud + quiet, tail_bytes)
+    assert g > 1.0, 'a quiet tail behind a loud prefix must still be boosted'
+    assert 14120 * g <= 32767, 'the boost must not clip the louder prefix'
+
+    # An all-loud window is still left alone — this is what keeps substitutions down.
+    assert window.posted_window_gain(loud, tail_bytes) == 1.0
+
+    # Admission is NOT deadbanded: a loud envelope still gains the scored copy.
+    ingest = window.SessionPcmGain()
+    ingest.peak = 17712.0
+    assert ingest.apply(pcm) != pcm
+    assert ingest.last_gain > 1.0
+
+
 def test_farfield_like_peak_gain_moves_smoothly_with_target():
     # Clip peak from the public far-field file. Not a WER-fitted constant: it
     # only shows that 0.7 / 0.8 / 0.9 all boost and all stay under the 4× cap.

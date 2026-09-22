@@ -10155,4 +10155,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Не удалось прочитать аудио — синхронизация невозможна';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

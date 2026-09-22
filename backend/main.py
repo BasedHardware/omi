@@ -109,6 +109,7 @@ from routers import (
     csat,
     jit_rollout,
     email_preferences,
+    mobile_feedback,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -229,6 +230,7 @@ app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
+app.include_router(mobile_feedback.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)

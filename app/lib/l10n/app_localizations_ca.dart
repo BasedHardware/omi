@@ -10175,4 +10175,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

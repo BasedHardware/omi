@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Giọng nói đã sẵn sàng để nhận diện} saved_sample_awaiting_embedding{Đã lưu mẫu; vẫn cần xử lý giọng nói} not_learned{Chưa học giọng nói} other{Chưa rõ trạng thái giọng nói}}",
     "tagSpeakerIncludingLaterSpeech": "Gắn thẻ cả lời nói sau này của người nói này",
     "updateSummaryWithNewNames": "Cập nhật tóm tắt với tên mới",
-    "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ"
+    "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

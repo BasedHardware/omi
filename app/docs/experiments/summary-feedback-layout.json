@@ -1,0 +1,50 @@
+{
+  "key": "mobile-summary-feedback-layout-v1",
+  "version": 1,
+  "owner": "mobile-product",
+  "hypothesis": "Compact feedback controls increase completed summary feedback without increasing feedback submission failures.",
+  "primary_metric": {
+    "event": "Product Journey Outcome",
+    "filters": {
+      "journey": "summary_feedback",
+      "outcome": "success"
+    }
+  },
+  "guardrails": [
+    {
+      "event": "Product Journey Outcome",
+      "filters": {
+        "journey": "summary_feedback",
+        "outcome": "failure"
+      }
+    }
+  ],
+  "targeting": {
+    "namespaces": [
+      "mobile-dev"
+    ],
+    "minimum_build": 0
+  },
+  "variants": [
+    {
+      "key": "control",
+      "rollout_percentage": 50
+    },
+    {
+      "key": "compact",
+      "rollout_percentage": 50
+    }
+  ],
+  "default_variant": "control",
+  "surfaces": [
+    "summary-feedback"
+  ],
+  "expires_at": "2027-01-01T00:00:00Z",
+  "collision_policy": "independent",
+  "analysis": {
+    "exposure_event": "experiment_exposed",
+    "unit": "distinct_id",
+    "conversion_window_hours": 24
+  },
+  "status": "draft"
+}

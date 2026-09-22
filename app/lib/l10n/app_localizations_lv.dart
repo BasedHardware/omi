@@ -10142,4 +10142,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

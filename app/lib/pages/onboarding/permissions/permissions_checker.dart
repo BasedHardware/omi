@@ -186,18 +186,11 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                                   if (Platform.isAndroid && !provider.hasBackgroundPermission) {
                                     await provider.askForBackgroundPermissions();
                                   }
-                                  await Permission.notification.request().then((value) async {
-                                    if (value.isGranted) {
-                                      provider.updateNotificationPermission(true);
-                                    }
-                                    if (await Permission.location.serviceStatus.isEnabled) {
-                                      var res = await Permission.locationWhenInUse.request();
-                                      provider.updateLocationPermission(res.isGranted);
-                                      if (Platform.isIOS && res.isGranted) {
-                                        await provider.alwaysAllowLocation();
-                                      }
-                                    }
-                                  });
+                                  await provider.askForNotificationPermissions();
+                                  final (_, locationStatus) = await provider.askForLocationPermissions();
+                                  if (Platform.isIOS && locationStatus.isGranted) {
+                                    await provider.alwaysAllowLocation();
+                                  }
                                   PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                                   provider.setLoading(false);
                                   if (context.mounted) {

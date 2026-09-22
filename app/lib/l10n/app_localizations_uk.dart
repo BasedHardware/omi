@@ -10138,4 +10138,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Не вдалося прочитати аудіо — синхронізація неможлива';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

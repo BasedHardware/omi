@@ -18704,6 +18704,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio couldn\'t be read — can\'t be synced'**
   String get syncStatusUnsupportedAudio;
+
+  /// Inline conversation-row hint when processing finished but the title pass produced nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Title didn\'t generate'**
+  String get conversationTitleDidntGenerate;
+
+  /// Inline conversation-row action to rerun title and summary generation
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocess'**
+  String get conversationReprocess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

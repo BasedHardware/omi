@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{आवाज ओळखण्यासाठी तयार आहे} saved_sample_awaiting_embedding{नमुना जतन केला; आवाज प्रक्रिया अजून आवश्यक आहे} not_learned{आवाज शिकलेला नाही} other{आवाजाची स्थिती अज्ञात आहे}}",
     "tagSpeakerIncludingLaterSpeech": "या वक्त्याचे नंतरचे बोलणेही टॅग करा",
     "updateSummaryWithNewNames": "नवीन नावांसह सारांश अद्यतनित करा",
-    "syncStatusUnsupportedAudio": "ऑडिओ वाचता आला नाही — सिंक करता येत नाही"
+    "syncStatusUnsupportedAudio": "ऑडिओ वाचता आला नाही — सिंक करता येत नाही",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

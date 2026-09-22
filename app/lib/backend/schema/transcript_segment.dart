@@ -50,6 +50,10 @@ class TranscriptSegment {
     return '${start.inHours.toString().padLeft(2, '0')}:${(start.inMinutes % 60).toString().padLeft(2, '0')}:${(start.inSeconds % 60).toString().padLeft(2, '0')} - ${end.inHours.toString().padLeft(2, '0')}:${(end.inMinutes % 60).toString().padLeft(2, '0')}:${(end.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
+  /// Whitespace-delimited word count. Shared with [ServerConversation.isFailedTitleRecoverable]
+  /// so the ≥5-word "real content" heuristic has one source of truth.
+  int get wordCount => text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedTranscriptSegment.fromJson(json);

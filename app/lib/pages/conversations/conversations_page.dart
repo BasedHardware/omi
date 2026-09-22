@@ -24,7 +24,6 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -267,7 +266,6 @@ class ConversationsPage extends StatefulWidget {
 
 class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
-  final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
   String? _loadMoreFilterKey;
@@ -314,13 +312,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
         _scheduleDeferred(folderProvider.loadFolders);
-      }
-
-      // Check if we should show the app review prompt for first conversation
-      if (mounted && conversationProvider.conversations.isNotEmpty) {
-        _scheduleDeferred(
-          () => _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true),
-        );
       }
     });
   }

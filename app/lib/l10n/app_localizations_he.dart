@@ -10038,4 +10038,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

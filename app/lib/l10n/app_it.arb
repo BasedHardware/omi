@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Voce pronta per il riconoscimento} saved_sample_awaiting_embedding{Campione salvato; elaborazione vocale ancora necessaria} not_learned{Voce non appresa} other{Stato della voce sconosciuto}}",
     "tagSpeakerIncludingLaterSpeech": "Etichetta anche il parlato successivo di questo speaker",
     "updateSummaryWithNewNames": "Aggiorna il riepilogo con i nuovi nomi",
-    "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare"
+    "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

@@ -4,7 +4,10 @@ Tests the Firestore helpers (set/get_user_speaker_embedding), the speech profile
 upload extraction path, and the transcribe.py Firestore loading path.
 """
 
+import asyncio
+import logging
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -299,80 +302,172 @@ class TestSpeechProfileEmbeddingExtraction:
 # ─── Transcribe Firestore Loading Path ───────────────────────────────────────
 
 
+@pytest.fixture
+def live_owner_profile(monkeypatch):
+    import routers.listen.runtime as runtime_module
+    import routers.listen.speakers as speakers_module
+    from routers.listen.contracts import ListenRequest
+    from utils.listen_session_bootstrap import ListenConnectBase
+
+    world = SimpleNamespace(
+        embedding=MagicMock(return_value=[0.25] * 256),
+        blob=MagicMock(return_value=False),
+        audio=MagicMock(return_value=None),
+        extract=MagicMock(return_value=np.full((1, 256), 0.5, dtype=np.float32)),
+        store=MagicMock(return_value=True),
+        people=MagicMock(return_value=[{'id': 'untaught', 'name': 'Contact', 'speech_samples_version': 3}]),
+    )
+    monkeypatch.setattr(runtime_module.user_db, 'get_user_speaker_embedding', world.embedding)
+    monkeypatch.setattr(runtime_module, 'get_user_has_speech_profile', world.blob)
+    monkeypatch.setattr(speakers_module, 'get_profile_audio_if_exists', world.audio)
+    monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', world.extract)
+    monkeypatch.setattr(speakers_module.user_db, 'set_user_speaker_embedding', world.store)
+    monkeypatch.setattr(speakers_module.user_db, 'get_people', world.people)
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', lambda *a, **kw: ('test-stt', 'en', 'test'))
+
+    async def start(*, private_sync=False, **request_options):
+        request = ListenRequest(websocket=SimpleNamespace(headers={}), uid='synthetic-owner', **request_options)
+        runtime = runtime_module.ListenSessionRuntime(request)
+        base = ListenConnectBase(True, True, {'uses_custom_stt': runtime.use_custom_stt}, None, False, False)
+        monkeypatch.setattr(runtime_module, 'load_listen_connect_base', AsyncMock(return_value=base))
+        monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: private_sync)
+
+        async def call(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        runtime.persistence = SimpleNamespace(call=call)
+        # Keep the actual bootstrap, profile refresh and matching gates. Other
+        # live components are unrelated to this storage-boundary regression.
+        runtime._build_components = lambda: setattr(runtime, 'speakers', speakers_module.SpeakerMatcher(runtime))
+        assert await runtime._bootstrap()
+        await runtime.speakers.refresh_for_conversation('synthetic-conversation')
+        return runtime
+
+    world.start = start
+    return world
+
+
+def _owner_segment_can_queue(runtime):
+    from utils.transcribe_decisions import should_queue_speaker_embedding
+
+    return should_queue_speaker_embedding(
+        speaker_id=0,
+        person_id=None,
+        is_user=False,
+        speaker_id_enabled=runtime.state.speaker_id_enabled,
+        has_person_embeddings=bool(runtime.speakers.person_embeddings),
+        speaker_already_mapped=False,
+    )
+
+
 class TestTranscribeFirestoreLoading:
-    """Tests for the Firestore loading path in speaker_identification_task."""
+    """Exercise bootstrap through the real matcher, including its earlier enablement gate."""
 
-    def test_embedding_loaded_from_firestore_and_cached(self):
-        """When Firestore returns an embedding, it should be cached with 'user' sentinel."""
-        # Simulate what speaker_identification_task does
-        USER_SELF_PERSON_ID = 'user'
-        embedding_list = list(np.random.randn(512).astype(float))
-        person_embeddings_cache = {}
+    @pytest.mark.parametrize('private_sync', [False, True])
+    @pytest.mark.parametrize('blob_exists', [False, True])
+    def test_firestore_voiceprint_enables_matching_without_reading_gcs(
+        self, live_owner_profile, private_sync, blob_exists
+    ):
+        from utils.transcribe_decisions import USER_SELF_PERSON_ID
 
-        # This mirrors the code in transcribe.py lines 1806-1820
-        if embedding_list:
-            user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-            person_embeddings_cache[USER_SELF_PERSON_ID] = {
-                'embedding': user_embedding,
-                'name': 'User',
-            }
+        world = live_owner_profile
+        world.blob.return_value = blob_exists
+        runtime = asyncio.run(world.start(private_sync=private_sync))
 
-        assert USER_SELF_PERSON_ID in person_embeddings_cache
-        assert person_embeddings_cache[USER_SELF_PERSON_ID]['embedding'].shape == (1, 512)
+        assert runtime.has_speech_profile
+        assert runtime.state.audio_ring_buffer is not None
+        cached = runtime.speakers.person_embeddings[USER_SELF_PERSON_ID]
+        assert cached['name'] == 'User'
+        assert cached['embedding'].shape == (1, 256)
+        assert cached['embedding'].dtype == np.float32
+        np.testing.assert_array_equal(cached['embedding'], np.full((1, 256), 0.25, dtype=np.float32))
+        assert _owner_segment_can_queue(runtime)
+        world.blob.assert_not_called()
+        world.audio.assert_not_called()
+        world.extract.assert_not_called()
+        world.store.assert_not_called()
 
-    def test_fallback_extracts_from_wav_when_no_stored_embedding(self):
-        """When Firestore returns None, should extract from WAV and store for future sessions."""
-        USER_SELF_PERSON_ID = 'user'
-        person_embeddings_cache = {}
-        embedding_list = None  # Simulates no stored embedding
+    @pytest.mark.parametrize('private_sync', [False, True])
+    @pytest.mark.parametrize('embedding', [None, []])
+    def test_no_embedding_or_blob_logs_once_and_does_not_queue(
+        self, live_owner_profile, caplog, private_sync, embedding
+    ):
+        world = live_owner_profile
+        world.embedding.return_value = embedding
+        with caplog.at_level(logging.INFO):
+            runtime = asyncio.run(world.start(private_sync=private_sync))
 
-        # Simulate the fallback path from transcribe.py
-        fallback_embedding = np.random.RandomState(42).randn(1, 512).astype(np.float32)
-        stored_embeddings = []
+        assert not runtime.has_speech_profile
+        assert runtime.state.speaker_id_enabled is private_sync
+        assert not runtime.speakers.person_embeddings
+        assert not _owner_segment_can_queue(runtime)
+        messages = [r.getMessage() for r in caplog.records if 'Speaker ID owner profile skipped' in r.getMessage()]
+        assert messages == ['Speaker ID owner profile skipped reason=no_embedding_or_audio']
+        assert runtime.request.uid not in messages[0]
+        world.blob.assert_called_once_with(runtime.request.uid)
+        world.audio.assert_not_called()
+        world.extract.assert_not_called()
 
-        if not embedding_list:
-            # Fallback: extract from WAV (simulated)
-            user_embedding = fallback_embedding
-            person_embeddings_cache[USER_SELF_PERSON_ID] = {
-                'embedding': user_embedding,
-                'name': 'User',
-            }
-            # Store in Firestore for future sessions (simulated)
-            stored_embeddings.append(user_embedding.flatten().tolist())
+    def test_legacy_blob_extracts_and_persists_embedding(self, live_owner_profile, tmp_path):
+        from utils.transcribe_decisions import USER_SELF_PERSON_ID
 
-        assert USER_SELF_PERSON_ID in person_embeddings_cache
-        assert len(stored_embeddings) == 1
-        assert len(stored_embeddings[0]) == 512
+        world = live_owner_profile
+        world.embedding.return_value = None
+        world.blob.return_value = True
+        audio_path = tmp_path / 'profile.wav'
+        audio_path.write_bytes(b'synthetic-profile-audio')
+        world.audio.return_value = str(audio_path)
+        runtime = asyncio.run(world.start())
 
-    def test_has_speech_profile_gate(self):
-        """User embedding is only loaded when has_speech_profile is True."""
-        USER_SELF_PERSON_ID = 'user'
-        person_embeddings_cache = {}
-        embedding_list = list(np.random.randn(512).astype(float))
+        assert _owner_segment_can_queue(runtime)
+        np.testing.assert_array_equal(
+            runtime.speakers.person_embeddings[USER_SELF_PERSON_ID]['embedding'], world.extract.return_value
+        )
+        world.extract.assert_called_once_with(b'synthetic-profile-audio', 'speech_profile.wav')
+        world.store.assert_called_once_with(runtime.request.uid, world.extract.return_value.flatten().tolist())
 
-        # Simulate has_speech_profile=False — the outer if guard
-        has_speech_profile = False
-        if has_speech_profile:
-            if embedding_list:
-                user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-                person_embeddings_cache[USER_SELF_PERSON_ID] = {
-                    'embedding': user_embedding,
-                    'name': 'User',
-                }
+    def test_blob_disappearing_after_bootstrap_logs_skip(self, live_owner_profile, caplog):
+        world = live_owner_profile
+        world.embedding.return_value = None
+        world.blob.return_value = True
+        with caplog.at_level(logging.INFO):
+            runtime = asyncio.run(world.start())
+        assert not _owner_segment_can_queue(runtime)
+        assert 'Speaker ID owner profile skipped reason=no_embedding_or_audio' in caplog.text
+        world.extract.assert_not_called()
 
-        assert USER_SELF_PERSON_ID not in person_embeddings_cache
+    @pytest.mark.parametrize('private_sync', [False, True])
+    @pytest.mark.parametrize(
+        'options',
+        [
+            {'include_speech_profile': False},
+            {'channels': 2},
+            {'custom_stt_mode': 'enabled'},
+        ],
+    )
+    def test_excluded_profiles_are_not_read_or_loaded(self, live_owner_profile, options, private_sync):
+        from routers.listen.contracts import CustomSttMode
 
-        # Now with has_speech_profile=True
-        has_speech_profile = True
-        if has_speech_profile:
-            if embedding_list:
-                user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-                person_embeddings_cache[USER_SELF_PERSON_ID] = {
-                    'embedding': user_embedding,
-                    'name': 'User',
-                }
+        options = dict(options)
+        if 'custom_stt_mode' in options:
+            options['custom_stt_mode'] = CustomSttMode.enabled
+        world = live_owner_profile
+        runtime = asyncio.run(world.start(private_sync=private_sync, **options))
+        assert not runtime.has_speech_profile
+        assert not runtime.speakers.person_embeddings
+        assert not _owner_segment_can_queue(runtime)
+        world.embedding.assert_not_called()
+        world.blob.assert_not_called()
+        world.audio.assert_not_called()
 
-        assert USER_SELF_PERSON_ID in person_embeddings_cache
+    def test_embedding_read_failure_does_not_abort_bootstrap(self, live_owner_profile, caplog):
+        world = live_owner_profile
+        world.embedding.side_effect = RuntimeError('sensitive datastore error')
+        runtime = asyncio.run(world.start())
+        assert not _owner_segment_can_queue(runtime)
+        assert 'Speaker ID user embedding availability failed type=RuntimeError' in caplog.text
+        assert 'sensitive datastore error' not in caplog.text
 
 
 # ─── Final Assignment Pass ─────────────────────────────────────────────────

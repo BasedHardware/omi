@@ -114,6 +114,8 @@ class SpeakerMatcher:
                         await self.host.persistence.call(
                             user_db.set_user_speaker_embedding, self.host.request.uid, result.flatten().tolist()
                         )
+                    else:
+                        logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
             except Exception as error:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:

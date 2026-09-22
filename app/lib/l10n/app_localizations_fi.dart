@@ -10120,4 +10120,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

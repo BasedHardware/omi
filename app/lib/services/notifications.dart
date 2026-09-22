@@ -8,6 +8,7 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -58,13 +59,27 @@ class NotificationUtil {
     if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
       return;
     }
-    await _handleAppLinkOrDeepLink(receivedAction.payload!);
+    final navigateTo = receivedAction.payload!['navigate_to'];
+    if (navigateTo is String && navigateTo.isNotEmpty) {
+      await handleNavigateTo(navigateTo);
+    }
   }
 
   /// Public entry for FCM background/terminated notification taps (#5126).
-  static void handleNavigateTo(String route) {
-    // Fire-and-forget: waits for navigator readiness before pushing (terminated cold start).
-    unawaited(_handleAppLinkOrDeepLink({'navigate_to': route}));
+  static Future<bool> handleNavigateTo(String route, {RecordReference? objectId}) async {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.notificationOpen,
+      surface: ProductSurface.notification,
+      objectId: objectId,
+    );
+    // Wait for navigator readiness so callers can distinguish an accepted
+    // destination from a tap that was dropped during cold start.
+    final destinationReady = await _handleAppLinkOrDeepLink({'navigate_to': route});
+    attempt.complete(
+      destinationReady ? ProductOutcome.success : ProductOutcome.failure,
+      failure: destinationReady ? ProductFailure.none : ProductFailure.timeout,
+    );
+    return destinationReady;
   }
 
   /// Extract a chat/conversation deep-link from an FCM data map.
@@ -100,24 +115,25 @@ class NotificationUtil {
     return null;
   }
 
-  static Future<void> _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
+  static Future<bool> _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     WidgetsFlutterBinding.ensureInitialized();
 
     final navigateTo = payload['navigate_to'];
     if (navigateTo is! String || navigateTo.isEmpty) {
       Logger.debug('Navigate To is null');
-      return;
+      return false;
     }
 
     final navigator = await waitUntilNonNull(() => globalNavigatorKey.currentState);
     if (navigator == null) {
       Logger.debug('Navigator unavailable; dropping navigate_to=$navigateTo');
-      return;
+      return false;
     }
 
     navigator.pushReplacement(
       MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
     );
+    return true;
   }
 
   static Future<void> triggerFallNotification() async {

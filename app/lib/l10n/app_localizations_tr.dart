@@ -10131,4 +10131,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Ses okunamadı — eşitlenemiyor';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }
