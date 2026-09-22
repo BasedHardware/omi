@@ -751,6 +751,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_sync_review = conversation.get('sync_relevance') == 'review'
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -770,6 +771,12 @@ def reprocess_conversation(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # Successful explicit recovery is a durable user choice, including when
+    # the selected app supplies the summary rather than the default overview.
+    if was_sync_review and not processed_conversation.discarded:
+        if lifecycle_service.restore_discarded(uid, conversation_id):
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 

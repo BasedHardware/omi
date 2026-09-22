@@ -789,7 +789,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    # Visible transcript-only review: never discard uncertain real speech.
+    # Recoverable filler-only review skips enrichment; meaningful speech stays kept.
     # Re-evaluate the entire current transcript so later content promotes it.
     if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
         conversation_data.get('transcript_segments', [])
