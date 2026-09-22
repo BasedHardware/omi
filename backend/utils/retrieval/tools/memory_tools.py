@@ -173,7 +173,8 @@ def get_memories_tool(
         effective_view = requested_view if belief_model_enabled() else 'released'
         as_of_dt = _parse_aware_iso(as_of)
     except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
+        logger.warning("Invalid temporal read arguments: %s", type(e).__name__, exc_info=True)
+        return "Error: Invalid temporal read arguments."
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
@@ -408,7 +409,8 @@ def search_memories_tool(
         effective_view = requested_view if belief_model_enabled() else 'released'
         as_of_dt = _parse_aware_iso(as_of)
     except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
+        logger.warning("Invalid temporal read arguments: %s", type(e).__name__, exc_info=True)
+        return "Error: Invalid temporal read arguments."
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
@@ -422,7 +424,8 @@ def search_memories_tool(
         scope_start_dt = _parse_aware_iso(scope.get("start_date") if isinstance(scope.get("start_date"), str) else None)
         scope_end_dt = _parse_aware_iso(scope.get("end_date") if isinstance(scope.get("end_date"), str) else None)
     except ValueError as e:
-        return f"Error: chat_scope dates invalid ({e})"
+        logger.warning("Invalid chat_scope dates: %s", type(e).__name__, exc_info=True)
+        return "Error: chat_scope dates invalid."
 
     # Cap limit at 20
     limit = min(limit, 20)
