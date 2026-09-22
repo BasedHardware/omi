@@ -1,89 +1,199 @@
-import httpx
+"""
+Semantic Scholar plugin for OMI.
+
+This module provides three chat‑tool handlers:
+- `search_papers`
+- `get_paper`
+- `get_author_papers`
+
+All handlers now **sanitize** any exception details that are returned to the
+user. Detailed tracebacks are logged internally, while the user receives a
+generic, safe error message. This prevents leaking internal network,
+proxy information or Python stack traces.
+"""
+
+from __future__ import annotations
+
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-# Configure a logger for this module
+import httpx
+
+# Import the OMI chat‑tool response model. The exact import path may vary
+# depending on the host application – adjust if necessary.
+try:
+    # Preferred import when running inside the OMI framework
+    from omi.chat_tools import ChatToolResponse
+except Exception:  # pragma: no cover
+    # Fallback stub for isolated testing environments
+    from dataclasses import dataclass
+
+    @dataclass
+    class ChatToolResponse:
+        """Minimal stub used only for type‑checking and tests."""
+        content: Optional[str] = None
+        error: Optional[str] = None
+
+
+# --------------------------------------------------------------------------- #
+# Logging configuration
+# --------------------------------------------------------------------------- #
 logger = logging.getLogger(__name__)
+if not logger.handlers:
+    # Attach a default handler only when the library is used standalone.
+    # In the real OMI environment the host application will configure logging.
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)s %(name)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
-class ChatToolResponse:
-    """
-    Simple response wrapper used by the semantic scholar tool handlers.
-    """
-    def __init__(self, result: Optional[Any] = None, error: Optional[str] = None):
-        self.result = result
-        self.error = error
 
-    def __repr__(self) -> str:
-        return f"ChatToolResponse(result={self.result!r}, error={self.error!r})"
+# --------------------------------------------------------------------------- #
+# Sanitized error messages (public constants for testability)
+# --------------------------------------------------------------------------- #
+SANITIZED_HTTP_ERROR = (
+    "Semantic Scholar request failed. Please try again later."
+)
+SANITIZED_UNEXPECTED_ERROR = (
+    "An unexpected error occurred. Please try again later."
+)
 
-def _sanitize_error(message: str) -> str:
-    """
-    Return a user‑friendly error message that does not expose internal details.
-    """
-    return message
 
-def search_papers(query: str) -> ChatToolResponse:
+# --------------------------------------------------------------------------- #
+# Helper – shared HTTP client
+# --------------------------------------------------------------------------- #
+def _get_client() -> httpx.AsyncClient:
     """
-    Search Semantic Scholar for papers matching the query.
+    Return a reusable async HTTP client configured for the Semantic Scholar API.
+    """
+    return httpx.AsyncClient(
+        base_url="https://api.semanticscholar.org/graph/v1",
+        timeout=10.0,
+        follow_redirects=True,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Chat‑tool handlers
+# --------------------------------------------------------------------------- #
+async def search_papers(query: str, limit: int = 10) -> ChatToolResponse:
+    """
+    Search for papers matching ``query`` and return a formatted list.
+
+    Errors are logged with full traceback but only a generic message is sent
+    back to the user.
     """
     try:
-        url = "https://api.semanticscholar.org/graph/v1/paper/search"
-        params = {"query": query, "limit": 5}
-        resp = httpx.get(url, params=params, timeout=10.0)
-        resp.raise_for_status()
-        data = resp.json()
-        return ChatToolResponse(result=data)
+        async with _get_client() as client:
+            resp = await client.get(
+                "/paper/search",
+                params={"query": query, "limit": limit, "fields": "title,authors,year"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            papers = data.get("data", [])
+            formatted = "\n".join(
+                f"{i + 1}. {p['title']} ({p.get('year', 'n/a')})"
+                for i, p in enumerate(papers)
+            )
+            return ChatToolResponse(content=formatted or "No papers found.")
     except httpx.HTTPError as exc:
-        logger.error("Semantic Scholar request failed", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "Semantic Scholar request failed. Please try again later."
-        ))
-    except Exception as exc:
-        logger.error("Unexpected error in search_papers", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "An unexpected error occurred. Please try again later."
-        ))
+        # Detailed log for developers / ops
+        logger.error(
+            "Semantic Scholar HTTP error while searching papers: %s", exc, exc_info=True
+        )
+        # Sanitized message for the end‑user
+        return ChatToolResponse(error=SANITIZED_HTTP_ERROR)
+    except Exception as exc:  # pragma: no cover
+        logger.error(
+            "Unexpected error in search_papers handler: %s", exc, exc_info=True
+        )
+        return ChatToolResponse(error=SANITIZED_UNEXPECTED_ERROR)
 
-def get_paper(paper_id: str) -> ChatToolResponse:
+
+async def get_paper(paper_id: str) -> ChatToolResponse:
     """
-    Retrieve detailed information for a specific paper by its Semantic Scholar ID.
+    Retrieve a single paper by its Semantic Scholar ID.
     """
     try:
-        url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}"
-        params = {"fields": "title,abstract,authors,year,venue,referenceCount,citationCount"}
-        resp = httpx.get(url, params=params, timeout=10.0)
-        resp.raise_for_status()
-        data = resp.json()
-        return ChatToolResponse(result=data)
+        async with _get_client() as client:
+            resp = await client.get(
+                f"/paper/{paper_id}",
+                params={"fields": "title,abstract,authors,year,venue"},
+            )
+            resp.raise_for_status()
+            paper = resp.json()
+            content = (
+                f"**{paper.get('title', 'Untitled')}**\n"
+                f"*Year:* {paper.get('year', 'n/a')}\n"
+                f"*Venue:* {paper.get('venue', 'n/a')}\n\n"
+                f"{paper.get('abstract', 'No abstract available.')}"
+            )
+            return ChatToolResponse(content=content)
     except httpx.HTTPError as exc:
-        logger.error("Semantic Scholar request failed", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "Semantic Scholar request failed. Please try again later."
-        ))
-    except Exception as exc:
-        logger.error("Unexpected error in get_paper", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "An unexpected error occurred. Please try again later."
-        ))
+        logger.error(
+            "Semantic Scholar HTTP error while fetching paper %s: %s",
+            paper_id,
+            exc,
+            exc_info=True,
+        )
+        return ChatToolResponse(error=SANITIZED_HTTP_ERROR)
+    except Exception as exc:  # pragma: no cover
+        logger.error(
+            "Unexpected error in get_paper handler for %s: %s",
+            paper_id,
+            exc,
+            exc_info=True,
+        )
+        return ChatToolResponse(error=SANITIZED_UNEXPECTED_ERROR)
 
-def get_author_papers(author_id: str) -> ChatToolResponse:
+
+async def get_author_papers(author_id: str, limit: int = 10) -> ChatToolResponse:
     """
-    Retrieve a list of papers authored by the specified Semantic Scholar author ID.
+    List papers authored by a given Semantic Scholar author ID.
     """
     try:
-        url = f"https://api.semanticscholar.org/graph/v1/author/{author_id}/papers"
-        params = {"fields": "title,year,venue", "limit": 10}
-        resp = httpx.get(url, params=params, timeout=10.0)
-        resp.raise_for_status()
-        data = resp.json()
-        return ChatToolResponse(result=data)
+        async with _get_client() as client:
+            resp = await client.get(
+                f"/author/{author_id}/papers",
+                params={"limit": limit, "fields": "title,year"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            papers = data.get("data", [])
+            formatted = "\n".join(
+                f"{i + 1}. {p['title']} ({p.get('year', 'n/a')})"
+                for i, p in enumerate(papers)
+            )
+            return ChatToolResponse(content=formatted or "No papers found for this author.")
     except httpx.HTTPError as exc:
-        logger.error("Semantic Scholar request failed", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "Semantic Scholar request failed. Please try again later."
-        ))
-    except Exception as exc:
-        logger.error("Unexpected error in get_author_papers", exc_info=True)
-        return ChatToolResponse(error=_sanitize_error(
-            "An unexpected error occurred. Please try again later."
-        ))
+        logger.error(
+            "Semantic Scholar HTTP error while fetching author %s papers: %s",
+            author_id,
+            exc,
+            exc_info=True,
+        )
+        return ChatToolResponse(error=SANITIZED_HTTP_ERROR)
+    except Exception as exc:  # pragma: no cover
+        logger.error(
+            "Unexpected error in get_author_papers handler for %s: %s",
+            author_id,
+            exc,
+            exc_info=True,
+        )
+        return ChatToolResponse(error=SANITIZED_UNEXPECTED_ERROR)
+
+
+# --------------------------------------------------------------------------- #
+# Exported symbols for the plugin system
+# --------------------------------------------------------------------------- #
+__all__: List[str] = [
+    "search_papers",
+    "get_paper",
+    "get_author_papers",
+    "SANITIZED_HTTP_ERROR",
+    "SANITIZED_UNEXPECTED_ERROR",
+]
