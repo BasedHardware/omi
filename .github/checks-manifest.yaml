@@ -69,6 +69,11 @@ checks:
     triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
+  - id: plugin-remaining-apps-uid-reflection-tests
+    command: ["python3", "plugins/test_uid_reflection_remaining_apps.py"]
+    triggers: ["plugins/omi-dropbox-app/**", "plugins/omi-google-calendar-app/**", "plugins/omi-hive-app/**", "plugins/omi-ms365-app/**", "plugins/omi-shipbob-app/**", "plugins/omi-shopify-app/**", "plugins/omi-linear-app/**", "plugins/test_uid_reflection_remaining_apps.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the client-controlled uid query param was reflected raw into HTML form actions, hrefs, hidden input values, and redirect URLs across the remaining plugin apps; a quote broke the attribute (reflected XSS) and a bare & or # corrupted the next hop"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
