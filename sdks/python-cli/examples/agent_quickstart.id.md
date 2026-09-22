@@ -74,6 +74,70 @@ omi --json local task search "taxes" --include-completed
 
 Selesaikan atau hapus tugas hanya ketika diminta secara eksplisit oleh pengguna:
 
+Selesaikan atau hapus tugas hanya jika pengguna memintanya secara eksplisit:
+
 ```bash
-omi --json local task complete task_1
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
+
+`omi local screenshot SCREENSHOT_ID --output PATH` menyimpan tangkapan layar ke disk dan tetap mencetak JSON ke stdout untuk skrip. ID tangkapan layar biasanya diperoleh dari `local search-screen` atau kueri SQL pada tabel `screenshots`. Jika Desktop mengembalikan kegagalan terstruktur seperti `screenshot_pending`, `screenshot_file_missing`, atau `screenshot_chunk_corrupted`, mode JSON mempertahankan bidang `reason`, `hint`, dan `screenshot_id` di stderr sehingga agen dapat mencoba lagi dengan ID yang lebih lama atau melaporkan kendala yang tepat. Validasi output yang berhasil dengan `file PATH` sebelum meneruskannya ke alat visual.
+
+## Contoh Praktis: Loop Agen Python
+
+```python
+import json
+import subprocess
+from typing import Any
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        # The CLI prints structured errors to stderr in JSON mode:
+        # {"error": "...", "detail": "..."}
+        try:
+            err = json.loads(result.stderr)
+        except json.JSONDecodeError:
+            err = {"error": result.stderr.strip()}
+        raise RuntimeError(f"omi exited {result.returncode}: {err}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+# Read all open action items and mark anything older than 30 days complete.
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+items = omi("action-item", "list", "--open")
+for item in items or []:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## Menangani Batas Kecepatan (Handling rate limits)
+
+Memori: 120/jam. Percakapan: 25/jam. Pembuatan batch: 15/jam.
+
+```python
+result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
+if result.returncode == 4:                             # rate limited
+    err = json.loads(result.stderr)
+    # err["detail"] looks like: "Retry in 12s. ..."
+    time.sleep(parse_retry_window(err["detail"]) or 60)
+```
+
+## Tips (Tips)
+
+* Gunakan `--profile <nama>` jika agen Anda mengelola beberapa akun Omi. Setiap profil memiliki kredensial dan basis API sendiri.
+* Gunakan `--api-base http://localhost:8080` untuk pengujian backend lokal.
+* Gunakan `OMI_LOCAL_API_URL` dan `OMI_LOCAL_TOKEN` untuk mengganti pengaturan Desktop API lokal profil untuk satu kali eksekusi.
+* Gunakan `--verbose` untuk debugging — mencatat `METHOD path → status (Ns)` ke stderr tanpa memengaruhi stdout, sehingga mode JSON tetap valid.
+* Untuk menyalurkan konten ke dalam percakapan melalui pipe, gunakan `--text -`:
+  ```bash
+  cat meeting_notes.md | omi conversation create --text - --text-source other_text
+  ```
