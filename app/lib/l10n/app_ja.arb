@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "すべての記憶が公開されました",
     "newMemory": "✨ 新しい記憶",
     "editMemory": "✏️ 記憶を編集",
-    "memoryContentHint": "アイスクリームが好き...",
+    "memoryContentHint": "会議は午前中がいいです。",
     "failedToSaveMemory": "保存に失敗しました。接続を確認してください。",
     "saveMemory": "記憶を保存",
     "retry": "再試行",
@@ -3251,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{声の認識準備ができています} saved_sample_awaiting_embedding{サンプル保存済み・音声処理が必要です} not_learned{声は未学習です} other{声の状態は不明です}}",
     "tagSpeakerIncludingLaterSpeech": "この話者の以降の発話もタグ付けする",
     "updateSummaryWithNewNames": "新しい名前で要約を更新",
-    "syncStatusUnsupportedAudio": "音声を読み取れません — 同期できません"
+    "syncStatusUnsupportedAudio": "音声を読み取れません — 同期できません",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{どんなことを手伝ってくれる？} goal{目標を立てるのを手伝って} activity{最近の活動をまとめて} improve{どうすればもっと成長できる？} other{}}",
+    "nextWeek": "来週",
+    "clearSearch": "検索をクリア"
 }

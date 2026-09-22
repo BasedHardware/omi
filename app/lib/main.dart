@@ -84,6 +84,8 @@ import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/app_session_telemetry.dart';
+import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
@@ -238,12 +240,17 @@ Future _init() async {
       SharedPreferencesUtil().uid,
     );
   }
+  AnalyticsManager().bindIdentity(FirebaseAuth.instance.currentUser?.uid);
   FlutterError.onError = (FlutterErrorDetails details) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    AnalyticsManager().recordProductError(ProductErrorKind.flutterFramework);
+    unawaited(FirebaseCrashlytics.instance.recordFlutterError(details).catchError((Object _) {}));
+    Logger.instance.talker.handle(details.exception, details.stack);
+    DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
+    unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
     return true;
   };
 
@@ -275,8 +282,9 @@ void main() {
         // day of investigation for exactly this reason — the app looked hung
         // when it had in fact thrown a precise, actionable StateError.
         if (Firebase.apps.isNotEmpty) {
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+          unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
         }
+        AnalyticsManager().recordProductError(ProductErrorKind.startup);
         runApp(StartupFailureApp(error: error, stack: stack));
         return;
       }
@@ -284,8 +292,9 @@ void main() {
     },
     (error, stack) {
       debugPrint('Uncaught error: $error\n$stack');
+      AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
       if (Firebase.apps.isNotEmpty) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
       }
     },
   );
@@ -306,6 +315,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
+    emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
+    identityEpoch: () => AnalyticsManager.identityEpoch,
+  );
 
   @override
   void initState() {
@@ -313,11 +326,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
     _appSessionTelemetry.recordColdStart();
+    _performanceTelemetry.attach();
+    PlatformManager.instance.analytics.recordTelemetryHealth();
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
     }
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _performanceTelemetry.dispose();
+    super.dispose();
   }
 
   void _deinit() {
@@ -346,9 +368,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     if (state == AppLifecycleState.resumed) {
       _appSessionTelemetry.recordResumed();
+      _performanceTelemetry.setForeground(true);
+      PlatformManager.instance.analytics.recordTelemetryHealth();
+      unawaited(PlatformManager.instance.analytics.refreshExperiments());
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
       _appSessionTelemetry.recordBackgrounded();
+      _performanceTelemetry.setForeground(false);
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
@@ -449,6 +475,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             debugShowCheckedModeBanner: F.env == Environment.dev,
             title: F.title,
             navigatorKey: MyApp.navigatorKey,
+            navigatorObservers: [_performanceTelemetry],
             locale: context.watch<LocaleProvider>().locale,
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -485,12 +512,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             ),
             themeMode: ThemeMode.dark,
             builder: (context, child) {
-              FlutterError.onError = (FlutterErrorDetails details) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  Logger.instance.talker.handle(details.exception, details.stack);
-                  DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
-                });
-              };
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
