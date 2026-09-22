@@ -323,7 +323,8 @@ def get_memories(
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.warning(f"Invalid category {e}")
+            raise HTTPException(status_code=400, detail="Invalid memory category. Please provide valid category names.")
 
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
@@ -600,7 +601,8 @@ def search_action_items(
     try:
         return mcp_action_items.search_action_items(uid, query, limit=limit)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        logger.warning(f"search_action_items ValueError: {e}")
+        raise HTTPException(status_code=422, detail="Invalid action item search parameters")
 
 
 @router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
@@ -612,7 +614,8 @@ def create_action_item(
     try:
         return mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        logger.warning(f"create_action_item ValueError: {e}")
+        raise HTTPException(status_code=422, detail="Invalid action item payload")
     except mcp_action_items.ActionItemError as e:
         raise _action_item_write_error(e)
 
@@ -642,7 +645,8 @@ def update_action_item(
             uid, action_item_id, description=body.description, due_at=body.due_at
         )
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        logger.warning(f"update_action_item ValueError: {e}")
+        raise HTTPException(status_code=422, detail="Invalid action item update payload")
     except mcp_action_items.ActionItemError as e:
         raise _action_item_write_error(e)
 
