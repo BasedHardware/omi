@@ -439,6 +439,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get autoSyncDescription => 'Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt';
 
   @override
+  String get omiButtonActions => 'Omi-knopacties';
+
+  @override
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override

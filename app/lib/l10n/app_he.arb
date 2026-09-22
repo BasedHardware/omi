@@ -557,6 +557,7 @@
     "offlineSync": "סינכרון במצב לא מחובר",
     "autoSync": "סנכרון אוטומטי",
     "autoSyncDescription": "סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר",
+    "omiButtonActions": "פעולות כפתור Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

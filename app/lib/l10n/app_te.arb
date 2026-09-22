@@ -557,6 +557,7 @@
     "offlineSync": "ఆఫ్‌లైన్ సమకాలీకరణ",
     "autoSync": "ఆటో సింక్",
     "autoSyncDescription": "మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి",
+    "omiButtonActions": "Omi బటన్ చర్యలు",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

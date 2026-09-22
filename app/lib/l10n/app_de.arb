@@ -138,6 +138,7 @@
     "offlineSync": "Offline-Synchronisierung",
     "autoSync": "Automatische Synchronisierung",
     "autoSyncDescription": "Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird",
+    "omiButtonActions": "Omi-Tastenaktionen",
     "deviceSettings": "Geräteeinstellungen",
     "integrations": "Integrationen",
     "feedbackBug": "Feedback / Fehler",

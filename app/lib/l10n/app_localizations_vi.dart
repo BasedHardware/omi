@@ -438,6 +438,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
+  String get omiButtonActions => 'Tác vụ nút Omi';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override

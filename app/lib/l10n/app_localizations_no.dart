@@ -438,6 +438,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
 
   @override
+  String get omiButtonActions => 'Omi-knapphandlinger';
+
+  @override
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override

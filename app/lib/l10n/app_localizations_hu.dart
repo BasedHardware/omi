@@ -440,6 +440,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
+  String get omiButtonActions => 'Omi gombműveletek';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override

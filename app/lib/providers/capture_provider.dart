@@ -13,6 +13,7 @@ class CaptureProvider extends CaptureController {
     super.microphonePermissionRequester,
     super.phoneMicBatchRecorder,
     super.recordingTelemetry,
+    super.speakerHaptic,
     super.walService,
     super.phoneMicRecorder,
     super.phoneMicBatchSupported,
