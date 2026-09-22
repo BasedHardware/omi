@@ -65,6 +65,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   // Notification frequency (0-5), default 0 (disabled)
   int _notificationFrequency = 0;
+  int _savedNotificationFrequency = 0;
 
   // Daily Summary settings
   bool _dailySummaryEnabled = true;
@@ -96,6 +97,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         }
         // Use backend value if available, otherwise use local
         _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        _savedNotificationFrequency = _notificationFrequency;
         // Sync local with backend
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
@@ -112,7 +114,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
-    await setMentorNotificationSettings(value);
+    final saved = await setMentorNotificationSettings(value);
+    if (saved) {
+      _savedNotificationFrequency = value;
+    } else if (mounted && _notificationFrequency == value) {
+      setState(() => _notificationFrequency = _savedNotificationFrequency);
+      SharedPreferencesUtil().notificationFrequency = _savedNotificationFrequency;
+    }
   }
 
   String _getFrequencyLabel(BuildContext context, int value) {
@@ -160,18 +168,24 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateDailySummaryEnabled(bool value) async {
+    final previous = _dailySummaryEnabled;
     setState(() => _dailySummaryEnabled = value);
-    await setDailySummarySettings(enabled: value);
+    if (!await setDailySummarySettings(enabled: value)) {
+      if (mounted) setState(() => _dailySummaryEnabled = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
+    final previous = _dailySummaryHour;
     setState(() => _dailySummaryHour = hour);
-    await setDailySummarySettings(hour: hour);
+    if (!await setDailySummarySettings(hour: hour)) {
+      if (mounted) setState(() => _dailySummaryHour = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
-
-
 
   Future<void> _showGenerateSummaryDatePicker() async {
     final now = DateTime.now();
@@ -203,13 +217,16 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
       try {
         final summaryId = await generateDailySummary(date: formattedDate);
+        if (!mounted) return;
         if (summaryId != null) {
           AppSnackbar.showSnackbarSuccess('Daily summary generated for $formattedDate');
         } else {
           AppSnackbar.showSnackbarError('Failed to generate summary for $formattedDate');
         }
       } catch (e) {
-        AppSnackbar.showSnackbarError('Error generating summary: $e');
+        if (mounted) {
+          AppSnackbar.showSnackbarError('Error generating summary: $e');
+        }
       } finally {
         if (mounted) {
           setState(() => _isGeneratingSummary = false);
@@ -217,6 +234,8 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       }
     }
   }
+
+
 
   Future<void> _showHourPicker() async {
     if (!_dailySummaryEnabled) return;
