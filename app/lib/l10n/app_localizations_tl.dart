@@ -10209,4 +10209,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

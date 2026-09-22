@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Voce pregătită pentru recunoaștere} saved_sample_awaiting_embedding{Probă salvată; mai este necesară procesarea vocii} not_learned{Vocea nu a fost învățată} other{Starea vocii este necunoscută}}",
     "tagSpeakerIncludingLaterSpeech": "Etichetează și vorbirea ulterioară a acestui vorbitor",
     "updateSummaryWithNewNames": "Actualizează rezumatul cu numele noi",
-    "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat"
+    "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

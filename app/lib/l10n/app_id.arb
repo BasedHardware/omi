@@ -3286,5 +3286,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Suara siap dikenali} saved_sample_awaiting_embedding{Sampel tersimpan; pemrosesan suara masih diperlukan} not_learned{Suara belum dipelajari} other{Status suara tidak diketahui}}",
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan berikutnya dari pembicara ini",
     "updateSummaryWithNewNames": "Perbarui ringkasan dengan nama baru",
-    "syncStatusUnsupportedAudio": "Audio tidak terbaca — tidak bisa disinkronkan"
+    "syncStatusUnsupportedAudio": "Audio tidak terbaca — tidak bisa disinkronkan",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

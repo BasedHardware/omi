@@ -3286,5 +3286,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Głos jest gotowy do rozpoznawania} saved_sample_awaiting_embedding{Próbka zapisana; przetwarzanie głosu nadal potrzebne} not_learned{Głos nie został nauczony} other{Stan głosu nieznany}}",
     "tagSpeakerIncludingLaterSpeech": "Oznacz też późniejszą mowę tego mówcy",
     "updateSummaryWithNewNames": "Zaktualizuj podsumowanie o nowe imiona",
-    "syncStatusUnsupportedAudio": "Nie można odczytać dźwięku — synchronizacja niemożliwa"
+    "syncStatusUnsupportedAudio": "Nie można odczytać dźwięku — synchronizacja niemożliwa",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Hlas je pripravený na rozpoznanie} saved_sample_awaiting_embedding{Vzorka uložená, hlas ešte treba spracovať} not_learned{Hlas nie je naučený} other{Stav hlasu nie je známy}}",
     "tagSpeakerIncludingLaterSpeech": "Označiť aj neskoršiu reč tohto hovoriaceho",
     "updateSummaryWithNewNames": "Aktualizovať súhrn s novými menami",
-    "syncStatusUnsupportedAudio": "Zvuk sa nedá prečítať — synchronizácia nie je možná"
+    "syncStatusUnsupportedAudio": "Zvuk sa nedá prečítať — synchronizácia nie je možná",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

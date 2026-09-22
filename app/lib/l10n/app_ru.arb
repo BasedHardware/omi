@@ -3286,5 +3286,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Голос готов к распознаванию} saved_sample_awaiting_embedding{Образец сохранён; требуется обработка голоса} not_learned{Голос не изучен} other{Состояние голоса неизвестно}}",
     "tagSpeakerIncludingLaterSpeech": "Также отметить последующую речь этого говорящего",
     "updateSummaryWithNewNames": "Обновить сводку с новыми именами",
-    "syncStatusUnsupportedAudio": "Не удалось прочитать аудио — синхронизация невозможна"
+    "syncStatusUnsupportedAudio": "Не удалось прочитать аудио — синхронизация невозможна",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

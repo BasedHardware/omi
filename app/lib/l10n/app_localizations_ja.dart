@@ -9948,4 +9948,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => '音声を読み取れません — 同期できません';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }
