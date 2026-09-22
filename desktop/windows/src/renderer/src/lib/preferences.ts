@@ -75,7 +75,7 @@ export type Preferences = {
   // Set by the onboarding opt-in step; toggled in Settings → Rewind. Undefined =
   // off (opt-in), so existing users are unaffected until they enable it.
   continuousRecording?: boolean
-  // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
+  // Auto-cleanup of empty local recordings + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'

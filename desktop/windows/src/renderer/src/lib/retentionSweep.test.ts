@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 // The retention sweep's REQUEST-VOLUME contract. `retentionMode` is optional and
-// falls back to 'dry-run', and a dry-run pass ends at a console.log — so before the
-// trigger split, every default install ran a full `/v3/memories` page-through plus a
-// 200-conversation fetch every 30 minutes, forever, and threw all of it away. These
-// cases pin who is allowed to spend a request: the background timer only in 'live',
-// the user's Preview button in 'dry-run'.
+// falls back to 'dry-run', and a dry-run pass ends at a console.log. These cases
+// pin who is allowed to spend a request: the background timer only in 'live',
+// the user's Preview button in 'dry-run'. The sweep must never fetch or delete
+// cloud conversations: list transcripts can be redacted while still containing data.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -27,6 +26,7 @@ vi.mock('./pageCache', () => ({ invalidateConversationsCache: h.invalidateConver
 import { maybeStartRetentionSweep, runRetentionSweep } from './retentionSweep'
 
 const listLocalConversations = vi.fn()
+const deleteLocalConversation = vi.fn(async () => {})
 
 /** Every backend call the sweep can make, from either of its two fetch paths. */
 const backendCalls = (): number => h.get.mock.calls.length + h.fetchAllMemories.mock.calls.length
@@ -38,7 +38,7 @@ beforeEach(() => {
   listLocalConversations.mockResolvedValue([])
   ;(globalThis as unknown as { window: Record<string, unknown> }).window.omi = {
     listLocalConversations,
-    deleteLocalConversation: vi.fn(async () => {})
+    deleteLocalConversation
   }
   h.get.mockResolvedValue({ data: [] })
   h.fetchAllMemories.mockResolvedValue([])
@@ -73,7 +73,29 @@ describe('scheduled passes', () => {
     h.getPreferences.mockReturnValue({ retentionMode: 'live' })
     await runRetentionSweep('scheduled')
     expect(h.fetchAllMemories).toHaveBeenCalledTimes(1)
-    expect(h.get).toHaveBeenCalledWith('/v1/conversations', expect.anything())
+    expect(h.get).not.toHaveBeenCalled()
+    expect(h.del).not.toHaveBeenCalled()
+  })
+
+  it('deletes empty local recordings without reading a potentially redacted cloud list', async () => {
+    h.getPreferences.mockReturnValue({ retentionMode: 'live' })
+    listLocalConversations.mockResolvedValue([
+      { id: 'local-empty', kind: 'recording', transcript: 'You: hi' }
+    ])
+    // This response would misclassify a locked conversation if the sweep fetched it.
+    // The fixture must remain unread: no cloud list request or DELETE is allowed.
+    h.get.mockResolvedValue({
+      data: [
+        { id: 'locked-with-content', status: 'completed', is_locked: true, transcript_segments: [] }
+      ]
+    })
+
+    await runRetentionSweep('scheduled')
+
+    expect(deleteLocalConversation).toHaveBeenCalledTimes(1)
+    expect(deleteLocalConversation).toHaveBeenCalledWith('local-empty')
+    expect(h.get).not.toHaveBeenCalled()
+    expect(h.del).not.toHaveBeenCalled()
   })
 })
 
@@ -84,7 +106,8 @@ describe('manual passes', () => {
     h.getPreferences.mockReturnValue({ retentionMode: 'dry-run' })
     await runRetentionSweep('manual')
     expect(h.fetchAllMemories).toHaveBeenCalledTimes(1)
-    expect(h.get).toHaveBeenCalledWith('/v1/conversations', expect.anything())
+    expect(h.get).not.toHaveBeenCalled()
+    expect(h.del).not.toHaveBeenCalled()
   })
 
   it('still respects off — the one mode that means do nothing', async () => {

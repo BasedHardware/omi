@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Auto-cleanup no longer deletes cloud conversations from a potentially redacted conversation list. It still removes empty local recordings and junk memories."
+  ]
+}
