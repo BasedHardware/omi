@@ -74,6 +74,70 @@ omi --json local task search "taxes" --include-completed
 
 فقط در صورتی که کاربر صریحاً درخواست کند، وظایف را تکمیل یا حذف کنید:
 
+فقط در صورتی که کاربر صریحاً درخواست کند، وظایف را تکمیل یا حذف کنید:
+
 ```bash
-omi --json local task complete task_1
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
+
+دستور `omi local screenshot SCREENSHOT_ID --output PATH` تصویر صفحه را بر روی دیسک ذخیره می‌کند و همچنان JSON را برای اسکریپت‌ها در stdout چاپ می‌کند. شناسه تصویر معمولاً از طریق `local search-screen` یا پرس‌وجوی SQL بر روی جدول `screenshots` به دست می‌آید. اگر نسخه دسکتاپ خطای ساختاریافته‌ای مانند `screenshot_pending`، `screenshot_file_missing` یا `screenshot_chunk_corrupted` بازگرداند، حالت JSON فیلدهای `reason`، `hint` و `screenshot_id` را در stderr حفظ می‌کند تا عامل‌ها بتوانند شناسه قدیمی‌تری را امتحان کنند یا مانع دقیق را گزارش دهند. پیش از ارسال تصویر به ابزارهای بینایی، خروجی موفق را با `file PATH` اعتبارسنجی کنید.
+
+## مثال کاربردی: حلقه عامل پایتون (Python)
+
+```python
+import json
+import subprocess
+from typing import Any
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        # The CLI prints structured errors to stderr in JSON mode:
+        # {"error": "...", "detail": "..."}
+        try:
+            err = json.loads(result.stderr)
+        except json.JSONDecodeError:
+            err = {"error": result.stderr.strip()}
+        raise RuntimeError(f"omi exited {result.returncode}: {err}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+# Read all open action items and mark anything older than 30 days complete.
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+items = omi("action-item", "list", "--open")
+for item in items or []:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## مدیریت محدودیت نرخ درخواست (Handling rate limits)
+
+حافظه‌ها: ۱۲۰ در ساعت. گفتگوها: ۲۵ در ساعت. ایجاد دسته‌ای: ۱۵ در ساعت.
+
+```python
+result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
+if result.returncode == 4:                             # rate limited
+    err = json.loads(result.stderr)
+    # err["detail"] looks like: "Retry in 12s. ..."
+    time.sleep(parse_retry_window(err["detail"]) or 60)
+```
+
+## نکات کاربردی (Tips)
+
+* اگر عامل شما چندین حساب Omi را مدیریت می‌کند، از `--profile <name>` استفاده کنید. هر نمایه دارای اعتبار و آدرس پایه API اختصاصی خود است.
+* برای آزمایش با بک‌اند محلی از `--api-base http://localhost:8080` استفاده کنید.
+* برای بازنویسی تنظیمات محلی Desktop API برای یک اجرای خاص، از `OMI_LOCAL_API_URL` و `OMI_LOCAL_TOKEN` استفاده کنید.
+* برای خطایابی از پرچم `--verbose` استفاده کنید — این پرچم `METHOD path → status (Ns)` را بدون تأثیر بر stdout در stderr چاپ می‌کند تا فرمت JSON معتبر بماند.
+* برای ارسال داده به مکالمه از طریق pipe، از `--text -` استفاده کنید:
+  ```bash
+  cat meeting_notes.md | omi conversation create --text - --text-source other_text
+  ```
