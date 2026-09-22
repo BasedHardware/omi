@@ -75,16 +75,44 @@ def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> 
     return max(minimum, min(maximum, number))
 
 
-def _normalize_tag(tag: str) -> str:
+def _normalize_tag(tag: Any) -> str:
     if not isinstance(tag, str):
         return ""
     return tag.split(":", 1)[-1].replace("-", " ").strip()
 
 
 def _normalize_tags(tags: Any) -> List[str]:
-    if not isinstance(tags, list):
+    if not tags:
         return []
+    if not isinstance(tags, list):
+        tags = [tags]
     return [item for item in (_normalize_tag(tag) for tag in tags) if item]
+
+
+def _normalize_string_list(value: Any) -> List[str]:
+    if not value or isinstance(value, bool):
+        return []
+    if isinstance(value, str):
+        values = re.split(r"[,;\s]+", value)
+    elif isinstance(value, (list, tuple, set)):
+        values = list(value)
+    else:
+        values = [value]
+    result = []
+    seen = set()
+    for item in values:
+        s = str(item or "").strip()
+        if s and s not in seen:
+            seen.add(s)
+            result.append(s)
+    return result
+
+
+def _safe_grade(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip().upper()
+    return cleaned or None
 
 
 async def _json_body(request: Request) -> tuple[Dict[str, Any], Optional[str]]:
@@ -107,33 +135,37 @@ def _invalid_body_response(message: str) -> ChatToolResponse:
     )
 
 
-def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
+def _nutrient(product: Any, key: str) -> Optional[Any]:
     """Return the per-100g nutrient only.
 
     Unsuffixed nutriment keys depend on nutrition_data_per (often serving).
     Falling back to them and labeling the result per_100g is wrong.
     """
-    nutriments = product.get("nutriments") or {}
+    if not isinstance(product, dict):
+        return None
+    nutriments = product.get("nutriments")
+    if not isinstance(nutriments, dict):
+        return None
     per_100g_key = f"{key}_100g"
-    if per_100g_key in nutriments:
-        return nutriments[per_100g_key]
-    return None
+    return nutriments.get(per_100g_key)
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(product, dict):
+        return {}
     return {
-        "barcode": product.get("code") or "",
-        "name": product.get("product_name") or product.get("generic_name") or "Unknown product",
-        "brands": product.get("brands") or "",
-        "quantity": product.get("quantity") or "",
-        "nutri_score": (product.get("nutriscore_grade") or "").upper() or None,
-        "nova_group": product.get("nova_group"),
-        "eco_score": (product.get("ecoscore_grade") or "").upper() or None,
+        "barcode": str(product.get("code") or ""),
+        "name": str(product.get("product_name") or product.get("generic_name") or "Unknown product"),
+        "brands": str(product.get("brands") or ""),
+        "quantity": str(product.get("quantity") or ""),
+        "nutri_score": _safe_grade(product.get("nutriscore_grade")),
+        "nova_group": product.get("nova_group") if isinstance(product.get("nova_group"), (int, float)) and not isinstance(product.get("nova_group"), bool) else None,
+        "eco_score": _safe_grade(product.get("ecoscore_grade")),
         "allergens": _normalize_tags(product.get("allergens_tags")),
         "traces": _normalize_tags(product.get("traces_tags")),
         "labels": _normalize_tags(product.get("labels_tags"))[:12],
         "categories": _normalize_tags(product.get("categories_tags"))[:12],
-        "ingredients": product.get("ingredients_text") or "",
+        "ingredients": str(product.get("ingredients_text") or ""),
         "nutrition_per_100g": {
             "energy_kcal": _nutrient(product, "energy-kcal"),
             "fat_g": _nutrient(product, "fat"),
@@ -144,7 +176,7 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
             "proteins_g": _nutrient(product, "proteins"),
             "salt_g": _nutrient(product, "salt"),
         },
-        "image_url": product.get("image_front_small_url") or "",
+        "image_url": str(product.get("image_front_small_url") or ""),
         "data_note": "Open Food Facts data is community contributed and can be incomplete.",
     }
 
@@ -248,9 +280,10 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
 
 
 async def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
-    barcodes = body.get("barcodes") or []
-    if not isinstance(barcodes, list):
-        return {"error": "barcodes must be a list"}
+    raw_barcodes = body.get("barcodes")
+    barcodes = _normalize_string_list(raw_barcodes)
+    if not barcodes:
+        return {"error": "barcodes must be a non-empty list of barcode strings"}
 
     products = []
     errors = []
@@ -271,7 +304,7 @@ def _ingredient_mentions_term(ingredients: str, term: str) -> bool:
     if not term:
         return False
 
-    normalized = ingredients.lower()
+    normalized = str(ingredients or "").lower()
     pattern = re.compile(rf"(?<![a-z]){re.escape(term)}(?![a-z])")
     for match in pattern.finditer(normalized):
         after = normalized[match.end() : match.end() + 8]
@@ -451,21 +484,30 @@ async def tool_check_allergens(request: Request):
     if error:
         return _invalid_body_response(error)
 
-    avoid = body.get("avoid") or []
-    if not isinstance(avoid, list) or not avoid:
+    avoid = _normalize_string_list(body.get("avoid"))
+    if not avoid:
         return ChatToolResponse(
             success=False,
             message="avoid must be a non-empty list",
             data={"error": "avoid must be a non-empty list"},
         )
 
-    if body.get("barcode"):
-        lookup = await _lookup_barcode(body.get("barcode"))
+    barcode = str(body.get("barcode") or "").strip()
+    query = str(body.get("query") or "").strip()
+    if not barcode and not query:
+        return ChatToolResponse(
+            success=False,
+            message="Either barcode or query must be provided to check allergens.",
+            data={"error": "Either barcode or query must be provided to check allergens."},
+        )
+
+    if barcode:
+        lookup = await _lookup_barcode(barcode)
         if "error" in lookup:
             return ChatToolResponse(success=False, message=lookup["error"], data=lookup)
         product = lookup["product"]
     else:
-        search = await _search_foods(body.get("query", ""), 1)
+        search = await _search_foods(query, 1)
         if "error" in search:
             return ChatToolResponse(success=False, message=search["error"], data=search)
         products = search.get("products", [])
@@ -480,7 +522,7 @@ async def tool_check_allergens(request: Request):
     avoid_terms = {str(item).lower().strip() for item in avoid if str(item).strip()}
     known_allergens = {item.lower() for item in (product.get("allergens") or []) if isinstance(item, str)}
     traces = {item.lower() for item in (product.get("traces") or []) if isinstance(item, str)}
-    ingredients = (product.get("ingredients") or "").lower()
+    ingredients = str(product.get("ingredients") or "").lower()
 
     matches = sorted(
         term

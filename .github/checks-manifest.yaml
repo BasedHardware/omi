@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: openfoodfacts-robustness-and-coercion-tests
+    command: ["python3", "plugins/omi-openfoodfacts-app/test_robustness_and_coercion.py"]
+    triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open Food Facts app must guard non-dict nutriments payloads, safely format scores without AttributeError on non-string types, and normalize comma-separated barcode/allergen input strings"
   - id: hive-limit-coercion-tests
     command: ["python3", "plugins/omi-hive-app/test_limit_coercion.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
