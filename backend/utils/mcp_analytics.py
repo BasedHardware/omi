@@ -53,6 +53,8 @@ _TOOL_OPERATIONS = {
     "get_goals": "goal_list",
     "get_chat_messages": "chat_message_list",
     "get_people": "people_list",
+    "rename_person": "people_rename",
+    "dismiss_person": "people_dismiss",
     "get_screen_activity": "screen_activity_get",
     # Kept here for the connector branch: once search/fetch reaches this
     # boundary it automatically uses the same event contract.
@@ -97,6 +99,8 @@ _KNOWN_TOOLS = frozenset(
         "get_goals",
         "get_chat_messages",
         "get_people",
+        "rename_person",
+        "dismiss_person",
         "get_screen_activity",
         "search",
         "fetch",

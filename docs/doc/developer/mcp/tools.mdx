@@ -168,6 +168,8 @@ in the first two sections below; the additional tools are hosted-server tools.
 | `get_goals` | `include_inactive?` (default false) | List goals, active by default |
 | `get_chat_messages` | `limit?` (default 50), `offset?` | List recent Omi chat messages, newest first |
 | `get_people` | None | List recognized people with speaker samples |
+| `rename_person` | `person_id`, `name` | Correct a display name without exposing speaker samples in the response |
+| `dismiss_person` | `person_id` | Soft-dismiss a false-positive person; requires the opt-in `people.cleanup` scope |
 | `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `summary?`, `limit?` | List synced screen activity or return a per-app summary |
 | `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
 
@@ -194,6 +196,11 @@ The same summary contract serves hosted MCP, REST MCP, and
 
 Window titles are samples, not a ranking by dwell time. Summaries remain derived
 views of screen evidence; they do not create or promote semantic memories.
+
+`rename_person` requires `people.rename`, which is part of the compatible default MCP key grant.
+`dismiss_person` requires the explicitly requested `people.cleanup` scope. Dismissal is soft: it
+hides the person from default app and MCP People reads while preserving the record for data export.
+Existing and newly created default keys do not receive `people.cleanup` automatically.
 
 ---
 

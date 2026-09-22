@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
@@ -227,6 +227,34 @@ class ApiKeyAuth:
         self.scopes = scopes
         self.app_id = app_id
         self.key_id = key_id
+
+
+def require_mcp_api_key_scope(
+    required_scope: str,
+    *,
+    policy_name: str = "mcp:read",
+) -> Callable[..., Awaitable[str]]:
+    """Build a REST MCP dependency that enforces one persisted key scope.
+
+    Hosted MCP tools and REST routes consume the same stored scope list.  The
+    dependency returns only the owner UID so route handlers cannot accidentally
+    use caller-supplied identity data.
+    """
+
+    async def dependency(auth: ApiKeyAuth = Depends(get_mcp_api_key_auth)) -> str:
+        if not has_scope(auth.scopes, required_scope):
+            raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {required_scope}")
+        await _check_api_key_rate_limit_async(
+            prefix="mcp",
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            policy_name=policy_name,
+        )
+        return auth.uid
+
+    dependency.__name__ = f"require_mcp_{required_scope.replace('.', '_')}"
+    return dependency
 
 
 async def get_api_key_auth(

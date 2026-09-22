@@ -393,7 +393,9 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
         yield ",\n" if index < len(JIT_EXPORT_COLLECTIONS) - 1 else "\n"
     yield '  },\n'
 
-    people = cast(Sequence[Mapping[str, Any]], get_people(uid))
+    # Soft-dismissed people stay in the user's portable archive even though
+    # normal product and MCP reads hide them.
+    people = cast(Sequence[Mapping[str, Any]], get_people(uid, include_dismissed=True))
     yield '  "people": ' + _dumps(people, indent=2) + ",\n"
 
     yield '  "action_items": '

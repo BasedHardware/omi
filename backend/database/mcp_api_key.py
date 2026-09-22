@@ -29,7 +29,8 @@ from utils.mcp_api_keys import generate_api_key, hash_api_key
 from utils.mcp_scopes import (
     MCP_APP_KEY_MEMORY_GRANTS_DOC_ID,
     MCP_DEFAULT_APP_ID,
-    MCP_FULL_ACCESS_SCOPES,
+    MCP_FULL_ACCESS_SCOPES as MCP_FULL_ACCESS_SCOPES,
+    MCP_SUPPORTED_SCOPES,
     MCP_MEMORY_CONTROL_COLLECTION,
     MCP_MEMORY_GRANT_SCOPES,
     normalize_mcp_scopes,
@@ -150,7 +151,7 @@ def _valid_cached_auth_context(cached_data: Dict[str, Any]) -> bool:
         and not api_key_scopes_need_repair(
             cached_data.get("scopes"),
             scopes,
-            allowed_scopes=MCP_FULL_ACCESS_SCOPES,
+            allowed_scopes=MCP_SUPPORTED_SCOPES,
             missing_is_valid=False,
         )
     )
@@ -234,7 +235,7 @@ def get_mcp_keys_for_user_with_repair_info(
         if api_key_scopes_need_repair(
             data.get("scopes"),
             projected["scopes"],
-            allowed_scopes=MCP_FULL_ACCESS_SCOPES,
+            allowed_scopes=MCP_SUPPORTED_SCOPES,
             missing_is_valid=False,
         ):
             repairs.add(ApiKeyMetadataRepair.SCOPES)
@@ -293,10 +294,11 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     """
     Verifies an MCP API key and returns uid plus server-owned app/key/scopes.
 
-    MCP keys are full-access agent keys. Older key documents may be missing the
-    app identity, scopes, and memory grant state introduced by the app/key grant
-    layer; repair them lazily on successful authentication so existing agents
-    keep working without regenerating keys.
+    MCP keys receive the compatible default agent scopes; risky capabilities
+    such as People cleanup remain explicit opt-ins. Older key documents may be
+    missing the app identity, scopes, and memory grant state introduced by the
+    app/key grant layer; repair them lazily on successful authentication so
+    existing agents keep working without regenerating keys.
     """
     if not api_key.startswith("omi_mcp_"):
         return ApiKeyAuthLookupResult(context=None)
@@ -350,7 +352,7 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     if api_key_scopes_need_repair(
         key_data.get("scopes"),
         scopes,
-        allowed_scopes=MCP_FULL_ACCESS_SCOPES,
+        allowed_scopes=MCP_SUPPORTED_SCOPES,
         missing_is_valid=False,
     ):
         repairs.add(ApiKeyAuthRepair.SCOPES)

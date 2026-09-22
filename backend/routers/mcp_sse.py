@@ -61,7 +61,6 @@ from utils.memory.product_authorization import (
 from utils.mcp_data import (
     clean_action_item,
     clean_chat_message,
-    clean_person,
     clean_screen_activity_row,
     end_of_day_utc,
     parse_date_only_utc,
@@ -77,7 +76,14 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
 )
-from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_scopes import MCP_DEFAULT_API_KEY_SCOPES, MCP_SUPPORTED_SCOPES
+from utils.mcp_people import (
+    MCP_PEOPLE_TOOL_NAMES,
+    PEOPLE_CLEANUP_SECURITY,
+    PEOPLE_RENAME_SECURITY,
+    build_people_tools,
+    execute_people_tool,
+)
 from utils.mcp_analytics import (
     authorization_outcome_for_code,
     error_category_for_code,
@@ -108,8 +114,8 @@ MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-kno
 MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS = int(os.getenv("MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS", "30"))
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
-MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+MCP_SCOPES_SUPPORTED = list(MCP_SUPPORTED_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_DEFAULT_API_KEY_SCOPES)
 MCP_MEMORY_LIST_DEFAULT_LIMIT = 20
 MCP_MEMORY_LIST_MAX_LIMIT = 100
 MCP_MEMORY_LIST_MAX_SCAN = 200
@@ -163,7 +169,6 @@ ACTION_ITEMS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["action_items.write
 GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
-PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 
 
 @dataclass
@@ -321,6 +326,8 @@ TOOL_REQUIRED_SCOPE = {
     "get_goals": "goals.read",
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
+    "rename_person": "people.rename",
+    "dismiss_person": "people.cleanup",
     "get_screen_activity": "screen_activity.read",
 }
 
@@ -335,6 +342,8 @@ SCOPE_PERMISSION_TEXT = {
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
+    "people.rename": "Correct display names for people in your Omi account",
+    "people.cleanup": "Dismiss false-positive people from normal Omi reads",
 }
 
 
@@ -744,17 +753,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
             },
         },
     },
-    {
-        "name": "get_people",
-        "description": (
-            "Retrieve the people/contacts the user interacts with (recurring speakers Omi has identified). "
-            "Returns each person's name, id, and a few transcript samples of how they speak. Use this to reason "
-            "about the user's relationships, not just raw text."
-        ),
-        "annotations": READ_ONLY_ANNOTATIONS,
-        "securitySchemes": PEOPLE_READ_SECURITY,
-        "inputSchema": {"type": "object", "properties": {}},
-    },
+    *build_people_tools(READ_ONLY_ANNOTATIONS, WRITE_ANNOTATIONS, DESTRUCTIVE_WRITE_ANNOTATIONS),
     {
         "name": "get_screen_activity",
         "description": (
@@ -1453,8 +1452,8 @@ def execute_tool(
         messages = chat_db.get_messages(user_id, limit=limit, offset=offset)
         return {"messages": [clean_chat_message(m) for m in messages]}
 
-    elif tool_name == "get_people":
-        return {"people": [clean_person(p) for p in users_db.get_people(user_id)]}
+    elif tool_name in MCP_PEOPLE_TOOL_NAMES:
+        return execute_people_tool(tool_name, arguments, user_id, ToolExecutionError, users_db)
 
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
