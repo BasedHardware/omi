@@ -167,7 +167,11 @@ async def test_pure_noise_close_posts_nothing(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_windowed_gate_uses_silero_start_and_continue_thresholds(monkeypatch):
+async def test_windowed_gate_keeps_the_billed_threshold_with_a_short_tail(monkeypatch):
+    """The windowed leg differs from the billed Deepgram gate in its tail, not its
+    threshold. Quiet far-field speech is admitted by the level-corrected copy the gate
+    scores, not by a lower threshold, so the start value tracks VAD_GATE_SPEECH_THRESHOLD
+    and there is no hysteresis gap for borderline audio to slip through."""
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     socket = await LiveChainSession(receiver()).connect(16000)
@@ -175,8 +179,8 @@ async def test_windowed_gate_uses_silero_start_and_continue_thresholds(monkeypat
     assert gate is not None
     assert gate.mode == 'active'
     assert gate._hangover_ms == WINDOW_VAD_HANGOVER_MS == 300
-    assert gate._speech_threshold == WINDOW_VAD_SPEECH_THRESHOLD == 0.5
-    assert gate._continue_threshold == WINDOW_VAD_CONTINUE_THRESHOLD == 0.35
+    assert gate._speech_threshold == WINDOW_VAD_SPEECH_THRESHOLD == vad_gate.VAD_GATE_SPEECH_THRESHOLD
+    assert gate._continue_threshold == WINDOW_VAD_CONTINUE_THRESHOLD == gate._speech_threshold
     await socket.drain_and_close()
     assert window.admission.active == 0
 

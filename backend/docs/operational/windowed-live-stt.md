@@ -130,12 +130,16 @@ opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
 
-The windowed TDT leg owns forced-active VAD with a short silence tail. Speech
-starts at Silero's published 0.5 probability and continues at 0.35 (the model's
-`neg_threshold`) so quiet far-field is not dropped by the billed-path 0.65
-start threshold; hangover remains 300 ms. Initial noise never reaches TDT. VAD
-initialization failure skips TDT; inference failure on that leg closes it
-before raw audio can escape.
+The windowed TDT leg owns forced-active VAD with a short silence tail. It keeps
+the billed path's 0.65 start probability with no hysteresis gap, and differs
+only in the tail: hangover is 300 ms rather than 4 s, because a growing window
+re-posts its own prefix and does not need seconds of trailing silence to avoid
+clipping a word. Quiet far-field is admitted by the level-corrected copy the
+gate scores (below), not by a lower threshold — that copy lifts far-field
+admission from 73.7 s to 91.7 s of a 120 s clip on its own, where a 0.5 / 0.35
+hysteresis added only 5.6 s more and cost words on dense speech. Initial noise
+never reaches TDT. VAD initialization failure skips TDT; inference failure on
+that leg closes it before raw audio can escape.
 
 The windowed leg splits bounded peak AGC into two jobs with the same knobs:
 target 0.8 of full scale (the RNNT path's `AGC_TARGET_PEAK`), hard 4× (12 dB)
