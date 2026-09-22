@@ -192,7 +192,8 @@ async def _auth_guard(uid: str) -> None:
     try:
         await auth.get_access_token(uid)
     except auth.AuthError as e:
-        raise HTTPException(401, f"Microsoft not connected — {e}")
+        log.warning("Authentication failed for uid=%s: %s", uid, e)
+        raise HTTPException(401, "Microsoft not connected — please connect in settings.")
 
 
 # Keys the Omi backend adds to every chat tool call next to the tool's own
@@ -232,7 +233,16 @@ async def tool_dispatch(tool_name: str, request: Request) -> Any:
     try:
         return await handler(uid, **args)
     except TypeError as e:
-        raise HTTPException(400, f"Bad arguments for {tool_name}: {e}")
+        log.warning("Bad arguments for %s: %s", tool_name, e)
+        raise HTTPException(400, f"Bad arguments for {tool_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("Error executing %s for uid=%s: %s", tool_name, uid, e, exc_info=True)
+        status_code = getattr(e, "status", None)
+        if isinstance(status_code, int) and 400 <= status_code < 500:
+            raise HTTPException(status_code, f"Request failed for {tool_name}")
+        raise HTTPException(502, f"Failed to execute {tool_name} due to an upstream service error.")
 
 
 # tool_name -> coroutine(uid, **args)
