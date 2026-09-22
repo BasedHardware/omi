@@ -2146,7 +2146,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get alwaysInContext => 'ہمیشہ سیاق میں';
 
   @override
-  String get memoryContentHint => 'مجھے آئس کریم کھانا پسند ہے...';
+  String get memoryContentHint => 'مجھے صبح کی میٹنگز پسند ہیں۔';
 
   @override
   String get failedToSaveMemory => 'محفوظ کرنا ناکام۔ براہ کرم اپنی کنکشن چیک کریں۔';
@@ -10136,4 +10136,25 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'تم میرے لیے کیا کر سکتے ہو؟',
+        'goal': 'مجھے ایک مقصد طے کرنے میں مدد کرو',
+        'activity': 'میری حالیہ سرگرمیوں کا خلاصہ دو',
+        'improve': 'میں کیسے بہتر ہو سکتا ہوں؟',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'اگلے ہفتے';
+
+  @override
+  String get clearSearch => 'تلاش صاف کریں';
 }

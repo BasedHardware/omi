@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "मला आयस्क्रीम खाण्यास आवडते...",
+    "memoryContentHint": "मला सकाळच्या बैठका आवडतात.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,8 @@
     "updateSummaryWithNewNames": "नवीन नावांसह सारांश अद्यतनित करा",
     "syncStatusUnsupportedAudio": "ऑडिओ वाचता आला नाही — सिंक करता येत नाही",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{तू माझ्यासाठी काय करू शकतोस?} goal{मला ध्येय ठरवायला मदत कर} activity{माझ्या अलीकडील कामांचा सारांश दे} improve{मी कशी सुधारणा करू शकतो?} other{}}",
+    "nextWeek": "पुढील आठवड्यात",
+    "clearSearch": "शोध साफ करा"
 }

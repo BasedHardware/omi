@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "جميع الذكريات عامة الآن",
     "newMemory": "✨ ذاكرة جديدة",
     "editMemory": "✏️ تعديل الذاكرة",
-    "memoryContentHint": "أحب تناول الآيس كريم...",
+    "memoryContentHint": "أفضل الاجتماعات الصباحية.",
     "failedToSaveMemory": "فشل الحفظ. يرجى التحقق من اتصالك.",
     "saveMemory": "حفظ الذكرى",
     "retry": "إعادة المحاولة",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "تحديث الملخص بالأسماء الجديدة",
     "syncStatusUnsupportedAudio": "تعذّرت قراءة الصوت — لا يمكن مزامنته",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{ماذا يمكنك أن تفعل من أجلي؟} goal{ساعدني في تحديد هدف} activity{لخّص نشاطي الأخير} improve{كيف يمكنني التحسّن؟} other{}}",
+    "nextWeek": "الأسبوع القادم",
+    "clearSearch": "مسح البحث"
 }

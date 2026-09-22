@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Alle minner er nå offentlige",
     "newMemory": "✨ Nytt minne",
     "editMemory": "✏️ Rediger minne",
-    "memoryContentHint": "Jeg liker å spise iskrem...",
+    "memoryContentHint": "Jeg foretrekker møter om morgenen.",
     "failedToSaveMemory": "Kunne ikke lagre. Sjekk forbindelsen din.",
     "saveMemory": "Lagre minne",
     "retry": "Prøv igjen",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Oppdater sammendraget med de nye navnene",
     "syncStatusUnsupportedAudio": "Lyden kunne ikke leses — kan ikke synkroniseres",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Hva kan du gjøre for meg?} goal{Hjelp meg med å sette et mål} activity{Oppsummer mine siste aktiviteter} improve{Hvordan kan jeg bli bedre?} other{}}",
+    "nextWeek": "Neste uke",
+    "clearSearch": "Tøm søk"
 }

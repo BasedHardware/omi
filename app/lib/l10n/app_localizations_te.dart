@@ -2156,7 +2156,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get alwaysInContext => 'ఎల్లప్పుడూ సందర్భంలో';
 
   @override
-  String get memoryContentHint => 'నేను ice cream తినడానికి ఇష్టపడతాను...';
+  String get memoryContentHint => 'నేను ఉదయం సమావేశాలను ఇష్టపడతాను.';
 
   @override
   String get failedToSaveMemory => 'సేవ చేయడానికి విఫలమైంది. దయచేసి మీ కనెక్షన్‌ను తనిఖీ చేయండి.';
@@ -10172,4 +10172,25 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'నువ్వు నా కోసం ఏమి చేయగలవు?',
+        'goal': 'లక్ష్యాన్ని నిర్దేశించుకోవడంలో నాకు సహాయం చేయి',
+        'activity': 'నా ఇటీవలి కార్యకలాపాలను సంక్షిప్తంగా చెప్పు',
+        'improve': 'నేను ఎలా మెరుగుపడగలను?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'వచ్చే వారం';
+
+  @override
+  String get clearSearch => 'శోధనను క్లియర్ చేయండి';
 }

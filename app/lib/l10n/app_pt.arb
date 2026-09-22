@@ -650,7 +650,7 @@
     "allMemoriesPublicResult": "Todas as memórias são agora públicas",
     "newMemory": "✨ Nova memória",
     "editMemory": "✏️ Editar memória",
-    "memoryContentHint": "Eu gosto de sorvete...",
+    "memoryContentHint": "Prefiro reuniões pela manhã.",
     "failedToSaveMemory": "Falha ao salvar.",
     "saveMemory": "Salvar memória",
     "retry": "Tentar Novamente",
@@ -3288,5 +3288,8 @@
     "updateSummaryWithNewNames": "Atualizar o resumo com os novos nomes",
     "syncStatusUnsupportedAudio": "Não foi possível ler o áudio — não pode ser sincronizado",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{O que você pode fazer por mim?} goal{Ajude-me a definir uma meta} activity{Resuma minha atividade recente} improve{Como posso melhorar?} other{}}",
+    "nextWeek": "Na próxima semana",
+    "clearSearch": "Limpar pesquisa"
 }

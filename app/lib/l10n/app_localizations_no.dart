@@ -2145,7 +2145,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get alwaysInContext => 'Alltid i kontekst';
 
   @override
-  String get memoryContentHint => 'Jeg liker å spise iskrem...';
+  String get memoryContentHint => 'Jeg foretrekker møter om morgenen.';
 
   @override
   String get failedToSaveMemory => 'Kunne ikke lagre. Sjekk forbindelsen din.';
@@ -10123,4 +10123,25 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Hva kan du gjøre for meg?',
+        'goal': 'Hjelp meg med å sette et mål',
+        'activity': 'Oppsummer mine siste aktiviteter',
+        'improve': 'Hvordan kan jeg bli bedre?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Neste uke';
+
+  @override
+  String get clearSearch => 'Tøm søk';
 }

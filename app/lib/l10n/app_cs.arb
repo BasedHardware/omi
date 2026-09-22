@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Všechny vzpomínky jsou nyní veřejné",
     "newMemory": "✨ Nová vzpomínka",
     "editMemory": "✏️ Upravit vzpomínku",
-    "memoryContentHint": "Rád/a jím zmrzlinu...",
+    "memoryContentHint": "Dávám přednost ranním schůzkám.",
     "failedToSaveMemory": "Uložení se nezdařilo. Zkontrolujte prosím připojení.",
     "saveMemory": "Uložit vzpomínku",
     "retry": "Opakovat",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
     "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
+    "nextWeek": "Příští týden",
+    "clearSearch": "Vymazat hledání"
 }

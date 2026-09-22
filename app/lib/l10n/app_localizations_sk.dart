@@ -2151,7 +2151,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get alwaysInContext => 'Vždy v kontexte';
 
   @override
-  String get memoryContentHint => 'Rád jem zmrzlinu...';
+  String get memoryContentHint => 'Uprednostňujem ranné stretnutia.';
 
   @override
   String get failedToSaveMemory => 'Nepodarilo sa uložiť. Skontrolujte prosím svoje pripojenie.';
@@ -10116,4 +10116,25 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Čo pre mňa môžeš urobiť?',
+        'goal': 'Pomôž mi stanoviť cieľ',
+        'activity': 'Zhrň moje nedávne aktivity',
+        'improve': 'Ako sa môžem zlepšiť?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Budúci týždeň';
+
+  @override
+  String get clearSearch => 'Vymazať vyhľadávanie';
 }

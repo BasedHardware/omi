@@ -2164,7 +2164,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get alwaysInContext => 'Πάντα στο πλαίσιο';
 
   @override
-  String get memoryContentHint => 'Μου αρέσει να τρώω παγωτό...';
+  String get memoryContentHint => 'Προτιμώ τις πρωινές συναντήσεις.';
 
   @override
   String get failedToSaveMemory => 'Αποτυχία αποθήκευσης. Παρακαλώ ελέγξτε τη σύνδεσή σας.';
@@ -10194,4 +10194,25 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Τι μπορείς να κάνεις για μένα;',
+        'goal': 'Βοήθησέ με να θέσω έναν στόχο',
+        'activity': 'Σύνοψε την πρόσφατη δραστηριότητά μου',
+        'improve': 'Πώς μπορώ να βελτιωθώ;',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Επόμενη εβδομάδα';
+
+  @override
+  String get clearSearch => 'Εκκαθάριση αναζήτησης';
 }
