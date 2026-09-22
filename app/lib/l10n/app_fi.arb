@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Ääni on valmis tunnistettavaksi} saved_sample_awaiting_embedding{Näyte tallennettu, äänen käsittelyä tarvitaan vielä} not_learned{Ääntä ei ole opittu} other{Äänen tila tuntematon}}",
     "tagSpeakerIncludingLaterSpeech": "Merkitse myös tämän puhujan myöhempi puhe",
     "updateSummaryWithNewNames": "Päivitä yhteenveto uusilla nimillä",
-    "syncStatusUnsupportedAudio": "Ääntä ei voitu lukea — ei voi synkronoida"
+    "syncStatusUnsupportedAudio": "Ääntä ei voitu lukea — ei voi synkronoida",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

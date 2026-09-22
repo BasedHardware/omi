@@ -386,6 +386,24 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Apply a list-row reprocess response: processing/merging rows leave the
+  /// completed list and join the processing skeleton; a titled (or otherwise
+  /// settled) result upserts in place.
+  void applyConversationReprocessResult(ServerConversation updated) {
+    if (_isActiveProcessingStatus(updated.status)) {
+      conversations.removeWhere((conversation) => conversation.id == updated.id);
+      searchedConversations.removeWhere((conversation) => conversation.id == updated.id);
+      if (hasActiveSearch) {
+        _groupSearchConvosByDateWithoutNotify();
+      } else {
+        _groupConversationsByDateWithoutNotify();
+      }
+      addProcessingConversation(updated);
+      return;
+    }
+    upsertConversation(updated);
+  }
+
   void removeProcessingConversation(String conversationId) {
     _bumpProcessingStateRevision(conversationId);
     processingConversations.removeWhere((m) => m.id == conversationId);

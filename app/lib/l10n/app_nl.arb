@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Stem klaar voor herkenning} saved_sample_awaiting_embedding{Fragment opgeslagen; stemverwerking nog nodig} not_learned{Stem niet geleerd} other{Stemstatus onbekend}}",
     "tagSpeakerIncludingLaterSpeech": "Ook latere spraak van deze spreker taggen",
     "updateSummaryWithNewNames": "Samenvatting bijwerken met nieuwe namen",
-    "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd"
+    "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

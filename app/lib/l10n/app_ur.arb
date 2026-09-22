@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{آواز شناخت کے لیے تیار ہے} saved_sample_awaiting_embedding{نمونہ محفوظ ہے؛ آواز کی پروسیسنگ ابھی درکار ہے} not_learned{آواز سیکھی نہیں گئی} other{آواز کی حالت نامعلوم ہے}}",
     "tagSpeakerIncludingLaterSpeech": "اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں",
     "updateSummaryWithNewNames": "نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں",
-    "syncStatusUnsupportedAudio": "آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی"
+    "syncStatusUnsupportedAudio": "آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

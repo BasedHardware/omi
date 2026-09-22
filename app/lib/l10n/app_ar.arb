@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{الصوت جاهز للتعرّف} saved_sample_awaiting_embedding{عينة محفوظة بانتظار معالجة الصوت} not_learned{لم يتم تعلّم الصوت} other{حالة الصوت غير معروفة}}",
     "tagSpeakerIncludingLaterSpeech": "وسم الكلام اللاحق من هذا المتحدث أيضًا",
     "updateSummaryWithNewNames": "تحديث الملخص بالأسماء الجديدة",
-    "syncStatusUnsupportedAudio": "تعذّرت قراءة الصوت — لا يمكن مزامنته"
+    "syncStatusUnsupportedAudio": "تعذّرت قراءة الصوت — لا يمكن مزامنته",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

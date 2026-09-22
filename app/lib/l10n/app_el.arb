@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Η φωνή είναι έτοιμη για αναγνώριση} saved_sample_awaiting_embedding{Αποθηκευμένο δείγμα, αναμένεται επεξεργασία φωνής} not_learned{Η φωνή δεν έχει μαθευτεί} other{Άγνωστη κατάσταση φωνής}}",
     "tagSpeakerIncludingLaterSpeech": "Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή",
     "updateSummaryWithNewNames": "Ενημέρωση περίληψης με τα νέα ονόματα",
-    "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί"
+    "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

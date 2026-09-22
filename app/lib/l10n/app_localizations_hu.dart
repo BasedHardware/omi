@@ -10159,4 +10159,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

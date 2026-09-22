@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Veu preparada per al reconeixement} saved_sample_awaiting_embedding{Mostra desada, pendent de processar la veu} not_learned{Veu no apresa} other{Estat de la veu desconegut}}",
     "tagSpeakerIncludingLaterSpeech": "Etiqueta també la parla posterior d'aquest parlant",
     "updateSummaryWithNewNames": "Actualitza el resum amb els noms nous",
-    "syncStatusUnsupportedAudio": "No s'ha pogut llegir l'àudio — no es pot sincronitzar"
+    "syncStatusUnsupportedAudio": "No s'ha pogut llegir l'àudio — no es pot sincronitzar",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }
