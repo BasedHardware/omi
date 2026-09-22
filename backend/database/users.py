@@ -1400,6 +1400,7 @@ def set_chat_message_rating_score(
     reason: str = None,
     platform: str = None,
     app_version: str = None,
+    app_build: str = None,
     notification_kind: str = None,
     app_id: str = None,
 ):
@@ -1431,6 +1432,8 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
+    if app_build:
+        data['app_build'] = app_build
     if notification_kind:
         data['notification_kind'] = notification_kind
     if app_id:

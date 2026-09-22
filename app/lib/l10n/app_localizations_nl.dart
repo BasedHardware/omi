@@ -2153,7 +2153,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get alwaysInContext => 'Altijd in context';
 
   @override
-  String get memoryContentHint => 'Ik hou van ijs eten...';
+  String get memoryContentHint => 'Ik heb liever vergaderingen in de ochtend.';
 
   @override
   String get failedToSaveMemory => 'Opslaan mislukt. Controleer je verbinding.';
@@ -10146,4 +10146,31 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Audio niet leesbaar — kan niet worden gesynchroniseerd';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Wat kun je voor me doen?',
+        'goal': 'Help me een doel te stellen',
+        'activity': 'Vat mijn recente activiteiten samen',
+        'improve': 'Hoe kan ik me verbeteren?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Volgende week';
+
+  @override
+  String get clearSearch => 'Zoekopdracht wissen';
 }

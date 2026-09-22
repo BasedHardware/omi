@@ -304,6 +304,7 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
             'StoreRecordingPermissionResponse',
