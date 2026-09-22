@@ -439,6 +439,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
 
   @override
+  String get omiButtonActions => 'Omi பொத்தான் செயல்கள்';
+
+  @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
 
   @override
@@ -2156,7 +2159,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
-  String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
+  String get memoryContentHint => 'நான் காலை நேரக் கூட்டங்களை விரும்புகிறேன்.';
 
   @override
   String get failedToSaveMemory => 'சேமிக்க முடியவில்லை. உங்கள் இணைப்பை சரிபார்க்கவும்.';
@@ -10186,4 +10189,31 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'நீ எனக்கு என்ன செய்ய முடியும்?',
+        'goal': 'இலக்கை அமைக்க எனக்கு உதவு',
+        'activity': 'எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு',
+        'improve': 'நான் எப்படி மேம்படலாம்?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'அடுத்த வாரம்';
+
+  @override
+  String get clearSearch => 'தேடலை அழி';
 }

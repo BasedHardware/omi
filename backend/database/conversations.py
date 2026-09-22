@@ -22,6 +22,7 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
+from utils.observability.speaker_identification import record_speaker_review
 from utils.manual_speaker_assignments import (
     LiveTranscriptMerge,
     apply_manual_assignments,
@@ -40,6 +41,7 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 from utils.other.storage import list_audio_chunks
+from utils.conversations.fragment_visibility import is_effectively_discarded, is_low_signal_sync_fragment
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
     claim_authorized_first_open_work,
@@ -83,6 +85,29 @@ _MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'structured.overview',
     'structured.category',
     'structured.emoji',
+)
+# These metadata fields are needed to apply the legacy review visibility rule
+# to MCP list/detail reads. They are removed from the returned card below; the
+# public card shape remains unchanged.
+_FRAGMENT_VISIBILITY_FIELD_PATHS = (
+    'status',
+    'sync_relevance',
+    'sync_relevance_user_kept',
+    'sync_live_target',
+    'has_photos',
+    'folder_user_set',
+    'visibility',
+    'starred',
+    'user_title',
+    # These bounded structured arrays distinguish an enriched review row from
+    # the deterministic minimum. They are stripped before returning the card.
+    'structured.sections',
+    'structured.action_items',
+    'structured.events',
+    'client_processing.schema_version',
+)
+_FRAGMENT_VISIBILITY_INTERNAL_FIELD_PATHS = tuple(
+    field for field in _FRAGMENT_VISIBILITY_FIELD_PATHS if field != 'user_title'
 )
 _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = _MCP_CONVERSATION_CARD_FIELD_PATHS + (
     'transcript_segments',
@@ -519,9 +544,50 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         return False
     if is_soft_deleted(conversation):
         return False
-    if conversation.get('discarded') and not include_discarded:
+    if is_effectively_discarded(conversation) and not include_discarded:
         return False
     return True
+
+
+def _project_effective_discarded(conversation: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Expose legacy review rows as discarded without mutating Firestore."""
+    if conversation is None:
+        return None
+    projected = dict(conversation)
+    if is_effectively_discarded(projected):
+        projected['discarded'] = True
+    return projected
+
+
+def _strip_fragment_visibility_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove internal metadata selected only to evaluate MCP visibility."""
+    projected = dict(conversation)
+    for path in _FRAGMENT_VISIBILITY_INTERNAL_FIELD_PATHS:
+        parts = path.split('.')
+        if len(parts) == 1:
+            projected.pop(parts[0], None)
+            continue
+        root, leaf = parts[0], parts[1:]
+        value = projected.get(root)
+        if not isinstance(value, dict):
+            continue
+        nested = dict(value)
+        cursor = nested
+        for part in leaf[:-1]:
+            child = cursor.get(part)
+            if not isinstance(child, dict):
+                cursor = None
+                break
+            child_copy = dict(child)
+            cursor[part] = child_copy
+            cursor = child_copy
+        if cursor is not None:
+            cursor.pop(leaf[-1], None)
+        if not nested:
+            projected.pop(root, None)
+        else:
+            projected[root] = nested
+    return projected
 
 
 def _conversation_matches_list_predicates(
@@ -595,6 +661,52 @@ def _count_matching_tombstones(
     return matching
 
 
+def _count_matching_low_signal_fragments(
+    collection: Any,
+    *,
+    statuses: Optional[List[str]] = None,
+    sources: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+) -> int:
+    """Count legacy review rows included by the ``discarded == False`` query.
+
+    Firestore cannot express the legacy predicate (which also accepts rows
+    without the newer metadata fields) without changing the stored schema.
+    The aggregate query remains the fast path for ordinary rows; this selective
+    supplemental scan keeps list/count parity until old rows are naturally
+    rewritten. Soft-deleted rows are left to the existing tombstone subtraction
+    so the two corrections remain disjoint.
+    """
+    matching = 0
+    review_query = collection.where(filter=FieldFilter('discarded', '==', False)).where(
+        filter=FieldFilter('sync_relevance', '==', 'review')
+    )
+    for doc in review_query.stream():
+        data = doc.to_dict() or {}
+        # The default aggregate uses ``discarded == False``. Firestore does
+        # not match a missing field, so a legacy row without the field must not
+        # be subtracted from that aggregate a second time.
+        if data.get('discarded') is not False or is_soft_deleted(data) or not is_low_signal_sync_fragment(data):
+            continue
+        if _conversation_matches_list_predicates(
+            data,
+            include_discarded=True,
+            statuses=statuses,
+            sources=sources,
+            start_date=start_date,
+            end_date=end_date,
+            categories=categories,
+            folder_id=folder_id,
+            starred=starred,
+        ):
+            matching += 1
+    return matching
+
+
 def _collect_visible_conversation_page(
     conversations_ref: Any,
     *,
@@ -603,48 +715,35 @@ def _collect_visible_conversation_page(
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
-    """Page visible rows. `include_discarded=True` cannot use Firestore offset.
+    """Page visible rows while filling around legacy review fragments.
 
-    Flutter lists with `include_discarded=True`, so donor tombstones would steal
-    page slots if we `limit`/`offset` then drop `deleted` in Python. Scan and
-    fill visible rows instead. `include_discarded=False` keeps server-side
-    offset so the list-read budget still charges the skipped prefix without
-    iterating it; `discarded=True` on donors (and the backfill) keeps those
-    rows out of that indexed query.
+    Both archive and default lists need a scan because old review rows were
+    persisted with ``discarded=False``. Applying Firestore ``offset`` before
+    the Python predicate would skip visible rows and underfill pages. The
+    budget charges every scanned document, including suppressed and offset
+    rows, so this remains bounded by the route's existing read budget.
     """
-    if include_discarded:
-        skipped_visible = 0
-        conversations: List[Dict[str, Any]] = []
-        try:
-            for doc in budgeted_stream_iter(conversations_ref, budget):
-                conversation = _document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
-                ):
-                    continue
-                if skipped_visible < offset:
-                    skipped_visible += 1
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    break
-        except ListReadBudgetExhausted:
-            pass
-        return conversations
-
-    if budget is not None and offset > 0:
+    # Preserve the cheap no-RPC guard for pathological offsets. Do not charge
+    # the offset here when the scan will charge each skipped document itself.
+    if budget is not None and offset > budget.remaining_documents:
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
             return []
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    skipped_visible = 0
     conversations: List[Dict[str, Any]] = []
     try:
         for doc in budgeted_stream_iter(conversations_ref, budget):
             conversation = _document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
                 continue
-            conversations.append(conversation)
+            if skipped_visible < offset:
+                skipped_visible += 1
+                continue
+            conversations.append(_project_effective_discarded(conversation) or {})
+            if len(conversations) >= limit:
+                break
     except ListReadBudgetExhausted:
         pass
     return conversations
@@ -772,6 +871,15 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
+        # Restoring a legacy review row is an explicit user decision. A
+        # processor that started before the restore may still carry the old
+        # review/discarded verdict, so preserve the server-owned marker and
+        # force the restored lifecycle state on every successful merge.
+        if existing.get('sync_relevance_user_kept'):
+            write_data['sync_relevance_user_kept'] = True
+            write_data['discarded'] = False
+            write_data['sync_relevance'] = 'keep'
+
         # Generated processing content never owns user-managed fields.
         # A null existing value means "never user-set" (stub docs dump None
         # fields), so only non-null values are preserved — otherwise the
@@ -858,7 +966,7 @@ def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = Fir
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
-    return conversation_data
+    return _project_effective_discarded(conversation_data)
 
 
 def get_public_shared_conversation_bounded(
@@ -1001,6 +1109,17 @@ def get_conversations_count(
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
     matching = int(result[0][0].value)
+    if not include_discarded:
+        matching -= _count_matching_low_signal_fragments(
+            db.collection('users').document(uid).collection(conversations_collection),
+            statuses=statuses,
+            sources=sources,
+            start_date=start_date,
+            end_date=end_date,
+            categories=categories,
+            folder_id=folder_id,
+            starred=starred,
+        )
     matching -= _count_matching_tombstones(
         db.collection('users').document(uid).collection(conversations_collection),
         include_discarded=include_discarded,
@@ -1110,21 +1229,26 @@ def get_mcp_conversation_cards(
         },
         field_filter_factory=FieldFilter,
     )
-    query = (
-        query.order_by('created_at', direction=firestore.Query.DESCENDING)
-        .select(list(_MCP_CONVERSATION_CARD_FIELD_PATHS))
-        .limit(limit)
-        .offset(offset)
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(
+        list(dict.fromkeys(_MCP_CONVERSATION_CARD_FIELD_PATHS + _FRAGMENT_VISIBILITY_FIELD_PATHS))
     )
     conversations: List[Dict[str, Any]] = []
+    skipped_visible = 0
     for doc in query.stream():
         conversation = _document_data_with_revision(doc)
         if conversation is None:
             continue
-        if is_soft_deleted(conversation):
+        if not is_visible_conversation(conversation, include_discarded=False):
+            continue
+        if skipped_visible < offset:
+            skipped_visible += 1
             continue
         conversation.setdefault('id', doc.id)
+        conversation = _project_effective_discarded(conversation) or conversation
+        conversation = _strip_fragment_visibility_fields(conversation)
         conversations.append(conversation)
+        if len(conversations) >= limit:
+            break
     return conversations
 
 
@@ -1141,8 +1265,10 @@ def get_mcp_conversations_by_id(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    field_paths = _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else _MCP_CONVERSATION_CARD_FIELD_PATHS
-    docs = client.get_all(doc_refs, field_paths=list(field_paths))
+    field_paths = (
+        _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else _MCP_CONVERSATION_CARD_FIELD_PATHS
+    ) + _FRAGMENT_VISIBILITY_FIELD_PATHS
+    docs = client.get_all(doc_refs, field_paths=list(dict.fromkeys(field_paths)))
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if not doc.exists:
@@ -1153,6 +1279,8 @@ def get_mcp_conversations_by_id(
         if not is_visible_conversation(data, include_discarded=include_discarded):
             continue
         data.setdefault('id', doc.id)
+        data = _project_effective_discarded(data) or data
+        data = _strip_fragment_visibility_fields(data)
         conversations_by_id[str(data['id'])] = data
     return [
         conversations_by_id[str(conversation_id)]
@@ -1179,7 +1307,7 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
             conv = _prepare_conversation_for_read(conv, uid) or conv
             if not is_visible_conversation(conv, include_discarded=include_discarded):
                 continue
-            batch.append(conv)
+            batch.append(_project_effective_discarded(conv) or conv)
         yield from batch
         if len(snapshots) < batch_size:
             break
@@ -1588,6 +1716,7 @@ def _get_conversations_by_id(
             if not is_visible_conversation(data, include_discarded=include_discarded):
                 continue
             data.setdefault('id', doc.id)
+            data = _project_effective_discarded(data) or data
             conversations_by_id[str(data['id'])] = data
         else:
             misses += 1
@@ -1910,23 +2039,37 @@ def claim_conversation_status(
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'discarded': True})
+    conversation_ref.update({'discarded': True, 'sync_relevance_user_kept': False})
     _sync_conversation_search_index(uid, conversation_id)
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    snapshot = conversation_ref.get()
-    if not snapshot.exists:
-        return
-    current = snapshot.to_dict() or {}
-    if is_soft_deleted(current):
-        # Redirect tombstones reuse discarded=True for the indexed hide. Restoring
-        # them would put a merged-away donor back on discarded==False lists.
-        return
-    conversation_ref.update({'discarded': False})
-    _sync_conversation_search_index(uid, conversation_id)
+
+    @firestore.transactional
+    def _restore(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        current = snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            # Redirect tombstones reuse discarded=True for the indexed hide.
+            # Restoring them would put a merged-away donor back on lists.
+            return False
+        updates = {'discarded': False}
+        if current.get('sync_relevance') == 'review':
+            # Legacy review rows are hidden by the read predicate even when
+            # their stored discarded flag is false. Persist the user's choice
+            # so future sync appends cannot hide the recording again.
+            updates.update({'sync_relevance': 'keep', 'sync_relevance_user_kept': True})
+        transaction.update(conversation_ref, updates)
+        return True
+
+    restored = _restore(db.transaction())
+    if restored:
+        _sync_conversation_search_index(uid, conversation_id)
+    return restored
 
 
 # *********************************
@@ -1945,6 +2088,19 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+
+
+def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
+    """How many of a conversation's action items the flattening below would keep."""
+    kept = 0
+    for item in conversation.get('structured', {}).get('action_items', []):
+        if isinstance(item, dict):
+            if item.get('deleted', False):
+                continue
+            if not include_completed and item.get('completed', False):
+                continue
+        kept += 1
+    return kept
 
 
 def get_action_items(
@@ -1970,8 +2126,13 @@ def get_action_items(
     # Sort by created_at descending
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Get all conversations with action items
+    # Read only as far as the requested page needs. The stream is ordered by the
+    # same created_at the flattened items are sorted by, and every item inherits
+    # its conversation's timestamp, so the first offset+limit items collected here
+    # are the ones the slice at the end would have kept anyway.
+    needed = offset + limit
     conversations = []
+    collected = 0
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
         if is_soft_deleted(conversation_data):
@@ -1985,6 +2146,9 @@ def get_action_items(
             # Decrypt conversation data for proper reading
             decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
+            collected += _page_eligible_action_item_count(decrypted_data, include_completed)
+            if needed > 0 and collected >= needed:
+                break
 
     # Extract and flatten action items with metadata
     action_items = []
@@ -2355,7 +2519,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
 
-    return run_transactional(client, assign)
+    result = run_transactional(client, assign)
+    current, _, _, before = result
+    record_speaker_review(uid, conversation_id, before, current['transcript_segments'])
+    return result
 
 
 def update_conversation_segments(
