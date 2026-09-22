@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 
-
 def clean_anki_field(text):
     if not text:
         return ""
@@ -11,13 +10,12 @@ def clean_anki_field(text):
     text = text.replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
     return text.strip()
 
-
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("memories", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected the JSON array from omi --json memory list")
+        raise ValueError("Expected JSON array from 'omi --json memory list'")
 
     dest = Path(destination)
     if dest.exists():
@@ -25,7 +23,11 @@ def convert(source, destination):
 
     tmp = dest.with_suffix(dest.suffix + ".partial")
     try:
-        lines = []
+        lines = [
+            "#separator:tab",
+            "#html:true",
+            "#tags column:3",
+        ]
         for mem in items:
             if not isinstance(mem, dict):
                 continue
@@ -52,9 +54,12 @@ def convert(source, destination):
             except OSError:
                 pass
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python memories_to_anki.py <source.json> <destination.txt>", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    try:
+        convert(sys.argv[1], sys.argv[2])
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
