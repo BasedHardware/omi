@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
@@ -7,6 +8,8 @@ import httpx
 from fastapi import FastAPI
 
 from models import AuthorWorksInput, ChatToolResponse, GetWorkInput, SearchWorksInput
+
+logger = logging.getLogger(__name__)
 
 CROSSREF_BASE = "https://api.crossref.org"
 TIMEOUT = 20.0
@@ -231,8 +234,14 @@ async def search_crossref_works(payload: SearchWorksInput):
             "/works",
             {"query": query, "rows": limited, "sort": "relevance", "order": "desc"},
         )
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Crossref request failed with status {exc.response.status_code}.")
+    except httpx.HTTPError as exc:
+        logger.error("Crossref request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed due to a network error.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.error("Unexpected error during Crossref search: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed.")
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
@@ -255,8 +264,16 @@ async def get_crossref_work(payload: GetWorkInput):
 
     try:
         payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"No Crossref work found for DOI '{normalized}'.")
+        return ChatToolResponse(error=f"Crossref request failed with status {exc.response.status_code}.")
+    except httpx.HTTPError as exc:
+        logger.error("Crossref request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed due to a network error.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.error("Unexpected error during Crossref work lookup: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed.")
     item = payload.get("message", {})
     title = clean((item.get("title") or ["Untitled"])[0])
     publisher = clean(item.get("publisher"))
@@ -293,8 +310,14 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
                 "order": "desc",
             },
         )
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Crossref request failed with status {exc.response.status_code}.")
+    except httpx.HTTPError as exc:
+        logger.error("Crossref request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed due to a network error.")
     except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+        logger.error("Unexpected error during Crossref author search: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Crossref request failed.")
     items = payload.get("message", {}).get("items", [])
     if not items:
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")
