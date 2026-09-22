@@ -76,6 +76,12 @@
 * [`quickstart.nd.md`](quickstart.nd.md) — izinyathelo zokuqala ngesiNdebele (Northern Ndebele Quickstart).
 * [`quickstart.kg.md`](quickstart.kg.md) — mikangidulu ya ntete na Kikongo (Kongo Quickstart).
 * [`quickstart.seh.md`](quickstart.seh.md) — mapito oyambirira mu chisena (Sena Quickstart).
+* [`quickstart.mh.md`](quickstart.mh.md) — jinoe in omi-cli (Marshallese Quickstart).
+* [`quickstart.ch.md`](quickstart.ch.md) — fina na pasu siha yan omi-cli (Chamorro Quickstart).
+* [`quickstart.tet.md`](quickstart.tet.md) — pasu primeiru ho omi-cli (Tetum Quickstart).
+* [`quickstart.tpi.md`](quickstart.tpi.md) — fas sted wantaim omi-cli (Tok Pisin Quickstart).
+* [`quickstart.ay.md`](quickstart.ay.md) — nayrïr saräwinaka omi-cli-mpi (Aymara Quickstart).
+* [`quickstart.nah.md`](quickstart.nah.md) — achto tzintiliztli ica omi-cli (Nahuatl Quickstart).
 * [`quickstart.gl.md`](quickstart.gl.md) — Guía de inicio rápido de omi-cli (Galician Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli के साथ शुरुआत (Hindi Quickstart).
 * [`quickstart.hr.md`](quickstart.hr.md) — Prvi koraci s omi-cli (Croatian Quickstart).
