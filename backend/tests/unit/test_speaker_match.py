@@ -31,6 +31,11 @@ from utils.stt.speaker_match import (  # noqa: E402
 )
 
 
+async def _no_owner_name():
+    """The listen coordinator's owner-name veto, resolved to "no owner name known"."""
+    return None
+
+
 class TestSelectSpeakerMatch:
     def test_cross_session_owner_distance_is_accepted(self):
         # Median same-user, different-session distance measured in the bench.
@@ -392,6 +397,7 @@ def test_speaker_detection_reads_person_embeddings_live():
             speaker_to_person={},
             person_embeddings={},
             queue=queue,
+            resolve_owner_name=_no_owner_name,
         )
         processor = object.__new__(TranscriptProcessor)
         processor.host = SimpleNamespace(
@@ -415,7 +421,7 @@ def test_speaker_detection_reads_person_embeddings_live():
             end=3.0,
             is_user=False,
         )
-        with patch('routers.listen.transcripts.detect_speaker_from_text', return_value=None):
+        with patch('routers.listen.transcripts.detect_speaker_introduction', return_value=None):
             await processor._speaker_detection([segment], 0.0)
             assert queue.empty()
             speakers.person_embeddings = {'p1': {'name': 'Alex'}}

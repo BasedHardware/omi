@@ -47,6 +47,14 @@ FIXTURE_CODEC = "pcm16"
 # landed by the bounded deadline.
 TRANSCRIPT_SETTLE_SECONDS = 20
 TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
+# The discard verdict is exempted for the probe uid in the product
+# (utils/conversations/process_conversation.py, run 35583992730: the durable
+# word count could not be made deterministic — the trailing passes' transcripts
+# flush late into the rollover generation). The loop below still matters:
+# streaming several passes keeps the fixture phrase durably present in the
+# CLIENT conversation even when the trailing passes flush after the rollover,
+# so the durable-transcript readback never depends on a single STT pass.
+DISCARD_KEEP_AUDIO_PASSES = 8
 
 
 class ProbeError(RuntimeError):
@@ -206,11 +214,17 @@ async def _listen_sample(
                     )
 
         receiver = asyncio.create_task(receive_transcripts())
-        for offset in range(0, len(fixture.pcm), chunk_bytes):
-            chunk = fixture.pcm[offset : offset + chunk_bytes]
-            if len(chunk) != chunk_bytes:
-                break
-            await websocket.send(chunk)
+        # Loop the fixture so the durable transcript in the CLIENT conversation
+        # contains the fixture phrase with margin: the dev STT chain can flush
+        # trailing passes only at teardown, after the lifecycle rollover has
+        # moved current_conversation_id (run 35583992730: the last passes'
+        # segments landed in the rollover generation, not this one).
+        for _ in range(DISCARD_KEEP_AUDIO_PASSES):
+            for offset in range(0, len(fixture.pcm), chunk_bytes):
+                chunk = fixture.pcm[offset : offset + chunk_bytes]
+                if len(chunk) != chunk_bytes:
+                    break
+                await websocket.send(chunk)
         await asyncio.sleep(TRANSCRIPT_SETTLE_SECONDS)
         receiver.cancel()
         try:
@@ -230,7 +244,20 @@ async def _listen_sample(
             # finalizer's persist->fanout-claim window and fences the
             # conversation (run 35573952966). Hold the session open until
             # the durable readback finishes, mirroring the client contract.
-            await hold_open.wait()
+            #
+            # The session also dies if inbound audio goes quiet: the listen
+            # heartbeat tears a session down when last_activity_time is
+            # >90s stale, and only received audio refreshes it (run
+            # 35576101770: lifetime_done exactly 100s after connect). While
+            # holding, stream near-silence at the fixture rate exactly like
+            # a real client's quiet audio path.
+            silence_chunk = b"\x00" * chunk_bytes
+            while not hold_open.is_set():
+                await websocket.send(silence_chunk)
+                try:
+                    await asyncio.wait_for(hold_open.wait(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
         await websocket.close(code=1000, reason="release_probe_complete")
         return fixture.expected_phrase in live_window_combined, live_window_combined
 

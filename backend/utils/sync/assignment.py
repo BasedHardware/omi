@@ -7,9 +7,39 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 
 from copy import deepcopy
 import re
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Mapping
+from typing import Any, TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
+
+try:
+    from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+except ModuleNotFoundError:
+    # A few sync import-isolation tests intentionally replace ``utils`` with a
+    # non-package module. Keep the assignment policy importable there without
+    # making that harness reconstruct the whole conversation package graph.
+    def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
+        if not data or getattr(data.get('status'), 'value', data.get('status')) != 'completed':
+            return False
+        if data.get('sync_relevance') != 'review' or data.get('sync_relevance_user_kept'):
+            return False
+        if data.get('sync_live_target') or data.get('has_photos') or data.get('photos'):
+            return False
+        if data.get('user_title') or data.get('starred') or data.get('folder_user_set'):
+            return False
+        visibility = getattr(data.get('visibility', 'private'), 'value', data.get('visibility', 'private'))
+        if visibility not in (None, 'private'):
+            return False
+        structured = data.get('structured')
+        if isinstance(structured, dict) and (
+            str(structured.get('overview') or '').strip()
+            or any(structured.get(field) for field in ('sections', 'action_items', 'events'))
+        ):
+            return False
+        client_processing = data.get('client_processing')
+        return not (isinstance(client_processing, dict) and client_processing.get('schema_version') == 1)
+
+
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
@@ -25,7 +55,7 @@ def needs_fragment_review(segments: list[dict]) -> bool:
     """Defer only short, filler-only content. Unknown language/content stays kept.
 
     Speaker IDs, profiles, and is_user are intentionally not consulted. Even a
-    false positive keeps a visible transcript, and subsequent content is assessed
+    false positive keeps a recoverable transcript, and subsequent content is assessed
     over the entire merged recording, allowing automatic promotion.
     """
     words = re.findall(r"[^\W_]+", ' '.join(s.get('text', '') for s in segments).casefold())
@@ -67,6 +97,7 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('user_title')
         or row.get('starred')
         or row.get('folder_user_set')
+        or row.get('sync_relevance_user_kept')
         or row.get('visibility', 'private') not in (None, 'private')
     )
 
@@ -223,9 +254,15 @@ def assign_in_transaction(
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
     result['has_content'] = bool(segments)
-    result['discarded'] = False  # sync relevance demotes visibly; it never discards capture
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
-    result['sync_relevance'] = 'review' if not segments or needs_fragment_review(segments) else 'keep'
+    result['sync_relevance'] = (
+        'review'
+        if not result.get('sync_relevance_user_kept') and (not segments or needs_fragment_review(segments))
+        else 'keep'
+    )
+    # Discard is a recoverable list filter, never a deletion of captured speech.
+    # Meaningful later intake automatically promotes the complete recording.
+    result['discarded'] = is_low_signal_sync_fragment(result)
     result['is_locked'] = bool(incoming.get('is_locked'))
     result['private_cloud_sync_enabled'] = any(row.get('private_cloud_sync_enabled') for row in [incoming, *records])
     # A codec must never be downgraded when bridge donors have mixed protection.
@@ -261,6 +298,10 @@ def assign_in_transaction(
                 collection.document(cid),
                 {
                     'deleted': True,
+                    # Hide the redirect from discarded==False list indexes. Distinct
+                    # from user discard: include_discarded=True readers still drop
+                    # these rows via is_soft_deleted, and restore must not revive them.
+                    'discarded': True,
                     'sync_merged_into': canonical,
                     'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
                 },

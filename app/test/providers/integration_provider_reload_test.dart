@@ -101,6 +101,52 @@ void main() {
     expect(fetches, before);
   });
 
+  test('a failed reload keeps connected integrations and does not save them as disconnected', () async {
+    final backend = <String, bool>{'google_calendar': true, 'gmail': true, 'apple_health': true};
+    final prefs = <String, bool>{};
+    final provider = providerWith(backend, prefs: prefs);
+    addTearDown(provider.dispose);
+    await provider.loadFromBackend();
+
+    backend.clear();
+    await provider.loadFromBackend();
+
+    for (final app in IntegrationApp.values) {
+      expect(provider.isAppConnected(app), isTrue, reason: '${app.key} was flipped by a failed fetch');
+      expect(prefs[IntegrationProvider.prefKeyFor(app.key)], isTrue);
+    }
+  });
+
+  test('a failed cold start shows the saved status and the next ensureLoaded fetches again', () async {
+    await SharedPreferencesUtil().saveBool(IntegrationProvider.prefKeyFor('google_calendar'), true);
+    final backend = <String, bool>{};
+    var fetches = 0;
+    final provider = IntegrationProvider(
+      fetchStatus: (appKey) async {
+        fetches++;
+        if (!backend.containsKey(appKey)) return null;
+        return IntegrationResponse(connected: backend[appKey]!, appKey: appKey);
+      },
+      persistPref: (key, value) async {
+        await SharedPreferencesUtil().saveBool(key, value);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.ensureLoaded();
+    expect(provider.hasLoaded, isTrue);
+    expect(provider.isLoading, isFalse);
+    expect(provider.isAppConnected(IntegrationApp.googleCalendar), isTrue);
+
+    backend.addAll({'google_calendar': false, 'gmail': false, 'apple_health': true});
+    final before = fetches;
+    await provider.ensureLoaded();
+
+    expect(fetches, greaterThan(before));
+    expect(provider.isAppConnected(IntegrationApp.googleCalendar), isFalse);
+    expect(provider.isAppConnected(IntegrationApp.appleHealth), isTrue);
+  });
+
   test('clearUserData forgets Apple Health as well as Google rows', () async {
     final prefs = <String, bool>{};
     final provider = providerWith({'google_calendar': true, 'gmail': true, 'apple_health': true}, prefs: prefs);

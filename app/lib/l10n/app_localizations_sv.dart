@@ -438,6 +438,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get autoSyncDescription => 'Synkronisera offlineinspelningar automatiskt när din enhet ansluter';
 
   @override
+  String get omiButtonActions => 'Omi-knappåtgärder';
+
+  @override
   String get deviceSettings => 'Enhetsinställningar';
 
   @override
@@ -2146,7 +2149,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get alwaysInContext => 'Alltid i kontexten';
 
   @override
-  String get memoryContentHint => 'Jag gillar att äta glass...';
+  String get memoryContentHint => 'Jag föredrar möten på morgonen.';
 
   @override
   String get failedToSaveMemory => 'Det gick inte att spara. Kontrollera din anslutning.';
@@ -10117,4 +10120,34 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Uppdatera sammanfattningen med de nya namnen';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ljudet kunde inte läsas — kan inte synkroniseras';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Vad kan du göra för mig?',
+        'goal': 'Hjälp mig att sätta ett mål',
+        'activity': 'Sammanfatta mina senaste aktiviteter',
+        'improve': 'Hur kan jag bli bättre?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Nästa vecka';
+
+  @override
+  String get clearSearch => 'Rensa sökning';
 }

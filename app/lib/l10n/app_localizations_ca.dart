@@ -440,6 +440,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
   @override
+  String get omiButtonActions => 'Accions del botó Omi';
+
+  @override
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override
@@ -2157,7 +2160,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get alwaysInContext => 'Sempre en context';
 
   @override
-  String get memoryContentHint => 'M\'agrada menjar gelat...';
+  String get memoryContentHint => 'Prefereixo les reunions al matí.';
 
   @override
   String get failedToSaveMemory => 'No s\'ha pogut desar. Comproveu la vostra connexió.';
@@ -10169,4 +10172,34 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Actualitza el resum amb els noms nous';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Què pots fer per mi?',
+        'goal': 'Ajuda’m a fixar un objectiu',
+        'activity': 'Resumeix la meva activitat recent',
+        'improve': 'Com puc millorar?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'La setmana que ve';
+
+  @override
+  String get clearSearch => 'Esborra la cerca';
 }

@@ -17,6 +17,7 @@ from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_co
 from scripts.runtime_env_capability_contracts import (
     validate_conversation_finalization_capabilities,
     validate_free_tier_deploy_contract,
+    validate_speaker_embedding_hosts,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
@@ -754,6 +755,7 @@ def validate_runtime_env(
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
+    errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_free_tier_deploy_contract(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))

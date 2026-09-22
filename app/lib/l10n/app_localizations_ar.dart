@@ -434,6 +434,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
 
   @override
+  String get omiButtonActions => 'إجراءات زر Omi';
+
+  @override
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override
@@ -2127,7 +2130,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get alwaysInContext => 'دائمًا في السياق';
 
   @override
-  String get memoryContentHint => 'أحب تناول الآيس كريم...';
+  String get memoryContentHint => 'أفضل الاجتماعات الصباحية.';
 
   @override
   String get failedToSaveMemory => 'فشل الحفظ. يرجى التحقق من اتصالك.';
@@ -10053,4 +10056,34 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'تحديث الملخص بالأسماء الجديدة';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'تعذّرت قراءة الصوت — لا يمكن مزامنته';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'ماذا يمكنك أن تفعل من أجلي؟',
+        'goal': 'ساعدني في تحديد هدف',
+        'activity': 'لخّص نشاطي الأخير',
+        'improve': 'كيف يمكنني التحسّن؟',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'الأسبوع القادم';
+
+  @override
+  String get clearSearch => 'مسح البحث';
 }
