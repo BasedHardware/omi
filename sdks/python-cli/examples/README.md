@@ -1,7 +1,15 @@
 # Python CLI Examples
 
-These examples demonstrate how to use the `omi-cli` to interact with agents and other resources.
+یہ ڈائریکٹری `omi-cli` کے مختلف استعمال کے مثالیں فراہم کرتی ہے۔ ہر مثال ایک خود مختار مارک ڈاؤن فائل ہے جس میں وضاحتی متن اور متعلقہ کوڈ بلاکس شامل ہیں۔
 
-- [agent_quickstart.md](agent_quickstart.md) – Quickstart guide for agent-driven workflows.
-- [agent_quickstart.ur.md](agent_quickstart.ur.md) – Urdu (ur) quickstart guide.
-- [another_example.md](another_example.md) – Additional example.
+## موجودہ مثالیں
+
+- [Agent Quickstart (English)](agent_quickstart.md)
+- [Agent Quickstart (Urdu)](agent_quickstart.ur.md) <!-- Added Urdu localization -->
+- [Chatbot Quickstart (English)](chatbot_quickstart.md)
+- [Streaming Example (English)](streaming_example.md)
+
+---
+
+ہر مثال کو مقامی طور پر چلانے کے لیے:
+
