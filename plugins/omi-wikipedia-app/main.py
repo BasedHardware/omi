@@ -6,6 +6,7 @@ and finding a random article for exploration.
 """
 
 from html import unescape
+import logging
 import re
 from typing import Any, Optional
 from urllib.parse import quote
@@ -14,6 +15,8 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 REQUEST_TIMEOUT_SECONDS = 10
@@ -273,7 +276,11 @@ async def search_articles(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia search failed: {exc}")
+        logger.error("Wikipedia search failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia search failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Wikipedia search: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia search failed.")
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -300,7 +307,11 @@ async def get_article_summary(payload: dict[str, Any]):
             return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
         return ChatToolResponse(error=f"Wikipedia article request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia article request failed: {exc}")
+        logger.error("Wikipedia article request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia article request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Wikipedia article request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia article request failed.")
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -334,4 +345,8 @@ async def get_random_article(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia random article request failed: {exc}")
+        logger.error("Wikipedia random article request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia random article request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Wikipedia random article request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Wikipedia random article request failed.")
