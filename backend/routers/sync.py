@@ -60,6 +60,7 @@ from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
+    verify_audio_merge_cloud_tasks_oidc,
     verify_cloud_tasks_oidc,
 )
 from utils.executors import (
@@ -123,7 +124,7 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
-from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
+from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.sync.rate_limit import (
     FAIR_USE_RATE_LIMIT_CODE,
     bounded_fair_use_retry_after,
@@ -1794,7 +1795,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     if sync_lane == SyncLane.BACKFILL.value:
                         await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
-            failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
+            failure = sync_failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
             if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
@@ -1906,7 +1907,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
-async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
 
     Response semantics drive the queue: 2xx consumes the task, 409 while the

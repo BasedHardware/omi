@@ -22,6 +22,7 @@ from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
 )
+from utils.observability.speaker_identification import record_speaker_review
 from utils.manual_speaker_assignments import (
     LiveTranscriptMerge,
     apply_manual_assignments,
@@ -2355,7 +2356,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
 
-    return run_transactional(client, assign)
+    result = run_transactional(client, assign)
+    current, _, _, before = result
+    record_speaker_review(uid, conversation_id, before, current['transcript_segments'])
+    return result
 
 
 def update_conversation_segments(
