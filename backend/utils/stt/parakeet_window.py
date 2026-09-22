@@ -46,6 +46,16 @@ from utils.stt.window_anchor import (
 WINDOW_AGC_TARGET_PEAK = 0.8
 WINDOW_AGC_MAX_GAIN = 4.0
 WINDOW_INGEST_AGC = True
+# Deadband on the *posted* (decode) stage only. A session already peaking above
+# this fraction of full scale is not quiet, and gaining it costs accuracy: on a
+# dense-speech clip peaking at 0.54, adding 1.48x moved substitutions from 27 to
+# 37 and never moved them back when the VAD threshold was reverted. Below the
+# deadband the boost is worth its distortion; above it there is nothing to
+# rescue. 0.4 is equivalent to "never apply less than 2x (6 dB)", and sits
+# between the measured far-field session peak (0.26) and dense speech (0.54).
+# Admission is deliberately NOT deadbanded — the copy Silero scores is still
+# always gained, which is what admits quiet far-field.
+WINDOW_AGC_DEADBAND_PEAK = 0.4
 _INT16_ABS_MAX = 32767.0
 
 
@@ -82,6 +92,15 @@ def bounded_agc_pcm16(
     samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
     out = np.clip(samples * gain, -32768, 32767).astype(np.int16)
     return out.tobytes(), float(gain)
+
+
+def posted_agc_applies(peak: float) -> bool:
+    """Whether the POSTED (decode) stage should gain a session with this envelope.
+
+    False once the session is already well levelled. Admission does not consult this:
+    the copy Silero scores is always gained, which is what admits quiet far-field.
+    """
+    return peak <= WINDOW_AGC_DEADBAND_PEAK * _INT16_ABS_MAX
 
 
 class SessionPcmGain:
@@ -269,6 +288,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def _normalize_posted_pcm(self, pcm: bytes) -> bytes:
         # Buffer is original-level. One uniform scale for this window; gain is
         # taken from the session envelope frozen at POST start (see _post_window).
+        # Above the deadband the session is already well levelled, so post it
+        # untouched rather than trading accuracy for a boost it does not need.
+        if not posted_agc_applies(self._agc_peak):
+            self._agc_last_gain = 1.0
+            return pcm
         out, gain = bounded_agc_pcm16(pcm, peak=self._agc_peak)
         self._agc_last_gain = gain
         return out

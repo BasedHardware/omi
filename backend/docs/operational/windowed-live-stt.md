@@ -148,7 +148,13 @@ attenuates, digital silence (peak 0) unchanged. **Admission** gains a copy
 ahead of Silero so quiet far-field can start speech; per-chunk gain is safe
 there because Silero scores frames independently. **Decoding** keeps the
 stored buffer at original level and applies one uniform scale to each posted
-window from the session envelope at POST start. Ingest cannot write gained
+window from the session envelope at POST start — but only below a **deadband**
+of 0.4 of full scale (`WINDOW_AGC_DEADBAND_PEAK`, equivalently "never apply
+less than 2×"). A session already peaking above that is not quiet, and gaining
+it costs accuracy rather than buying anything: on a dense-speech clip peaking
+at 0.54, adding 1.48× moved substitutions from 27 to 37 and reverting the VAD
+threshold did not move them back. Admission is deliberately **not** deadbanded,
+so quiet far-field is still admitted by its gained copy. Ingest cannot write gained
 bytes into the buffer, so the 4× cap cannot compound to 16×. Overlapping
 later POSTs of the same prefix may use a lower gain if the envelope grew;
 each POST stays internally flat. Gain is not frozen after the first POST:
