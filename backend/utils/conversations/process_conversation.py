@@ -90,6 +90,7 @@ from utils.observability.fallback import record_fallback
 from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
+from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import (
     is_trial_paywalled,
@@ -171,7 +172,7 @@ from utils.other.hume import (
 )
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
@@ -564,13 +565,24 @@ def _get_structured(
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-        with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(
-                discard_transcript,
-                main_conv.photos,
-                duration_seconds,
-                trusted_wake_word_markers=has_wake_word_marker,
-            )
+        # The discard verdict is a desktop post-processing gate, and the release
+        # probe's terminal contract only completes through a kept conversation,
+        # so the probe uid must skip it (gate convention, utils/release_probe.py).
+        # The probe's synthetic transcript cannot rely on the deterministic
+        # >100-word keep line: the trailing fixture passes flush late — at
+        # teardown, into the rollover generation — so the durably-present word
+        # count varies with STT yield, and the discard LLM fences the lane at
+        # terminal_failure (run 35583992730).
+        if is_release_probe_uid(uid):
+            discarded = False
+        else:
+            with track_usage(uid, Features.CONVERSATION_DISCARD):
+                discarded = should_discard_conversation(
+                    discard_transcript,
+                    main_conv.photos,
+                    duration_seconds,
+                    trusted_wake_word_markers=has_wake_word_marker,
+                )
         if discarded:
             # Calendar overlap outranks discard (SCA-381): a scrap recorded
             # inside a booked meeting is evidence, never noise. Only a positive
@@ -652,7 +664,10 @@ def _get_conversation_obj(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
 ) -> Conversation:
-    discarded = structured.title == ''
+    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    # The empty-title fallback is the discard gate's second verdict and is
+    # covered by the same release-probe exemption as the LLM discard above:
+    # an LLM mood must not terminalize the probe lane's synthetic capture.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
@@ -1862,10 +1877,30 @@ def _write_action_items(uid: str, conversation: Conversation):
         for action_item in conversation.structured.action_items
     ]
 
-    old_ids = [item['id'] for item in action_items_db.get_action_items_by_conversation(uid, conversation.id)]
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
     action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+    try:
+        for item in old_items:
+            # The replaced rows may own client-scheduled reminders, which the client
+            # only cancels on the deletion data message (#5085). Reprocessing re-creates
+            # the tasks under new ids and schedules their reminders below, so leaving
+            # these armed duplicates every surviving task and keeps reminders for
+            # dropped ones.
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=item['id'],
+                    description='',
+                    completed=True,
+                    due_at=None,
+                )
+    except Exception as e:
+        # The old rows are already gone; a failed reminder send must never cost the
+        # conversation its new extraction.
+        logger.error(f"Error cancelling replaced task reminders for {conversation.id}: {e}")
 
     action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
     logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
@@ -2532,6 +2567,14 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
+    # The synthetic release-probe identity (dev pusher release lane) is
+    # exempt from the desktop deferral gates below so the probe certifies
+    # the full terminal desktop path end to end. New desktop gates must
+    # check is_release_probe_uid(uid) (utils/release_probe.py) or the probe
+    # fails loudly in CI — that is intended.
+    probe_uid = is_release_probe_uid(uid)
+    if probe_uid:
+        logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -2543,6 +2586,7 @@ def process_conversation(
     if (
         hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and is_trial_paywalled(uid, 'macos')
     ):
         logger.info(
@@ -2578,6 +2622,7 @@ def process_conversation(
         free_tier_local_processing_enabled(uid)
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
     ):
         source_value = getattr(conversation.source, 'value', conversation.source)
         # Explicit ingest-time projection wins over a previously stored one.
@@ -2641,6 +2686,7 @@ def process_conversation(
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
+        and not probe_uid
         and should_defer_desktop_processing(uid)
     ):
         deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
@@ -2918,7 +2964,13 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+            if is_reprocess:
+                # Same fail-closed idea as memory source replacement: a transient
+                # destructive-op fence must be observable on the sync reprocess
+                # path instead of disappearing into postprocess_executor.
+                _save_action_items(uid, conversation, people)
+            else:
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.

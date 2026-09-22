@@ -63,12 +63,13 @@ jobs:
           set -euo pipefail
           controls="$RUNNER_TEMP/desktop-backend-deploy-controls"
           rm -rf "$controls"
-          mkdir -p "$controls/.github/scripts" "$controls/backend/deploy" "$controls/backend/scripts" "$controls/scripts"
+          mkdir -p "$controls/.github/scripts" "$controls/backend/deploy" "$controls/backend/config" "$controls/backend/scripts" "$controls/scripts"
           cp .workflow-source/.github/scripts/desktop_backend_candidate_probe.py "$controls/.github/scripts/"
           cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
           cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/config/free_tier_rollout.py "$controls/backend/config/"
           cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
@@ -297,6 +298,23 @@ jobs:
             --region="${{ env.REGION }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      # The sidecar attach re-serialises the live Cloud Run export, so it verifies
+      # the ingress env it is about to rewrite against what the manifest says it
+      # should be. Render that expectation from the manifest rather than
+      # restating it here, so the guard cannot drift from its source.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        # No cohort variable is passed here, on purpose. GitHub's `vars` context
+        # falls back from environment to repository scope, so the only way to make
+        # a development cohort structurally unable to reach production is for the
+        # production workflow never to read one. Prod renders literal empties.
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
+            --env prod \
+            --manifest "$DESKTOP_BACKEND_CONTROLS/backend/deploy/runtime_env.yaml" \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
       - name: Deploy production candidate at zero traffic
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -332,6 +350,9 @@ jobs:
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=false
             BASIC_PLAN_GATE_PROACTIVITY_ENABLED=false
+            FREE_TIER_LOCAL_PROCESSING=false
+            FREE_TIER_EMERGENCY_STOP=false
+            FREE_TIER_LOCAL_PROCESSING_COHORT=
             BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=false
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
@@ -350,19 +371,6 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
             POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
-
-      # The sidecar attach re-serialises the live Cloud Run export, so it verifies
-      # the ingress env it is about to rewrite against what the manifest says it
-      # should be. Render that expectation from the manifest rather than
-      # restating it here, so the guard cannot drift from its source.
-      - name: Render desktop backend expected env state
-        id: desktop-expected-env
-        run: |
-          set -euo pipefail
-          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
-            --env prod \
-            --manifest "$DESKTOP_BACKEND_CONTROLS/backend/deploy/runtime_env.yaml" \
-            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
 
       - name: Attach Managed Prometheus sidecar to production candidate
         id: attach-gmp-sidecar

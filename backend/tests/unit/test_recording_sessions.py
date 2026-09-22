@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import copy
 import threading
 from dataclasses import dataclass, field
@@ -453,6 +455,7 @@ class _ResumeSessionHost:
         self.request = SimpleNamespace(uid='uid', source='omi', call_id=None, conversation_role=None)
         self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
         self.language = 'en'
+        self.conversation_creation_timeout = 120
         self.use_custom_stt = False
         self.private_cloud_sync_enabled = False
         self.client_conversation_id = None
@@ -461,7 +464,11 @@ class _ResumeSessionHost:
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=self._refresh_speakers)
         self._firestore_client = firestore_client
+
+    async def _refresh_speakers(self, _conversation_id: str) -> None:
+        return None
 
     async def _call(self, fn, *args, **kwargs):
         if fn.__name__ == 'open_live_recording_session':
@@ -480,7 +487,14 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
 
     get_conversation_calls: list[str] = []
-    conversation = {'id': 'conversation-old', 'status': 'in_progress', 'discarded': False}
+    conversation = {
+        'id': 'conversation-old',
+        'status': 'in_progress',
+        'discarded': False,
+        'source': 'omi',
+        'client_device_id': 'dev-1',
+        'finished_at': datetime.now(timezone.utc),
+    }
 
     def counting_get_conversation(_uid, conversation_id, **_kwargs):
         get_conversation_calls.append(conversation_id)
@@ -565,3 +579,18 @@ def test_empty_cleanup_publishes_nothing_when_it_refuses_to_delete(recording_sto
     assert deleted is False
     assert conversation_path in recording_store.documents
     assert captured == {}
+
+
+@pytest.mark.parametrize('field,value', [('is_locked', True), ('deleted', True), ('sync_content_revision', 1)])
+def test_empty_cleanup_preserves_protected_or_sync_owned_rows(recording_store, field, value):
+    path = ('users', 'uid', 'conversations', 'conversation')
+    row = _stored_conversation([], level='standard')
+    row[field] = value
+    recording_store.documents[path] = row
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+    assert not recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=recording_store
+    )
+    assert recording_store.documents[path] == row

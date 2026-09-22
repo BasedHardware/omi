@@ -11,7 +11,7 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
@@ -86,6 +86,7 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
+from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -122,6 +123,9 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
     if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
@@ -747,6 +751,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_sync_review = conversation.get('sync_relevance') == 'review'
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -766,6 +771,12 @@ def reprocess_conversation(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # Successful explicit recovery is a durable user choice, including when
+    # the selected app supplies the summary rather than the default overview.
+    if was_sync_review and not processed_conversation.discarded:
+        if lifecycle_service.restore_discarded(uid, conversation_id):
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 
@@ -813,43 +824,6 @@ LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
 def _reject_oversized_filter(values: List[str], field_name: str) -> None:
     if len(values) > MAX_IN_FILTER_VALUES:
         raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
-
-
-def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: List[str]) -> List[int]:
-    """Resolve assignment targets before mutating any transcript segment.
-
-    Desktop sends positional targets for legacy transcripts that were stored without
-    segment IDs. Exact IDs remain the preferred wire contract; positional targets are
-    only accepted for completed conversations because an in-progress transcript can
-    still be reordered or merged.
-    """
-    segments = conversation.transcript_segments
-    segment_indices_by_id = {segment.id: index for index, segment in enumerate(segments)}
-    resolved_indices: List[int] = []
-    unresolved_ids: List[str] = []
-    allow_legacy_indices = conversation.status == ConversationStatus.completed
-
-    for requested_id in requested_ids:
-        segment_index = segment_indices_by_id.get(requested_id)
-        if segment_index is None and allow_legacy_indices and requested_id.startswith(LEGACY_SEGMENT_INDEX_PREFIX):
-            raw_index = requested_id[len(LEGACY_SEGMENT_INDEX_PREFIX) :]
-            if raw_index.isascii() and raw_index.isdecimal():
-                candidate_index = int(raw_index)
-                if candidate_index < len(segments):
-                    segment_index = candidate_index
-
-        if segment_index is None:
-            unresolved_ids.append(requested_id)
-        elif segment_index not in resolved_indices:
-            resolved_indices.append(segment_index)
-
-    if unresolved_ids:
-        raise HTTPException(
-            status_code=409,
-            detail=f'Unable to resolve transcript segment assignment target(s): {", ".join(unresolved_ids)}',
-        )
-
-    return resolved_indices
 
 
 @router.get(
@@ -1449,13 +1423,83 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                delete_action_item_vector(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
+
+
+def _assign_manual_speaker(
+    conversation_id,
+    assign_type,
+    value,
+    uid,
+    background_tasks,
+    *,
+    segment_ids=None,
+    speaker_id=None,
+    segment_index=None,
+    use_for_speech_training=True,
+):
+    if assign_type not in {'is_user', 'person_id'}:
+        raise HTTPException(status_code=400, detail='Invalid assign type')
+    value = None if value == 'null' else value
+    is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
+    person_id = value if assign_type == 'person_id' else None
+    try:
+        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+            uid,
+            conversation_id,
+            person_id=person_id,
+            is_user=is_user,
+            segment_ids=segment_ids,
+            speaker_id=speaker_id,
+            segment_index=segment_index,
+            use_for_speech_training=use_for_speech_training,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    conversation = deserialize_conversation(raw)
+    _drop_display_projection(conversation)
+    if background_tasks is not None:
+        for path in removed:
+            background_tasks.add_task(delete_speech_profile_blob, path)
+        if person_id and use_for_speech_training:
+            background_tasks.add_task(
+                extract_speaker_samples,
+                uid=uid,
+                person_id=person_id,
+                conversation_id=conversation_id,
+                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
+            )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
+        before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
+        after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
+    )
+    return conversation
 
 
 @router.patch(
@@ -1470,181 +1514,47 @@ def set_assignee_conversation_segment(
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of a segment in the transcript of a conversation.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file shuold be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {segment_idx} {assign_type} {value} {use_for_speech_training} {uid}'
-    )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    # Bound-check segment_idx before indexing. Same class as the events / action-items
-    # handlers above (0 <= idx < len): an out-of-range idx (e.g. a stale client after
-    # reprocess/merge shrank the segments) otherwise raises IndexError -> HTTP 500, and a
-    # negative idx would silently mutate the wrong segment. This is a single-target route,
-    # so a missing segment is a 404 rather than a skip.
-    if not (0 <= segment_idx < len(conversation.transcript_segments)):
-        raise HTTPException(status_code=404, detail="Segment not found")
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
-    if assign_type == 'is_user':
-        conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
-        conversation.transcript_segments[segment_idx].person_id = None
-    elif assign_type == 'person_id':
-        conversation.transcript_segments[segment_idx].is_user = False
-        conversation.transcript_segments[segment_idx].person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        segment_index=segment_idx,
+        use_for_speech_training=use_for_speech_training,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='segment',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
-    )
-    # thinh's note: disabled for now
-    # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
-    # # TODO: can do this async
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
     '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
+    operation_id='set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch',
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(
+def set_assignee_conversation_speaker(
     conversation_id: str,
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of all segments in the transcript of a conversation with the given speaker_id.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file should be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
-    )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
-    before = [_speaker_assignment(segment) for segment in targeted_segments]
-
-    if assign_type == 'is_user':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                segment.is_user = bool(value) if value is not None else False
-                segment.person_id = None
-    elif assign_type == 'person_id':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                logger.info(f"{segment.speaker_id} {speaker_id} {value}")
-                segment.is_user = False
-                segment.person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        speaker_id=speaker_id,
+        use_for_speech_training=use_for_speech_training,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='speaker',
-        before=before,
-        after=[_speaker_assignment(segment) for segment in targeted_segments],
-    )
-    # This will be used when we setup recording for conversations, not used for now
-    # get the segment with the most words with the speaker_id
-    # segment_idx = 0
-    # segment_words = 0
-    # for segment in conversation.transcript_segments:
-    #     if segment.speaker == speaker_id:
-    #         if len(segment.text.split(' ')) > segment_words:
-    #             segment_words = len(segment.text.split(' '))
-    #             if segment_words > 5:
-    #                 segment_idx = segment.idx
-    #
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/segments/assign-bulk',
-    response_model=Conversation,
-    tags=['conversations'],
+    '/v1/conversations/{conversation_id}/segments/assign-bulk', response_model=Conversation, tags=['conversations']
 )
 def assign_segments_bulk(
     conversation_id: str,
@@ -1652,72 +1562,14 @@ def assign_segments_bulk(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if data.assign_type not in {'is_user', 'person_id'}:
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    value = data.value
-    if value == 'null':
-        value = None
-
-    if data.assign_type == 'person_id' and value and not users_db.get_person(uid, value):
-        raise HTTPException(status_code=404, detail='Person not found')
-
-    segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
-    resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
-    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
-    previous_people = {
-        conversation.transcript_segments[index].person_id
-        for index in segment_indices
-        if conversation.transcript_segments[index].person_id
-        and (data.assign_type != 'person_id' or conversation.transcript_segments[index].person_id != value)
-    }
-
-    for index in segment_indices:
-        segment = conversation.transcript_segments[index]
-        if data.assign_type == 'is_user':
-            segment.is_user = bool(value) if value is not None else False
-            segment.person_id = None
-        else:
-            segment.is_user = False
-            segment.person_id = value
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        data.assign_type,
+        data.value,
+        uid,
+        background_tasks,
+        segment_ids=data.segment_ids,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='bulk',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
-    )
-
-    # Invalidate only profiles taught from these corrected segments, and fence
-    # any older extraction still in flight. Other conversations' teaching survives.
-    for previous_person_id in previous_people:
-        removed = users_db.invalidate_person_speech_profile(
-            uid, previous_person_id, conversation_id, resolved_segment_ids
-        )
-        for sample_path in removed:
-            background_tasks.add_task(delete_speech_profile_blob, sample_path)
-
-    # Trigger speaker sample extraction when assigning to a person
-    if data.assign_type == 'person_id' and value:
-        background_tasks.add_task(
-            extract_speaker_samples,
-            uid=uid,
-            person_id=value,
-            conversation_id=conversation_id,
-            segment_ids=resolved_segment_ids,
-        )
-
-    return conversation
 
 
 # *********************************************

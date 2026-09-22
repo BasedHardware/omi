@@ -438,6 +438,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
+  String get omiButtonActions => 'عملکردهای دکمه Omi';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override
@@ -10093,4 +10096,33 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'صدا آمادهٔ شناسایی است',
+        'saved_sample_awaiting_embedding': 'نمونه ذخیره شد؛ پردازش صدا هنوز لازم است',
+        'not_learned': 'صدا یاد گرفته نشده است',
+        'other': 'وضعیت صدا نامشخص است',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'گفتار بعدی این گوینده را هم برچسب بزن';
+
+  @override
+  String get updateSummaryWithNewNames => 'به‌روزرسانی خلاصه با نام‌های جدید';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

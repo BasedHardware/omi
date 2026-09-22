@@ -7,10 +7,18 @@ prefix that ends on a message boundary or an explicit ``prompt_cache_breakpoint`
 (utils/llm/prompt_cache), and the gate packed its stable framing, user facts and goals
 into the same single string as the live conversation. There was no boundary to read from.
 
+Splitting the prompt is not enough. ``get_llm(..., prompt_cache_options=...)`` binds
+those fields onto the model *before* ``with_structured_output``, and LangChain's
+``RunnableBinding`` silently drops them (see ``prompt_cache.bind_explicit_cache``).
+These tests therefore pin the INVOKED runnable's kwargs, not the arguments handed
+to ``get_llm``.
+
 These tests pin the request shape rather than the prompt wording:
   - the stable half carries the breakpoint, the volatile half must not;
   - the two halves still concatenate to exactly the old prompt bytes;
+  - two calls with different conversations share a byte-identical stable prefix;
   - the per-uid routing key is set, stable, and carries no raw uid;
+  - cache options are bound onto the structured runnable, not dropped beforehand;
   - every guard (kill switch, missing uid, prefix under the provider's floor, BYOK)
     falls back to a plain uncached request instead of buying an unreadable cache write.
 """
@@ -20,6 +28,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from utils.llm import proactive_notification as pn
+from utils.llm.prompt_cache import EXPLICIT_CACHE_MINIMUM_CHARACTERS, EXPLICIT_CACHE_OPTIONS
 
 # ---------------------------------------------------------------------------
 # Harness
@@ -29,19 +38,39 @@ BIG_FACTS = 'the user ships backend infrastructure. ' * 400  # well over the 409
 SMALL_FACTS = 'likes coffee'
 
 
-def _run_gate(**overrides):
-    """Invoke the gate with the LLM mocked; return (get_llm kwargs, invoked messages)."""
-    captured = {}
+class _RecordingLLM:
+    """Mimic ChatOpenAI enough to notice bind-after-structured-output.
 
-    structured = MagicMock()
-    structured.invoke.side_effect = lambda messages: captured.__setitem__('messages', messages) or MagicMock()
-    llm = MagicMock()
-    llm.with_structured_output.return_value = structured
+    A MagicMock ``with_structured_output`` returning a second MagicMock would
+    hide the production bug: get_llm(cache_kwargs).with_structured_output()
+    "succeeds" on a mock even though a real RunnableBinding drops the kwargs.
+    """
+
+    def __init__(self, captured: dict):
+        self._captured = captured
+
+    def with_structured_output(self, schema):
+        self._captured['schema'] = schema
+        return self
+
+    def bind(self, **kwargs):
+        self._captured['llm_kwargs'] = kwargs
+        return self
+
+    def invoke(self, messages, **kwargs):
+        self._captured['messages'] = messages
+        self._captured['invoked_kwargs'] = kwargs
+        return MagicMock()
+
+
+def _run_gate(**overrides):
+    """Invoke the gate with the LLM mocked; return captured bind kwargs and messages."""
+    captured = {'llm_kwargs': None, 'get_llm_kwargs': {}}
 
     def _get_llm(feature, **kwargs):
         captured['feature'] = feature
-        captured['llm_kwargs'] = kwargs
-        return llm
+        captured['get_llm_kwargs'] = kwargs
+        return _RecordingLLM(captured)
 
     kwargs = dict(
         user_name='Alex',
@@ -107,6 +136,30 @@ def test_volatile_half_holds_the_conversation_and_the_stable_half_does_not():
     assert 'Today is 2026-09-09' in stable
 
 
+def test_stable_prefix_is_byte_identical_across_different_per_call_inputs():
+    """The first content part must not move when the conversation or recent notifs change.
+
+    OpenAI caches the longest identical prefix. If per-call text sits at the head,
+    every call is a miss. This is the regression the split exists to prevent.
+    """
+    first = _run_gate(
+        current_messages=[{'text': 'we should ship on friday', 'is_user': True}],
+        recent_notifications=[{'created_at': '2026-09-09T10:00:00', 'text': 'call Mike'}],
+    )
+    second = _run_gate(
+        current_messages=[{'text': 'totally different live transcript', 'is_user': False}],
+        recent_notifications=[{'created_at': '2026-09-09T11:00:00', 'text': 'ping Sam'}],
+    )
+    first_parts = _parts(first['messages'])
+    second_parts = _parts(second['messages'])
+    assert first_parts[0]['text'] == second_parts[0]['text']
+    assert len(first_parts[0]['text']) >= EXPLICIT_CACHE_MINIMUM_CHARACTERS
+    assert first_parts[1]['text'] != second_parts[1]['text']
+    concatenated = first_parts[0]['text'] + first_parts[1]['text']
+    n = len(first_parts[0]['text'])
+    assert concatenated[:n] == (second_parts[0]['text'] + second_parts[1]['text'])[:n]
+
+
 # ---------------------------------------------------------------------------
 # Request shape: breakpoint, options, routing key
 # ---------------------------------------------------------------------------
@@ -121,8 +174,11 @@ def test_breakpoint_is_on_the_stable_part_only():
 def test_cache_key_and_options_are_sent():
     captured = _run_gate()
     assert captured['feature'] == 'proactive_notification'
-    assert captured['llm_kwargs']['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
-    assert captured['llm_kwargs']['cache_key'] == pn.gate_cache_key('uid-abc')
+    # Options must land on the structured runnable, not on get_llm: binding
+    # before with_structured_output is the silent drop this path existed to fix.
+    assert captured['get_llm_kwargs'] == {}
+    assert captured['llm_kwargs']['extra_body'] == {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}
+    assert captured['llm_kwargs']['prompt_cache_key'] == pn.gate_cache_key('uid-abc')
 
 
 def test_cache_key_is_stable_per_uid_and_hides_the_uid():
@@ -142,8 +198,8 @@ def _assert_uncached(captured):
     parts = _parts(captured['messages'])
     assert 'prompt_cache_breakpoint' not in parts[0]
     assert 'prompt_cache_breakpoint' not in parts[1]
-    assert captured['llm_kwargs']['cache_key'] is None
-    assert captured['llm_kwargs']['prompt_cache_options'] is None
+    assert captured['llm_kwargs'] is None
+    assert captured['get_llm_kwargs'] == {}
 
 
 @pytest.mark.parametrize('value', ['false', '0', 'off', 'no'])
@@ -157,7 +213,8 @@ def test_kill_switch_disables_the_cache_without_changing_the_prompt(monkeypatch,
 
 def test_enabled_by_default_when_the_env_var_is_unset(monkeypatch):
     monkeypatch.delenv(pn.MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, raising=False)
-    assert _run_gate()['llm_kwargs']['prompt_cache_options'] is not None
+    captured = _run_gate()
+    assert captured['llm_kwargs']['extra_body']['prompt_cache_options'] == dict(EXPLICIT_CACHE_OPTIONS)
 
 
 def test_no_uid_means_no_routing_key_and_no_cache_write():

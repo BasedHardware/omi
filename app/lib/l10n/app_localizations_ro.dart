@@ -440,6 +440,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
 
   @override
+  String get omiButtonActions => 'Acțiuni buton Omi';
+
+  @override
   String get deviceSettings => 'Setări dispozitiv';
 
   @override
@@ -10139,4 +10142,33 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voce pregătită pentru recunoaștere',
+        'saved_sample_awaiting_embedding': 'Probă salvată; mai este necesară procesarea vocii',
+        'not_learned': 'Vocea nu a fost învățată',
+        'other': 'Starea vocii este necunoscută',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etichetează și vorbirea ulterioară a acestui vorbitor';
+
+  @override
+  String get updateSummaryWithNewNames => 'Actualizează rezumatul cu numele noi';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

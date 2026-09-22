@@ -7,6 +7,8 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from fakes.firestore import read_conversation, seed_conversation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -207,12 +209,14 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
     assert reprocessed == ["sync-created-conversation"]
 
 
-def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize('empty_target', [False, True])
+def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch, empty_target):
     patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 
     target_id = "sync-target-conversation"
-    timestamp = int(time.time()) - 120
+    # Independent recordings need distinct ledger identities in the session-scoped fake.
+    timestamp = int(time.time()) - (180 if empty_target else 120)
     target_timestamp = timestamp - 3600
     seed_conversation(
         "123",
@@ -220,7 +224,9 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
             "id": target_id,
             "created_at": datetime.fromtimestamp(target_timestamp, tz=timezone.utc).isoformat(),
             "started_at": datetime.fromtimestamp(target_timestamp, tz=timezone.utc).isoformat(),
-            "finished_at": datetime.fromtimestamp(target_timestamp + 1, tz=timezone.utc).isoformat(),
+            "finished_at": datetime.fromtimestamp(
+                target_timestamp + (0 if empty_target else 1), tz=timezone.utc
+            ).isoformat(),
             "source": "desktop",
             "language": "en",
             "structured": {
@@ -231,16 +237,20 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
                 "action_items": [],
                 "events": [],
             },
-            "transcript_segments": [
-                {
-                    "id": "seg-existing",
-                    "text": "Existing live transcript.",
-                    "speaker": "SPEAKER_00",
-                    "is_user": True,
-                    "start": 0.0,
-                    "end": 1.0,
-                }
-            ],
+            "transcript_segments": (
+                []
+                if empty_target
+                else [
+                    {
+                        "id": "seg-existing",
+                        "text": "Existing live transcript.",
+                        "speaker": "SPEAKER_00",
+                        "is_user": True,
+                        "start": 0.0,
+                        "end": 1.0,
+                    }
+                ]
+            ),
             "discarded": False,
             "status": "completed",
             "is_locked": False,
@@ -274,7 +284,8 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
     assert persisted.status_code == 200, persisted.text
     body = persisted.json()
     assert body["structured"]["title"] == "Hermetic Sync Conversation Reprocessed"
-    assert [segment["text"] for segment in body["transcript_segments"]] == [
-        "Existing live transcript.",
+    assert [segment["text"] for segment in body["transcript_segments"]] == (
+        [] if empty_target else ["Existing live transcript."]
+    ) + [
         "Merged sync transcript appended to the target conversation.",
     ]
