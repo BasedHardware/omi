@@ -1154,12 +1154,6 @@ checks:
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
 
-
-  - id: users-notification-sanitization-tests
-    path: backend/routers/tests/test_users_notification_sanitization.py
-    lanes: ["local", "ci"]
-    reason: >
-      Verifies that notification_db ValueError in users.py notification endpoints does not expose internal DB schema, constraint names, or enum values in HTTP responses.
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
