@@ -138,6 +138,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omiapi.com:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -297,6 +300,9 @@ environments:
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omiapi.com:80
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -632,6 +638,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -781,6 +790,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -952,6 +964,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1104,6 +1119,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1624,6 +1642,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omi.me:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1811,6 +1832,9 @@ environments:
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omi.me:80
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -2033,6 +2057,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -2198,6 +2225,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -2370,6 +2400,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -2523,6 +2556,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability

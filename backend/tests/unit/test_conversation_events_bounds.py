@@ -584,3 +584,54 @@ def test_unchecking_a_conversation_task_rearms_its_reminder(router):
     reminder.assert_called_once_with(
         user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
     )
+
+
+def _delete_conversation_action_item(router, mirrored, description="Send the budget"):
+    """Run the swipe-delete handler that removes one task from a conversation.
+
+    That DELETE path mirrors the removal into the standalone action_items collection,
+    so a deleted row can still own a client-scheduled reminder. The client only
+    cancels it on the deletion data message (ActionItemNotificationHandler
+    .handleDeletionMessage), so the handler must send one.
+    """
+    convo = SimpleNamespace(
+        structured=SimpleNamespace(action_items=[_FakeActionItem(description)]),
+        created_at=None,
+    )
+    notifications = ModuleType("utils.notifications")
+    notifications.sync_action_item_reminder = MagicMock()
+    data = router.conv.DeleteActionItemRequest(description=description, completed=False)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
+        router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
+    ), patch.object(
+        router.conv.action_items_db, "delete_action_item"
+    ) as delete, patch.dict(
+        "sys.modules", {"utils.notifications": notifications}
+    ):
+        router.conv.delete_action_item(data, "c1", uid="u1")
+    return delete, notifications.sync_action_item_reminder
+
+
+def test_deleting_a_conversation_task_cancels_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due, "completed": False}]
+
+    delete, reminder = _delete_conversation_action_item(router, mirrored)
+
+    delete.assert_called_once_with("u1", "task-1")
+    reminder.assert_called_once_with(user_id="u1", action_item_id="task-1", description="", completed=True, due_at=None)
+
+
+def test_deleting_a_task_without_a_live_reminder_sends_nothing(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [
+        {"id": "task-done", "description": "Send the budget", "due_at": due, "completed": True},
+        {"id": "task-other", "description": "Something else", "due_at": due, "completed": False},
+    ]
+
+    delete, reminder = _delete_conversation_action_item(router, mirrored)
+
+    delete.assert_called_once_with("u1", "task-done")
+    reminder.assert_not_called()

@@ -404,7 +404,7 @@ function ProfileSection({
   user: any;
   onCopyUserId: () => void;
   language: string;
-  vocabulary: string[];
+  vocabulary: string[] | null;
   onLanguageChange: (lang: string) => void;
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
@@ -421,8 +421,10 @@ function ProfileSection({
     setTimeout(() => setCopiedUserId(false), 2000);
   };
 
+  const words = vocabulary ?? [];
+
   const handleAddWord = () => {
-    if (newWord.trim()) {
+    if (vocabulary !== null && newWord.trim()) {
       onAddWord(newWord.trim());
       setNewWord('');
     }
@@ -538,7 +540,7 @@ function ProfileSection({
               />
               <button
                 onClick={handleAddWord}
-                disabled={!newWord.trim()}
+                disabled={vocabulary === null || !newWord.trim()}
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
                   'bg-text-primary text-bg-primary',
@@ -550,9 +552,9 @@ function ProfileSection({
               </button>
             </div>
 
-            {vocabulary.length > 0 && (
+            {words.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-2">
-                {vocabulary.map((word) => (
+                {words.map((word) => (
                   <span
                     key={word}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-secondary text-sm"
@@ -569,9 +571,14 @@ function ProfileSection({
               </div>
             )}
 
-            {vocabulary.length === 0 && (
+            {vocabulary !== null && words.length === 0 && (
               <p className="text-sm text-text-quaternary text-center py-4">
                 No custom vocabulary added yet
+              </p>
+            )}
+            {vocabulary === null && (
+              <p className="py-4 text-center text-sm text-text-quaternary">
+                Could not load your vocabulary
               </p>
             )}
           </div>
@@ -3052,7 +3059,9 @@ export function SettingsPage() {
 
   // Settings state - each section's data
   const [language, setLanguage] = useState('en');
-  const [vocabulary, setVocabulary] = useState<string[]>([]);
+  // null until the list is known: saving replaces the whole vocabulary, so a
+  // failed load must not be sent back as an empty one.
+  const [vocabulary, setVocabulary] = useState<string[] | null>(null);
   const [dailySummary, setDailySummary] = useState<DailySummarySettings>({
     enabled: true,
     hour: 22,
@@ -3093,7 +3102,7 @@ export function SettingsPage() {
             // groups together, so it loads both sets in one pass.
             const [lang, vocab, summary, usageData, sub, plansData] = await Promise.all([
               getUserLanguage().catch(() => 'en'),
-              getCustomVocabulary().catch(() => []),
+              getCustomVocabulary().catch(() => null),
               getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
               getAllUsageData().catch(() => null),
               getUserSubscription().catch(() => null),
@@ -3180,6 +3189,7 @@ export function SettingsPage() {
   };
 
   const handleAddWord = async (word: string) => {
+    if (vocabulary === null) return;
     const newVocabulary = [...vocabulary, word];
     setVocabulary(newVocabulary);
     try {
@@ -3190,6 +3200,7 @@ export function SettingsPage() {
   };
 
   const handleRemoveWord = async (word: string) => {
+    if (vocabulary === null) return;
     const newVocabulary = vocabulary.filter((w) => w !== word);
     setVocabulary(newVocabulary);
     try {
@@ -3358,7 +3369,9 @@ export function SettingsPage() {
         ...webhooks,
         [type]: {
           enabled,
-          url: url || webhooks[type as keyof DeveloperWebhooks]?.url || '',
+          // Mirror what was sent: audio_bytes keeps its interval in the URL, and
+          // storing the bare URL here made the interval field fall back to 5.
+          url: webhookUrl || webhooks[type as keyof DeveloperWebhooks]?.url || '',
         },
       });
     } catch (error) {

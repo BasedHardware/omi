@@ -368,6 +368,21 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
+def _release_chat_quota_question_best_effort(
+    uid: str,
+    *,
+    idempotency_key: str,
+) -> None:
+    """Best-effort release for a question charged up front when the turn fails
+    terminally (provider error, empty answer) — the user keeps the question.
+    A release failure must never mask the original stream failure, and a retry
+    is idempotent on the same event doc."""
+    try:
+        llm_usage_db.release_chat_quota_question(uid, idempotency_key)
+    except Exception:
+        logger.exception('Failed to release chat quota question uid=%s', uid)
+
+
 def _required_chat_quota_provider() -> str | None:
     # Direct agent chat consumes managed Anthropic unless an Anthropic BYOK key
     # is on the request. Other BYOK providers must stay metered on this path.
@@ -463,10 +478,11 @@ def send_message(
     # Fail-closed before persisting the human turn or starting billable work:
     # a Firestore outage must not leave Free-plan turns uncounted, orphan
     # messages on retry, or return a bare HTTP 503 that mobile SSE silently drops.
+    quota_idempotency_key = f'v2_messages:{message.id}'
     try:
         _record_chat_quota_question(
             uid,
-            idempotency_key=f'v2_messages:{message.id}',
+            idempotency_key=quota_idempotency_key,
             source='v2_messages',
             message_id=message.id,
             chat_session_id=message.chat_session_id,
@@ -610,7 +626,7 @@ def send_message(
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
 
-        def emit_done_frame(response: str) -> str:
+        async def emit_done_frame(response: str) -> str:
             """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs.
 
             If Firestore persistence fails, still emit an in-memory ``done:`` frame (same
@@ -619,7 +635,7 @@ def send_message(
             """
             persist_outcome = 'degraded'
             try:
-                ai_message, ask_for_nps = process_message(response, callback_data)
+                ai_message, ask_for_nps = await run_blocking(db_executor, process_message, response, callback_data)
             except Exception as persist_exc:
                 logger.error(
                     'chat stream terminal answer persistence failed for uid=%s: %s',
@@ -687,7 +703,7 @@ def send_message(
                     if response:
                         # This is the furthest server-observable client boundary:
                         # a yielded terminal frame is not a client-render acknowledgement.
-                        yield emit_done_frame(response)
+                        yield await emit_done_frame(response)
                         answered = True
 
             if not answered:
@@ -697,7 +713,7 @@ def send_message(
                 # without setting ``callback_data['answer']`` (those still need ``done:``).
                 response = callback_data.get('answer')
                 if response:
-                    yield emit_done_frame(response)
+                    yield await emit_done_frame(response)
                 else:
                     if streamed_terminal_error:
                         logger.error(
@@ -707,6 +723,9 @@ def send_message(
                             callback_data.get('route') or 'unknown',
                             True,
                         )
+                    # The turn produced no answer: release the question charged
+                    # up front so the user is not billed for a failed turn.
+                    _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,
@@ -722,6 +741,7 @@ def send_message(
             raise
         except Exception:
             journey_attempt.finish('failure')
+            _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
             raise
         finally:
             reset_usage_context(usage_token)

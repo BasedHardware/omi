@@ -172,7 +172,7 @@ from utils.other.hume import (
 )
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
@@ -1877,10 +1877,30 @@ def _write_action_items(uid: str, conversation: Conversation):
         for action_item in conversation.structured.action_items
     ]
 
-    old_ids = [item['id'] for item in action_items_db.get_action_items_by_conversation(uid, conversation.id)]
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
     action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+    try:
+        for item in old_items:
+            # The replaced rows may own client-scheduled reminders, which the client
+            # only cancels on the deletion data message (#5085). Reprocessing re-creates
+            # the tasks under new ids and schedules their reminders below, so leaving
+            # these armed duplicates every surviving task and keeps reminders for
+            # dropped ones.
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=item['id'],
+                    description='',
+                    completed=True,
+                    due_at=None,
+                )
+    except Exception as e:
+        # The old rows are already gone; a failed reminder send must never cost the
+        # conversation its new extraction.
+        logger.error(f"Error cancelling replaced task reminders for {conversation.id}: {e}")
 
     action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
     logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
@@ -2944,7 +2964,13 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+            if is_reprocess:
+                # Same fail-closed idea as memory source replacement: a transient
+                # destructive-op fence must be observable on the sync reprocess
+                # path instead of disappearing into postprocess_executor.
+                _save_action_items(uid, conversation, people)
+            else:
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.

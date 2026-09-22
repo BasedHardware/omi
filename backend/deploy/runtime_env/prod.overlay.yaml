@@ -22,6 +22,8 @@ overlay:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
         HOSTED_TRANSLATION_API_URL:
@@ -97,6 +99,8 @@ overlay:
           value: 'false'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -204,6 +208,8 @@ overlay:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -284,6 +290,8 @@ overlay:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -355,6 +363,8 @@ overlay:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -418,6 +428,8 @@ overlay:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
