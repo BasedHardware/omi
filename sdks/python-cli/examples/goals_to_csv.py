@@ -4,19 +4,30 @@ import os
 import sys
 from pathlib import Path
 
-FIELDS = ("id", "title", "status", "target_date", "progress", "created_at")
+FIELDS = ("id", "title", "description", "target_date", "progress", "created_at")
 
 
 def spreadsheet_text(value):
-    """Render one exported field as spreadsheet-safe text."""
+    """Neutralize spreadsheet formula injection risks."""
     if value is None:
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    # Neutralize spreadsheet formula injection attacks
     if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
         return "'" + value
     return value
+
+
+def format_progress(item):
+    """Format goal progress from GoalResponse fields (current_value, target_value, metric)."""
+    curr = item.get("current_value")
+    tgt = item.get("target_value")
+    metric = (item.get("metric") or "").strip()
+    if curr is not None and tgt is not None:
+        return f"{curr}/{tgt} {metric}".strip()
+    if curr is not None:
+        return f"{curr} {metric}".strip()
+    return str(item.get("progress") or "")
 
 
 def convert(source, destination):
@@ -38,14 +49,16 @@ def convert(source, destination):
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                writer.writerow([
-                    spreadsheet_text(item.get("id")),
-                    spreadsheet_text(item.get("title")),
-                    spreadsheet_text(item.get("status")),
-                    spreadsheet_text(item.get("target_date") or item.get("target_at")),
-                    spreadsheet_text(item.get("progress")),
-                    spreadsheet_text(item.get("created_at")),
-                ])
+                row = [
+                    item.get("id", ""),
+                    spreadsheet_text(item.get("title") or item.get("name")),
+                    spreadsheet_text(item.get("description") or ""),
+                    item.get("horizon_at") or item.get("target_date") or item.get("target_at") or "",
+                    spreadsheet_text(format_progress(item)),
+                    item.get("created_at") or "",
+                ]
+                writer.writerow(row)
+
         os.replace(tmp, dest)
     finally:
         if tmp.exists():
