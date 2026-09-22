@@ -5,6 +5,7 @@ This app provides Hive project management integration through API key authentica
 and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
+import urllib.parse
 from typing import Optional, Dict, Any, List, Tuple
 
 import requests
@@ -583,9 +584,11 @@ async def home(request: Request, uid: Optional[str] = None):
         projects = get_user_projects(uid)
         default_project = get_default_project(uid)
 
+    uid_q = urllib.parse.quote(uid, safe="") if uid else ""
     return templates.TemplateResponse("setup.html", {
         "request": request,
         "uid": uid,
+        "uid_q": uid_q,
         "connected": connected,
         "user_info": user_info,
         "projects": projects,
@@ -608,10 +611,11 @@ async def connect_api_key(
     # Verify the API key
     user_info = verify_api_key(api_key.strip())
 
+    safe_uid = urllib.parse.quote(uid, safe="")
     if not user_info:
         # Return to setup page with error
         return RedirectResponse(
-            url=f"/?uid={uid}&error=Invalid+API+key.+Please+check+and+try+again.",
+            url=f"/?uid={safe_uid}&error=Invalid+API+key.+Please+check+and+try+again.",
             status_code=303
         )
 
@@ -624,7 +628,7 @@ async def connect_api_key(
         workspace_id=user_info.get("workspace_id"),
     )
 
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={safe_uid}", status_code=303)
 
 
 @app.get("/setup/hive", tags=["setup"])
@@ -645,7 +649,8 @@ async def set_default_project(uid: str, project_id: str, project_name: str):
 async def disconnect_hive(uid: str):
     """Disconnect Hive account."""
     delete_hive_credentials(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    safe_uid = urllib.parse.quote(uid, safe="")
+    return RedirectResponse(url=f"/?uid={safe_uid}")
 
 
 # ============================================
