@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Rad imam jesti sladoled...",
+    "memoryContentHint": "Raje imam jutranje sestanke.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10838,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Glas je pripravljen za prepoznavanje} saved_sample_awaiting_embedding{Vzorec shranjen, potrebna je še obdelava glasu} not_learned{Glas ni naučen} other{Stanje glasu ni znano}}",
     "tagSpeakerIncludingLaterSpeech": "Označi tudi poznejši govor tega govorca",
     "updateSummaryWithNewNames": "Posodobi povzetek z novimi imeni",
-    "syncStatusUnsupportedAudio": "Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča"
+    "syncStatusUnsupportedAudio": "Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Kaj lahko narediš zame?} goal{Pomagaj mi postaviti cilj} activity{Povzemi moje nedavne dejavnosti} improve{Kako lahko napredujem?} other{}}",
+    "nextWeek": "Naslednji teden",
+    "clearSearch": "Počisti iskanje"
 }
