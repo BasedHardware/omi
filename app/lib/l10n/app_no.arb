@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{Stemmen er klar for gjenkjenning} saved_sample_awaiting_embedding{Prøve lagret, stemmebehandling gjenstår} not_learned{Stemmen er ikke lært} other{Stemmestatus ukjent}}",
     "tagSpeakerIncludingLaterSpeech": "Merk også senere tale fra denne taleren",
     "updateSummaryWithNewNames": "Oppdater sammendraget med de nye navnene",
-    "syncStatusUnsupportedAudio": "Lyden kunne ikke leses — kan ikke synkroniseres"
+    "syncStatusUnsupportedAudio": "Lyden kunne ikke leses — kan ikke synkroniseres",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

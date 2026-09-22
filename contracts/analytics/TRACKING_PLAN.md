@@ -125,3 +125,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | appleRemindersSyncCompleted | Apple Reminders Sync Completed | pending_exported, synced_checked, completions_pulled, completions_pushed, title_due_pulled, title_due_pushed, reminders_unlinked | active | mobile-instrumentation-presence |
 | wrappedGenerationCompleted | Wrapped Generation Completed | total_conversations, total_minutes, days_active | active | mobile-instrumentation-presence |
 | typeExtensionProbe | Type Extension Probe | enabled, count, mode | active | c8-type-extension |
+| appReviewOpportunity | App Review Opportunity | moment, decision | active | mobile-review-presence |
+| appReviewRequestAttempted | App Review Request Attempted | moment | active | mobile-review-presence |
+| appReviewRequestFinished | App Review Request Finished | moment, result | active | mobile-review-presence |
+| productJourneyStarted | Product Journey Started | journey, surface, object_id | active | mobile-product-outcomes |
+| productJourneyFirstResult | Product Journey First Result | journey, surface, object_id, duration_ms | active | mobile-product-outcomes |
+| productJourneyOutcome | Product Journey Outcome | journey, surface, object_id, outcome, failure, duration_ms, result_count | active | mobile-product-outcomes |
+| productValueEvent | Product Value | kind, surface, object_id | active | mobile-product-outcomes |

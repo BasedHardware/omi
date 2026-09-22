@@ -10838,5 +10838,7 @@
     "voiceRecognitionStatus": "{status, select, ready{הקול מוכן לזיהוי} saved_sample_awaiting_embedding{הדגימה נשמרה; עדיין נדרש עיבוד קול} not_learned{הקול לא נלמד} other{מצב הקול אינו ידוע}}",
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
-    "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן"
+    "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }

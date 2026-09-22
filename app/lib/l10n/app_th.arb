@@ -3251,5 +3251,7 @@
     "voiceRecognitionStatus": "{status, select, ready{เสียงพร้อมสำหรับการจดจำ} saved_sample_awaiting_embedding{บันทึกตัวอย่างแล้ว ยังต้องประมวลผลเสียง} not_learned{ยังไม่ได้เรียนรู้เสียง} other{ไม่ทราบสถานะเสียง}}",
     "tagSpeakerIncludingLaterSpeech": "แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย",
     "updateSummaryWithNewNames": "อัปเดตสรุปด้วยชื่อใหม่",
-    "syncStatusUnsupportedAudio": "อ่านเสียงไม่ได้ — ซิงค์ไม่ได้"
+    "syncStatusUnsupportedAudio": "อ่านเสียงไม่ได้ — ซิงค์ไม่ได้",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess"
 }
