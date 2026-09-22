@@ -197,11 +197,21 @@ def main():
     if args.team not in profile["TeamIdentifier"]:
         parser.error("profile team does not match --team")
     # Apple exposes development identities as SHA-1 certificate fingerprints.
-    # This is an identifier comparison, never a security digest or trust check.
-    certificate_fingerprints = {
-        hashlib.sha1(cert, usedforsecurity=False).hexdigest().upper()
-        for cert in profile.get("DeveloperCertificates", [])
-    }
+    # Ask the platform certificate tool for that opaque identifier instead of
+    # using an in-process weak hash that could be mistaken for a security digest.
+    certificate_fingerprints = set()
+    developer_certificates = profile.get("DeveloperCertificates", [])
+    openssl = shutil.which("openssl") if developer_certificates else None
+    if developer_certificates and openssl is None:
+        parser.error("openssl is required to read Apple certificate fingerprints")
+    for cert in developer_certificates:
+        fingerprint = subprocess.check_output(
+            [openssl, "x509", "-inform", "DER", "-fingerprint", "-sha1", "-noout"],
+            input=cert,
+            stderr=subprocess.STDOUT,
+            text=True,
+        ).strip().rsplit("=", 1)[-1]
+        certificate_fingerprints.add(fingerprint.replace(":", "").upper())
     if args.identity.upper() not in certificate_fingerprints:
         parser.error("--identity must be the SHA-1 fingerprint of a certificate authorized by the profile")
     profile_app = profile["Entitlements"]["application-identifier"]
