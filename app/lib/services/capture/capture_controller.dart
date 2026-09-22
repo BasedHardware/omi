@@ -18,7 +18,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -35,6 +34,7 @@ import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -92,6 +92,8 @@ class CaptureController extends ChangeNotifier
   final CaptureSessionOwner? _sessionOwner;
   final SharedPreferencesUtil _preferences;
   final IMicRecorderService? _phoneMicBatchRecorder;
+  final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
+  final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
   bool _sessionGeolocationPublishedToWal = false;
@@ -212,6 +214,7 @@ class CaptureController extends ChangeNotifier
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
     RecordingLifecycleTelemetry? recordingTelemetry,
+    Future<bool> Function(String deviceId, int level)? speakerHaptic,
     IWalService? walService,
     IMicRecorderService? phoneMicRecorder,
     bool? phoneMicBatchSupported,
@@ -223,6 +226,7 @@ class CaptureController extends ChangeNotifier
     CaptureBleListeners? bleListeners,
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
+    Future<CreateConversationResponse?> Function()? processInProgressConversation,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -230,6 +234,7 @@ class CaptureController extends ChangeNotifier
         _microphonePermissionRequester = microphonePermissionRequester,
         _phoneMicBatchRecorder = phoneMicBatchRecorder,
         _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
+        _speakerHaptic = speakerHaptic,
         _walServiceOverride = walService,
         _phoneMicRecorderOverride = phoneMicRecorder,
         _phoneMicBatchSupportedOverride = phoneMicBatchSupported,
@@ -240,6 +245,7 @@ class CaptureController extends ChangeNotifier
         _bleListeners = bleListeners,
         _openSocketOverride = openSocket,
         _sessionOwner = sessionOwner,
+        _processInProgressConversationOverride = processInProgressConversation,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
@@ -313,11 +319,13 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
+        _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
           _wal.getSyncs().phone.onFrameCaptured(frame);
           if (_socket?.state == SocketServiceState.connected) {
             _socket?.send(frame.payload);
+            _recordingTelemetry.observeSent(frame.payload.length);
             _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
           }
         }
@@ -549,6 +557,7 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  final Map<int, String> _manualSpeakerDefaults = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -561,6 +570,8 @@ class CaptureController extends ChangeNotifier
   StreamSubscription? _bleButtonStream;
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
+  int _voiceCommandSubmissionGeneration = 0;
+  bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
 
@@ -632,11 +643,28 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  BtDevice? _recordingDevicePreservingNormalizedType(BtDevice? device) {
+    final current = _recordingDevice;
+    if (device == null || current == null || current.id != device.id) {
+      return device;
+    }
+    // Same device: do not downgrade capability-normalized OpenGlass back to
+    // the advertising-time Omi type (Home / speech-profile restarts).
+    if (current.type == DeviceType.openglass && device.type == DeviceType.omi) {
+      return device.copyWith(type: DeviceType.openglass);
+    }
+    return device;
+  }
+
   void _updateRecordingDevice(BtDevice? device) {
-    Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
-    _rollCaptureSession(device?.id ?? 'none');
-    _recordingDevice = device;
-    if (device == null) _endOfflineSession();
+    // Preserve a capability-normalized OpenGlass identity across recording-device
+    // updates (Home / speech-profile restarts pass the raw advertising-time Omi
+    // object; a downgrade would flip the button-actions gate mid-recording).
+    final next = _recordingDevicePreservingNormalizedType(device);
+    Logger.debug('connected device changed from ${_recordingDevice?.id} to ${next?.id}');
+    _rollCaptureSession(next?.id ?? 'none');
+    _recordingDevice = next;
+    if (next == null) _endOfflineSession();
     notifyListeners();
   }
 
@@ -650,6 +678,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
@@ -1072,7 +1101,28 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+  // Omi-button actions are user-configurable; when disabled, single/double-tap
+  // and device-button voice commands are ignored. This gate intentionally does
+  // NOT apply to interactive onboarding, which must still receive button events.
+  bool get _omiButtonActionsDisabled =>
+      _isOmiButtonActionsDevice(_recordingDevice) && !SharedPreferencesUtil().omiButtonActionsEnabled;
+
+  /// Whether this device honors the Omi button actions preference. Identity is
+  /// capability-normalized: BtDevice.getDeviceInfo() reclassifies image-stream
+  /// hardware as DeviceType.openglass, and DeviceProvider pushes that normalized
+  /// paired device into updateRecordingDevice after connect — so the device type
+  /// alone is authoritative here and advertising names are never inspected.
+  bool _isOmiButtonActionsDevice(BtDevice? device) {
+    return device?.type == DeviceType.omi;
+  }
+
+  Future<void> _processVoiceCommandBytes(
+    String deviceId,
+    List<List<int>> data, {
+    bool allowWhenDisabled = false,
+  }) async {
+    final submissionGeneration = _voiceCommandSubmissionGeneration;
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
     if (data.isEmpty) {
       Logger.debug("voice frames is empty");
       return;
@@ -1084,6 +1134,8 @@ class CaptureController extends ChangeNotifier
     }
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    if (submissionGeneration != _voiceCommandSubmissionGeneration) return;
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
     await externalActions.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: () {
@@ -1094,6 +1146,11 @@ class CaptureController extends ChangeNotifier
       // Gated by _preferences.voiceResponseEnabled inside the service.
       playResponseAudio: true,
     );
+  }
+
+  @visibleForTesting
+  Future<void> processVoiceCommandBytesForTesting(String deviceId, List<List<int>> data) {
+    return _processVoiceCommandBytes(deviceId, data);
   }
 
   // Start a 15s timeout timer for voice commands - auto-ends if user forgets to tap again
@@ -1112,9 +1169,48 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
+
+    // The started-during-onboarding exemption only holds while the tutorial is
+    // still active: if onboarding exited (dispose/skip/complete), the session
+    // should have been cancelled — never submit audio captured after leaving.
+    final allowWhenDisabled =
+        _voiceCommandStartedDuringOnboarding && deviceOnboardingProvider?.isOnboardingActive == true;
+    _voiceCommandStartedDuringOnboarding = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
-    _processVoiceCommandBytes(deviceId, data);
+    _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
+  }
+
+  void cancelActiveVoiceSession() {
+    _voiceCommandSubmissionGeneration++;
+    _voiceCommandTimeoutTimer?.cancel();
+    _voiceCommandTimeoutTimer = null;
+    _voiceCommandSession = null;
+
+    _voiceCommandStartedDuringOnboarding = false;
+    _commandBytes = [];
+  }
+
+  /// Cancel a voice session only if the tutorial started it.
+  ///
+  /// Tapping Start then exiting during step 0 never starts a voice session, so
+  /// a pre-existing Omi command must be left alone.
+  void cancelTutorialOwnedVoiceSession() {
+    if (!_voiceCommandStartedDuringOnboarding) return;
+    cancelActiveVoiceSession();
+  }
+
+  @visibleForTesting
+  bool get hasVoiceCommandSessionForTesting => _voiceCommandSession != null;
+
+  @visibleForTesting
+  void addVoiceCommandBytesForTesting(List<int> payload) {
+    _commandBytes.add(payload);
+  }
+
+  @visibleForTesting
+  void endVoiceCommandSessionForTesting(String deviceId) {
+    _endVoiceCommandSession(deviceId);
   }
 
   Future streamButton(String deviceId) async {
@@ -1242,6 +1338,127 @@ class CaptureController extends ChangeNotifier
     );
   }
 
+  @visibleForTesting
+  void handleButtonEventForTesting(String deviceId, int buttonState) {
+    _handleButtonEvent(deviceId, buttonState);
+  }
+
+  void _handleButtonEvent(String deviceId, int buttonState) {
+    // Intercept for interactive device onboarding
+    if (deviceOnboardingProvider?.isOnboardingActive == true) {
+      deviceOnboardingProvider!.onButtonEvent(buttonState);
+      // For step 1 (ask question), let single-tap fall through to normal voice command handling
+      if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+        // Fall through to normal single-tap handling below
+      } else {
+        return;
+      }
+    }
+
+    // Omi button actions are disabled by the user: skip action handling but
+    // onboarding (handled above) still receives button events regardless.
+    if (_omiButtonActionsDisabled && deviceOnboardingProvider?.isOnboardingActive != true) return;
+
+    // double tap
+    if (buttonState == 2) {
+      Logger.debug("Double tap detected");
+
+      // Guard: ignore if already processing a button event
+      if (_isProcessingButtonEvent) {
+        Logger.debug("Double tap: already processing, ignoring");
+        return;
+      }
+
+      int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+      if (doubleTapAction == 1) {
+        // Pause/resume recording
+        Logger.debug("Double tap: toggling pause/mute");
+        _isProcessingButtonEvent = true;
+        if (isPaused) {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          resumeDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error resuming device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        } else {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          pauseDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error pausing device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        }
+      } else if (doubleTapAction == 2) {
+        // Star ongoing conversation (doesn't end it)
+        Logger.debug("Double tap: marking conversation for starring");
+        if (!_starOngoingConversation) {
+          markConversationForStarring();
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          // Haptic feedback to confirm
+          HapticFeedback.mediumImpact();
+        } else {
+          // Toggle off if already marked
+          unmarkConversationForStarring();
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          HapticFeedback.lightImpact();
+        }
+      } else {
+        // End conversation and process (default)
+        Logger.debug("Double tap: processing conversation");
+        PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        forceProcessingCurrentConversation();
+      }
+      return;
+    }
+
+    // Single tap (buttonState == 1) - toggle voice question mode
+    // Tap once to start, tap again to end
+    if (buttonState == 1) {
+      debugPrint("Single tap detected");
+      if (_voiceCommandSession == null) {
+        // Start voice question session (new toggle mode)
+        debugPrint("Starting voice question session (toggle mode)");
+        // Cut off any in-flight voice playback from a prior reply so the
+        // new recording starts clean.
+        if (OmiVoicePlaybackService.instance.isSpeaking) {
+          OmiVoicePlaybackService.instance.interrupt();
+        }
+        _voiceCommandSession = DateTime.now();
+        _commandBytes = [];
+        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+
+        _startVoiceCommandTimeout(deviceId);
+        _playSpeakerHaptic(deviceId, 1);
+      } else {
+        // End on second tap
+        debugPrint("Ending voice question session (toggle mode)");
+        _endVoiceCommandSession(deviceId);
+      }
+      return;
+    }
+
+    // Legacy support: start long press (for voice commands) - older firmware
+    if (buttonState == 3 && _voiceCommandSession == null) {
+      debugPrint("Legacy: Long press start detected");
+      _voiceCommandSession = DateTime.now();
+      _commandBytes = [];
+      _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+
+      _startVoiceCommandTimeout(deviceId);
+      _playSpeakerHaptic(deviceId, 1);
+    }
+
+    // Legacy support: release (end voice command) - older firmware
+    // End on release if a voice command session is active
+    if (buttonState == 5 && _voiceCommandSession != null) {
+      _endVoiceCommandSession(deviceId);
+    }
+  }
+
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return false;
@@ -1256,12 +1473,18 @@ class CaptureController extends ChangeNotifier
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
+        _recordingTelemetry.observeAudio(snapshot.length);
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
-        if (_voiceCommandSession != null && voiceCommandSupported) {
+        // Once Omi button actions are disabled, stop collecting command audio so
+        // a session missed by cancelActiveVoiceSession cannot keep buffering
+        // frames that would be submitted later. Interactive onboarding still
+        // receives command audio (its step-1 session runs while disabled).
+        final collectCommandAudio = !_omiButtonActionsDisabled || deviceOnboardingProvider?.isOnboardingActive == true;
+        if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
           final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
         }
@@ -1291,6 +1514,7 @@ class CaptureController extends ChangeNotifier
 
           // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
+          _recordingTelemetry.observeSent(socketPayload.length);
 
           // Mark frames as synced
           if (_isWalSupported) {
@@ -1347,6 +1571,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
+    if (_speakerHaptic != null) return _speakerHaptic!(deviceId, level);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return false;
@@ -1668,6 +1893,7 @@ class CaptureController extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
+    _manualSpeakerDefaults.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -1861,6 +2087,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
+          _recordingTelemetry.observeAudio(bytes.length);
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
@@ -1869,6 +2096,7 @@ class CaptureController extends ChangeNotifier
 
             if (_socket?.state == SocketServiceState.connected) {
               _socket?.send(frame.payload);
+              _recordingTelemetry.observeSent(frame.payload.length);
               _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
             }
           }
@@ -1938,6 +2166,7 @@ class CaptureController extends ChangeNotifier
         _wal.getSyncs().phone.onFrameCaptured(frame);
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(frame.payload);
+          _recordingTelemetry.observeSent(frame.payload.length);
           _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
         }
       }
@@ -2254,6 +2483,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
 
@@ -2263,6 +2493,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onConnected() {
+    _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
     // Restart mic on reconnect if interrupted (skip during active call).
     if (recordingState == RecordingState.interrupted && !_micInterrupted) {
@@ -2392,8 +2623,18 @@ class CaptureController extends ChangeNotifier
       await _inProgressConversationLoader!();
       return;
     }
-    var convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    _conversation = convos.isNotEmpty ? convos.first : null;
+    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+  }
+
+  /// Install an acknowledged server snapshot. Shared by REST refresh and
+  /// hermetic capture scenarios that control the conversation boundary.
+  void applyInProgressConversation(ServerConversation? nextConversation) {
+    if (_conversation?.id != nextConversation?.id) {
+      suggestionsBySegmentId.clear();
+      _manualSpeakerDefaults.clear();
+    }
+    _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
       // Merge server photos with locally-captured temp photos to avoid losing
@@ -2421,6 +2662,9 @@ class CaptureController extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
+      // Replace the optimistic Process Now placeholder once the server confirms
+      // a real processing row, so timeout/retry apply to the confirmed id.
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _pendingAutoSyncConversationId = event.memory.id;
@@ -2447,6 +2691,7 @@ class CaptureController extends ChangeNotifier
 
     if (event is ConversationEvent) {
       event.memory.isNew = true;
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
@@ -2537,37 +2782,28 @@ class CaptureController extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
 
-    // Force-drain tail buffer before clearing state
     final phoneSync = _wal.getSyncs().phone;
+    // Show the Conversations-tab skeleton before the WAL drain. Awaiting
+    // finalizeCurrentSession first is the 30–60s dead window users hit today.
+    // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+
     await phoneSync.finalizeCurrentSession();
     _clearSessionLocation();
 
     _resetStateVariables();
-    externalActions.addProcessingConversation(
-      ServerConversation(
-        id: '0',
-        createdAt: DateTime.now(),
-        structured: Structured('', ''),
-        status: ConversationStatus.processing,
-      ),
-    );
-    processInProgressConversation().then((result) async {
-      if (result == null || result.conversation == null) {
-        externalActions.removeProcessingConversation('0');
-        return;
-      }
-      externalActions.removeProcessingConversation('0');
-      result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
-
-      // Stamp WALs with conversation ID and auto-sync
-      if (sessionStart > 0 && result.conversation != null) {
-        await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
+    final process = _processInProgressConversationOverride ?? processInProgressConversation;
+    process().then((result) async {
+      final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
+        result: result,
+        actions: externalActions,
+        onCreated: _processConversationCreated,
+      );
+      if (sessionStart > 0 && conversationId != null) {
+        await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
     });
-
-    return;
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
@@ -2670,15 +2906,20 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
+    if (event.speakerId < 0 || event.segmentId.isEmpty || event.personName.trim().isEmpty) return;
     // Tagging
     if (taggingSegmentIds.contains(event.segmentId)) {
       return;
     }
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
-    if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+    if (segment == null || segment.speakerId != event.speakerId || segment.personId != null || segment.isUser) return;
+    if (event.personId.isEmpty) {
+      suggestionsBySegmentId[event.segmentId] = event;
+      notifyListeners();
       return;
     }
+    suggestionsBySegmentId.remove(event.segmentId);
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
@@ -2686,12 +2927,18 @@ class CaptureController extends ChangeNotifier
       _preferences.addCachedPerson(
         Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
+      _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
     }
 
     // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
     if (event.personId.isNotEmpty) {
       for (var seg in segments) {
-        if (seg.speakerId == event.speakerId) {
+        if (seg.speakerId == event.speakerId &&
+            !seg.isUser &&
+            seg.personId == null &&
+            !taggingSegmentIds.contains(seg.id)) {
           seg.isUser = isUser;
           seg.personId = isUser ? null : event.personId;
         }
@@ -2701,71 +2948,51 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> assignSpeakerToConversation(
+  Future<bool> assignSpeakerToConversation(
     int speakerId,
     String personId,
     String personName,
-    List<String> segmentIds,
-  ) async {
-    if (segmentIds.isEmpty) return;
-
-    taggingSegmentIds = List.from(segmentIds);
+    List<String> segmentIds, {
+    bool applyToSpeaker = false,
+  }) async {
+    final conversationId = _conversation?.id;
+    final sessionId = activeCaptureSessionId;
+    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
+    final targets = List<String>.of(segmentIds);
+    taggingSegmentIds = targets;
     notifyListeners();
-
     try {
-      String finalPersonId = personId;
-
-      // Create person if new (old app path - calls idempotent API)
-      if (finalPersonId.isEmpty) {
-        Person? newPerson = await externalActions.createPerson(personName);
-        if (newPerson != null) {
-          finalPersonId = newPerson.id;
+      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
+      if (finalPersonId == null || finalPersonId.isEmpty) return false;
+      final saved = await externalActions.assignSpeaker(conversationId, targets, finalPersonId,
+          speakerId: applyToSpeaker ? speakerId : null);
+      if (!saved) return false;
+      if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
+      if (applyToSpeaker) {
+        _manualSpeakerDefaults[speakerId] = finalPersonId;
+      } else {
+        _manualSpeakerDefaults.remove(speakerId);
+      }
+      for (final segment in segments) {
+        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
+          segment.isUser = finalPersonId == 'user';
+          segment.personId = segment.isUser ? null : finalPersonId;
         }
       }
-
-      // Add person to local cache if not exists (backward compatibility for old apps)
-      if (finalPersonId.isNotEmpty && finalPersonId != 'user' && _preferences.getPersonById(finalPersonId) == null) {
-        _preferences.addCachedPerson(
-          Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        );
-      }
-
-      // Find conversation id
-      if (_conversation == null) return;
-
-      final isAssigningToUser = finalPersonId == 'user';
-
-      // Update all segments with this speakerId for UI consistency
-      for (var segment in segments) {
-        if (segment.speakerId == speakerId) {
-          segment.isUser = isAssigningToUser;
-          segment.personId = isAssigningToUser ? null : finalPersonId;
-        }
-      }
-      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
-
-      // Persist change
-      await assignBulkConversationTranscriptSegments(
-        _conversation!.id,
-        segmentIds,
-        isUser: isAssigningToUser,
-        personId: isAssigningToUser ? null : finalPersonId,
-      );
-
-      // Notify backend session
+      _segmentsPhotosVersion++;
       if (_socket?.state == SocketServiceState.connected) {
-        final payload = jsonEncode({
+        _socket?.send(jsonEncode({
           'type': 'speaker_assigned',
           'speaker_id': speakerId,
           'person_id': finalPersonId,
           'person_name': personName,
-          'segment_ids': segmentIds,
-        });
-        _socket?.send(payload);
+          'segment_ids': targets,
+        }));
       }
-
-      // Remove all suggestions for this speakerId
-      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == speakerId);
+      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      return true;
+    } catch (_) {
+      return false;
     } finally {
       taggingSegmentIds = [];
       notifyListeners();
@@ -2783,6 +3010,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
+    _recordingTelemetry.observeTranscript();
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
@@ -2798,6 +3026,13 @@ class CaptureController extends ChangeNotifier
     }
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    for (final segment in remainSegments) {
+      final assigned = _manualSpeakerDefaults[segment.speakerId];
+      if (assigned != null && segment.personId == null && !segment.isUser) {
+        segment.isUser = assigned == 'user';
+        segment.personId = segment.isUser ? null : assigned;
+      }
+    }
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)

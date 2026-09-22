@@ -19,6 +19,20 @@ WORKFLOW_ID = 654
 CANARY_RUN_ID = 987
 CANARY_WORKFLOW_ID = 789
 REPOSITORY = "gcr.io/based-hardware-dev/pusher"
+LIVE_WINDOW_TRANSCRIPT = "the wizard who had vanished"
+
+
+def writer_live_segment_window(
+    transcript: str = LIVE_WINDOW_TRANSCRIPT,
+    *,
+    matched: bool = True,
+) -> dict[str, object]:
+    """Mirror `pusher_semantic_probe._receipt` live_segment_window emission."""
+
+    return {
+        "matched": matched,
+        "segment_text_chars": len(transcript),
+    }
 
 
 @pytest.fixture(scope="module")
@@ -106,6 +120,7 @@ def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -
             "synthetic_uid_class": "firebase_release_probe",
             "producer_observation": {"status": "PASS", "candidate_pod_count": 1},
             "consumer_readback": {"status": "PASS"},
+            "live_segment_window": writer_live_segment_window(),
         },
     }
 
@@ -175,6 +190,7 @@ def validate(
         "synthetic_uid_class": "firebase_release_probe",
         "producer_observation": {"status": "PASS", "candidate_pod_count": 1},
         "consumer_readback": {"status": "PASS"},
+        "live_segment_window": writer_live_segment_window(),
     }
     canary = canary_override or {
         "schema_version": 1,
@@ -243,6 +259,88 @@ def test_accepts_an_exact_digest_from_the_successful_main_dev_run(
     run: dict[str, object],
 ) -> None:
     assert validate(verifier, evidence, deployment_receipt, run) == []
+
+
+def test_accepts_writer_emitted_live_segment_window(
+    verifier: SimpleNamespace,
+    semantic_probe: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    receipt_sha = verifier.canonical_sha256(deployment_receipt)
+    probe = semantic_probe._receipt(
+        status="PASS",
+        evidence_id="dev-probe-321",
+        deployment_receipt=deployment_receipt,
+        deployment_receipt_sha256=receipt_sha,
+        started_at="2026-08-30T12:06:00Z",
+        ended_at="2026-08-30T12:16:00Z",
+        candidate_pod_count=1,
+        failure_stage=None,
+        live_window_matched=True,
+        live_window_transcript=LIVE_WINDOW_TRANSCRIPT,
+    )
+    probe["window"] = {
+        "started_at": "2026-08-30T12:06:00Z",
+        "ended_at": "2026-08-30T12:16:00Z",
+        "closed_at": "2026-08-30T12:17:00Z",
+    }
+    probe["samples"] = {"attempted": 8, "succeeded": 8, "failed": 0}
+    evidence["semantic_probe"] = probe
+
+    assert probe["live_segment_window"] == writer_live_segment_window()
+    assert validate(verifier, evidence, deployment_receipt, run) == []
+
+
+def test_rejects_semantic_probe_missing_live_segment_window(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    probe = evidence["semantic_probe"]
+    assert isinstance(probe, dict)
+    del probe["live_segment_window"]
+
+    errors = validate(verifier, evidence, deployment_receipt, run)
+    assert any("semantic probe evidence has an unexpected schema" in error for error in errors)
+
+
+def test_rejects_semantic_probe_live_segment_window_with_extra_or_invalid_nested_key(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    probe = evidence["semantic_probe"]
+    assert isinstance(probe, dict)
+    extra = dict(writer_live_segment_window())
+    extra["transcript"] = LIVE_WINDOW_TRANSCRIPT
+    probe["live_segment_window"] = extra
+    extra_errors = validate(verifier, evidence, deployment_receipt, run)
+    assert any(
+        "semantic probe live_segment_window must declare matched and segment_text_chars" in error
+        for error in extra_errors
+    )
+
+    probe["live_segment_window"] = {"matched": True}
+    missing_errors = validate(verifier, evidence, deployment_receipt, run)
+    assert any(
+        "semantic probe live_segment_window must declare matched and segment_text_chars" in error
+        for error in missing_errors
+    )
+
+    probe["live_segment_window"] = {"matched": "yes", "segment_text_chars": len(LIVE_WINDOW_TRANSCRIPT)}
+    matched_errors = validate(verifier, evidence, deployment_receipt, run)
+    assert any("semantic probe live_segment_window.matched must be a boolean" in error for error in matched_errors)
+
+    probe["live_segment_window"] = {"matched": True, "segment_text_chars": -1}
+    chars_errors = validate(verifier, evidence, deployment_receipt, run)
+    assert any(
+        "semantic probe live_segment_window.segment_text_chars must be a non-negative integer" in error
+        for error in chars_errors
+    )
 
 
 def test_final_receipt_requires_the_canary_qualified_config_and_ready_shared_deployment(
@@ -669,6 +767,49 @@ def test_pusher_template_semantics_normalize_kubernetes_probe_defaults_and_quant
                         "requests": {"cpu": "700m", "memory": "4608Mi"},
                         "limits": {"cpu": "700m", "memory": "4608Mi"},
                     },
+                }
+            ],
+        }
+    }
+
+    assert receipt_builder.pod_template_semantic_projection(expected) == (
+        receipt_builder.pod_template_semantic_projection(live)
+    )
+
+
+def test_live_receipt_projection_drops_helm_empty_string_env_value(
+    receipt_builder: SimpleNamespace,
+) -> None:
+    """Helm renders `value: ""` (unset repo variable) but the API server stores
+    the env entry without the value key (omitempty marshalling). The rendered
+    projection must normalize to the API form before hashing (2026-09-22 prod
+    canary: FREE_TIER_LOCAL_PROCESSING_COHORT)."""
+    expected = {
+        "spec": {
+            "serviceAccountName": "prod-omi-pusher",
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+                    ],
+                }
+            ],
+        }
+    }
+    live = {
+        "spec": {
+            "serviceAccountName": "prod-omi-pusher",
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT"},
+                    ],
                 }
             ],
         }

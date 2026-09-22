@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
+import json
 
 import pytest
 
@@ -245,6 +246,28 @@ class TestDocumentShape:
         assert document is not None
         assert document["geolocation"] == [52.52, 13.405]
 
+    def test_structured_firestore_datetime_is_json_serializable(self):
+        class DatetimeWithNanoseconds(datetime):
+            """Stand-in for google.api_core.datetime_helpers.DatetimeWithNanoseconds."""
+
+        event_at = DatetimeWithNanoseconds(2026, 9, 21, 3, 42, 22, tzinfo=timezone.utc)
+        document = build_conversation_index_document(
+            UID,
+            {
+                "id": "c-json",
+                "created_at": 1788609600,
+                "structured": {
+                    "title": "Call",
+                    "overview": "Follow-up",
+                    "events": [{"created_at": event_at, "title": "ping"}],
+                },
+            },
+        )
+
+        assert document is not None
+        json.dumps(document)
+        assert document["structured"]["events"][0]["created_at"] == int(event_at.timestamp())
+
     def test_missing_created_at_is_unindexable(self):
         assert build_conversation_index_document(UID, {"id": "c6"}) is None
         assert build_conversation_index_document(UID, {"id": "", "created_at": 1788609600}) is None
@@ -337,6 +360,18 @@ class TestSync:
         _, docs_store = mock_typesense
         docs_store[CONVERSATION_ID] = {"id": CONVERSATION_ID, "userId": UID}
         firestore = _firestore_with_doc(None)
+
+        assert sync_conversation_index_after_write(UID, CONVERSATION_ID, firestore_client=firestore) is True
+
+        assert docs_store == {}
+
+    def test_deleted_tombstone_converges_to_delete(self, index_env, mock_typesense):
+        _, docs_store = mock_typesense
+        docs_store[CONVERSATION_ID] = {"id": CONVERSATION_ID, "userId": UID}
+        payload = _conversation_data()
+        payload["deleted"] = True
+        payload["sync_merged_into"] = "survivor"
+        firestore = _firestore_with_doc(payload)
 
         assert sync_conversation_index_after_write(UID, CONVERSATION_ID, firestore_client=firestore) is True
 

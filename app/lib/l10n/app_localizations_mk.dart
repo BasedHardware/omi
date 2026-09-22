@@ -440,6 +440,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
 
   @override
+  String get omiButtonActions => 'Дејства на копчето Omi';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override
@@ -10146,4 +10149,33 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Гласот е подготвен за препознавање',
+        'saved_sample_awaiting_embedding': 'Примерокот е зачуван, се чека обработка на гласот',
+        'not_learned': 'Гласот не е научен',
+        'other': 'Статусот на гласот е непознат',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Означи го и подоцнежниот говор на овој говорник';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ажурирај го резимето со новите имиња';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Аудиото не може да се прочита — не може да се синхронизира';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

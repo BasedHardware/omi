@@ -439,6 +439,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматично синхронізувати офлайн-записи під час підключення пристрою';
 
   @override
+  String get omiButtonActions => 'Дії кнопки Omi';
+
+  @override
   String get deviceSettings => 'Налаштування пристрою';
 
   @override
@@ -10112,4 +10115,33 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Голос готовий до розпізнавання',
+        'saved_sample_awaiting_embedding': 'Зразок збережено; потрібна обробка голосу',
+        'not_learned': 'Голос не вивчено',
+        'other': 'Стан голосу невідомий',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Також позначити пізніше мовлення цього мовця';
+
+  @override
+  String get updateSummaryWithNewNames => 'Оновити підсумок з новими іменами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не вдалося прочитати аудіо — синхронізація неможлива';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

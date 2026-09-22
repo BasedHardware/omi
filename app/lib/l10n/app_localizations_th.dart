@@ -436,6 +436,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
 
   @override
+  String get omiButtonActions => 'การทำงานของปุ่ม Omi';
+
+  @override
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
 
   @override
@@ -10035,4 +10038,33 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'เสียงพร้อมสำหรับการจดจำ',
+        'saved_sample_awaiting_embedding': 'บันทึกตัวอย่างแล้ว ยังต้องประมวลผลเสียง',
+        'not_learned': 'ยังไม่ได้เรียนรู้เสียง',
+        'other': 'ไม่ทราบสถานะเสียง',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย';
+
+  @override
+  String get updateSummaryWithNewNames => 'อัปเดตสรุปด้วยชื่อใหม่';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

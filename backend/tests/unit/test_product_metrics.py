@@ -2,12 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import pytest
-from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
+from prometheus_client import CollectorRegistry, Counter, generate_latest
 from starlette.requests import Request
 
 from utils import product_metrics as metrics
 from utils.journey_metrics_contract import CLIENT_KINDS
-from utils.metrics import OMI_PRODUCT_EVENT_TOTAL, OMI_PRODUCT_EVENT_USER_DAILY
+from utils.metrics import OMI_PRODUCT_EVENT_TOTAL, OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL
 
 SECRET_UID = 'uid_SHOULD_NEVER_APPEAR'
 SECRET_CONVERSATION = 'conv_SHOULD_NEVER_APPEAR'
@@ -29,15 +29,14 @@ def counter(monkeypatch):
         ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
         registry=registry,
     )
-    histogram = Histogram(
-        'omi_product_event_user_daily',
-        'Daily',
-        ['event', 'app_build'],
-        buckets=(1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000),
+    over = Counter(
+        'omi_product_event_user_daily_over_total',
+        'Daily crossings',
+        ['event', 'threshold'],
         registry=registry,
     )
     monkeypatch.setattr(metrics, 'OMI_PRODUCT_EVENT_TOTAL', counter)
-    monkeypatch.setattr(metrics, 'OMI_PRODUCT_EVENT_USER_DAILY', histogram)
+    monkeypatch.setattr(metrics, 'OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL', over)
     return registry
 
 
@@ -118,7 +117,7 @@ def test_uid_and_raw_version_never_appear_as_labels(counter):
     assert SECRET_UID not in values
     assert RAW_VERSION not in values
     assert 'uid' not in OMI_PRODUCT_EVENT_TOTAL._labelnames
-    assert 'uid' not in OMI_PRODUCT_EVENT_USER_DAILY._labelnames
+    assert 'uid' not in OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL._labelnames
 
 
 def test_build_cardinality_cap_is_thread_safe():
@@ -235,51 +234,83 @@ def test_t2_events_record_source_and_op(counter):
     )
 
 
-def test_observe_per_user_daily_buckets_without_uid_label(counter):
-    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
-    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
-    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
-    family = next(f for f in counter.collect() if f.name == 'omi_product_event_user_daily')
-    samples = {tuple(sorted(s.labels.items())): s for s in family.samples}
-    count_sample = next(
-        s
-        for s in family.samples
-        if s.name == 'omi_product_event_user_daily_count'
-        and s.labels.get('event') == 'conversation_created'
-        and s.labels.get('app_build') == '240'
-    )
-    assert count_sample.value == 3
+def test_observe_per_user_daily_crosses_each_threshold_once_without_uid_label(counter):
+    for _ in range(6):
+        metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    family = next(f for f in counter.collect() if f.name == 'omi_product_event_user_daily_over')
     for sample in family.samples:
         assert 'uid' not in sample.labels
         assert SECRET_UID not in sample.labels.values()
-    bucket_le_3 = next(
-        s
-        for s in family.samples
-        if s.name == 'omi_product_event_user_daily_bucket'
-        and s.labels.get('le') == '3.0'
-        and s.labels.get('app_build') == '240'
+        assert 'app_build' not in sample.labels
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'conversation_created', 'threshold': '5'},
+        )
+        == 1
     )
-    assert bucket_le_3.value >= 1
-    assert samples  # histogram exported
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'conversation_created', 'threshold': '10'},
+        )
+        is None
+    )
+    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    # Tally is 7: still below 10, and threshold 5 must not increment again.
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'conversation_created', 'threshold': '5'},
+        )
+        == 1
+    )
 
 
-def test_record_product_event_drives_per_user_histogram_for_selected_events(counter):
-    metrics.record_product_event('memory_created', uid=SECRET_UID, app_build='240', source='client')
-    count_sample = next(
-        s
-        for family in counter.collect()
-        for s in family.samples
-        if s.name == 'omi_product_event_user_daily_count' and s.labels.get('event') == 'memory_created'
+def test_record_product_event_drives_per_user_threshold_for_selected_events(counter):
+    metrics.record_product_event('memory_created', uid=SECRET_UID, app_build='240', source='client', count=5)
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'memory_created', 'threshold': '5'},
+        )
+        == 1
     )
-    assert count_sample.value == 1
-    assert count_sample.labels.get('app_build') == '240'
 
 
 def test_observe_per_user_daily_fail_open(monkeypatch):
     broken = MagicMock()
     broken.labels.side_effect = RuntimeError('collector failed')
-    monkeypatch.setattr(metrics, 'OMI_PRODUCT_EVENT_USER_DAILY', broken)
+    monkeypatch.setattr(metrics, 'OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL', broken)
     metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+
+
+def test_observe_per_user_daily_does_not_replay_crossings_after_pod_rotation(counter):
+    for _ in range(6):
+        metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    metrics._per_user_counts.clear()
+    for _ in range(3):
+        metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'conversation_created', 'threshold': '5'},
+        )
+        == 1
+    )
+    for _ in range(2):
+        metrics.observe_per_user_daily('conversation_created', SECRET_UID, '240')
+    assert (
+        counter.get_sample_value(
+            'omi_product_event_user_daily_over_total',
+            {'event': 'conversation_created', 'threshold': '5'},
+        )
+        == 2
+    )
 
 
 def test_zero_init_covers_event_by_client_kind_not_app_build():
@@ -306,3 +337,17 @@ def test_zero_init_covers_event_by_client_kind_not_app_build():
     assert expected <= children
     unknown_only = {dict(child)['app_build'] for child in expected}
     assert unknown_only == {'unknown'}
+    over_names = set(OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL._labelnames)
+    assert over_names == {'event', 'threshold'}
+    over_children = {
+        tuple(sorted(sample.labels.items()))
+        for family in OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL.collect()
+        for sample in family.samples
+        if sample.name == 'omi_product_event_user_daily_over_total'
+    }
+    expected_over = {
+        (('event', event), ('threshold', str(threshold)))
+        for event in metrics.PER_USER_DAILY_EVENTS
+        for threshold in metrics.USER_DAILY_THRESHOLDS
+    }
+    assert expected_over <= over_children

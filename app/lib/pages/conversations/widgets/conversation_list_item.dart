@@ -9,6 +9,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -16,9 +17,11 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -29,12 +32,16 @@ class ConversationListItem extends StatefulWidget {
   final int conversationIdx;
   final ServerConversation conversation;
 
+  /// Optional reprocess override for tests.
+  final Future<ServerConversation?> Function(String conversationId)? reprocess;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
     required this.date,
     required this.conversationIdx,
     this.isFromOnboarding = false,
+    this.reprocess,
   });
 
   @override
@@ -44,6 +51,7 @@ class ConversationListItem extends StatefulWidget {
 class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
+  bool _reprocessing = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hash(
         conversation.structured.title,
@@ -64,6 +72,63 @@ class _ConversationListItemState extends State<ConversationListItem> {
   void dispose() {
     _conversationNewStatusResetTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _onReprocess() async {
+    if (_reprocessing || widget.conversation.id == '0') return;
+    setState(() => _reprocessing = true);
+    try {
+      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final updated = await reprocess(widget.conversation.id);
+      if (!mounted) return;
+      final provider = context.read<ConversationProvider>();
+      if (updated == null) {
+        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+        return;
+      }
+      provider.applyConversationReprocessResult(updated);
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+    } finally {
+      if (mounted) setState(() => _reprocessing = false);
+    }
+  }
+
+  Widget _buildFailedTitleRecovery(BuildContext context) {
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            context.l10n.conversationTitleDidntGenerate,
+            key: const Key('conversation_failed_title_indicator'),
+            style: const TextStyle(color: Color(0xFFC4C4CC), fontSize: 13, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        GestureDetector(
+          onTap: () {}, // absorb so the card's open-on-tap does not fire
+          child: TextButton(
+            key: const Key('conversation_failed_title_reprocess_button'),
+            onPressed: _reprocessing ? null : _onReprocess,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: _reprocessing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(context.l10n.conversationReprocess),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -144,6 +209,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   SchedulerBinding.instance.scheduleTask<void>(() {
                     if (!mounted) return;
                     if (searchQuery.isNotEmpty) {
+                      ProductTelemetry.instance.value(
+                        ProductValue.searchResultOpened,
+                        surface: ProductSurface.conversations,
+                        objectId: RecordReference.fromId(widget.conversation.id),
+                      );
                       PlatformManager.instance.analytics.conversationOpenedFromSearch(
                         conversation: widget.conversation,
                         searchQuery: searchQuery,
@@ -170,7 +240,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 ConversationDetailPage(
                   conversation: widget.conversation,
                   isFromOnboarding: widget.isFromOnboarding,
-                  initialTabIndex: seek != null ? 0 : 1,
+                  // Search matches explicitly open Transcript. Other rows
+                  // let detail choose Transcript for retained fragments that
+                  // have no generated summary after hydration.
+                  initialTabIndex: seek != null ? 0 : null,
                   initialSeekStart: seek?.start,
                   initialSeekEnd: seek?.end,
                 ),
@@ -360,6 +433,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                       _getConversationHeader(),
                                       const SizedBox(height: 16),
                                       _buildConversationBody(context),
+                                      if (widget.conversation.isFailedTitleRecoverable) ...[
+                                        const SizedBox(height: 10),
+                                        _buildFailedTitleRecovery(context),
+                                      ],
                                     ],
                                   ),
                           ),
@@ -463,6 +540,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   ),
                               ],
                             ),
+                      if (widget.conversation.isFailedTitleRecoverable) ...[
+                        const SizedBox(height: 8),
+                        _buildFailedTitleRecovery(context),
+                      ],
                       if (_searchSnippetText() != null) ...[
                         const SizedBox(height: 10),
                         Row(

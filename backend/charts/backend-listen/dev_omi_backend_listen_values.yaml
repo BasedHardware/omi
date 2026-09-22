@@ -106,6 +106,19 @@ envFrom:
 env:
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://api.omiapi.com"
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "true"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: FREE_TIER_LOCAL_PROCESSING_COHORT
+        # Absent key == unset env == the cohort module admits nobody. Without
+        # this, a pusher rollout that races the backend lane's first ConfigMap
+        # write fails to start instead of starting dark.
+        optional: true
   - name: DESKTOP_UPDATE_POINTERS_MODE
     value: "primary"
   - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
@@ -272,8 +285,30 @@ env:
         key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
+  - name: STT_CONNECT_ORDER_FROM_CONFIG
+    value: "true"
+  - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
+    value: "100"
+  - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
+    value: "8"
+  - name: PARAKEET_WINDOW_DIARIZATION
+    value: "false"
+  - name: PARAKEET_WINDOW_PACE_SECONDS
+    value: "6"
+  - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
+    value: "24"
+  - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
+    value: "1800"
+  - name: STT_CIRCUIT_HALF_OPEN_PROBES
+    value: "1"
+  - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
+    value: "3"
+  - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
+    value: "30"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "parakeet-window,soniox"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

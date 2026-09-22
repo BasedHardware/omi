@@ -60,6 +60,7 @@ from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
+    verify_audio_merge_cloud_tasks_oidc,
     verify_cloud_tasks_oidc,
 )
 from utils.executors import (
@@ -94,7 +95,11 @@ from utils.metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
-from utils.subscription import has_transcription_credits
+from utils.subscription import (
+    TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
+    has_transcription_credits,
+    resolve_transcription_allowance,
+)
 from utils.sync import playback as sync_playback
 from utils.sync.files import (
     decode_files_to_wav,
@@ -123,7 +128,7 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
-from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
+from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.sync.rate_limit import (
     FAIR_USE_RATE_LIMIT_CODE,
     bounded_fair_use_retry_after,
@@ -553,7 +558,7 @@ async def sync_local_files(
         )
 
     # Pre-check gates (#5854)
-    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
     if lane_decision.lane == SyncLane.FRESH and hard_restricted:
         return await _fair_use_restriction_response(
             uid=uid,
@@ -569,7 +574,7 @@ async def sync_local_files(
     # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
     # already over the rolling-24h total. Set high enough that no legitimate user hits it;
     # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
-    if lane_decision.lane == SyncLane.FRESH and is_daily_audio_ceiling_exceeded(uid):
+    if lane_decision.lane == SyncLane.FRESH and await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
         logger.info(f'sync: daily audio ceiling reached uid={uid}')
         return await _fair_use_restriction_response(
             uid=uid,
@@ -582,8 +587,14 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
-    should_lock = not has_transcription_credits(uid)
+    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock.
+    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
+    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
+    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = False
+    if not has_credits:
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -692,10 +703,10 @@ async def sync_local_files(
         fair_use_restrict_dg = False
         if FAIR_USE_ENABLED and lane_decision.lane == SyncLane.FRESH:
             try:
-                fair_use_stage = get_enforcement_stage(uid)
+                fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
                 if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                     fair_use_restrict_dg = True
-                    dg_budget_blocked = is_dg_budget_exhausted(uid)
+                    dg_budget_blocked = await run_blocking(db_executor, is_dg_budget_exhausted, uid)
             except Exception as e:
                 logger.error(f'sync: DG budget check error for {uid}: {e}')
 
@@ -813,7 +824,9 @@ async def sync_local_files(
         try:
             usage_seconds = int(total_speech_seconds)
             if usage_seconds > 0:
-                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+                await run_blocking(
+                    db_executor, record_usage, uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds
+                )
         except Exception as e:
             logger.error(f'sync: usage record error for {uid}: {e}')
 
@@ -971,7 +984,13 @@ async def sync_local_files_v2(
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
 
-    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
+    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
+    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
+    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = False
+    if not has_credits:
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])
@@ -1792,7 +1811,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     if sync_lane == SyncLane.BACKFILL.value:
                         await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
-            failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
+            failure = sync_failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
             if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
@@ -1904,7 +1923,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
-async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
 
     Response semantics drive the queue: 2xx consumes the task, 409 while the
