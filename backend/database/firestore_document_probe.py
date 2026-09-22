@@ -13,9 +13,10 @@ structural rather than remembered: a new call site is counted the day it is
 written, without touching it. Lookups wrap ``DocumentReference.get`` and
 ``Client.get_all``; queries wrap ``Query.stream`` (the funnel for ``Query.get``
 and ``CollectionReference.get`` / ``.stream``) and ``AggregationQuery.stream``.
-It records only the collection *pattern* (document ids elided) and whether the
-document existed, which is exactly the pair needed to find waste -- a read that
-is billed but returns nothing.
+It records the collection *pattern* (document ids elided), bounded request-owner
+tier, and whether the document existed, making billed reads that return nothing
+visible. Query streams also count one RunQuery operation per completed stream, so an empty query -- which still bills one read -- is
+visible, and documents per query operation is derivable by collection.
 
 Cardinality is bounded by construction: ids are stripped, and any pattern outside
 the reviewed set collapses to ``other``. No uid, document id, or query text can
@@ -28,10 +29,13 @@ from typing import Any
 
 from prometheus_client import Counter
 
+from database.firestore_tier_context import current_tier
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
     'FIRESTORE_DOCUMENT_READS',
+    'FIRESTORE_QUERY_OPERATIONS',
     'collection_pattern',
     'install_document_read_probe',
 ]
@@ -39,9 +43,18 @@ __all__ = [
 
 FIRESTORE_DOCUMENT_READS = Counter(
     'omi_firestore_document_reads_total',
-    'Firestore document reads by collection pattern and whether the document existed. '
-    'Includes lookups and query streams. outcome="miss" is a billed read that returned nothing.',
-    ['collection', 'outcome'],
+    'Firestore document reads by collection pattern, request-owner tier and whether the document existed. '
+    'Includes lookups and query streams. outcome="miss" is a billed read that returned nothing. '
+    'Pair with omi_firestore_query_operations_total for documents per query operation.',
+    ['collection', 'outcome', 'tier'],
+)
+
+
+FIRESTORE_QUERY_OPERATIONS = Counter(
+    'omi_firestore_query_operations_total',
+    'Firestore RunQuery operations by collection pattern and request-owner tier. An operation bills at least one '
+    'document read even when it matches nothing, which per-document counting cannot show.',
+    ['collection', 'tier'],
 )
 
 
@@ -116,9 +129,23 @@ def _record(path_parts: Any, exists: bool, amount: float = 1) -> None:
         FIRESTORE_DOCUMENT_READS.labels(
             collection=collection_pattern(path_parts),
             outcome='hit' if exists else 'miss',
+            tier=current_tier(),
         ).inc(amount)
     except Exception:
         logger.warning('firestore document read probe failed to record', exc_info=True)
+
+
+def _record_operation(path_parts: Any) -> None:
+    """Count one RunQuery operation against its collection pattern.
+
+    Called after the query's stream is fully consumed (or fails): Firestore bills
+    an empty query one document read, which the per-document counter can never
+    see. Never raises: telemetry must not break a read.
+    """
+    try:
+        FIRESTORE_QUERY_OPERATIONS.labels(collection=collection_pattern(path_parts), tier=current_tier()).inc()
+    except Exception:
+        logger.warning('firestore query operation probe failed to record', exc_info=True)
 
 
 _installed = False
@@ -166,10 +193,19 @@ def install_document_read_probe() -> None:
     def stream(self: Any, *args: Any, **kwargs: Any) -> Any:
         # Query.get and CollectionReference.get/stream all call Query.stream
         # (google-cloud-firestore 2.20.0). Wrapping those too would double-count.
-        for snapshot in original_stream(self, *args, **kwargs):
-            reference = getattr(snapshot, 'reference', None)
-            _record(getattr(reference, '_path', ()), bool(getattr(snapshot, 'exists', False)))
-            yield snapshot
+        # A Query's parent collection lives at _parent (BaseQuery.__init__).
+        path = getattr(getattr(self, '_parent', None), '_path', ())
+        try:
+            for snapshot in original_stream(self, *args, **kwargs):
+                reference = getattr(snapshot, 'reference', None)
+                _record(getattr(reference, '_path', ()), bool(getattr(snapshot, 'exists', False)))
+                yield snapshot
+        finally:
+            # An empty query bills one read but yields no snapshots, so the
+            # per-document counter never sees it. One operation per completed
+            # stream makes documents-per-query (and empty-query floors) visible
+            # by collection pattern.
+            _record_operation(path)
 
     def aggregation_stream(self: Any, *args: Any, **kwargs: Any) -> Any:
         # AggregationQuery.get materialises this stream.

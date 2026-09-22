@@ -1,6 +1,7 @@
 import io
 import re
 import wave
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 
 import av
@@ -232,6 +233,57 @@ for lang, lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.items():
     patterns_to_check.extend(lang_patterns)
     for pat in lang_patterns:
         PATTERN_TO_LANG[pat] = lang
+
+# Lead-ins above that are a bare copula — "I am <something>" — rather than a
+# self-introduction. They match a nationality, a mood, a brand or a sentence-cased
+# filler just as readily as a name ("I'm Chinese", "I'm Googling it", 我是因为…),
+# so a hit is a *hint* only: good enough to reuse a person the user already has,
+# never good enough to mint a new one. The explicit forms in the same alternation
+# ("My name is", 我叫, Je m'appelle, …) do carry that authority.
+#
+# Compared case-insensitively against capture group 1, so only one case variant
+# of each lead-in is listed.
+COPULAR_SELF_REFERENCE_LEAD_INS = frozenset(
+    {
+        'аз съм',  # bg
+        'sóc',  # ca
+        '我是',  # zh
+        'jsem',  # cs
+        'jeg er',  # da, no
+        'ich bin',  # de
+        'είμαι',  # el
+        'i am',  # en
+        "i'm",  # en
+        'soy',  # es
+        'ma olen',  # et
+        'olen',  # fi
+        'je suis',  # fr
+        'मैं हूँ',  # hi
+        'én vagyok',  # hu
+        'saya',  # id, ms
+        'sono',  # it
+        '私は',  # ja
+        'わたしは',  # ja
+        '저는',  # ko
+        'aš esu',  # lt
+        'es esmu',  # lv
+        'ik ben',  # nl
+        'jestem',  # pl
+        'eu sou',  # pt
+        'sunt',  # ro
+        'я',  # ru, uk
+        'som',  # sk
+        'jag är',  # sv
+        'ผมคือ',  # th
+        'ฉันคือ',  # th
+        'tôi là',  # vi
+    }
+)
+
+# Name-first patterns capture the name in group 1, so there is no lead-in to
+# classify. Only Hungarian "<Name> vagyok" is a bare copula; "<Name> is my name"
+# and "<Name> es mi nombre" are explicit introductions.
+_NAME_FIRST_COPULAR_PATTERNS = frozenset({r"\b([A-Z][a-zA-Z]*)\s+vagyok\b"})
 
 # CJK stopwords and grammatical elements to avoid false-positive speaker creation
 # from ordinary conversational sentences (#12900).
@@ -608,7 +660,41 @@ def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) ->
     return True
 
 
+@dataclass(frozen=True)
+class SpeakerNameDetection:
+    """A name read out of transcript text, and how much authority the phrasing carries.
+
+    ``explicit`` is true only for a self-introduction ("My name is Ada", 私の名前は…).
+    A bare copula ("I'm Ada") sets it false: the same phrasing produces "I'm Chinese"
+    and "I'm Googling it", so the name may be reused to resolve a person the user
+    already has, but must not create one (#15247 fallout — auto-created people).
+    """
+
+    name: str
+    explicit: bool
+
+
+def _is_explicit_introduction(pattern: str, match: 're.Match[str]') -> bool:
+    groups = match.groups()
+    if len(groups) < 2:
+        return pattern not in _NAME_FIRST_COPULAR_PATTERNS
+    lead_in = groups[0]
+    if not lead_in:
+        return False
+    return lead_in.strip().lower() not in COPULAR_SELF_REFERENCE_LEAD_INS
+
+
 def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
+    """Back-compatible name-only view of :func:`detect_speaker_introduction`.
+
+    Callers that only *resolve* an existing person keep using this; anything that
+    can create a person must read ``explicit`` from the detection instead.
+    """
+    detection = detect_speaker_introduction(text, language=language)
+    return detection.name if detection else None
+
+
+def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Optional[SpeakerNameDetection]:
     if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
         seen = set()
         patterns = []
@@ -655,11 +741,12 @@ def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optio
             if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
-            return (
+            normalized = (
                 name
                 if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
                 else name.capitalize()
             )
+            return SpeakerNameDetection(name=normalized, explicit=_is_explicit_introduction(pattern, match))
     return None
 
 

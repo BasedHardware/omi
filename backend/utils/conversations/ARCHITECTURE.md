@@ -5,6 +5,14 @@ and background processing.
 
 ## Boundaries
 
+- `live_continuation.py` coordinates durable reconnect admission through
+  `database/listen_continuations.py`. The original recording binding remains
+  immutable; its continuation metadata is adopted transactionally. Resume
+  requires the same source/device and an unlocked, nondeleted in-progress row
+  inside the shared continuity window. Expired empty and unexposed losing
+  generations use lifecycle's codec-aware transactional deletion; content,
+  lock, tombstone and sync revision prevent deletion.
+
 - `factory.py`, `location.py`, `search.py`, and `transcript_chunks.py` provide
   serialization, lookup, and read-model helpers; callers retain ownership of
   request authentication and response shaping.
@@ -79,3 +87,17 @@ and background processing.
 This package receives persisted conversation data only. Request-scoped BYOK
 context may be propagated by a live Pusher caller into `finalizer.py`, but it
 must never be written here, passed to durable task payloads, or logged.
+
+Sync lifecycle intake computes unattended speech components transactionally. A
+compatible, non-deleted explicit target keeps its ID even when empty; timestamp
+hints never adopt live rows. Explicit live targets remain excluded from automatic
+bridges after sync appends. Different existing reconnect targets may therefore
+remain separate until realtime reuses its in-progress conversation on reconnect. The pipeline
+replays bridge effects once, after audio persistence, through existing merge
+retraction/copy helpers; tombstone revision receipts skip completed cleanup. Retained donor
+redirects preserve late audio. `merge_conversations.delete_conversation_with_sync_sources`
+owns retained-source purging for user/source deletion, called by the frame-evidence
+service and developer delete endpoint. Raw DB deletion and new-target rollback do
+not orchestrate external cleanup. The shared gap
+predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.

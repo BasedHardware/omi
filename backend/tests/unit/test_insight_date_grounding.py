@@ -69,6 +69,7 @@ _pc = _mod("utils.llm.prompt_cache")
 _pc.EXPLICIT_CACHE_BREAKPOINT = {"mode": "explicit"}
 _pc.EXPLICIT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
 _pc.has_cacheable_prefix = MagicMock(return_value=False)
+_pc.bind_explicit_cache = MagicMock(side_effect=lambda runnable, **_: runnable)
 
 temporal = _load("utils.llm.temporal", "utils/llm/temporal.py")
 proactive = _load("utils.llm.proactive_notification", "utils/llm/proactive_notification.py")

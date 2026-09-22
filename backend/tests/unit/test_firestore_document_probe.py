@@ -1,6 +1,7 @@
 """The document-read probe must count every lookup and query read, and never break one."""
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -9,13 +10,32 @@ import pytest  # noqa: E402
 
 from database.firestore_document_probe import (  # noqa: E402
     FIRESTORE_DOCUMENT_READS,
+    FIRESTORE_QUERY_OPERATIONS,
     collection_pattern,
     install_document_read_probe,
 )
 
 
+from database import firestore_tier_context as tier_context
+
+
+@pytest.fixture(autouse=True, params=['unattributed', 'basic', 'plus'])
+def request_tier(request):
+    owner = tier_context._RequestOwner(tier=request.param, expires_at=time.monotonic() + 60)
+    token = tier_context._request_owner.set(owner)
+    yield
+    tier_context._request_owner.reset(token)
+
+
 def _count(collection: str, outcome: str) -> float:
-    value = FIRESTORE_DOCUMENT_READS.labels(collection=collection, outcome=outcome)._value.get()
+    value = FIRESTORE_DOCUMENT_READS.labels(
+        collection=collection, outcome=outcome, tier=tier_context.current_tier()
+    )._value.get()
+    return float(value or 0)
+
+
+def _count_operations(collection: str) -> float:
+    value = FIRESTORE_QUERY_OPERATIONS.labels(collection=collection, tier=tier_context.current_tier())._value.get()
     return float(value or 0)
 
 
@@ -108,6 +128,18 @@ def test_recording_failure_never_propagates(monkeypatch):
     probe._record(('users', 'u1', 'conversations', 'c1'), True)
 
 
+def test_operation_recording_failure_never_propagates(monkeypatch):
+    import database.firestore_document_probe as probe
+
+    class _Exploding:
+        def labels(self, **kwargs):
+            raise RuntimeError('registry unavailable')
+
+    monkeypatch.setattr(probe, 'FIRESTORE_QUERY_OPERATIONS', _Exploding())
+    # Must not raise: a telemetry fault may never break a Firestore query.
+    probe._record_operation(('users', 'u1', 'conversations'))
+
+
 def test_probe_counts_each_document_in_a_batch_read():
     firestore_client_mod = pytest.importorskip('google.cloud.firestore_v1.client')
     Client = firestore_client_mod.Client
@@ -169,12 +201,17 @@ def test_query_stream_counts_each_document_lazily():
         install_document_read_probe()
 
         hit_before = _count('users/conversations', 'hit')
+        ops_before = _count_operations('users/conversations')
         query = Query.__new__(Query)
+        # A real Query always carries its parent collection; the ops counter
+        # reduces through it.
+        query._parent = _Ref(('users', 'u1', 'conversations'))
         iterator = Query.stream(query)
 
         # The underlying generator must not be consumed until the caller pulls.
         assert consumed == []
         assert _count('users/conversations', 'hit') == hit_before
+        assert _count_operations('users/conversations') == ops_before
 
         first = next(iterator)
         assert first.reference._path[-1] == 'c1'
@@ -185,9 +222,72 @@ def test_query_stream_counts_each_document_lazily():
         assert [s.reference._path[-1] for s in rest] == ['c2', 'c3']
         assert consumed == ['c1', 'c2', 'c3']
         assert _count('users/conversations', 'hit') == hit_before + 3
+        # One RunQuery operation was billed for the whole stream.
+        assert _count_operations('users/conversations') == ops_before + 1
     finally:
         setattr(Query, 'stream', original)
         install_document_read_probe.__globals__['_installed'] = False
+
+
+def test_query_stream_counts_an_empty_result_as_one_operation():
+    # Firestore bills a minimum of one read for an empty query result. The
+    # per-document counter never sees it, so the operations counter is the only
+    # witness -- and it must fire even though no snapshot passed through.
+    firestore_query = pytest.importorskip('google.cloud.firestore_v1.query')
+    Query = firestore_query.Query
+
+    def fake_stream(self, *args, **kwargs):
+        return iter(())
+
+    original = Query.stream
+    setattr(Query, 'stream', fake_stream)
+    try:
+        install_document_read_probe.__globals__['_installed'] = False
+        install_document_read_probe()
+
+        ops_before = _count_operations('users/conversations')
+        query = Query.__new__(Query)
+        query._parent = _Ref(('users', 'u1', 'conversations'))
+        assert list(Query.stream(query)) == []
+        assert _count_operations('users/conversations') == ops_before + 1
+    finally:
+        setattr(Query, 'stream', original)
+        install_document_read_probe.__globals__['_installed'] = False
+
+
+def test_query_stream_operation_counted_when_consumer_abandons_stream():
+    # A caller that stops iterating early (GeneratorExit) still ran the RPC;
+    # the operation must be recorded by the finally block, and cleanup must
+    # not raise even when the generator is being torn down.
+    import database.firestore_document_probe as probe
+
+    firestore_query = pytest.importorskip('google.cloud.firestore_v1.query')
+    Query = firestore_query.Query
+
+    def fake_stream(self, *args, **kwargs):
+        def gen():
+            yield _Snapshot(exists=True, reference=_Ref(('users', 'u1', 'conversations', 'c1')))
+            yield _Snapshot(exists=True, reference=_Ref(('users', 'u1', 'conversations', 'c2')))
+
+        return gen()
+
+    original = Query.stream
+    setattr(Query, 'stream', fake_stream)
+    try:
+        probe.install_document_read_probe.__globals__['_installed'] = False
+        probe.install_document_read_probe()
+
+        ops_before = _count_operations('users/conversations')
+        query = Query.__new__(Query)
+        query._parent = _Ref(('users', 'u1', 'conversations'))
+        iterator = Query.stream(query)
+        next(iterator)
+        iterator.close()
+
+        assert _count_operations('users/conversations') == ops_before + 1
+    finally:
+        setattr(Query, 'stream', original)
+        probe.install_document_read_probe.__globals__['_installed'] = False
 
 
 def test_query_stream_unknown_collection_reduces_to_other():
@@ -241,6 +341,54 @@ def test_query_stream_recording_failure_never_propagates(monkeypatch):
     finally:
         setattr(Query, 'stream', original)
         probe.install_document_read_probe.__globals__['_installed'] = False
+
+
+def test_collection_reference_get_funnels_through_query_stream_without_double_counting():
+    # google-cloud-firestore 2.20.0: CollectionReference.get delegates to
+    # Query.get, which materialises Query.stream. Wrapping the collection layer
+    # too would count each document twice; this pins the funnel shape the probe
+    # relies on.
+    firestore_collection = pytest.importorskip('google.cloud.firestore_v1.collection')
+    firestore_query = pytest.importorskip('google.cloud.firestore_v1.query')
+    CollectionReference = firestore_collection.CollectionReference
+    Query = firestore_query.Query
+
+    snapshots = [
+        _Snapshot(exists=True, reference=_Ref(('users', 'u1', 'conversations', 'c1'))),
+        _Snapshot(exists=True, reference=_Ref(('users', 'u1', 'conversations', 'c2'))),
+    ]
+
+    def fake_stream(self, *args, **kwargs):
+        def gen():
+            for snapshot in snapshots:
+                yield snapshot
+
+        return gen()
+
+    original_stream = Query.stream
+    original_get = CollectionReference.get
+    setattr(Query, 'stream', fake_stream)
+    try:
+        install_document_read_probe.__globals__['_installed'] = False
+        install_document_read_probe()
+
+        hit_before = _count('users/conversations', 'hit')
+        ops_before = _count_operations('users/conversations')
+
+        # The real CollectionReference.get body calls self._query().get() --
+        # only the RPC-bound Query.stream needs faking for this funnel check.
+        collection = CollectionReference.__new__(CollectionReference)
+        collection._path = ('users', 'u1', 'conversations')
+        docs = CollectionReference.get(collection)
+
+        assert [d.reference._path[-1] for d in docs] == ['c1', 'c2']
+        # Two documents and exactly one operation: no double count.
+        assert _count('users/conversations', 'hit') == hit_before + 2
+        assert _count_operations('users/conversations') == ops_before + 1
+    finally:
+        setattr(Query, 'stream', original_stream)
+        setattr(CollectionReference, 'get', original_get)
+        install_document_read_probe.__globals__['_installed'] = False
 
 
 class _AggRow:
@@ -322,3 +470,27 @@ def test_install_is_idempotent():
         setattr(Query, 'stream', originals[2])
         setattr(AggregationQuery, 'stream', originals[3])
         install_document_read_probe.__globals__['_installed'] = False
+
+
+def test_tier_series_reconcile_to_collection_totals(monkeypatch):
+    from prometheus_client import CollectorRegistry, Counter
+    from database import firestore_document_probe as probe
+
+    registry = CollectorRegistry()
+    reads = Counter('test_reads', 'reads', ['collection', 'outcome', 'tier'], registry=registry)
+    operations = Counter('test_operations', 'operations', ['collection', 'tier'], registry=registry)
+    monkeypatch.setattr(probe, 'FIRESTORE_DOCUMENT_READS', reads)
+    monkeypatch.setattr(probe, 'FIRESTORE_QUERY_OPERATIONS', operations)
+    path = ('users', 'private-uid', 'conversations', 'private-document')
+    for label in tier_context.TIER_VALUES:
+        tier_context._request_owner.set(tier_context._RequestOwner(tier=label, expires_at=time.monotonic() + 60))
+        probe._record(path, True, amount=3)
+        probe._record(path, False)
+        probe._record_operation(path[:-1])
+    samples = [s for m in reads.collect() for s in m.samples if s.name == 'test_reads_total']
+    assert sum(s.value for s in samples) == 4 * len(tier_context.TIER_VALUES)
+    assert {s.labels['collection'] for s in samples} == {'users/conversations'}
+    assert {s.labels['tier'] for s in samples} == tier_context.TIER_VALUES
+    assert sum(s.value for m in operations.collect() for s in m.samples if s.name == 'test_operations_total') == len(
+        tier_context.TIER_VALUES
+    )

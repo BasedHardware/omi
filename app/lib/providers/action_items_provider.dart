@@ -16,6 +16,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -442,7 +443,13 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.taskMutation,
+      surface: ProductSurface.tasks,
+      objectId: RecordReference.fromId(item.id),
+    );
     try {
       final itemInList = _findAndUpdateItemState(item.id, newState);
       if (itemInList != null) {
@@ -455,51 +462,67 @@ class ActionItemsProvider extends ChangeNotifier {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
-      } else {
-        // Cancel notification if the action item is marked as completed
-        if (newState == true) {
-          await ActionItemNotificationHandler.cancelNotification(item.id);
-        }
-        _pushUpdateToAppleReminder(item, completed: newState);
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
+        return false;
       }
+      // Cancel notification if the action item is marked as completed
+      if (newState == true) {
+        await ActionItemNotificationHandler.cancelNotification(item.id);
+      }
+      _pushUpdateToAppleReminder(item, completed: newState);
+      attempt.complete(ProductOutcome.success);
+      if (newState) {
+        ProductTelemetry.instance.value(
+          ProductValue.taskCompleted,
+          surface: ProductSurface.tasks,
+          objectId: RecordReference.fromId(item.id),
+        );
+      }
+      return true;
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
+      return false;
     }
   }
 
-  Future<void> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
     try {
       final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
       if (itemInList != null) {
         notifyListeners();
       }
 
-      final updatedItem = await api.updateActionItem(item.id, description: newDescription);
+      final updatedItem = await _updateActionItemRequest(item.id, description: newDescription);
 
-      if (updatedItem != null) {
-        // Update the local item with server response
-        final index = _actionItems.indexWhere((i) => i.id == item.id);
-        if (index != -1) {
-          _actionItems[index] = updatedItem;
-          notifyListeners();
-        }
-        _pushUpdateToAppleReminder(item, title: newDescription);
-      } else {
+      if (updatedItem == null) {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
         notifyListeners();
         Logger.debug('Failed to update action item description on server');
+        return false;
       }
+      // Update the local item with server response
+      final index = _actionItems.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        _actionItems[index] = updatedItem;
+        notifyListeners();
+      }
+      _pushUpdateToAppleReminder(item, title: newDescription);
+      return true;
     } catch (e) {
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
       Logger.debug('Error updating action item description: $e');
+      return false;
     }
   }
 
-  Future<void> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
     // Optimistic update: update locally first for instant UI feedback
     final index = _actionItems.indexWhere((i) => i.id == item.id);
     ActionItemWithMetadata? originalItem;
@@ -534,6 +557,7 @@ class ActionItemsProvider extends ChangeNotifier {
           notifyListeners();
         }
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
+        return true;
       } else {
         // Revert on failure — re-find index in case list changed during await
         if (originalItem != null) {
@@ -544,6 +568,7 @@ class ActionItemsProvider extends ChangeNotifier {
           }
         }
         Logger.debug('Failed to update action item due date on server');
+        return false;
       }
     } catch (e) {
       // Revert on error — re-find index in case list changed during await
@@ -555,6 +580,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
       Logger.debug('Error updating action item due date: $e');
+      return false;
     }
   }
 

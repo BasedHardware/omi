@@ -13,6 +13,7 @@ class CaptureProvider extends CaptureController {
     super.microphonePermissionRequester,
     super.phoneMicBatchRecorder,
     super.recordingTelemetry,
+    super.speakerHaptic,
     super.walService,
     super.phoneMicRecorder,
     super.phoneMicBatchSupported,
@@ -24,6 +25,7 @@ class CaptureProvider extends CaptureController {
     super.bleListeners,
     super.openSocket,
     super.sessionOwner,
+    super.processInProgressConversation,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);

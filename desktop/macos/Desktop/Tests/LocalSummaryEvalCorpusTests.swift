@@ -160,7 +160,7 @@ final class LocalSummaryEvalCorpusTests: XCTestCase {
     let wrapper = ConversationChunkSummarizer.estimatedTokens(
       ConversationChunkSummarizer.mapPrompt("", index: 1, total: 1)
     )
-    let reserve = ConversationChunkSummarizer.completionReserveTokens
+    let reserve = ConversationChunkSummarizer.completionReserve(windowTokens: smallestSelectedWindow)
 
     for scenario in LocalSummaryEvalCorpus.scenarios {
       let tokens = scenario.estimatedTokens
@@ -227,5 +227,133 @@ final class LocalSummaryEvalCorpusTests: XCTestCase {
     let label = "the outage started at 09:12 UTC"
     let produced = "The gateway outage started at 09:12 UTC and lasted roughly forty minutes before recovery."
     XCTAssertTrue(LocalSummaryEvalCorpus.matches(label: label, produced: produced))
+  }
+
+  /// "18%" / "100" scored as misses against labels that said "eighteen percent"
+  /// and "hundred", even though both commitments were present with owners.
+  func testNumeralsNormalizeBeforeComparing() {
+    XCTAssertEqual(
+      LocalSummaryEvalCorpus.contentWords("eighteen percent"),
+      LocalSummaryEvalCorpus.contentWords("18%")
+    )
+    XCTAssertEqual(
+      LocalSummaryEvalCorpus.contentWords("hundred"),
+      LocalSummaryEvalCorpus.contentWords("100")
+    )
+    XCTAssertEqual(
+      LocalSummaryEvalCorpus.contentWords("two hundred and ten"),
+      LocalSummaryEvalCorpus.contentWords("210")
+    )
+    XCTAssertEqual(
+      LocalSummaryEvalCorpus.contentWords("forty-five"),
+      LocalSummaryEvalCorpus.contentWords("45")
+    )
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.matches(
+        label: "the vendor wants an eighteen percent increase",
+        produced: "the vendor wants an 18% price increase"
+      ),
+      "digit and % forms of the same quantity must not score as a miss"
+    )
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.matches(
+        label: "Nadia reads the remaining hundred sync tickets before anyone scopes a rewrite",
+        produced: "Nadia reads the remaining 100 sync tickets before anyone scopes a rewrite"
+      ),
+      "hundred vs 100 with the owner still attached must not score as a miss"
+    )
+  }
+
+  /// "Tomas to schedule the token rotation fix as dedicated work" missed the
+  /// label at 0.625 because `schedule` != `schedules`.
+  func testInflectionDoesNotSplitAMatch() {
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.matches(
+        label: "Tomas schedules the token rotation fix as real scheduled work",
+        produced: "Tomas to schedule the token rotation fix as dedicated work"
+      ),
+      "schedule/schedules/scheduled are the same verb; 0.625 was a stemmer miss, not a dropped commitment"
+    )
+  }
+
+  /// Whole-body containment of a banned claim is how 9 of 9 hallucination flags
+  /// across 7 runs became false positives: the words occurred in different
+  /// sentences.
+  func testBannedClaimRequiresOneSentence() {
+    let scattered = """
+      Pricing test showed flat conversion between tiers, indicating price is not the objection.
+      Clear ownership of the follow-up sits with Ines.
+      Last quarter's experiments are archived.
+      """
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.matches(
+        label: "the pricing experiment showed a clear winner",
+        produced: scattered
+      ),
+      "the words still co-occur in the body; claims() is what must refuse this, not matches()"
+    )
+    XCTAssertFalse(
+      LocalSummaryEvalCorpus.claims("the pricing experiment showed a clear winner", in: scattered),
+      "pricing / experiments / showed / clear from separate sentences is not the banned claim"
+    )
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.claims(
+        "the pricing experiment showed a clear winner",
+        in: "The pricing experiment showed a clear winner. Conversion was otherwise unremarkable."
+      ),
+      "a genuinely present banned claim in one sentence must still fire"
+    )
+  }
+
+  func testVerbatimCopyIsASubstringOrTwelveWordRun() {
+    let turns = [
+      LocalSummaryEvalCorpus.Turn(
+        "SPEAKER_00",
+        "Nadia reads the remaining hundred sync tickets before anyone scopes a rewrite off a ticket count."
+      )
+    ]
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.isVerbatimCopy(
+        "Nadia reads the remaining hundred sync tickets before anyone scopes a rewrite off a ticket count.",
+        of: turns
+      ),
+      "an action that is a turn, ignoring case, is copied"
+    )
+    let run =
+      "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima"
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.isVerbatimCopy(
+        "Please note: \(run) before we move on.",
+        of: [LocalSummaryEvalCorpus.Turn("SPEAKER_00", "Noise. \(run) more noise.")]
+      ),
+      "a twelve-word span lifted from one turn is copied even when wrapped"
+    )
+    XCTAssertFalse(
+      LocalSummaryEvalCorpus.isVerbatimCopy(
+        "Tomas to schedule the token rotation fix as dedicated work",
+        of: [
+          LocalSummaryEvalCorpus.Turn(
+            "SPEAKER_02",
+            "Tomas schedules the token rotation fix as real scheduled work, not squeezed into a Friday afternoon."
+          )
+        ]
+      ),
+      "an attributed paraphrase is not a verbatim copy"
+    )
+  }
+
+  // red-proof: let adjacent number words sum again, or split sentences on every "."
+  func testNumberFoldingAndSentenceSplittingDoNotInventValues() {
+    XCTAssertTrue(LocalSummaryEvalCorpus.contentWords("two hundred and ten open tickets").contains("210"))
+    XCTAssertTrue(LocalSummaryEvalCorpus.contentWords("forty-five day cap").contains("45"))
+    let spoken = LocalSummaryEvalCorpus.contentWords("up from one forty last month")
+    XCTAssertFalse(spoken.contains("41"), "adjacent number words are not a sum")
+    let pair = LocalSummaryEvalCorpus.contentWords("five and ten users")
+    XCTAssertTrue(pair.contains("5") && pair.contains("10") && !pair.contains("15"))
+    XCTAssertTrue(
+      LocalSummaryEvalCorpus.claims(
+        "candidate 0.12.148 ships Thursday",
+        in: "Planning notes. Candidate 0.12.148 ships Thursday after the drill. Owners are set."),
+      "a version number must not be split across scoring units")
   }
 }

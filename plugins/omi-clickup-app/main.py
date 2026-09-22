@@ -673,7 +673,8 @@ async def update_list(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ update_list error: {type(e).__name__}", flush=True)
+        return {"success": False, "error": "Failed to update default list."}
 
 
 @app.post("/update-timezone")
@@ -689,7 +690,8 @@ async def update_timezone(
         else:
             return {"success": False, "error": "User not found"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ update_timezone error: {type(e).__name__}", flush=True)
+        return {"success": False, "error": "Failed to update timezone."}
 
 
 @app.post("/refresh-lists")
@@ -724,7 +726,8 @@ async def refresh_lists(uid: str = Query(...)):
 
         return {"success": True, "lists_count": len(lists)}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ refresh_lists error: {type(e).__name__}", flush=True)
+        return {"success": False, "error": "Failed to refresh lists from ClickUp."}
 
 
 @app.post("/logout")
@@ -749,7 +752,8 @@ async def logout(uid: str = Query(...)):
 
         return {"success": True, "message": "Logged out successfully"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"❌ logout error: {type(e).__name__}", flush=True)
+        return {"success": False, "error": "Failed to log out."}
 
 
 @app.post("/webhook")

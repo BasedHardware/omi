@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Optional, List, Tuple, cast
+from typing import Any, Dict, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field, PrivateAttr
@@ -18,6 +19,30 @@ SENTENCE_SPLIT_RE = re.compile(r'(?<=' + SENTENCE_ENDERS_CLASS + r')\s*')
 SENTENCE_FINDALL_RE = re.compile(
     r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
 )
+
+
+def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
+    """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi/conversations/{conversation_id}/transcript-segments/{index}'))
+
+
+@dataclass(frozen=True)
+class CombineSegmentsResult:
+    """3-tuple unpack for existing callers, plus an explicit absorbed-id map.
+
+    ``list(removed_ids)`` (or JSON / executor copies) must not be how the remap
+    travels — pass ``absorbed_into`` as its own value.
+    """
+
+    segments: List['TranscriptSegment']
+    joined: List['TranscriptSegment']
+    removed_ids: List[str]
+    absorbed_into: Dict[str, str]
+
+    def __iter__(self):
+        yield self.segments
+        yield self.joined
+        yield self.removed_ids
 
 
 class Translation(BaseModel):
@@ -50,6 +75,8 @@ class TranscriptSegment(BaseModel):
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
+    # Cleared atomically on the first manual review; never authorizes teaching.
+    speaker_match_source: SkipJsonSchema[Optional[str]] = None
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # In-memory only: True when neither speaker nor speaker_id was in the
@@ -118,10 +145,14 @@ class TranscriptSegment(BaseModel):
 
     @staticmethod
     def combine_segments(
-        segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment'], delta_seconds: int = 0
-    ) -> Tuple[List['TranscriptSegment'], List['TranscriptSegment'], List[str]]:
+        segments: List['TranscriptSegment'],
+        new_segments: List['TranscriptSegment'],
+        delta_seconds: int = 0,
+        *,
+        protected_segment_ids: Optional[set[str]] = None,
+    ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
-            return segments, [], []
+            return CombineSegmentsResult(segments, [], [], {})
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
             text = text.strip()
@@ -189,13 +220,28 @@ class TranscriptSegment(BaseModel):
                 and a.speech_profile_processed == b.speech_profile_processed
             )
 
+        absorbed_into: Dict[str, str] = {}
+        removed_ids: List[str] = []
+
+        def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
+            if child is None or not child.id:
+                return
+            if child.id not in absorbed_into:
+                removed_ids.append(child.id)
+            if parent is not None and parent.id:
+                absorbed_into[child.id] = parent.id
+
         # Combined
         def _merge(
             a: Optional['TranscriptSegment'], b: Optional['TranscriptSegment']
         ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
             if not a or not b:
                 return a, b
+            if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
+                return a, b
             if b.stt_provider != a.stt_provider:
+                return a, b
+            if b.speaker_match_source != a.speaker_match_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
@@ -210,6 +256,7 @@ class TranscriptSegment(BaseModel):
                         return a, b
                     if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
                         a.text = f'{a.text} {first_sentence}'.strip()
+                        _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
                     b.text = f'{last_incomplete} {b.text}'.strip()
@@ -218,20 +265,21 @@ class TranscriptSegment(BaseModel):
                         a.end = min(a.end, b.start)
                         return a, b
                     a.text = ""
+                    _absorb(a, b)
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                _absorb(b, a)
                 return a, None
 
             if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
+                _absorb(b, a)
                 return a, None
 
             return a, b
-
-        removed_ids: List[str] = []
 
         # Join
         joined_similar_segments: List[TranscriptSegment] = [segments[-1].model_copy(deep=True)] if segments else []
@@ -246,7 +294,6 @@ class TranscriptSegment(BaseModel):
                 joined_similar_segments[-1] = a
             elif joined_similar_segments and joined_similar_segments[-1].text == "":
                 if segments and joined_similar_segments[-1].id == segments[-1].id:
-                    removed_ids.append(cast(str, segments[-1].id))
                     dropped_existing_tail = True
                 joined_similar_segments.pop()
             if b:
@@ -265,7 +312,7 @@ class TranscriptSegment(BaseModel):
                 segment.text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
-        return segments, joined_similar_segments, removed_ids
+        return CombineSegmentsResult(segments, joined_similar_segments, removed_ids, absorbed_into)
 
 
 class ImprovedTranscriptSegment(BaseModel):
