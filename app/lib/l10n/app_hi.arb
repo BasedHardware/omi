@@ -138,6 +138,7 @@
     "offlineSync": "ऑफलाइन सिंक",
     "autoSync": "स्वतः सिंक",
     "autoSyncDescription": "जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें",
+    "omiButtonActions": "Omi बटन क्रियाएँ",
     "deviceSettings": "डिवाइस सेटिंग्स",
     "integrations": "एकीकरण",
     "feedbackBug": "प्रतिक्रिया / बग",
@@ -649,7 +650,7 @@
     "allMemoriesPublicResult": "सभी यादें अब सार्वजनिक हैं",
     "newMemory": "✨ नई स्मृति",
     "editMemory": "✏️ स्मृति संपादित करें",
-    "memoryContentHint": "मुझे आइसक्रीम पसंद है...",
+    "memoryContentHint": "मुझे सुबह की बैठकें पसंद हैं।",
     "failedToSaveMemory": "सहेजने में विफल।",
     "saveMemory": "याद सहेजें",
     "retry": "पुनः प्रयास करें",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{आवाज़ पहचान के लिए तैयार है} saved_sample_awaiting_embedding{नमूना सहेजा गया; आवाज़ संसाधन अभी बाकी है} not_learned{आवाज़ सीखी नहीं गई} other{आवाज़ की स्थिति अज्ञात है}}",
     "tagSpeakerIncludingLaterSpeech": "इस वक्ता की बाद की बात भी टैग करें",
     "updateSummaryWithNewNames": "नए नामों के साथ सारांश अपडेट करें",
-    "syncStatusUnsupportedAudio": "ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता"
+    "syncStatusUnsupportedAudio": "ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{तुम मेरे लिए क्या कर सकते हो?} goal{मुझे एक लक्ष्य तय करने में मदद करो} activity{मेरी हाल की गतिविधियों का सारांश दो} improve{मैं कैसे सुधार कर सकता हूँ?} other{}}",
+    "nextWeek": "अगले सप्ताह",
+    "clearSearch": "खोज साफ़ करें"
 }

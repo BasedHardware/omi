@@ -138,6 +138,7 @@
     "offlineSync": "Συγχρονισμός εκτός σύνδεσης",
     "autoSync": "Αυτόματος συγχρονισμός",
     "autoSyncDescription": "Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας",
+    "omiButtonActions": "Ενέργειες κουμπιού Omi",
     "deviceSettings": "Ρυθμίσεις Συσκευής",
     "integrations": "Ενσωματώσεις",
     "feedbackBug": "Σχόλια / Σφάλμα",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Όλες οι αναμνήσεις είναι πλέον δημόσιες",
     "newMemory": "✨ Νέα μνήμη",
     "editMemory": "✏️ Επεξεργασία μνήμης",
-    "memoryContentHint": "Μου αρέσει να τρώω παγωτό...",
+    "memoryContentHint": "Προτιμώ τις πρωινές συναντήσεις.",
     "failedToSaveMemory": "Αποτυχία αποθήκευσης. Παρακαλώ ελέγξτε τη σύνδεσή σας.",
     "saveMemory": "Αποθήκευση Ανάμνησης",
     "retry": "Επανάληψη",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Η φωνή είναι έτοιμη για αναγνώριση} saved_sample_awaiting_embedding{Αποθηκευμένο δείγμα, αναμένεται επεξεργασία φωνής} not_learned{Η φωνή δεν έχει μαθευτεί} other{Άγνωστη κατάσταση φωνής}}",
     "tagSpeakerIncludingLaterSpeech": "Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή",
     "updateSummaryWithNewNames": "Ενημέρωση περίληψης με τα νέα ονόματα",
-    "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί"
+    "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Τι μπορείς να κάνεις για μένα;} goal{Βοήθησέ με να θέσω έναν στόχο} activity{Σύνοψε την πρόσφατη δραστηριότητά μου} improve{Πώς μπορώ να βελτιωθώ;} other{}}",
+    "nextWeek": "Επόμενη εβδομάδα",
+    "clearSearch": "Εκκαθάριση αναζήτησης"
 }

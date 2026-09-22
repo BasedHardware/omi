@@ -29,7 +29,7 @@ Bridge writes increment survivor and donor `sync_content_revision`. Processors r
 
 ## Relevance and remaining differences
 
-Short filler-only speech gets `sync_relevance=review`, remain visible with a deterministic title, and skip enrichment. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
+Short filler-only speech gets `sync_relevance=review` and skips enrichment. Uncurated completed review fragments are effectively discarded: hidden from default lists/search, retained with their transcript/audio, and recoverable through Show discarded. New intake persists `discarded=True`; read projection applies the same policy to legacy review rows without a destructive backfill. Explicit restoration sets `sync_relevance_user_kept` so later intake honors that choice. Curated, shared, photo-bearing, live-target, and already enriched records are protected. Duration alone never discards meaningful speech. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
 
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. A lineage migration remains separate.
 

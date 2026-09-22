@@ -1,6 +1,7 @@
 """The document-read probe must count every lookup and query read, and never break one."""
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -15,13 +16,26 @@ from database.firestore_document_probe import (  # noqa: E402
 )
 
 
+from database import firestore_tier_context as tier_context
+
+
+@pytest.fixture(autouse=True, params=['unattributed', 'basic', 'plus'])
+def request_tier(request):
+    owner = tier_context._RequestOwner(tier=request.param, expires_at=time.monotonic() + 60)
+    token = tier_context._request_owner.set(owner)
+    yield
+    tier_context._request_owner.reset(token)
+
+
 def _count(collection: str, outcome: str) -> float:
-    value = FIRESTORE_DOCUMENT_READS.labels(collection=collection, outcome=outcome)._value.get()
+    value = FIRESTORE_DOCUMENT_READS.labels(
+        collection=collection, outcome=outcome, tier=tier_context.current_tier()
+    )._value.get()
     return float(value or 0)
 
 
 def _count_operations(collection: str) -> float:
-    value = FIRESTORE_QUERY_OPERATIONS.labels(collection=collection)._value.get()
+    value = FIRESTORE_QUERY_OPERATIONS.labels(collection=collection, tier=tier_context.current_tier())._value.get()
     return float(value or 0)
 
 
@@ -456,3 +470,27 @@ def test_install_is_idempotent():
         setattr(Query, 'stream', originals[2])
         setattr(AggregationQuery, 'stream', originals[3])
         install_document_read_probe.__globals__['_installed'] = False
+
+
+def test_tier_series_reconcile_to_collection_totals(monkeypatch):
+    from prometheus_client import CollectorRegistry, Counter
+    from database import firestore_document_probe as probe
+
+    registry = CollectorRegistry()
+    reads = Counter('test_reads', 'reads', ['collection', 'outcome', 'tier'], registry=registry)
+    operations = Counter('test_operations', 'operations', ['collection', 'tier'], registry=registry)
+    monkeypatch.setattr(probe, 'FIRESTORE_DOCUMENT_READS', reads)
+    monkeypatch.setattr(probe, 'FIRESTORE_QUERY_OPERATIONS', operations)
+    path = ('users', 'private-uid', 'conversations', 'private-document')
+    for label in tier_context.TIER_VALUES:
+        tier_context._request_owner.set(tier_context._RequestOwner(tier=label, expires_at=time.monotonic() + 60))
+        probe._record(path, True, amount=3)
+        probe._record(path, False)
+        probe._record_operation(path[:-1])
+    samples = [s for m in reads.collect() for s in m.samples if s.name == 'test_reads_total']
+    assert sum(s.value for s in samples) == 4 * len(tier_context.TIER_VALUES)
+    assert {s.labels['collection'] for s in samples} == {'users/conversations'}
+    assert {s.labels['tier'] for s in samples} == tier_context.TIER_VALUES
+    assert sum(s.value for m in operations.collect() for s in m.samples if s.name == 'test_operations_total') == len(
+        tier_context.TIER_VALUES
+    )
