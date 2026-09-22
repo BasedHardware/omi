@@ -336,6 +336,23 @@ mobile and desktop reconnect/fallback logic. The backend deliberately does not
 replace a provider socket in-session because maintaining transcript timestamp
 continuity across that handoff requires a separate state model.
 
+#### Provider re-admission pacing (serve-error bench)
+
+A provider that dies mid-session (a typed serve error, e.g. Modulate/Velma
+`modulate_serve_error`) benches its process-local selection circuit
+(`utils/stt/provider_resilience.py`). The bench **escalates**: each further
+serve death in an unbroken benching cycle doubles the window from the
+baseline (180s default) up to 8x, and the ladder resets only on a full close
+(a probe that actually served). While such a bench stands, re-closing the
+breaker requires **serving evidence** — the probe session delivering a
+transcript segment or the provider's done frame (`SafeModulateSocket`
+health callbacks, attached by the connect seam) — never the 0.3s
+post-connect liveness grace alone, which a doomed stream passes before the
+fault kills it. The `/v3/speech-profile/stt-availability` pre-flight answers
+from the same breaker, so an escalated window also extends the "primary
+down" answer clients see; it flips true the moment the window lapses.
+Operational detail: `backend/docs/operational/modulate-serve-error-bench-escalation.md`.
+
 ```mermaid
 sequenceDiagram
     participant Client

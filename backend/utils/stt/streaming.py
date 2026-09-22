@@ -179,11 +179,19 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     except ValueError:
         return False
     circuit = _circuit_for_primary(service)
-    logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
         circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
     else:
         circuit.record_serve_failure()
+    # Logged AFTER the record so bench_seconds is the window just armed — an
+    # outage keeps dying here from every rescue, and this is what makes the
+    # escalation ladder visible in logs instead of a flat repeating record.
+    logger.warning(
+        'Opening %s selection circuit after serve-time death reason=%s bench_seconds=%s',
+        provider,
+        reason,
+        circuit.serve_error_bench_seconds,
+    )
     return True
 
 
@@ -290,6 +298,27 @@ async def connect_stt_socket_with_fallback(
             socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
+                circuit.record_failure()
+            elif primary_service is STTService.modulate and circuit.state == 'half_open':
+                # This probe was admitted under a serve-error bench. The
+                # breaker must re-close on real serving evidence — a
+                # transcript segment or the stream's done frame — never on
+                # the 0.3s liveness grace alone, which a doomed stream passes
+                # before the provider fault kills it mid-session. Attached
+                # BEFORE the grace so a transcript arriving inside the grace
+                # still lands (the evidence must never fire into a noop).
+                attach = getattr(socket, 'set_health_callbacks', None)
+                if callable(attach):
+                    on_serving, _on_released = circuit.replacement_callbacks(serving=True)
+                    attach(on_serving, _on_released)
+                if await _primary_is_serving(primary_service, socket):
+                    circuit.record_success()
+                    return socket, primary_service
+                # The grace observed the probe dying: the same rejected-stream
+                # handling as the healthy path below.
+                detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                close_rejected_socket(socket)
+                reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
@@ -1136,11 +1165,36 @@ class SafeModulateSocket(STTSocket):
         # single odd-length frame ends the session even after valid audio. Nothing upstream
         # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
         self._pending_odd_byte: bytes = b''
+        # Set by the selection layer for a probe admitted under a serve-error
+        # bench: fired once this socket has real serving evidence (a transcript
+        # segment or the provider's done frame) so the breaker may close.
+        self._health_success: Callable[[], None] = lambda: None
+        self._serving_observed = False
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
     def set_wav_header(self, header: bytes) -> None:
         self._wav_header = header
+
+    def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
+        """Attach the selection circuit's health callbacks (probe evidence seam).
+
+        Only ``on_success`` is used today: the breaker closes on real serving
+        evidence, not on socket teardown, so ``on_close`` is accepted and
+        ignored to keep the shared signature. The callback fires at most once,
+        at the first transcript segment or the provider's done frame.
+        """
+
+        self._health_success = on_success
+
+    def _observe_served(self) -> None:
+        if self._serving_observed:
+            return
+        self._serving_observed = True
+        try:
+            self._health_success()
+        except Exception:
+            pass
 
     @property
     def is_connection_dead(self) -> bool:
@@ -1315,6 +1369,7 @@ class SafeModulateSocket(STTSocket):
                     self._mark_dead(f'modulate error: {err}', typed_reason=typed)
                     break
                 elif msg_type == 'done':
+                    self._observe_served()
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
                     if self._prev_partial_text:
                         self._flush_partial()
@@ -1388,6 +1443,7 @@ class SafeModulateSocket(STTSocket):
         if not text:
             return
 
+        self._observe_served()
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
 
