@@ -57,6 +57,7 @@ from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
+from utils.product_metrics import sanitize_app_build
 from utils.marketplace_reviewers import is_marketplace_reviewer
 from database.users import *
 from models.conversation import Conversation
@@ -755,6 +756,8 @@ def set_chat_message_analytics(
     message_id: str,
     value: int,
     reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -769,18 +772,30 @@ def set_chat_message_analytics(
     snapshot = chat_db.update_message_rating(uid, message_id, rating_value) or {}
     triage = extract_rating_triage_fields(snapshot)
     normalized_reason = normalize_rating_reason(reason)
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = sanitize_app_build(x_app_build, x_app_version)
     set_chat_message_rating_score(
         uid,
         message_id,
         value,
         reason=normalized_reason,
         platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
-    record_chat_message_feedback(uid, message_id, value, reason=normalized_reason, platform='mobile')
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=normalized_reason,
+        platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
+    )
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
