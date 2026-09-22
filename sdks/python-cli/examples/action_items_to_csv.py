@@ -4,27 +4,23 @@ import os
 import sys
 from pathlib import Path
 
-FIELDS = ("id", "description", "completed", "created_at", "conversation_id")
-
+FIELDS = ["id", "description", "completed", "due_at", "created_at"]
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 def spreadsheet_text(value):
-    """Render one exported field as spreadsheet-safe text."""
     if value is None:
         return ""
-    if not isinstance(value, str):
-        value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    # Neutralize spreadsheet formula injection attacks
-    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
-        return "'" + value
-    return value
-
+    s = str(value)
+    if s.startswith(FORMULA_PREFIXES):
+        return "'" + s
+    return s
 
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("action_items", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected the JSON array from omi --json action-item list")
+        raise ValueError("Expected JSON array from 'omi --json action-item list'")
 
     dest = Path(destination)
     if dest.exists():
@@ -38,13 +34,14 @@ def convert(source, destination):
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                writer.writerow([
+                row = [
                     spreadsheet_text(item.get("id")),
-                    spreadsheet_text(item.get("description")),
-                    spreadsheet_text(item.get("completed")),
+                    spreadsheet_text(item.get("description") or item.get("content")),
+                    str(bool(item.get("completed"))).lower(),
+                    spreadsheet_text(item.get("due_at") or item.get("due_date")),
                     spreadsheet_text(item.get("created_at")),
-                    spreadsheet_text(item.get("conversation_id")),
-                ])
+                ]
+                writer.writerow(row)
         os.replace(tmp, dest)
     finally:
         if tmp.exists():
@@ -53,9 +50,12 @@ def convert(source, destination):
             except OSError:
                 pass
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python action_items_to_csv.py <source.json> <destination.csv>", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    try:
+        convert(sys.argv[1], sys.argv[2])
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)

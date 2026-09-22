@@ -15,3 +15,7 @@ python action_items_to_csv.py action_items.json action_items.csv
 ```
 
 The script features formula-injection prevention and atomic writes with `.partial` safety buffers.
+
+
+## Pagination Note
+`omi --json action-item list --limit 200 --offset 0` retrieves one page of up to 200 items. To export a complete history across multiple pages, increment `--offset 200` until an empty array is returned.
