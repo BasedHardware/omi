@@ -65,6 +65,7 @@
    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.FOREGROUND_BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.FOREGROUND_CHANGE_NETWORK_STATE" />
@@ -213,6 +214,13 @@
         <service
             android:name="com.friend.ios.phonemic.PhoneMicForegroundService"
             android:foregroundServiceType="microphone"
+            android:stopWithTask="false"
+            android:exported="false" />
+
+        <!-- Recording file-transfer keep-alive — dataSync FGS + wake lock for BLE/cloud sync (#5221) -->
+        <service
+            android:name="com.friend.ios.sync.SyncTransferForegroundService"
+            android:foregroundServiceType="dataSync"
             android:stopWithTask="false"
             android:exported="false" />
 

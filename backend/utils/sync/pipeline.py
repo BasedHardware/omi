@@ -17,6 +17,7 @@ import shutil
 import threading
 import time
 import wave
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
@@ -28,7 +29,7 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
-from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
@@ -117,11 +118,21 @@ from utils.stt.outcomes import (
     TranscriptionOutcome,
     bounded_provider,
     failure_from_exception,
+    is_destructive_operation_in_progress,
 )
-from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
-from utils.stt.speaker_match import select_speaker_match
+from utils.stt.speaker_embedding import (
+    compare_embeddings,
+    extract_embedding_from_bytes,
+    speaker_embedding_configured,
+)
+from utils.stt.speaker_match import mean_embedding, select_speaker_match
+from utils.stt.sync_speaker_evidence import collect_speaker_audio
+from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.capture import chunk_identity
+from utils.sync.bridge import finish_sync_segment
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -129,7 +140,8 @@ from utils.sync.telemetry import bounded_exception_type as _bounded_exception_ty
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.merge_dedupe import dedupe_segments_for_merge
+from utils.sync.assignment import needs_fragment_review
+from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -143,6 +155,7 @@ _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
+    'destructive_operation_in_progress',
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
@@ -772,8 +785,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     """
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation_data:
+    if not conversation_data or conversation_data.get('deleted'):
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
+        return
+
+    # Recoverable filler-only review skips enrichment; meaningful speech stays kept.
+    # Re-evaluate the entire current transcript so later content promotes it.
+    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
+        conversation_data.get('transcript_segments', [])
+    ):
         return
 
     # Convert to Conversation object
@@ -803,7 +823,6 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
 
 USER_SELF_PERSON_ID = 'user'
-SPEAKER_ID_MIN_AUDIO = 1.0  # Minimum seconds of audio per speaker for embedding extraction
 
 
 def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
@@ -846,73 +865,30 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
-def _extract_speaker_clip_wav(audio_bytes: bytes, start_sec: float, end_sec: float) -> Optional[bytes]:
-    """Extract a clip from WAV audio bytes between start_sec and end_sec.
-
-    Returns WAV bytes for the clip, or None if extraction fails or clip is too short.
-    """
-    try:
-        with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
-            framerate = wf.getframerate()
-            n_channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            n_frames = wf.getnframes()
-            total_duration = n_frames / framerate
-
-            # Clamp to audio bounds
-            start_sec = max(0.0, start_sec)
-            end_sec = min(total_duration, end_sec)
-            if end_sec - start_sec < SPEAKER_ID_MIN_AUDIO:
-                return None
-
-            # Cap extraction at 10 seconds
-            if end_sec - start_sec > 10.0:
-                center = (start_sec + end_sec) / 2
-                start_sec = center - 5.0
-                end_sec = center + 5.0
-                start_sec = max(0.0, start_sec)
-                end_sec = min(total_duration, end_sec)
-
-            start_frame = int(start_sec * framerate)
-            end_frame = int(end_sec * framerate)
-
-            wf.setpos(start_frame)
-            frames = wf.readframes(end_frame - start_frame)
-
-        # Write clip as WAV
-        clip_buf = io.BytesIO()
-        with wave.open(clip_buf, 'wb') as out_wf:
-            out_wf.setnchannels(n_channels)
-            out_wf.setsampwidth(sampwidth)
-            out_wf.setframerate(framerate)
-            out_wf.writeframes(frames)
-        return clip_buf.getvalue()
-    except Exception as e:
-        logger.warning(f'Speaker ID: failed to extract clip: {e}')
-        return None
-
-
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
     person_embeddings_cache: Dict[str, dict],
     uid: str,
+    language: Optional[str] = None,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
 
     Modifies segments in-place by assigning person_id and is_user fields.
 
     Steps:
-    1. Voice embedding matching (requires audio_bytes and non-empty cache):
-       For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
-       get embedding, match against person_embeddings_cache.
+    1. Voice embedding matching (requires audio_bytes, a non-empty cache, and
+       HOSTED_SPEAKER_EMBEDDING_API_URL):
+       For each speaker, pool distinct audio into bounded clips, average their
+       embeddings, and match against person_embeddings_cache.
     2. Text-based detection ("I am X") runs independently for all unmatched speakers.
     3. Apply assignments via process_speaker_assigned_segments.
     """
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
+    voice_assignments: list[tuple[TranscriptSegment, str]] = []
 
-    # Group segments by speaker_id, find best (longest) segment per speaker for embedding
+    # Group all available evidence by diarized speaker.
     speaker_segments: Dict[int, List[TranscriptSegment]] = {}
     for seg in transcript_segments:
         sid = seg.speaker_id if seg.speaker_id is not None else 0
@@ -923,9 +899,9 @@ def identify_speakers_for_segments(
     # (diarization tells us speakers are distinct — no person can be two speakers).
     matched_person_ids: set = set()
 
-    if audio_bytes and person_embeddings_cache:
-        # Sort speakers by best single segment duration (longest first) — this is the clip
-        # actually used for embedding, so it determines match quality.
+    if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
+        # Preserve existing longest-segment priority for one-person/one-speaker dedup.
+        # Pooling changes evidence, not the order in which identities are reserved.
         # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
         # If diarization fragments one person across speaker IDs, only the best match wins.
         sorted_speakers = sorted(
@@ -938,18 +914,44 @@ def identify_speakers_for_segments(
             best_seg = max(segments, key=lambda s: s.end - s.start)
             seg_duration = best_seg.end - best_seg.start
 
-            if seg_duration < SPEAKER_ID_MIN_AUDIO:
-                continue
-
-            clip_wav = _extract_speaker_clip_wav(audio_bytes, best_seg.start, best_seg.end)
-            if not clip_wav:
-                continue
-
             try:
-                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
-            except (ValueError, Exception) as e:
-                logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
+                evidence = collect_speaker_audio(audio_bytes, [(seg.start, seg.end) for seg in segments])
+            except (ValueError, EOFError, wave.Error):
+                evidence = None
+            embeddings = []
+            evidence_seconds = 0.0
+            failed_clips = 0
+            for clip_wav, seconds in evidence.clips if evidence is not None else []:
+                try:
+                    embeddings.append(extract_embedding_from_bytes(clip_wav, "sync_speaker.wav"))
+                    evidence_seconds += seconds
+                except Exception as error:
+                    failed_clips += 1
+                    logger.info(
+                        'Speaker ID: embedding failed speaker=%s type=%s uid=%s', speaker_id, type(error).__name__, uid
+                    )
+            if not embeddings:
+                outcome = (
+                    'audio_error'
+                    if evidence is None
+                    else 'embedding_error' if failed_clips else 'insufficient_evidence'
+                )
+                SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
+                logger.info(
+                    'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                    'best=None best_distance=inf runner_up_distance=inf accepted=False '
+                    'segments=%d clips=0 evidence_seconds=0 available_seconds=%.3f '
+                    'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
+                    uid,
+                    speaker_id,
+                    seg_duration,
+                    len(segments),
+                    evidence.available_seconds if evidence is not None else 0.0,
+                    failed_clips,
+                    outcome,
+                )
                 continue
+            query_embedding = mean_embedding(embeddings) if len(embeddings) > 1 else embeddings[0]
 
             # Keep assigned candidates in the ambiguity comparison. Removing the
             # owner after a first match must not make a similar household voice
@@ -960,9 +962,13 @@ def identify_speakers_for_segments(
             }
             decision = select_speaker_match(distances)
             accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
+            outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
+            SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
             logger.info(
                 'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s '
+                'segments=%d clips=%d evidence_seconds=%.3f available_seconds=%.3f '
+                'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
                 uid,
                 speaker_id,
                 seg_duration,
@@ -970,12 +976,21 @@ def identify_speakers_for_segments(
                 decision.best_distance,
                 decision.runner_up_distance,
                 accepted,
+                len(segments),
+                len(embeddings),
+                evidence_seconds,
+                evidence.available_seconds if evidence is not None else 0.0,
+                failed_clips,
+                outcome,
             )
             if accepted and decision.person_id is not None:
                 person_id = decision.person_id
                 speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
+                voice_assignments.extend(
+                    (segment, person_id) for segment in segments if not segment.is_user and not segment.person_id
+                )
 
     # Text-based detection runs independently for all unmatched speakers.
     # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
@@ -985,7 +1000,7 @@ def identify_speakers_for_segments(
         if speaker_id in speaker_to_person_map:
             continue
         for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
+            detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
@@ -1009,6 +1024,12 @@ def identify_speakers_for_segments(
             speaker_to_person_map,
         )
 
+    # The assignment helper preserves pre-existing labels. Only mark labels this
+    # voice decision actually supplied, never an existing manual/provider label.
+    for segment, person_id in voice_assignments:
+        if (person_id == USER_SELF_PERSON_ID and segment.is_user) or segment.person_id == person_id:
+            segment.speaker_match_source = 'sync_embedding'
+
 
 ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
 
@@ -1021,6 +1042,9 @@ class _OrderedTurnstile:
     race get_closest_conversation_to_timestamps() before any of them has persisted a
     conversation, so every chunk becomes its own conversation (#6551, #5747).
     """
+
+    # Cross-job correctness lives in assign_sync_conversation; this turnstile
+    # is only an in-job ordering optimization, never a persistence lock.
 
     def __init__(self, ordered_keys: List[str]):
         self._pending = deque(ordered_keys)
@@ -1064,7 +1088,9 @@ def process_segment(
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
     geolocation: Optional[Geolocation] = None,
+    speaker_scope: Optional[str] = None,
 ):
+    conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     try:
@@ -1130,6 +1156,7 @@ def process_segment(
                 audio_bytes if person_embeddings_cache else None,
                 person_embeddings_cache or {},
                 uid,
+                language=language,
             )
         except Exception as e:
             logger.warning(
@@ -1141,158 +1168,77 @@ def process_segment(
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
 
-        # Conversation assignment must happen chronologically across the batch: wait until
-        # every earlier-timestamped segment has created/merged its conversation, otherwise
-        # the closest-conversation lookup races and adjacent chunks split into separate
-        # conversations.
+        # Chronological scheduling reduces bridge work; the transaction remains
+        # correct when independent jobs or a timed-out worker arrive out of order.
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
-        segment_end_timestamp = timestamp + transcript_segments[-1].end
+        # The content identity survives job-directory changes and retry. Direct
+        # legacy callers retain a capture-time scope, never one shared by all WALs.
+        for segment in transcript_segments:
+            segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
+        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+        # Target eligibility (including live stubs and tombstones) is resolved
+        # inside the same transaction as temporal assignment.
+        closest_memory = (
+            None
+            if target_conversation_id
+            else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
+        )
+        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        create_memory = CreateConversation(
+            started_at=started_at,
+            finished_at=datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc),
+            transcript_segments=transcript_segments,
+            source=source,
+            language=language,
+            is_locked=is_locked,
+            private_cloud_sync_enabled=private_cloud_sync_enabled,
+            client_device_id=client_device_id,
+            client_platform=client_platform,
+            geolocation=geolocation,
+        )
+        incoming = Conversation(
+            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
+            created_at=started_at,
+            structured=build_deterministic_minimum_structured(create_memory),
+            **create_memory.model_dump(),
+        ).model_dump()
+        incoming['data_protection_level'] = data_protection_level
+        from utils.conversations.lifecycle import ingest_sync_conversation
 
-        # When a target conversation is specified (auto-sync from live capture),
-        # attach segments to it directly instead of searching by timestamp.
-        if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(
-                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
-            )
-            if not conversations_db.eligible_merge_target(closest_memory):
-                logger.warning(
-                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
-                )
-                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-        else:
-            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
-
-        if not closest_memory:
-            started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-            finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
-            create_memory = CreateConversation(
-                started_at=started_at,
-                finished_at=finished_at,
-                transcript_segments=transcript_segments,
-                source=source,
-                is_locked=is_locked,
-                private_cloud_sync_enabled=private_cloud_sync_enabled,
-                client_device_id=client_device_id,
-                client_platform=client_platform,
-                geolocation=geolocation,
-            )
-            created = process_conversation(
-                uid,
-                language,
-                create_memory,
-                persistence_observer=_require_current_conversation_persistence,
-            )
-            with lock:
-                response['new_memories'].add(created.id)
-            if private_cloud_sync_enabled:
-                _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
-        else:
-            if geolocation and not closest_memory.get('geolocation'):
-                conversations_db.update_conversation(
-                    uid, closest_memory['id'], {'geolocation': geolocation.model_dump()}
-                )
-                closest_memory['geolocation'] = geolocation.model_dump()
-            transcript_segments = [s.model_dump() for s in transcript_segments]
-
-            # assign timestamps to each segment
-            for segment in transcript_segments:
-                segment['timestamp'] = timestamp + segment['start']
-            for segment in closest_memory['transcript_segments']:
-                segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
-
-            incoming_count = len(transcript_segments)
-            # Deduplicate before append. Exact absolute ranges cover 207 retries;
-            # text+slop covers live+offline / clock-offset duplicates (#4769).
-            deduped_segments = dedupe_segments_for_merge(
-                closest_memory['started_at'].timestamp(),
-                closest_memory['transcript_segments'],
-                transcript_segments,
-            )
-            dropped_for_dedupe = incoming_count - len(deduped_segments)
-            if not deduped_segments:
-                logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
-                with lock:
-                    response['updated_memories'].add(closest_memory['id'])
-                # No chunk upload: duplicate of existing/realtime audio.
-                _set_deferred_segment_outcome(
-                    deferred_outcome,
-                    outcome=TranscriptionOutcome.SUCCESS,
-                    provider=provider,
-                    model=model,
-                    retryable=False,
-                )
-                if deferred_outcome is None:
-                    _record_sync_segment_outcome(
-                        TranscriptionOutcome.SUCCESS,
-                        provider=provider,
-                        model=model,
-                        lane=sync_lane,
-                        retryable=False,
-                    )
-                return True
-
-            # Private-cloud audio before conversation-relative rewrite so partial
-            # survivors still have chunk-relative start/end (#4769 David CR).
-            if private_cloud_sync_enabled:
-                if dropped_for_dedupe == 0:
-                    _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
-                else:
-                    store_partial_merge_survivor_audio(
-                        uid=uid,
-                        conversation_id=closest_memory['id'],
-                        file_timestamp=timestamp,
-                        audio_bytes=audio_bytes,
-                        data_protection_level=data_protection_level,
-                        survivors=deduped_segments,
-                    )
-
-            # merge and sort segments by start timestamp
-            segments = closest_memory['transcript_segments'] + deduped_segments
-            segments.sort(key=lambda x: x['timestamp'])
-
-            # fix segment.start .end to be relative to the memory
-            for i, segment in enumerate(segments):
-                duration = segment['end'] - segment['start']
-                segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
-                segment['end'] = segment['start'] + duration
-
-            # Calculate new finished_at based on the latest segment
-            last_segment_end = segments[-1]['end'] if segments else 0
-            new_finished_at = datetime.fromtimestamp(
-                closest_memory['started_at'].timestamp() + last_segment_end, tz=timezone.utc
-            )
-
-            # Ensure finished_at doesn't go backwards
-            if new_finished_at < closest_memory['finished_at']:
-                new_finished_at = closest_memory['finished_at']
-
-            # remove timestamp field
-            for segment in segments:
-                segment.pop('timestamp')
-
-            # save with updated finished_at
-            with lock:
-                response['updated_memories'].add(closest_memory['id'])
-            update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
-
-            # Lock existing conversation if credits exhausted
-            if is_locked:
-                conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
-
-            # Reprocess if conversation was discarded or if auto-synced WALs added new segments
-            if closest_memory.get('discarded', False) or target_conversation_id:
-                reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
-                logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
-                _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+        assigned, created, survivors = ingest_sync_conversation(
+            uid,
+            incoming,
+            candidate_id=closest_memory['id'] if closest_memory else None,
+            target_id=target_conversation_id,
+        )
+        conversation_id = assigned['id']
+        with lock:
+            response['new_memories' if created else 'updated_memories'].add(conversation_id)
+            if assigned['sync_relevance'] == 'keep':
+                response.setdefault('_merged', {})[conversation_id] = language
+        if private_cloud_sync_enabled and survivors:
+            if len(survivors) == len(transcript_segments):
+                _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
             else:
-                # Summary/structured data is now stale (it predates the merged segments).
-                # Record it so the caller reprocesses once per conversation at batch end,
-                # instead of once per merged segment.
-                with lock:
-                    response.setdefault('_merged', {})[closest_memory['id']] = language
+                store_partial_merge_survivor_audio(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    file_timestamp=timestamp,
+                    audio_bytes=audio_bytes,
+                    data_protection_level=data_protection_level,
+                    survivors=survivors,
+                )
+        finish_sync_segment(
+            uid,
+            assigned,
+            response,
+            lock,
+            language,
+            audio_source_id=conversation_id if private_cloud_sync_enabled and survivors else None,
+        )
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=TranscriptionOutcome.SUCCESS,
@@ -1309,9 +1255,25 @@ def process_segment(
                 retryable=False,
             )
         return True
+    except SyncAssignmentSuperseded:
+        # Acknowledge user authority without failing the WAL or dropping siblings.
+        # False excludes this segment from content usage; the zero-error job still
+        # commits its durable completion ledger before the client sees completed.
+        if conversation_id:
+            with lock:
+                response['new_memories'].discard(conversation_id)
+                response['updated_memories'].discard(conversation_id)
+                response.get('_merged', {}).pop(conversation_id, None)
+        logger.info('event=sync_assignment outcome=superseded')
+        _set_deferred_segment_outcome(
+            deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
+        )
+        return False
     except SyncConversationPersistenceFenced:
         raise
     except Exception as e:
+        if is_destructive_operation_in_progress(e):
+            raise
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1343,10 +1305,12 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
     same batch.
     """
     merged = response.pop('_merged', {})
+    fenced_ids = set()
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
+            fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
             response.get('updated_memories', set()).discard(conversation_id)
             response.get('new_memories', set()).discard(conversation_id)
@@ -1354,7 +1318,20 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
+            if is_destructive_operation_in_progress(e):
+                raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+    # A task-mode worker whose every conversation was superseded by a newer
+    # ingest must not publish an empty success: re-raise so the Cloud Tasks
+    # lane terminally ACKs the delivery as superseded (never retried). The
+    # v1 inline lane keeps the absorb behavior (no on_fenced checkpoint there).
+    if (
+        fenced_ids
+        and on_fenced is not None
+        and not response.get('new_memories')
+        and not response.get('updated_memories')
+    ):
+        raise SyncConversationPersistenceFenced('all merged conversations fenced')
 
 
 async def _checkpoint_fenced_conversations_for_run(
@@ -2138,6 +2115,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
+                    speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
                     client_device_id=client_device_id,

@@ -438,6 +438,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get autoSyncDescription => 'तुमचे डिव्हाइस कनेक्ट झाल्यावर ऑफलाइन रेकॉर्डिंग आपोआप सिंक करा';
 
   @override
+  String get omiButtonActions => 'Omi बटण क्रिया';
+
+  @override
   String get deviceSettings => 'डिव्हाइस सेटिंग्ज';
 
   @override
@@ -10113,4 +10116,33 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'आवाज ओळखण्यासाठी तयार आहे',
+        'saved_sample_awaiting_embedding': 'नमुना जतन केला; आवाज प्रक्रिया अजून आवश्यक आहे',
+        'not_learned': 'आवाज शिकलेला नाही',
+        'other': 'आवाजाची स्थिती अज्ञात आहे',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'या वक्त्याचे नंतरचे बोलणेही टॅग करा';
+
+  @override
+  String get updateSummaryWithNewNames => 'नवीन नावांसह सारांश अद्यतनित करा';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ऑडिओ वाचता आला नाही — सिंक करता येत नाही';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

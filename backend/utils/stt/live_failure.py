@@ -7,13 +7,15 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
-from utils.observability.transcription import record_live_stt_failure
+from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
     bounded_provider,
     failure_from_exception,
 )
+from utils.observability.fallback import record_fallback
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ _KNOWN_FAILURE_REASONS = frozenset(
         # provider failed to serve the stream it had accepted
         # (utils.stt.streaming.modulate_death_reason).
         'modulate_serve_error',
-        'soniox_account_state',
+        *ACCOUNT_REJECTION_REASONS,
         'soniox_idle_timeout',
         'soniox_rotation',
         'soniox_invalid_hint',
@@ -53,7 +55,8 @@ _FAILURE_PHASE_BY_REASON = {
     # accepted. The bounded phase vocabulary has no 'serve' bucket, and 'send'
     # would claim our send failed, so 'connection' is the truthful bucket.
     'modulate_serve_error': 'connection',
-    'soniox_account_state': 'connection',
+    PROVIDER_BUDGET_EXHAUSTED: 'connection',
+    PROVIDER_AUTH_REJECTED: 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
@@ -62,15 +65,16 @@ _FAILURE_PHASE_BY_REASON = {
 }
 _CIRCUIT_OPENING_REASONS = frozenset(
     {
-        # 402 organization_balance_exhausted: the provider still ACCEPTS the
-        # WebSocket upgrade but refuses to serve ANY stream, so the
-        # connect-time failure counter provably never accumulates under
-        # reconnect load (each dying session's replacement connects fine and
-        # calls record_success). Same mechanism record_serve_failure exists
-        # for. The other typed shapes are session-scoped — an idle-timeout is
-        # this session's VAD pattern and a 413 rotation serves fine on a fresh
-        # connection — so they must not bench the provider for everyone.
-        'soniox_account_state',
+        # 402 organization_balance_exhausted / organization_monthly_budget_exhausted:
+        # the provider still ACCEPTS the WebSocket upgrade but refuses to serve
+        # ANY stream, so the connect-time failure counter provably never
+        # accumulates under reconnect load (each dying session's replacement
+        # connects fine and calls record_success). Same mechanism
+        # record_serve_failure exists for. The other typed shapes are
+        # session-scoped — an idle-timeout is this session's VAD pattern and a
+        # 413 rotation serves fine on a fresh connection — so they must not
+        # bench the provider for everyone.
+        *ACCOUNT_REJECTION_REASONS,
         # Velma's mid-session "Internal server error" / "Unable to complete
         # the request" frames: the provider accepted the stream, served audio,
         # and then failed. This is the dominant live-STT outage shape
@@ -93,6 +97,72 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
+
+
+def fallback_reason_for_typed_death(typed_reason: str | None) -> str:
+    """Map a bounded death reason onto ``record_fallback``'s closed reason set."""
+
+    if typed_reason == PROVIDER_BUDGET_EXHAUSTED:
+        return 'quota'
+    if typed_reason == PROVIDER_AUTH_REJECTED:
+        return 'auth'
+    return 'other'
+
+
+def _segments_have_transcript(segments: object) -> bool:
+    if not isinstance(segments, list):
+        return False
+    for segment in segments:
+        if isinstance(segment, dict) and str(segment.get('text') or '').strip():
+            return True
+    return False
+
+
+class PendingLiveFailover:
+    """A mid-session hop that is not recovered until the new provider transcribes.
+
+    Connect-time ``record_fallback(..., outcome='recovered')`` counted a Soniox
+    socket that the vendor then closed for monthly budget exhaustion as a heal,
+    so a 100% dead failover leg looked 100% healthy for 27.5h.
+    """
+
+    def __init__(
+        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+    ) -> None:
+        self.component, self.reason = component, reason
+        self.from_mode = from_mode
+        self.to_mode = to_mode
+        self._settled = False
+
+    @property
+    def settled(self) -> bool:
+        return self._settled
+
+    def note_transcript(self, segments: object | None = None) -> None:
+        if self._settled:
+            return
+        if segments is not None and not _segments_have_transcript(segments):
+            return
+        self._settled = True
+        record_fallback(
+            component=self.component,
+            from_mode=self.from_mode,
+            to_mode=self.to_mode,
+            reason=self.reason,
+            outcome='recovered',
+        )
+
+    def note_failure(self, typed_reason: str | None) -> None:
+        if self._settled:
+            return
+        self._settled = True
+        record_fallback(
+            component=self.component,
+            from_mode=self.from_mode,
+            to_mode=self.to_mode,
+            reason=fallback_reason_for_typed_death(typed_reason),
+            outcome='exhausted',
+        )
 
 
 class LiveSTTSession(Protocol):
@@ -247,15 +317,22 @@ async def terminate_live_stt_session(
         # name: the provider accepts connects and refuses every stream.
         _open_serving_provider_circuit(bounded_reason, failure.provider)
     try:
+        failure_phase = _FAILURE_PHASE_BY_REASON[bounded_reason]
         record_live_stt_failure(
             provider=failure.provider,
             platform=platform,
             outcome=failure.outcome,
-            phase=_FAILURE_PHASE_BY_REASON[bounded_reason],
+            phase=failure_phase,
         )
         attempt = getattr(session, 'live_transcription_attempt', None)
         if attempt is not None:
-            attempt.finish('failure', phase=_FAILURE_PHASE_BY_REASON[bounded_reason])
+            attempt.finish('failure', phase=failure_phase)
+        else:
+            record_live_stt_pre_audio_failure(
+                provider=failure.provider,
+                platform=platform,
+                phase=failure_phase,
+            )
         client_attempt = getattr(session, 'client_live_transcription_attempt', None)
         if client_attempt is not None:
             client_attempt.fail('provider_error')

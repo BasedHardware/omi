@@ -230,24 +230,29 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
 }
 
 /// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations), or an empty list on error.
-Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({required DateTime start, required DateTime end}) async {
+/// Returns capture-gap rows (never conversations) and whether the read
+/// answered, so a failed read is not read as "nothing to show".
+Future<({List<CalendarCaptureGap> items, bool ok})> getCalendarCaptureGaps({
+  required DateTime start,
+  required DateTime end,
+}) async {
   final url =
       '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: const <CalendarCaptureGap>[], ok: false);
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
+    final gaps = (jsonDecode(body) as List<dynamic>)
         .map(
           (row) =>
               CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
         )
         .toList();
+    return (items: gaps, ok: true);
   }
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
   debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
-  return [];
+  // 400 means no connected calendar — nothing was captured, so nothing to show.
+  return (items: const <CalendarCaptureGap>[], ok: response.statusCode == 400);
 }
 
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
@@ -383,9 +388,13 @@ Future<Uint8List?> getConversationPhotoImage(String conversationId, String photo
   return response!.bodyBytes;
 }
 
+@visibleForTesting
+String conversationTitlePath(String conversationId, String title) =>
+    'v1/conversations/$conversationId/title?title=${Uri.encodeQueryComponent(title)}';
+
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
+    url: '${Env.apiBaseUrl}${conversationTitlePath(conversationId, title)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -479,6 +488,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   List<String> segmentIds, {
   bool? isUser,
   String? personId,
+  int? speakerId,
 }) async {
   String assignType;
   String? value;
@@ -491,13 +501,17 @@ Future<bool> assignBulkConversationTranscriptSegments(
   }
 
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
+    url: speakerId == null
+        ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
   );
   if (response == null) return false;
-  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 

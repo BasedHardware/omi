@@ -591,8 +591,13 @@ def upsert_canonical_memory_vector(
 def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
     """Delete canonical vectors by authoritative UID metadata, including legacy bare-ID rows."""
     if index is None:
-        logger.warning('Pinecone index not initialized, skipping canonical memory vector filter delete')
-        return False
+        # No vector store is configured, so no vector copy can exist: the desired
+        # absence is trivially confirmed. Privacy deletion must not fail closed
+        # on a projection the deployment never writes (#10446 regression class —
+        # without this, every explicit memory delete 503s on Pinecone-less
+        # deployments). A configured index that raises still fails closed below.
+        logger.warning('Pinecone index not initialized, nothing to purge for canonical memory vector delete')
+        return True
     delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
     index.delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
     logger.info(

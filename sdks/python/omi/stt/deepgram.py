@@ -4,15 +4,24 @@ import asyncio
 import json
 from asyncio import Queue
 from typing import Callable, Optional
+from urllib.parse import urlencode
 
 
 class DeepgramTranscriber:
-    def __init__(self, api_key: str, *, sample_rate: int = 16000, model: str = "nova") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        sample_rate: int = 16000,
+        model: str = "nova",
+        language: str = "en-US",
+    ) -> None:
         if not api_key:
             raise ValueError("Deepgram api_key is required")
         self.api_key = api_key
         self.sample_rate = sample_rate
         self.model = model
+        self.language = language
 
     async def run(
         self,
@@ -24,14 +33,22 @@ class DeepgramTranscriber:
         except ImportError as exc:
             raise ImportError("Deepgram engine requires websockets package") from exc
 
-        url = (
-            "wss://api.deepgram.com/v1/listen"
-            f"?punctuate=true&model={self.model}&language=en-US"
-            f"&encoding=linear16&sample_rate={self.sample_rate}&channels=1"
+        query = urlencode(
+            {
+                "punctuate": "true",
+                "model": self.model,
+                "language": self.language,
+                "encoding": "linear16",
+                "sample_rate": self.sample_rate,
+                "channels": 1,
+            }
         )
+        url = f"wss://api.deepgram.com/v1/listen?{query}"
         while True:
             try:
-                async with websockets.connect(url, additional_headers={"Authorization": f"Token {self.api_key}"}) as ws:
+                async with websockets.connect(
+                    url, additional_headers={"Authorization": f"Token {self.api_key}"}
+                ) as ws:
 
                     async def send_audio() -> None:
                         while True:
@@ -41,7 +58,11 @@ class DeepgramTranscriber:
                     async def receive() -> None:
                         async for message in ws:
                             data = json.loads(message)
-                            alt = data.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+                            alt = (
+                                data.get("channel", {})
+                                .get("alternatives", [{}])[0]
+                                .get("transcript", "")
+                            )
                             if alt:
                                 if on_transcript:
                                     on_transcript(alt)

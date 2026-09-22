@@ -51,6 +51,7 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.other import endpoints as auth
 from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
@@ -1805,7 +1806,7 @@ async def _chat_completions_unobserved(
                 web_search_authorization = await _web_search_authorized(uid)
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_desktop_chat_quota(uid, platform=x_app_platform)
+        await run_blocking(db_executor, enforce_desktop_chat_quota, uid, platform=x_app_platform)
         await _meter_server_request(uid, request_id=request_id)
     except HTTPException:
         raise
@@ -1925,6 +1926,7 @@ async def chat_completions(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
     x_omi_jit_contract_version: str | None = Header(None, alias='X-Omi-Jit-Contract-Version'),
@@ -1938,7 +1940,17 @@ async def chat_completions(
     attempt = ClientJourneyAttempt(
         'desktop_chat',
         _desktop_chat_client_kind(x_app_platform, user_agent),
+        app_build=extract_app_build({'x-app-version': x_app_version or ''}),
     )
+
+    def _record_desktop_chat_product() -> None:
+        record_product_event(
+            'desktop_chat_completion',
+            client_kind=attempt.client_kind,
+            app_build=attempt.app_build,
+            outcome=attempt.outcome or 'unknown',
+        )
+
     try:
         response = await _chat_completions_unobserved(
             body,
@@ -1955,9 +1967,11 @@ async def chat_completions(
         )
     except asyncio.CancelledError:
         attempt.cancel()
+        _record_desktop_chat_product()
         raise
     except Exception as exc:
         attempt.fail(_desktop_chat_issue_class(exc))
+        _record_desktop_chat_product()
         raise
 
     if isinstance(response, StreamingResponse):
@@ -1982,4 +1996,5 @@ async def chat_completions(
             attempt.succeed()
         else:
             attempt.fail('empty_answer')
+    _record_desktop_chat_product()
     return response

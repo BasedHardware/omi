@@ -12,6 +12,27 @@ from utils.journey_metrics_contract import (
     CLIENT_KINDS,
 )
 
+OMI_PRODUCT_EVENT_TOTAL = Counter(
+    'omi_product_event_total',
+    (
+        'Product events by bounded event, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Never labeled by uid or raw version strings.'
+    ),
+    ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+)
+
+OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL = Counter(
+    'omi_product_event_user_daily_over_total',
+    (
+        'Pod-local uid-days whose product-event tally crossed a closed threshold. '
+        'Incremented once per (event, uid, UTC-day, threshold). Never labeled by uid. '
+        'sum() across pods counts pod-local crossings: a user split across pods may be '
+        'undercounted; a user who independently crosses on two pods is counted twice.'
+    ),
+    ['event', 'threshold'],
+)
+
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
     'Number of currently active WebSocket connections in backend-listen',
@@ -209,20 +230,26 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
-    'Accepted client-segmented product journeys by bounded journey and client kind',
-    ['journey', 'client_kind'],
+    (
+        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build'],
 )
 
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_client_journey_terminal_total',
-    'Terminal client-segmented product journey outcomes by bounded labels',
-    ['journey', 'client_kind', 'outcome'],
+    (
+        'Terminal client-segmented product journey outcomes by bounded labels. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build', 'outcome'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
     'omi_client_journey_issues_total',
     'Bounded issue detail for failed or degraded client-segmented product journeys',
-    ['journey', 'client_kind', 'issue_class'],
+    ['journey', 'client_kind', 'app_build', 'issue_class'],
 )
 
 OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
@@ -237,19 +264,23 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # would multiply the most expensive metric without helping outcome segmentation.
 # Initialize the complete bounded product so healthy-but-idle exporters expose
 # zeros instead of making an idle process indistinguishable from a missing one.
+# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
+# the app_build axis would multiply series by every historical client build.
 for _journey in CLIENT_JOURNEYS:
     for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind)
+        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
         for _outcome in CLIENT_JOURNEY_OUTCOMES:
             OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 outcome=_outcome,
             )
         for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
             OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
                 journey=_journey,
                 client_kind=_client_kind,
+                app_build='unknown',
                 issue_class=_issue_class,
             )
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
@@ -372,8 +403,12 @@ OMI_FALLBACK_TOTAL = Counter(
 
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
-    'Desktop update channel resolutions by platform, channel, and source',
-    ['platform', 'channel', 'source'],
+    (
+        'Desktop update channel resolutions by platform, channel, source, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Server-to-server emitters omit app_build (unknown).'
+    ),
+    ['platform', 'channel', 'source', 'app_build'],
 )
 
 DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
@@ -402,8 +437,11 @@ DESKTOP_UPDATE_FEED_VALID = Gauge(
 
 OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     'omi_sync_dispatch_attempts_total',
-    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
-    ['mode'],
+    (
+        'Sync v2 dispatch attempts by selected mode and app build (denominator for fallback rates). '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['mode', 'app_build'],
 )
 
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
@@ -478,6 +516,17 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
+    'omi_sync_bridge_retraction_total',
+    (
+        'Sync-bridge donor retraction outcomes. Labels are a closed set: '
+        'outcome=attempted|deferred|converged|failed and '
+        'reason=none|gate_busy|hold_active|authority_unavailable|other. '
+        'Never labeled by uid, conversation id, or exception text.'
+    ),
+    ['outcome', 'reason'],
+)
+
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
     'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
@@ -507,6 +556,15 @@ OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     ['provider', 'stage'],
 )
 
+# Vendor stream-close frames by bounded provider and bounded reason. Budget/quota
+# exhaustion is never a transient blip; the PAGE alert keys on
+# reason=provider_budget_exhausted. Raw vendor messages are not label values.
+OMI_STT_STREAM_CLOSE_TOTAL = Counter(
+    'omi_stt_stream_close_total',
+    'Live-STT provider stream-close frames by bounded provider and bounded reason',
+    ['provider', 'reason'],
+)
+
 OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
     'omi_vad_gate_audio_seconds_total',
     'Live VAD gate audio seconds by gate outcome and mode',
@@ -530,8 +588,12 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
 # are closed enums; no user, call, or session identifiers appear as labels.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
-    'Accepted /v4/listen WebSocket sessions by bounded transcription source and client platform',
-    ['transcription_source', 'client_platform'],
+    (
+        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
+        'sum() across job=backend-listen-metrics.'
+    ),
+    ['transcription_source', 'client_platform', 'app_build'],
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -545,6 +607,83 @@ OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
     ['transcription_source', 'client_platform'],
 )
+
+# Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
+# backend-sync, which Prometheus does not scrape today (exporter allowlist is
+# backend + desktop-backend only). Counters are still the contract; alerts on this
+# series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
+OMI_SYNC_INTAKE_TOTAL = Counter(
+    'omi_sync_intake_total',
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
+)
+
+# Conversation shape at first durable completed persist. source is a closed
+# 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
+# children are emitted from backend-sync, which is not scraped today; the
+# matching omi_conversation_shape log line is the Cloud Logging backup.
+CONVERSATION_SHAPE_SOURCES = (
+    'live',
+    'sync',
+    'import',
+    'integration',
+    'desktop',
+    'unknown',
+)
+CONVERSATION_DURATION_BUCKETS = (
+    5,
+    10,
+    15,
+    20,
+    30,
+    45,
+    60,
+    90,
+    120,
+    180,
+    300,
+    600,
+    1200,
+    1800,
+    3600,
+    7200,
+    14400,
+    28800,
+)
+CONVERSATION_SEGMENT_BUCKETS = (1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 5000)
+
+OMI_CONVERSATION_DURATION_SECONDS = Histogram(
+    'omi_conversation_duration_seconds',
+    (
+        'Wall-clock conversation duration (finished_at - started_at) at first durable '
+        'completed persist, by bounded source. Never labeled by uid. Sync is dark in '
+        'Prometheus until backend-sync is scraped; read omi_conversation_shape logs until then.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SPEECH_SECONDS = Histogram(
+    'omi_conversation_speech_seconds',
+    (
+        'Sum of transcript segment (end - start) at first durable completed persist, '
+        'by bounded source. Speech extent, not wall-clock. Never labeled by uid.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SEGMENTS = Histogram(
+    'omi_conversation_segments',
+    'Transcript segment count at first durable completed persist, by bounded source. Never labeled by uid.',
+    ['source'],
+    buckets=CONVERSATION_SEGMENT_BUCKETS,
+)
+
+for _shape_source in CONVERSATION_SHAPE_SOURCES:
+    OMI_CONVERSATION_DURATION_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SPEECH_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SEGMENTS.labels(source=_shape_source)
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',
@@ -615,8 +754,11 @@ for _outcome in ('not_needed', 'committed'):
 
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
-    'Auth flow events by provider, stage, outcome, and sanitized failure class',
-    ['provider', 'stage', 'outcome', 'failure_class'],
+    (
+        'Auth flow events by provider, stage, outcome, sanitized failure class, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['provider', 'stage', 'outcome', 'failure_class', 'app_build'],
 )
 
 AUTH_FLOW_DURATION_SECONDS = Histogram(
@@ -655,7 +797,7 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 # `action_items_list` was 48.8% of every billable Firestore document read before
 # the 12/min per-uid cap shipped (#12258); the residual cost is a small number of
 # large-backlog accounts re-reading a full backlog on every allowed poll. These
-# two counters are how a deploy proves the remaining reads went away, rather than
+# counters are how a deploy proves the remaining reads went away, rather than
 # inferring it from the billing export a week later.
 OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL = Counter(
     'omi_action_items_list_throttled_total',
@@ -669,9 +811,32 @@ OMI_ACTION_ITEMS_LIST_CACHE_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL = Counter(
+    'omi_action_items_list_refused_total',
+    (
+        'GET /v1/action-items requests classified as the stale Windows build. '
+        'decision=allow while ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE is off; '
+        'decision=refuse when the request is rejected with 426. '
+        'client is the closed classification constant, never a raw User-Agent.'
+    ),
+    ['client', 'decision'],
+)
+
+_ACTION_ITEMS_LIST_REFUSED_CLIENTS = frozenset({'stale_windows'})
+_ACTION_ITEMS_LIST_REFUSED_DECISIONS = frozenset({'allow', 'refuse'})
+
 
 def record_action_items_list_throttled(*, client: str, policy: str) -> None:
     OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL.labels(client=client, policy=policy).inc()
+
+
+def record_action_items_list_refused(*, client: str, decision: str) -> None:
+    """client: stale_windows. decision: allow | refuse. Unknown values collapse to other."""
+    if client not in _ACTION_ITEMS_LIST_REFUSED_CLIENTS:
+        client = 'other'
+    if decision not in _ACTION_ITEMS_LIST_REFUSED_DECISIONS:
+        decision = 'other'
+    OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL.labels(client=client, decision=decision).inc()
 
 
 def record_action_items_list_cache(outcome: str) -> None:

@@ -439,6 +439,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
 
   @override
+  String get omiButtonActions => 'Omi பொத்தான் செயல்கள்';
+
+  @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
 
   @override
@@ -10175,4 +10178,33 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'குரல் அடையாளம் காணத் தயார்',
+        'saved_sample_awaiting_embedding': 'மாதிரி சேமிக்கப்பட்டது; குரல் செயலாக்கம் இன்னும் தேவை',
+        'not_learned': 'குரல் கற்றுக்கொள்ளப்படவில்லை',
+        'other': 'குரலின் நிலை தெரியவில்லை',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு';
+
+  @override
+  String get updateSummaryWithNewNames => 'புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -866,6 +866,46 @@ def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkey
     assert deleted_vectors == [(uid, memory_id)]
 
 
+def test_conversation_delete_cascade_completes_without_vector_store(monkeypatch, canonical_db):
+    """Cascade delete must complete when no vector store is configured.
+
+    The production backend and prod desktop-backend run without
+    ``PINECONE_API_KEY``; the 2026-08-27 fail-closed hardening treated the
+    unconfigured vector layer as a purge failure, so every cascade delete of a
+    conversation that owned memories raised 503 before the conversation was
+    even deleted (#10446 recurrence: desktop error, mobile resurrects).
+    """
+    import database.vector_db as vector_db_module
+
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-cascade-no-vector-store"
+    payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id=conversation_id,
+        content="Fact sourced from conversation without a vector store",
+    )
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(vector_db_module, "index", None)
+    from utils.memory.canonical_vector_sync import delete_canonical_memory_vector as real_delete
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        real_delete,
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    result = retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+
+    assert memory_id in (result.get("retracted_memory_ids") or [])
+    items = read_canonical_memories(uid, db_client=canonical_db)
+    assert all(item.memory_id != memory_id for item in items)
+
+
 def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-kg"

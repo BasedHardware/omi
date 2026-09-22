@@ -126,3 +126,24 @@ def test_get_llm_sends_explicit_options_without_cache_key_for_unique_prompts(mon
 
     assert payload['extra_body'] == {'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'}}
     assert 'prompt_cache_key' not in payload
+
+
+def test_bind_explicit_cache_after_structured_output_keeps_extra_body() -> None:
+    """The mentor-gate order: with_structured_output first, then bind.
+
+    Binding first is a silent no-op (RunnableBinding has no with_structured_output).
+    This is the guard that would have caught the gate shipping a breakpoint with
+    no prompt_cache_options on the wire.
+    """
+    from pydantic import BaseModel
+
+    from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, bind_explicit_cache
+
+    class _Gate(BaseModel):
+        is_relevant: bool = False
+
+    llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test')
+    structured = llm.with_structured_output(_Gate)
+    bound = bind_explicit_cache(structured, cache_key='omi-mentor-gate-v1-test')
+    assert bound.kwargs['extra_body'] == {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}
+    assert bound.kwargs['prompt_cache_key'] == 'omi-mentor-gate-v1-test'

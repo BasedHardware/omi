@@ -154,11 +154,13 @@ class UsageProvider with ChangeNotifier {
     try {
       final subscription = await getUserSubscription();
       if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
-      _subscription = subscription;
-      if (subscription != null) {
-        TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
-        PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
+      if (subscription == null) {
+        _error = 'Failed to load subscription data. Please try again later.';
+        return;
       }
+      _subscription = subscription;
+      TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
+      PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
       _error = 'Failed to load subscription data. Please try again later.';

@@ -440,6 +440,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
 
   @override
+  String get omiButtonActions => 'Azioni del pulsante Omi';
+
+  @override
   String get deviceSettings => 'Impostazioni Dispositivo';
 
   @override
@@ -10161,4 +10164,33 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voce pronta per il riconoscimento',
+        'saved_sample_awaiting_embedding': 'Campione salvato; elaborazione vocale ancora necessaria',
+        'not_learned': 'Voce non appresa',
+        'other': 'Stato della voce sconosciuto',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Etichetta anche il parlato successivo di questo speaker';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aggiorna il riepilogo con i nuovi nomi';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio illeggibile — impossibile sincronizzare';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -7,9 +7,16 @@ disappear from validation.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from typing import Any, cast
 
+from config.free_tier_rollout import (
+    FREE_TIER_DEPLOY_KEYS,
+    LOCAL_PROCESSING_COHORT,
+    EMERGENCY_STOP,
+    validate_free_tier_deploy_value,
+)
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 
@@ -232,9 +239,138 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
     return errors
 
 
+# main:app also runs integration and backfill; desktop_backend hosts the
+# shared emergency-stop reader through its basic-plan gates. Keep this roster
+# independent of env-key presence, as in #14316's finalization contract.
+FREE_TIER_DEPLOY_HOSTS = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+    ('desktop_backend', 'desktop-backend'),
+)
+
+
+def validate_free_tier_deploy_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    for platform, host in FREE_TIER_DEPLOY_HOSTS:
+        service = (
+            env_config.get('desktop_backend')
+            if platform == 'desktop_backend'
+            else _service_config(env_config, platform, host)
+        )
+        entries = (service or {}).get('env', {})
+        scope = f'{env}/{platform}/{host}'
+        for name in FREE_TIER_DEPLOY_KEYS:
+            entry = entries.get(name, {})
+            if name == LOCAL_PROCESSING_COHORT and env == 'dev':
+                if platform == 'gke':
+                    expected = {'name': 'dev-omi-backend-config', 'key': name}
+                    config_entry = env_config.get('gke', {}).get('config_map', {}).get('entries', {}).get(name, {})
+                    if entry.get('config_map') != expected or config_entry != {'source': 'environment', 'default': ''}:
+                        errors.append(
+                            ValidationError(scope, f'{name} requires the shared ConfigMap variable with empty default')
+                        )
+                elif entry.get('env_var') != name or entry.get('default') != '' or 'value' in entry:
+                    errors.append(ValidationError(scope, f'{name} requires the Actions variable with empty default'))
+                value = os.getenv(name, '')
+            else:
+                value = entry.get('value')
+                if value is None:
+                    errors.append(ValidationError(scope, f'{name} requires an explicit literal'))
+                    continue
+            try:
+                validate_free_tier_deploy_value(name, str(value))
+            except ValueError as exc:
+                errors.append(ValidationError(scope, str(exc)))
+            if (
+                env == 'prod'
+                and name != EMERGENCY_STOP
+                and value != ('' if name == LOCAL_PROCESSING_COHORT else 'false')
+            ):
+                errors.append(ValidationError(scope, f'{name} must remain dark in prod'))
+    return errors
+
+
+SPEAKER_EMBEDDING_ENV = 'HOSTED_SPEAKER_EMBEDDING_API_URL'
+SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+_CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+
+
+def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require the reachable diarizer ILB on every speaker-ID host.
+
+    Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
+    ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
+    voice matching there while the others keep working. Cloud Run cannot use
+    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    """
+    errors: list[ValidationError] = []
+    seen_values: dict[str, str] = {}
+    listen_value: str | None = None
+    for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
+        service_config = _service_config(env_config, platform, service_name)
+        if service_config is None:
+            continue
+        scope = f'{env}/{platform}/{service_name}'
+        literal_env = _literal_env(service_config)
+        value = (literal_env.get(SPEAKER_EMBEDDING_ENV) or '').strip()
+        has_parakeet = bool((literal_env.get('HOSTED_PARAKEET_API_URL') or '').strip())
+        # Tiny fixture manifests that only name a host for an unrelated contract
+        # must not be forced to declare speaker embedding. The real STT hosts
+        # already carry HOSTED_PARAKEET_API_URL; that is the co-host signal.
+        if not value and not has_parakeet:
+            continue
+        if not value:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be a non-empty literal on every speaker-ID host',
+                )
+            )
+            continue
+        if platform == 'cloud_run' and _CLUSTER_LOCAL_DNS in value:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
+                )
+            )
+        seen_values[scope] = value
+        if platform == 'gke' and service_name == 'backend-listen':
+            listen_value = value
+
+    if listen_value:
+        for scope, value in seen_values.items():
+            if '/gke/backend-listen' in scope:
+                continue
+            if value != listen_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
+                    )
+                )
+    return errors
+
+
 __all__ = [
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'SUMMARY_PIPELINE_FLAGS',
+    'SPEAKER_EMBEDDING_ENV',
+    'SPEAKER_EMBEDDING_HOSTS',
+    'FREE_TIER_DEPLOY_HOSTS',
+    'validate_free_tier_deploy_contract',
     'validate_conversation_finalization_capabilities',
+    'validate_speaker_embedding_hosts',
 ]

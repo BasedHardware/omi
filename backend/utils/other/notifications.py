@@ -196,20 +196,7 @@ def _generate_and_store_daily_summary(
     # Bound the generator's input (#12530). Keep the most recent conversations
     # that fit, drop the rest loudly, and always keep at least one so a recap is
     # still attempted.
-    bounded = summary_budget.select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS)
-    if bounded.truncated:
-        logger.warning(
-            'daily_summary_input_truncated uid=%s date=%s kept=%d dropped=%d rendered_chars=%d',
-            uid,
-            date_str,
-            len(bounded.conversations),
-            bounded.dropped,
-            bounded.rendered_chars,
-        )
-        _record_daily_summary_fallback(
-            from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
-        )
-    conversations = bounded.conversations
+    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
     # The prompt is built by ``conversations_to_string(use_transcript=False)``,
     # which renders the title plus the first app result or the structured
@@ -308,6 +295,23 @@ DAILY_SUMMARY_SELECTION_MODE = _selection_mode_from_env()
 _BATCH_SIZE = 8
 
 _FALLBACK_COMPONENT = 'daily_summary'
+
+
+def bound_daily_summary_conversations(uid: str, date_str: str, conversations: List[Any]) -> List[Any]:
+    bounded = summary_budget.select_conversations_within_budget(conversations, DAILY_SUMMARY_MAX_HISTORY_CHARS)
+    if bounded.truncated:
+        logger.warning(
+            'daily_summary_input_truncated uid=%s date=%s kept=%d dropped=%d rendered_chars=%d',
+            uid,
+            date_str,
+            len(bounded.conversations),
+            bounded.dropped,
+            bounded.rendered_chars,
+        )
+        _record_daily_summary_fallback(
+            from_mode='full_day', to_mode='truncated_day', reason='quota', outcome='degraded'
+        )
+    return bounded.conversations
 
 
 def _record_daily_summary_fallback(*, from_mode: str, to_mode: str, reason: str, outcome: str) -> None:

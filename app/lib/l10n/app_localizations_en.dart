@@ -437,6 +437,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
 
   @override
+  String get omiButtonActions => 'Omi Button Actions';
+
+  @override
   String get deviceSettings => 'Device Settings';
 
   @override
@@ -10095,4 +10098,33 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Voice ready for recognition',
+        'saved_sample_awaiting_embedding': 'Sample saved; voice processing still needed',
+        'not_learned': 'Voice not learned',
+        'other': 'Voice status unknown',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Also tag later speech from this speaker';
+
+  @override
+  String get updateSummaryWithNewNames => 'Update summary with new names';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio couldn\'t be read — can\'t be synced';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

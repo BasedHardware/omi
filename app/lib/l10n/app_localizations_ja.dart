@@ -431,6 +431,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
 
   @override
+  String get omiButtonActions => 'Omiボタンの操作';
+
+  @override
   String get deviceSettings => 'デバイス設定';
 
   @override
@@ -9934,4 +9937,33 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '声の認識準備ができています',
+        'saved_sample_awaiting_embedding': 'サンプル保存済み・音声処理が必要です',
+        'not_learned': '声は未学習です',
+        'other': '声の状態は不明です',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'この話者の以降の発話もタグ付けする';
+
+  @override
+  String get updateSummaryWithNewNames => '新しい名前で要約を更新';
+
+  @override
+  String get syncStatusUnsupportedAudio => '音声を読み取れません — 同期できません';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

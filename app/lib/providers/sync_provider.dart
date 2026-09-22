@@ -48,6 +48,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
+  final SyncTransferKeepAlive _keepAlive;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -116,7 +117,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
-      } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
+      } else if (w.status == WalStatus.corrupted ||
+          w.status == WalStatus.outsideRecoveryWindow ||
+          w.status == WalStatus.unsupportedAudio) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -226,7 +229,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         (s) =>
             s == WalSyncDisplayState.failed ||
             s == WalSyncDisplayState.corrupted ||
-            s == WalSyncDisplayState.outsideRecoveryWindow,
+            s == WalSyncDisplayState.outsideRecoveryWindow ||
+            s == WalSyncDisplayState.unsupportedAudio,
       );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
@@ -240,6 +244,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         case WalDisplayFilter.pending:
           return w.status != WalStatus.corrupted &&
               w.status != WalStatus.outsideRecoveryWindow &&
+              w.status != WalStatus.unsupportedAudio &&
               w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
@@ -360,12 +365,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
+    @visibleForTesting SyncTransferKeepAlive? keepAlive,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
         _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
+        _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -441,6 +448,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
+        onTransferStarted: _keepAlive.acquire,
+        onTransferFinished: _keepAlive.release,
       );
       unawaited(_startRecovery());
     } catch (e) {
@@ -666,6 +675,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation)) return null;
     _admittedWorkGeneration = generation;
     _uploadedWalIdsAtSyncStart = uploadedWals.map((w) => w.id).toSet();
+    await _keepAlive.acquire();
     try {
       _updateSyncState(_syncState.toSyncing(), generation);
 
@@ -774,6 +784,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (rethrowOnError) rethrow;
       return null;
     } finally {
+      await _keepAlive.release();
       // Use the admitted token, never a fresh `_sessionGeneration` read: a
       // finally refresh that recaptured would load this session's WAL list
       // into the account that replaced it, and `_recordNewlyAcceptedUploads`
@@ -1051,6 +1062,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else {
       _updateSyncState(_syncState.toIdle(), generation);
     }
+    // Drop the Android transfer FGS immediately so screen-off keep-alive
+    // cannot outlive a user cancel (#5221).
+    unawaited(_keepAlive.releaseAll());
     if (!_isCurrent(generation)) return;
     // Cancel only stops further uploads. Recordings already `uploaded` are
     // safe on the server — keep reconciling them through the single owner.
@@ -1066,6 +1080,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     _updateSyncState(_syncState.toSyncing(), generation);
 
+    await _keepAlive.acquire();
     try {
       await _walService.getSyncs().syncWal(wal: wal, progress: this);
       await _refreshWals(generation);
@@ -1074,6 +1089,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await _refreshWals(generation);
       _updateSyncState(_syncState.toIdle(), generation);
       rethrow;
+    } finally {
+      await _keepAlive.release();
     }
   }
 
@@ -1103,6 +1120,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _isDisposed = true;
     _sessionGeneration++;
     _admittedWorkGeneration = -1;
+    unawaited(_keepAlive.releaseAll());
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
     SyncRateLimiter.instance.removeListener(_onRateLimiterChanged);
     WaveformUtils.clearCache();

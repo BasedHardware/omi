@@ -147,6 +147,12 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
 
     @wraps(method)
     def wrapped(self: Any, uid: str, *args: Any, **kwargs: Any) -> Any:
+        # Sync-bridge donor retraction is bounded per-conversation cleanup of
+        # derived data for a row the assignment transaction already tombstoned.
+        # It must not take the exclusive account gate reserved for genuinely
+        # destructive work; callers pass claim_destructive_gate=False.
+        if not kwargs.get("claim_destructive_gate", True):
+            return method(self, uid, *args, **kwargs)
         with destructive_operation_gate(
             uid,
             kind="explicit_memory_deletion",
@@ -1071,8 +1077,10 @@ class HistoricalMemoryAdapter:
         """
         failures: List[str] = []
         if delete_vector:
-            if required and getattr(vector_db, "index", None) is None:
-                raise HTTPException(status_code=503, detail="Historical memory privacy cleanup unavailable")
+            # The legacy vector helper no-ops when no vector store is
+            # configured; a configured store that fails still records a
+            # failure below. Deletion must stay available on deployments
+            # that never had a vector store (#10446 regression class).
             try:
                 delete_memory_vector(uid, memory_id)
             except Exception:
@@ -4105,8 +4113,14 @@ class MemoryService:
         conversation_id: str,
         *,
         on_authoritative_commit: Optional[Callable[[], None]] = None,
+        claim_destructive_gate: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        result = retract_conversation_sourced_memories(uid, conversation_id, db_client=self.db_client)
+        result = retract_conversation_sourced_memories(
+            uid,
+            conversation_id,
+            db_client=self.db_client,
+            claim_destructive_gate=claim_destructive_gate,
+        )
         # Canonical retraction is irreversible even if the historical scan or
         # suppression write below fails. Advance the merge compensation fence
         # immediately so failure handling preserves the already-built merged

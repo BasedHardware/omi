@@ -1031,7 +1031,9 @@ async def delete_calendar_event_tool(
         f"start_date: {start_date}, end_date: {end_date}, event_id: {event_id}"
     )
 
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
@@ -1288,7 +1290,9 @@ async def update_calendar_event_tool(
         f"add_attendees: {add_attendees}, remove_attendees: {remove_attendees}, set_attendees: {set_attendees}"
     )
 
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',

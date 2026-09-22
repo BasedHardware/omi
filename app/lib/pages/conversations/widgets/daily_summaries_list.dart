@@ -12,8 +12,13 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
+typedef DailySummariesFetcher = Future<({List<DailySummary> items, bool ok})> Function({int limit, int offset});
+
 class DailySummariesList extends StatefulWidget {
-  const DailySummariesList({super.key});
+  const DailySummariesList({super.key, this.fetchSummaries});
+
+  /// Injectable for tests; defaults to the recaps endpoint.
+  final DailySummariesFetcher? fetchSummaries;
 
   @override
   State<DailySummariesList> createState() => _DailySummariesListState();
@@ -25,6 +30,9 @@ class _DailySummariesListState extends State<DailySummariesList> {
   bool _isLoadingMore = false;
   static const int _limit = 20;
   bool _hasMore = true;
+  bool _loadFailed = false;
+
+  DailySummariesFetcher get _fetchSummaries => widget.fetchSummaries ?? getDailySummaries;
 
   @override
   void initState() {
@@ -34,12 +42,17 @@ class _DailySummariesListState extends State<DailySummariesList> {
 
   Future<void> _loadSummaries() async {
     setState(() => _isLoading = true);
-    final summaries = await getDailySummaries(limit: _limit, offset: 0);
+    final result = await _fetchSummaries(limit: _limit, offset: 0);
     if (mounted) {
       setState(() {
-        _summaries = summaries;
         _isLoading = false;
-        _hasMore = summaries.length >= _limit;
+        // A failed read is not "no recaps": keep what is on screen and leave
+        // paging open so the next attempt can still load.
+        _loadFailed = !result.ok;
+        if (result.ok) {
+          _summaries = result.items;
+          _hasMore = result.items.length >= _limit;
+        }
       });
     }
   }
@@ -49,11 +62,13 @@ class _DailySummariesListState extends State<DailySummariesList> {
     setState(() => _isLoadingMore = true);
     // Derive the offset from the current list length so swipe-deletions don't
     // cause the next page to skip rows (a standalone counter would drift).
-    final moreSummaries = await getDailySummaries(limit: _limit, offset: _summaries.length);
+    final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length);
     if (mounted) {
       setState(() {
-        _summaries.addAll(moreSummaries);
-        _hasMore = moreSummaries.length >= _limit;
+        if (moreResult.ok) {
+          _summaries.addAll(moreResult.items);
+          _hasMore = moreResult.items.length >= _limit;
+        }
         _isLoadingMore = false;
       });
     }
@@ -128,7 +143,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
     }
 
     if (_summaries.isEmpty) {
-      return SliverToBoxAdapter(child: _buildEmptyState());
+      return SliverToBoxAdapter(child: _loadFailed ? _buildLoadFailedState() : _buildEmptyState());
     }
 
     return SliverList(
@@ -180,6 +195,19 @@ class _DailySummariesListState extends State<DailySummariesList> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadFailedState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Text(
+          context.l10n.somethingWentWrong,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
         ),
       ),
     );

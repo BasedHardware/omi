@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailRequestIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummaryProvenanceState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SummaryDocumentProse.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationPhotoGallery.swift

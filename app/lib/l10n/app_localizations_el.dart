@@ -441,6 +441,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
 
   @override
+  String get omiButtonActions => 'Ενέργειες κουμπιού Omi';
+
+  @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
@@ -10174,4 +10177,33 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Η φωνή είναι έτοιμη για αναγνώριση',
+        'saved_sample_awaiting_embedding': 'Αποθηκευμένο δείγμα, αναμένεται επεξεργασία φωνής',
+        'not_learned': 'Η φωνή δεν έχει μαθευτεί',
+        'other': 'Άγνωστη κατάσταση φωνής',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ενημέρωση περίληψης με τα νέα ονόματα';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

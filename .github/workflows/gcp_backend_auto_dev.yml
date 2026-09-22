@@ -300,6 +300,7 @@ jobs:
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: auto-dev
+          dev_free_tier_local_processing_cohort: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: development
           deploy_targets: all
