@@ -3100,7 +3100,7 @@ workflows:
       - name: Submit pinned iOS build for review
         script: |
           set -euo pipefail
-          if [ "${CONFIRM:-}" != "submit-for-review" ]; then
+          if [ "${CONFIRM:-}" != "submit-for-review" ] && [ "${CONFIRM:-}" != "export-ids" ]; then
             echo "ABORT: CONFIRM must be submit-for-review" >&2
             exit 3
           fi
