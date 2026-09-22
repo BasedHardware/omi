@@ -438,6 +438,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
+  String get omiButtonActions => 'Tác vụ nút Omi';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
@@ -10107,4 +10110,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Cập nhật tóm tắt với tên mới';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -434,6 +434,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
 
   @override
+  String get omiButtonActions => 'إجراءات زر Omi';
+
+  @override
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override
@@ -10053,4 +10056,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'تحديث الملخص بالأسماء الجديدة';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'تعذّرت قراءة الصوت — لا يمكن مزامنته';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

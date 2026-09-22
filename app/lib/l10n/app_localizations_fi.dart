@@ -436,6 +436,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
+  String get omiButtonActions => 'Omi-painikkeen toiminnot';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
@@ -10114,4 +10117,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Päivitä yhteenveto uusilla nimillä';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

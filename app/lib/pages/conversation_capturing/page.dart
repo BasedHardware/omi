@@ -17,6 +17,7 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
@@ -26,6 +27,12 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
+
+/// Switch the home IndexedStack to Conversations *before* popping the capturing
+/// route so the user lands on that tab with no flash of the previous page.
+void switchHomeToConversationsTab(BuildContext context) {
+  context.read<HomeProvider>().setIndex(1);
+}
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -93,6 +100,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     super.dispose();
   }
 
+  @visibleForTesting
+  Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
+
   int convertDateTimeToSeconds(DateTime dateTime) {
     DateTime now = DateTime.now();
     Duration difference = now.difference(dateTime);
@@ -125,6 +135,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
         if (mounted) {
+          switchHomeToConversationsTab(context);
           Navigator.of(context).pop();
         }
         return;
@@ -160,6 +171,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
                   if (context.mounted) {
+                    switchHomeToConversationsTab(context);
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                   }
@@ -345,6 +357,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     children: [
                       // Process Now button
                       GestureDetector(
+                        key: const Key('process_now_button'),
                         onTap: () => _stopConversation(provider),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -833,7 +846,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   bool _isTerminalWalState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
-      state == WalSyncDisplayState.outsideRecoveryWindow;
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio;
 
   String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;

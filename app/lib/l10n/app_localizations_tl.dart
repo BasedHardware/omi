@@ -440,6 +440,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
   @override
+  String get omiButtonActions => 'Mga aksyon ng button ng Omi';
+
+  @override
   String get deviceSettings => 'Mga Device Setting';
 
   @override
@@ -10203,4 +10206,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'I-update ang buod gamit ang mga bagong pangalan';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -58,6 +58,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
+        {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://diarizer.omiapi.com:80"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
@@ -2596,7 +2597,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     )
 
 
-_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL']
+_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL', 'HOSTED_SPEAKER_EMBEDDING_API_URL']
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
@@ -2630,6 +2631,72 @@ def test_repo_ilb_endpoints_use_http_scheme(env_name):
             _check_service('gke', svc_name, svc_cfg)
 
     assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
+
+
+def test_speaker_embedding_missing_on_sync_host_fails_admission():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
+                    'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'},
+                },
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'}},
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('dev', env_config)
+
+    assert errors == [
+        validator.ValidationError(
+            'dev/cloud_run/backend-sync',
+            'HOSTED_SPEAKER_EMBEDDING_API_URL must be a non-empty literal on every speaker-ID host',
+        )
+    ]
+
+
+def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'}},
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {
+                        'HOSTED_SPEAKER_EMBEDDING_API_URL': {
+                            'value': 'http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080',
+                        }
+                    }
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+    messages = [error.message for error in errors]
+    assert any('not cluster-local DNS' in message for message in messages)
+    assert any('must match gke/backend-listen' in message for message in messages)
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+def test_composed_manifest_declares_speaker_embedding_on_sync_hosts(env_name):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, env_name)
+
+    assert validator.validate_speaker_embedding_hosts(env_name, env_config) == []
 
 
 # --- live Cloud Run check validates services only (this pipeline deploys no Cloud Run jobs) ---

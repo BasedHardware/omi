@@ -437,6 +437,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get autoSyncDescription => 'Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže';
 
   @override
+  String get omiButtonActions => 'Dejanja gumba Omi';
+
+  @override
   String get deviceSettings => 'Nastavitve naprave';
 
   @override
@@ -10143,4 +10146,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Posodobi povzetek z novimi imeni';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

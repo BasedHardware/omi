@@ -440,6 +440,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
   @override
+  String get omiButtonActions => 'Accions del botó Omi';
+
+  @override
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override
@@ -10169,4 +10172,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Actualitza el resum amb els noms nous';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

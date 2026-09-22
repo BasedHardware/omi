@@ -435,6 +435,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
+  String get omiButtonActions => 'פעולות כפתור Omi';
+
+  @override
   String get deviceSettings => 'הגדרות המכשיר';
 
   @override
@@ -10032,4 +10035,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'עדכן את הסיכום עם השמות החדשים';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

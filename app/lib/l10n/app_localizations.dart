@@ -1017,6 +1017,12 @@ abstract class AppLocalizations {
   /// **'Automatically sync offline recordings when your device connects'**
   String get autoSyncDescription;
 
+  /// Toggle in device settings that controls whether the mobile app responds to Omi button actions
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Button Actions'**
+  String get omiButtonActions;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:
@@ -18692,6 +18698,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update summary with new names'**
   String get updateSummaryWithNewNames;
+
+  /// Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio couldn\'t be read — can\'t be synced'**
+  String get syncStatusUnsupportedAudio;
+
+  /// Inline conversation-row hint when processing finished but the title pass produced nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Title didn\'t generate'**
+  String get conversationTitleDidntGenerate;
+
+  /// Inline conversation-row action to rerun title and summary generation
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocess'**
+  String get conversationReprocess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

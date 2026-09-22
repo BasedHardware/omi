@@ -12,6 +12,18 @@ describe('TaskQuickAdd due date', () => {
     vi.unstubAllEnvs();
   });
 
+  it('prefills a default due date as the day it falls on locally', async () => {
+    const onAdd = vi.fn(async (_description: string, _dueAt?: string) => {});
+    const user = userEvent.setup();
+    const { container } = render(
+      <TaskQuickAdd onAdd={onAdd} defaultDueDate={new Date(2026, 8, 19, 23, 59)} />,
+    );
+
+    await user.click(screen.getByText('Add new task...'));
+
+    expect(container.querySelector('input[type="date"]')).toHaveValue('2026-09-19');
+  });
+
   it('keeps the picked day for users west of UTC', async () => {
     const onAdd = vi.fn(async (_description: string, _dueAt?: string) => {});
     const user = userEvent.setup();

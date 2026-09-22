@@ -439,6 +439,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматично синхронізувати офлайн-записи під час підключення пристрою';
 
   @override
+  String get omiButtonActions => 'Дії кнопки Omi';
+
+  @override
   String get deviceSettings => 'Налаштування пристрою';
 
   @override
@@ -10132,4 +10135,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Оновити підсумок з новими іменами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не вдалося прочитати аудіо — синхронізація неможлива';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

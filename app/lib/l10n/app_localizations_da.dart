@@ -438,6 +438,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
 
   @override
+  String get omiButtonActions => 'Omi-knaphandlinger';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
@@ -10097,4 +10100,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Opdater resuméet med de nye navne';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke læses — kan ikke synkroniseres';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

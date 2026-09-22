@@ -437,6 +437,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
 
   @override
+  String get omiButtonActions => 'Omi بٹن کے اعمال';
+
+  @override
   String get deviceSettings => 'ڈیوائس کی ترتیبات';
 
   @override
@@ -10124,4 +10127,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

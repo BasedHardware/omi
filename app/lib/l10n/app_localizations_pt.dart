@@ -438,6 +438,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Sincronizar automaticamente as gravações offline quando o seu dispositivo se conectar';
 
   @override
+  String get omiButtonActions => 'Ações do botão Omi';
+
+  @override
   String get deviceSettings => 'Configurações do dispositivo';
 
   @override
@@ -10122,4 +10125,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Atualizar o resumo com os novos nomes';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Não foi possível ler o áudio — não pode ser sincronizado';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

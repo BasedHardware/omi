@@ -438,6 +438,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
+  String get omiButtonActions => 'عملکردهای دکمه Omi';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override
@@ -10113,4 +10116,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'به‌روزرسانی خلاصه با نام‌های جدید';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

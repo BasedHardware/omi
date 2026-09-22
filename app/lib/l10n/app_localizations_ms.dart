@@ -438,6 +438,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
 
   @override
+  String get omiButtonActions => 'Tindakan Butang Omi';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
@@ -10139,4 +10142,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Kemas kini ringkasan dengan nama baharu';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

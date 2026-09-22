@@ -12,6 +12,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:uuid/uuid.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
@@ -336,41 +337,54 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         chatIndex == provider.messages.length - 1 ? 8 : 16;
                                                     double bottomPadding = chatIndex == 0 ? 16 : 0;
 
-                                                    return Padding(
-                                                      key: ValueKey(message.id),
-                                                      padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                      child: message.sender == MessageSender.ai
-                                                          ? AIMessage(
-                                                              showTypingIndicator: provider.showTypingIndicator &&
-                                                                  chatIndex == provider.messages.length - 1,
-                                                              showThinkingAfterText: provider.agentThinkingAfterText,
-                                                              message: message,
-                                                              sendMessage: _sendMessageUtil,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                              displayOptions: provider.messages.length <= 1,
-                                                              appSender: provider.messageSenderApp(message.appId),
-                                                              updateConversation: (ServerConversation conversation) {
-                                                                context.read<ConversationProvider>().updateConversation(
-                                                                      conversation,
-                                                                    );
-                                                              },
-                                                              setMessageNps: (int value, {String? reason}) => provider
-                                                                  .setMessageNps(message, value, reason: reason),
-                                                            )
-                                                          : HumanMessage(
-                                                              message: message,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                            ),
+                                                    final messageBody = message.sender == MessageSender.ai
+                                                        ? AIMessage(
+                                                            showTypingIndicator: provider.showTypingIndicator &&
+                                                                chatIndex == provider.messages.length - 1,
+                                                            showThinkingAfterText: provider.agentThinkingAfterText,
+                                                            message: message,
+                                                            sendMessage: _sendMessageUtil,
+                                                            onAskOmi: (text) {
+                                                              setState(() {
+                                                                _selectedContext = text;
+                                                              });
+                                                              textFieldFocusNode.requestFocus();
+                                                            },
+                                                            displayOptions: provider.messages.length <= 1,
+                                                            appSender: provider.messageSenderApp(message.appId),
+                                                            updateConversation: (ServerConversation conversation) {
+                                                              context.read<ConversationProvider>().updateConversation(
+                                                                    conversation,
+                                                                  );
+                                                            },
+                                                            setMessageNps: (int value, {String? reason}) =>
+                                                                provider.setMessageNps(message, value, reason: reason),
+                                                          )
+                                                        : HumanMessage(
+                                                            message: message,
+                                                            onAskOmi: (text) {
+                                                              setState(() {
+                                                                _selectedContext = text;
+                                                              });
+                                                              textFieldFocusNode.requestFocus();
+                                                            },
+                                                          );
+                                                    return VisibilityDetector(
+                                                      key: ValueKey('chat-result-visibility-${message.id}'),
+                                                      onVisibilityChanged: (info) {
+                                                        if (message.sender == MessageSender.ai &&
+                                                            !message.isEmpty &&
+                                                            info.visibleFraction > 0 &&
+                                                            context.mounted) {
+                                                          provider.markChatResultVisible(message.id);
+                                                        }
+                                                      },
+                                                      child: Padding(
+                                                        key: ValueKey(message.id),
+                                                        padding:
+                                                            EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                                        child: messageBody,
+                                                      ),
                                                     );
                                                   },
                                                 ),

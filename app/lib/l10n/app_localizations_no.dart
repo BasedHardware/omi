@@ -438,6 +438,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
 
   @override
+  String get omiButtonActions => 'Omi-knapphandlinger';
+
+  @override
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
@@ -10111,4 +10114,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Oppdater sammendraget med de nye navnene';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke leses — kan ikke synkroniseres';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -439,6 +439,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
 
   @override
+  String get omiButtonActions => 'Omi nupu toimingud';
+
+  @override
   String get deviceSettings => 'Seadme seaded';
 
   @override
@@ -10106,4 +10109,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Uuenda kokkuvõtet uute nimedega';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

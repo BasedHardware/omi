@@ -439,6 +439,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get autoSyncDescription => 'Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin';
 
   @override
+  String get omiButtonActions => 'Omi Düğme İşlemleri';
+
+  @override
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override
@@ -10125,4 +10128,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Özeti yeni adlarla güncelle';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ses okunamadı — eşitlenemiyor';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

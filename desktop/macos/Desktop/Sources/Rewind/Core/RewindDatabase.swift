@@ -356,6 +356,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -443,6 +444,7 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
           try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
@@ -2539,6 +2541,7 @@ actor RewindDatabase {
     Self.registerClientProcessingProjectionMigration(on: &migrator)
     Self.registerConversationSummarySectionsMigration(on: &migrator)
     Self.registerConversationLocalSummaryMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,

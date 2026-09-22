@@ -84,27 +84,30 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
         return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.actionItemUpdated),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-
       try {
+        var saved = true;
         if (descriptionChanged) {
-          await provider.updateActionItemDescription(widget.actionItem!, newDescription);
+          saved = await provider.updateActionItemDescription(widget.actionItem!, newDescription) && saved;
         }
 
         if (dueDateChanged) {
-          await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate);
+          saved = await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate) && saved;
         }
 
         if (completionChanged) {
-          await provider.updateActionItemState(widget.actionItem!, _isCompleted);
+          saved = await provider.updateActionItemState(widget.actionItem!, _isCompleted) && saved;
+        }
+
+        // Tell the user what actually happened: the edit is reverted when the write
+        // is rejected, so a success message here was wrong whenever it failed.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(saved ? context.l10n.actionItemUpdated : context.l10n.failedToUpdateActionItem),
+              backgroundColor: saved ? Colors.green : Colors.red,
+              duration: Duration(seconds: saved ? 2 : 3),
+            ),
+          );
         }
 
         // Track action item edit

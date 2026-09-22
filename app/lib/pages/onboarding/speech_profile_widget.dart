@@ -327,7 +327,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         ],
         if (flow.answers.isEmpty) Text(copy('noMemories'), style: const TextStyle(color: Colors.white70, height: 1.5)),
         const SizedBox(height: 20),
-        if (flow.stage == IntroductionStage.savingMemories) _status(copy('savingAnswers'), loading: true),
+        // saveAll() enrolls the voice first, so `voiceSaved` is already true while the
+        // answers are still uploading: both receipts render together for the whole
+        // memory-save round trip. Space them like the done view below, or the spinner
+        // and the check sit on the same leading edge and read as one broken glyph.
+        if (flow.stage == IntroductionStage.savingMemories) ...[
+          _status(copy('savingAnswers'), loading: true),
+          const SizedBox(height: 16),
+        ],
         if (flow.voiceSaved)
           _status(copy('savedVoice'), success: true)
         else if (flow.stage == IntroductionStage.savingVoice)
