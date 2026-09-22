@@ -217,8 +217,10 @@ async def get_front_page(payload: Annotated[Any, Body()] = None):
 
         stories = [_format_story(hit, index) for index, hit in enumerate(hits, start=1)]
         return ChatToolResponse(result="Current Hacker News front page:\n\n" + "\n\n".join(stories))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Hacker News request failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Hacker News request failed.")
+    except Exception:
+        return ChatToolResponse(error="Hacker News request failed.")
 
 
 @app.post("/tools/search_stories", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -240,8 +242,10 @@ async def search_stories(payload: Annotated[Any, Body()] = None):
 
         stories = [_format_story(hit, index) for index, hit in enumerate(hits, start=1)]
         return ChatToolResponse(result=f"Hacker News stories for '{query}':\n\n" + "\n\n".join(stories))
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Hacker News search failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Hacker News search failed.")
+    except Exception:
+        return ChatToolResponse(error="Hacker News search failed.")
 
 
 @app.post("/tools/get_discussion", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -300,5 +304,7 @@ async def get_discussion(payload: Annotated[Any, Body()] = None):
         return ChatToolResponse(result="\n".join(lines))
     except (ValueError, TypeError):
         return ChatToolResponse(error="item_id must be an integer")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Hacker News discussion request failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Hacker News discussion request failed.")
+    except Exception:
+        return ChatToolResponse(error="Hacker News discussion request failed.")

@@ -79,6 +79,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: hacker-news-error-handling-tests
+    command: ["python3", "plugins/omi-hacker-news-app/test_error_handling.py"]
+    triggers: ["plugins/omi-hacker-news-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Hacker News chat tool endpoints must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: composio-memory-route-tests
     command: ["python3", "plugins/composio/test_omi_api_route.py"]
     triggers: ["plugins/composio/**", ".github/checks-manifest.yaml"]
