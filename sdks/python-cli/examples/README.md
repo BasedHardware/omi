@@ -17,6 +17,7 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
+* [conversations_xlsx.es.md](conversations_xlsx.es.md) - convertir una exportacion JSON de conversaciones a un libro de Excel (Spanish conversations Excel recipe).
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
