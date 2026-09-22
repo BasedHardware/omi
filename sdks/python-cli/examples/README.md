@@ -12,6 +12,9 @@
   agents (French agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`export_all.md`](export_all.md) — one-shot snapshot of memories,
+  conversations, action items, and goals into a single JSON bundle via
+  `examples/export_all.py`.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
