@@ -177,7 +177,7 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
 
     except Exception as e:
         log(f"Whoop API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "API request failed"}
 
 
 # Safety cap on continuation pages per collection; a real Whoop week of data
@@ -659,9 +659,7 @@ async def tool_get_recovery(request: Request):
 
     except Exception as e:
         log(f"Error getting recovery: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to get recovery: {str(e)}")
+        return ChatToolResponse(error="Failed to get recovery")
 
 
 @app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -711,7 +709,7 @@ async def tool_get_strain(request: Request):
 
     except Exception as e:
         log(f"Error getting strain: {e}")
-        return ChatToolResponse(error=f"Failed to get strain: {str(e)}")
+        return ChatToolResponse(error="Failed to get strain")
 
 
 @app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -761,7 +759,7 @@ async def tool_get_sleep(request: Request):
 
     except Exception as e:
         log(f"Error getting sleep: {e}")
-        return ChatToolResponse(error=f"Failed to get sleep: {str(e)}")
+        return ChatToolResponse(error="Failed to get sleep")
 
 
 @app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -823,7 +821,7 @@ async def tool_get_workouts(request: Request):
 
     except Exception as e:
         log(f"Error getting workouts: {e}")
-        return ChatToolResponse(error=f"Failed to get workouts: {str(e)}")
+        return ChatToolResponse(error="Failed to get workouts")
 
 
 @app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -938,7 +936,7 @@ async def tool_get_weekly_summary(request: Request):
 
     except Exception as e:
         log(f"Error getting weekly summary: {e}")
-        return ChatToolResponse(error=f"Failed to get weekly summary: {str(e)}")
+        return ChatToolResponse(error="Failed to get weekly summary")
 
 
 @app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -987,7 +985,7 @@ async def tool_get_body_measurements(request: Request):
 
     except Exception as e:
         log(f"Error getting body measurements: {e}")
-        return ChatToolResponse(error=f"Failed to get measurements: {str(e)}")
+        return ChatToolResponse(error="Failed to get measurements")
 
 
 @app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1026,7 +1024,7 @@ async def tool_get_profile(request: Request):
 
     except Exception as e:
         log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        return ChatToolResponse(error="Failed to get profile")
 
 
 # ============================================
@@ -1273,9 +1271,7 @@ async def whoop_callback(
 
     except Exception as e:
         log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/whoop")
