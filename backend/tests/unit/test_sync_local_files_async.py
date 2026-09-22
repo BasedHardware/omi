@@ -3,7 +3,7 @@
 ``POST /v1/sync-local-files`` (``sync_local_files`` in ``routers/sync.py``) is an ``async``
 handler that accepts large audio uploads, so its requests are long lived and concurrent.
 It ran six synchronous Firestore/Redis calls directly on the loop: the hard-restriction
-check, the daily audio ceiling, the transcription-credit check, the fair-use enforcement
+check, the daily audio ceiling, the paywall decision, the fair-use enforcement
 stage, the Deepgram budget check, and the usage record written at the end.
 
 The v2 handler in the same file (``sync_local_files_v2``) already offloads the first three
@@ -25,7 +25,7 @@ _BLOCKING_GATES = frozenset(
     {
         "get_hard_restriction_status",
         "is_daily_audio_ceiling_exceeded",
-        "has_transcription_credits",
+        "should_paywall_synced_conversation",
         "get_enforcement_stage",
         "is_dg_budget_exhausted",
         "record_usage",
@@ -90,7 +90,7 @@ class TestSyncLocalFilesOffload:
     def test_gates_use_the_same_executors_the_rest_of_the_repo_uses(self):
         offloaded = _offloaded_via_awaited_run_blocking(_handler_node())
         assert offloaded["get_hard_restriction_status"] == "critical_executor"
-        assert offloaded["has_transcription_credits"] == "critical_executor"
+        assert offloaded["should_paywall_synced_conversation"] == "critical_executor"
         assert offloaded["is_daily_audio_ceiling_exceeded"] == "db_executor"
         assert offloaded["get_enforcement_stage"] == "db_executor"
         assert offloaded["is_dg_budget_exhausted"] == "db_executor"
