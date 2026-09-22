@@ -188,9 +188,8 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
         # Don't modify the URL - Tweepy's state parameter is already included
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        print(f"OAuth initialization error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/callback")
@@ -631,8 +630,8 @@ async def webhook(
     # Parse payload from OMI
     try:
         payload = await request.json()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
     # Handle both formats:
     # 1. Direct list: [{"text": "...", ...}, ...]
