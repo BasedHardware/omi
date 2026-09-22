@@ -607,12 +607,18 @@ class AccessTokenTests(unittest.TestCase):
             self.assertEqual(MAIN.get_valid_access_token("u1"), "tok")
 
     def test_expired_token_triggers_refresh(self):
+        # get_valid_access_token refreshes through refresh_access_token_full and
+        # persists the rotated token set via update_dropbox_tokens (upstream seam).
         past = (MAIN.datetime.now(MAIN.timezone.utc) - MAIN.timedelta(hours=1)).isoformat()
+        future = (MAIN.datetime.now(MAIN.timezone.utc) + MAIN.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         tokens = {"access_token": "old", "refresh_token": "ref", "expires_at": past}
+        stored = []
         with patch.object(MAIN, "get_dropbox_tokens", lambda uid: tokens), patch.object(
-            MAIN, "refresh_access_token", lambda refresh: "new-tok"
-        ):
+            MAIN, "refresh_access_token_full",
+            lambda refresh: {"access_token": "new-tok", "expires_at": future, "refresh_token": "ref2"},
+        ), patch.object(MAIN, "update_dropbox_tokens", lambda *a: stored.append(a)):
             self.assertEqual(MAIN.get_valid_access_token("u1"), "new-tok")
+            self.assertEqual(stored, [("u1", "new-tok", future, "ref2")])
 
 
 class HelperTests(unittest.TestCase):
