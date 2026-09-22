@@ -1852,13 +1852,16 @@ def send_conversation_share_email(
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        raise HTTPException(status_code=504, detail=str(e))
+        logger.error(f"share_conversation: timeout error: {str(e)}")
+        raise HTTPException(status_code=504, detail="The share operation timed out. Please try again.")
     except ValueError as e:
         _release_reservation_and_quota()
-        raise HTTPException(status_code=503, detail=str(e))
+        logger.error(f"share_conversation: validation error: {str(e)}")
+        raise HTTPException(status_code=503, detail="Share failed due to invalid data. Please try again.")
     except RuntimeError as e:
         _release_reservation_and_quota()
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error(f"share_conversation: runtime error: {str(e)}")
+        raise HTTPException(status_code=502, detail="Share service temporarily unavailable. Please try again.")
     except HTTPException:
         raise
     except Exception:
