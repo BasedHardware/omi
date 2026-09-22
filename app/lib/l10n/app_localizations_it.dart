@@ -440,6 +440,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
 
   @override
+  String get omiButtonActions => 'Azioni del pulsante Omi';
+
+  @override
   String get deviceSettings => 'Impostazioni Dispositivo';
 
   @override
@@ -2153,7 +2156,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get alwaysInContext => 'Sempre nel contesto';
 
   @override
-  String get memoryContentHint => 'Mi piace mangiare il gelato...';
+  String get memoryContentHint => 'Preferisco le riunioni al mattino.';
 
   @override
   String get failedToSaveMemory => 'Impossibile salvare. Controlla la tua connessione.';
@@ -10172,4 +10175,31 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Audio illeggibile — impossibile sincronizzare';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Cosa puoi fare per me?',
+        'goal': 'Aiutami a fissare un obiettivo',
+        'activity': 'Riassumi le mie attività recenti',
+        'improve': 'Come posso migliorare?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'La prossima settimana';
+
+  @override
+  String get clearSearch => 'Cancella ricerca';
 }

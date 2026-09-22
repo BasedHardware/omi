@@ -557,6 +557,7 @@
     "offlineSync": "همگام‌سازی آفلاین",
     "autoSync": "همگام‌سازی خودکار",
     "autoSyncDescription": "هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند",
+    "omiButtonActions": "عملکردهای دکمه Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "من دوست دارم بستنی بخورم...",
+    "memoryContentHint": "جلسه‌های صبح را ترجیح می‌دهم.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10837,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{صدا آمادهٔ شناسایی است} saved_sample_awaiting_embedding{نمونه ذخیره شد؛ پردازش صدا هنوز لازم است} not_learned{صدا یاد گرفته نشده است} other{وضعیت صدا نامشخص است}}",
     "tagSpeakerIncludingLaterSpeech": "گفتار بعدی این گوینده را هم برچسب بزن",
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
-    "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست"
+    "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{چه کاری می‌توانی برایم انجام دهی؟} goal{کمکم کن هدفی تعیین کنم} activity{فعالیت‌های اخیرم را خلاصه کن} improve{چطور می‌توانم بهتر شوم؟} other{}}",
+    "nextWeek": "هفتهٔ آینده",
+    "clearSearch": "پاک کردن جستجو"
 }

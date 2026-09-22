@@ -340,7 +340,8 @@ def test_discard_fixtures_reach_the_real_llm_adjudication_path(monkeypatch):
 
 
 def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypatch):
-    captured_task_instructions: list[str] = []
+    captured_static: list[str] = []
+    captured_volatile: list[str] = []
 
     class FixedDatetime(datetime):
         @classmethod
@@ -359,7 +360,8 @@ def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypat
 
     class FakeModel:
         def invoke(self, messages):
-            captured_task_instructions.append(messages[-1].content)
+            captured_static.append(messages[0].content[0]['text'])
+            captured_volatile.append(messages[-1].content)
             return SimpleNamespace(content='{}')
 
     monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
@@ -390,7 +392,10 @@ def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypat
         **common,
     )
 
-    assert captured_task_instructions[1] == f'{captured_task_instructions[0]}\n\n{WAKE_WORD_PROMPT_RULES}'
+    assert captured_static[0] == captured_static[1]
+    assert WAKE_WORD_PROMPT_RULES not in captured_static[0]
+    assert WAKE_WORD_PROMPT_RULES not in captured_volatile[0]
+    assert captured_volatile[1].endswith(WAKE_WORD_PROMPT_RULES)
 
 
 def test_adjudicator_uses_extended_reasoning_without_passing_extracted_intent_text(monkeypatch):

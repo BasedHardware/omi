@@ -80,8 +80,40 @@ class NormalizeDoiTests(unittest.TestCase):
             "10.5555/a/b#c",
         )
 
-    def test_does_not_decode_twice(self):
-        self.assertIsNone(crossref.normalize_doi("https://doi.org/10.5555/a%252Fb"))
+    def test_accepts_encoded_reserved_suffix_characters(self):
+        self.assertEqual(
+            crossref.normalize_doi(
+                "https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g"
+            ),
+            "10.5555/a&b?c=d@e+f%g",
+        )
+
+    def test_decodes_resolver_path_exactly_once(self):
+        self.assertEqual(
+            crossref.normalize_doi("https://doi.org/10.5555/a%252Fb"),
+            "10.5555/a%2Fb",
+        )
+
+    def test_accepts_legacy_dotted_registrant_code(self):
+        self.assertEqual(
+            crossref.normalize_doi("10.1000.10/example"),
+            "10.1000.10/example",
+        )
+
+    def test_accepts_registered_doi_with_angle_brackets(self):
+        doi = "10.1002/1097-4636(200108)56:2<297::aid-jbm1098>3.0.co;2-s"
+        self.assertEqual(
+            crossref.normalize_doi(
+                "https://doi.org/10.1002/1097-4636(200108)56%3A2%3C297%3A%3Aaid-jbm1098%3E3.0.co%3B2-s"
+            ),
+            doi,
+        )
+
+    def test_accepts_unicode_graphic_suffix_characters(self):
+        self.assertEqual(
+            crossref.normalize_doi("10.5555/日本語-A\N{COMBINING ACUTE ACCENT}"),
+            "10.5555/日本語-A\N{COMBINING ACUTE ACCENT}",
+        )
 
     def test_rejects_unrelated_host(self):
         self.assertIsNone(crossref.normalize_doi("https://example.com/10.5555/ABC"))
@@ -101,8 +133,21 @@ class NormalizeDoiTests(unittest.TestCase):
     def test_rejects_whitespace_in_doi(self):
         self.assertIsNone(crossref.normalize_doi("10.5555/ABC DEF"))
 
-    def test_rejects_repeated_dot(self):
-        self.assertIsNone(crossref.normalize_doi("10.5555/ABC..DEF"))
+    def test_accepts_repeated_dots_in_suffix(self):
+        self.assertEqual(
+            crossref.normalize_doi("10.5555/ABC..DEF"),
+            "10.5555/ABC..DEF",
+        )
+
+    def test_rejects_non_ascii_prefix_digits(self):
+        self.assertIsNone(crossref.normalize_doi("10.５５５５/example"))
+
+    def test_rejects_non_graphic_suffix_code_points(self):
+        for character in ("\x00", "\x7f", "\N{ZERO WIDTH SPACE}", "\u0378"):
+            with self.subTest(character=ascii(character)):
+                self.assertIsNone(
+                    crossref.normalize_doi(f"10.5555/abc{character}def")
+                )
 
 
 class HttpBoundaryTests(unittest.TestCase):
@@ -123,6 +168,20 @@ class HttpBoundaryTests(unittest.TestCase):
         result, request = self.invoke("https://doi.org/10.5555/a%2Fb%23c?x=1#top")
         self.assertIsNone(result.error)
         request.assert_awaited_once_with("/works/10.5555%2Fa%2Fb%23c", {})
+
+    def test_reserved_suffix_characters_are_quoted_as_one_path_segment(self):
+        result, request = self.invoke(
+            "https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g"
+        )
+        self.assertIsNone(result.error)
+        request.assert_awaited_once_with(
+            "/works/10.5555%2Fa%26b%3Fc%3Dd%40e%2Bf%25g", {}
+        )
+
+    def test_dot_segments_are_quoted_inside_the_doi_path_segment(self):
+        result, request = self.invoke("10.5555/a/../b")
+        self.assertIsNone(result.error)
+        request.assert_awaited_once_with("/works/10.5555%2Fa%2F..%2Fb", {})
 
     def test_invalid_host_does_not_call_crossref(self):
         result, request = self.invoke("https://example.com/10.5555/ABC")

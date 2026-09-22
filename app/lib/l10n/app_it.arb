@@ -138,6 +138,7 @@
     "offlineSync": "Sincronizzazione offline",
     "autoSync": "Sincronizzazione automatica",
     "autoSyncDescription": "Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette",
+    "omiButtonActions": "Azioni del pulsante Omi",
     "deviceSettings": "Impostazioni Dispositivo",
     "integrations": "Integrazioni",
     "feedbackBug": "Feedback / Bug",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Tutti i ricordi sono ora pubblici",
     "newMemory": "✨ Nuova memoria",
     "editMemory": "✏️ Modifica memoria",
-    "memoryContentHint": "Mi piace mangiare il gelato...",
+    "memoryContentHint": "Preferisco le riunioni al mattino.",
     "failedToSaveMemory": "Impossibile salvare. Controlla la tua connessione.",
     "saveMemory": "Salva Ricordo",
     "retry": "Riprova",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Voce pronta per il riconoscimento} saved_sample_awaiting_embedding{Campione salvato; elaborazione vocale ancora necessaria} not_learned{Voce non appresa} other{Stato della voce sconosciuto}}",
     "tagSpeakerIncludingLaterSpeech": "Etichetta anche il parlato successivo di questo speaker",
     "updateSummaryWithNewNames": "Aggiorna il riepilogo con i nuovi nomi",
-    "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare"
+    "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Cosa puoi fare per me?} goal{Aiutami a fissare un obiettivo} activity{Riassumi le mie attività recenti} improve{Come posso migliorare?} other{}}",
+    "nextWeek": "La prossima settimana",
+    "clearSearch": "Cancella ricerca"
 }

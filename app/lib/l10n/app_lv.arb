@@ -138,6 +138,7 @@
     "offlineSync": "Bezsaistes sinhronizācija",
     "autoSync": "Automātiska sinhronizācija",
     "autoSyncDescription": "Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota",
+    "omiButtonActions": "Omi pogas darbības",
     "deviceSettings": "Ierīces iestatījumi",
     "integrations": "Integrācijas",
     "feedbackBug": "Atsauksmes / Kļūda",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Visas atmiņas tagad ir publiskas",
     "newMemory": "✨ Jauna atmiņa",
     "editMemory": "✏️ Rediģēt atmiņu",
-    "memoryContentHint": "Man patīk ēst saldējumu...",
+    "memoryContentHint": "Es dodu priekšroku rīta sanāksmēm.",
     "failedToSaveMemory": "Neizdevās saglabāt. Lūdzu, pārbaudiet savienojumu.",
     "saveMemory": "Saglabāt atmiņu",
     "retry": "Mēģināt vēlreiz",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Balss ir gatava atpazīšanai} saved_sample_awaiting_embedding{Paraugs saglabāts, vēl jāapstrādā balss} not_learned{Balss nav apgūta} other{Balss statuss nav zināms}}",
     "tagSpeakerIncludingLaterSpeech": "Atzīmēt arī šī runātāja turpmāko runu",
     "updateSummaryWithNewNames": "Atjaunināt kopsavilkumu ar jaunajiem vārdiem",
-    "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt"
+    "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ko tu vari manā labā darīt?} goal{Palīdzi man izvirzīt mērķi} activity{Apkopo manas nesenās aktivitātes} improve{Kā es varu pilnveidoties?} other{}}",
+    "nextWeek": "Nākamnedēļ",
+    "clearSearch": "Notīrīt meklēšanu"
 }

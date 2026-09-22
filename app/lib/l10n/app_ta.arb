@@ -557,6 +557,7 @@
     "offlineSync": "ஆப்லைன் ஒத்திசை",
     "autoSync": "தானியங்கி ஒத்திசைவு",
     "autoSyncDescription": "உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்",
+    "omiButtonActions": "Omi பொத்தான் செயல்கள்",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...",
+    "memoryContentHint": "நான் காலை நேரக் கூட்டங்களை விரும்புகிறேன்.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10837,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{குரல் அடையாளம் காணத் தயார்} saved_sample_awaiting_embedding{மாதிரி சேமிக்கப்பட்டது; குரல் செயலாக்கம் இன்னும் தேவை} not_learned{குரல் கற்றுக்கொள்ளப்படவில்லை} other{குரலின் நிலை தெரியவில்லை}}",
     "tagSpeakerIncludingLaterSpeech": "இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு",
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
-    "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது"
+    "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
+    "nextWeek": "அடுத்த வாரம்",
+    "clearSearch": "தேடலை அழி"
 }

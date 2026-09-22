@@ -436,6 +436,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
+  String get omiButtonActions => 'Omi-painikkeen toiminnot';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
@@ -2142,7 +2145,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get alwaysInContext => 'Aina kontekstissa';
 
   @override
-  String get memoryContentHint => 'Pidän jäätelön syömisestä...';
+  String get memoryContentHint => 'Pidän mieluiten kokoukset aamulla.';
 
   @override
   String get failedToSaveMemory => 'Tallennus epäonnistui. Tarkista yhteytesi.';
@@ -10117,4 +10120,31 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Mitä voit tehdä hyväkseni?',
+        'goal': 'Auta minua asettamaan tavoite',
+        'activity': 'Tee yhteenveto viimeaikaisista toimistani',
+        'improve': 'Miten voin kehittyä?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Ensi viikolla';
+
+  @override
+  String get clearSearch => 'Tyhjennä haku';
 }

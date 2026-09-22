@@ -438,6 +438,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
+  String get omiButtonActions => 'Tác vụ nút Omi';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
@@ -2147,7 +2150,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get alwaysInContext => 'Luôn trong ngữ cảnh';
 
   @override
-  String get memoryContentHint => 'Tôi thích ăn kem...';
+  String get memoryContentHint => 'Tôi thích họp vào buổi sáng.';
 
   @override
   String get failedToSaveMemory => 'Không thể lưu. Vui lòng kiểm tra kết nối của bạn.';
@@ -10110,4 +10113,31 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Bạn có thể giúp gì cho tôi?',
+        'goal': 'Giúp tôi đặt mục tiêu',
+        'activity': 'Tóm tắt hoạt động gần đây của tôi',
+        'improve': 'Tôi có thể cải thiện như thế nào?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Tuần tới';
+
+  @override
+  String get clearSearch => 'Xóa tìm kiếm';
 }

@@ -1196,7 +1196,7 @@
     "memoriesCount": "{count} atminčių",
     "memorizingYourVoice": "Įsimenamas jūsų balsas...",
     "memoryClearedSuccess": "Omi atmintis apie jus išvalyta",
-    "memoryContentHint": "Mėgstu valgyti ledus...",
+    "memoryContentHint": "Pirmenybę teikiu rytiniams susitikimams.",
     "memoryDeleted": "Prisiminimas ištrintas.",
     "memoryManagement": "Atminties valdymas",
     "merge": "Sujungti",
@@ -1385,6 +1385,7 @@
     "offlineSync": "Sinchronizavimas neprisijungus",
     "autoSync": "Automatinis sinchronizavimas",
     "autoSyncDescription": "Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys",
+    "omiButtonActions": "Omi mygtuko veiksmai",
     "ok": "Gerai",
     "olderDeviceDetected": "Aptiktas senesnis įrenginys",
     "omiApiKeys": "Omi API raktai",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Balsas paruoštas atpažinti} saved_sample_awaiting_embedding{Pavyzdys išsaugotas, dar reikia apdoroti balsą} not_learned{Balsas neišmoktas} other{Balso būsena nežinoma}}",
     "tagSpeakerIncludingLaterSpeech": "Pažymėti ir vėlesnę šio kalbėtojo kalbą",
     "updateSummaryWithNewNames": "Atnaujinti santrauką su naujais vardais",
-    "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima"
+    "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ką gali dėl manęs padaryti?} goal{Padėk man išsikelti tikslą} activity{Apibendrink mano naujausią veiklą} improve{Kaip galiu tobulėti?} other{}}",
+    "nextWeek": "Kitą savaitę",
+    "clearSearch": "Išvalyti paiešką"
 }
