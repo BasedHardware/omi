@@ -280,12 +280,29 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+# Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
+# a write that lands between another writer's GET and SET vanish, silently
+# dropping that reviewer from everything the product reads. Do the read-modify-
+# write as a single atomic script instead, mirroring the rate-limit scripts
+# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
+# rather than raising, matching the fail-open behavior of the Python reader.
+_SET_APP_REVIEW_CACHE_LUA = r.register_script("""
+local raw = redis.call('GET', KEYS[1])
+local reviews = {}
+if raw then
+    local ok, decoded = pcall(cjson.decode, raw)
+    if ok and type(decoded) == 'table' then
+        reviews = decoded
+    end
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+""")
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
