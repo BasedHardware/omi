@@ -4,6 +4,7 @@ Dropbox Integration App for Omi.
 Automatically saves conversation summaries, transcripts, and audio to Dropbox.
 """
 
+import html
 import io
 import os
 import secrets
@@ -12,12 +13,6 @@ import wave
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
-from datetime import datetime, timedelta
-from typing import Dict, Optional
-import html
-from urllib.parse import urlencode
-from datetime import datetime, timedelta
-from typing import Dict, Optional
 from urllib.parse import quote, urlencode
 
 import requests
@@ -241,10 +236,16 @@ def get_home_page_html(
     if settings is None:
         settings = get_user_settings(uid)
 
-    # uid is reflected into form actions and hrefs below — percent-encode
-    # it so quotes cannot break the attribute and &, #, or .. cannot
-    # corrupt the query (same hardening as the other plugin apps).
-    uid_q = quote(uid or "", safe="")
+    # The uid, the Dropbox account name/email, and the stored folder name are all
+    # attacker-influenced and reach the markup. Escape them at the HTML boundary:
+    # html.escape for text nodes and attribute values, quote(..., safe="") for
+    # anything interpolated into a URL path or query string.
+    safe_uid = quote(str(uid), safe="")
+    safe_display_name = html.escape(str(display_name or ""), quote=True)
+    safe_email = html.escape(str(email or ""), quote=True)
+    safe_folder_name = html.escape(
+        str(settings.get("folder_name", "Omi Conversations") or ""), quote=True
+    )
 
     if connected:
         return f"""
@@ -277,14 +278,14 @@ def get_home_page_html(
         <h1>Dropbox Connected</h1>
         <p class="status">Your Dropbox account is connected</p>
         <div class="user-info">
-            <strong>{display_name}</strong><br>
-            <span style="color: #666;">{email}</span>
+            <strong>{safe_display_name}</strong><br>
+            <span style="color: #666;">{safe_email}</span>
         </div>
 
-        <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
+        <form class="settings-form" method="POST" action="/settings?uid={safe_uid}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
-                <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
+                <input type="text" id="folder_name" name="folder_name" value="{safe_folder_name}" placeholder="Omi Conversations">
             </div>
 
             <div class="form-group">
@@ -310,7 +311,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid_q}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={safe_uid}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
@@ -337,7 +338,7 @@ def get_home_page_html(
     <div class="card">
         <h1>Connect Dropbox</h1>
         <p>Connect your Dropbox account to automatically save your Omi conversations.</p>
-        <a href="/auth/dropbox?uid={uid_q}" class="btn">Connect Dropbox</a>
+        <a href="/auth/dropbox?uid={safe_uid}" class="btn">Connect Dropbox</a>
     </div>
 </body>
 </html>
@@ -419,6 +420,9 @@ async def auth_callback(
     """Handle Dropbox OAuth callback."""
     # Handle errors
     if error:
+        # `error`/`error_description` come straight from the query string of an
+        # unauthenticated GET, so escape them before reflecting into the body.
+        safe_error = html.escape(str(error_description or error), quote=True)
         return HTMLResponse(
             f"""
 <!DOCTYPE html>
@@ -426,7 +430,7 @@ async def auth_callback(
 <head><title>Authorization Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #dc3545;">Authorization Failed</h1>
-    <p>{html.escape(error_description or error, quote=True)}</p>
+    <p>{safe_error}</p>
 </body>
 </html>
 """,
@@ -464,7 +468,10 @@ async def auth_callback(
         )
 
         if response.status_code != 200:
-            return HTMLResponse(f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(
+                f"Token exchange failed: {html.escape(response.text, quote=True)}",
+                status_code=400,
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -499,19 +506,24 @@ async def auth_callback(
             email=email,
         )
 
-        # Redirect to home page (uid is server-verified here, but keep it
-        # percent-encoded so a hostile stored uid cannot corrupt the query)
-        return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
+        # Redirect to home page
+        return RedirectResponse(url=f"/?uid={quote(str(uid), safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        # The exception text can embed attacker-influenced input (the `code`/`state`
+        # query parameters, the upstream error body) on this same unauthenticated
+        # callback path, so it is escaped at the HTML boundary like every other sink.
+        return HTMLResponse(
+            f"Error during authorization: {html.escape(str(e), quote=True)}",
+            status_code=500,
+        )
 
 
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Dropbox account."""
     delete_dropbox_tokens(uid)
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
+    return RedirectResponse(url=f"/?uid={quote(str(uid), safe='')}")
 
 
 # ============== Settings Endpoint ==============
@@ -530,7 +542,7 @@ async def update_settings(request: Request, uid: str = Query(...)):
     }
 
     store_user_settings(uid, settings)
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(str(uid), safe='')}", status_code=303)
 
 
 # ============== Webhook Endpoint ==============
