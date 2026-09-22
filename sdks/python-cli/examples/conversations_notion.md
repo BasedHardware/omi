@@ -1,11 +1,29 @@
-# Convert Conversations to Notion Blocks
+# conversations_to_notion.py
 
-This recipe demonstrates how to transform a conversation JSON file into a
-Notion API-compatible block payload. The resulting JSON can be sent to the
-Notion API using the `blocks` endpoint to create a page or append to an
-existing page.
+A tiny helper script that turns a **conversation log** (JSON) into a list of
+**Notion API‑compatible block objects**.  
+The generated payload can be sent directly to the Notion `blocks` endpoint
+(e.g., via `requests.post(..., json=payload)`).
 
-## Input Format
+## Why you might need this
 
-The input file should be a JSON array of message objects:
+* You have a chatbot, meeting‑notes exporter, or any system that produces a
+  chronological list of speaker utterances.
+* You want to push that transcript into a Notion page without writing a full
+  integration yourself.
+* The script handles the low‑level Notion block format for you and writes the
+  result atomically, so you can safely chain it in CI pipelines.
+
+## Input format
+
+The script expects a JSON file that contains a **list** of conversation entries.
+Each entry must have at least a `text` field and may optionally include:
+
+| Key            | Type               | Description                                   |
+|----------------|--------------------|-----------------------------------------------|
+| `speaker`      | `string` (optional) | Name of the person speaking.                  |
+| `text`         | `string` (required) | The utterance itself.                         |
+| `action_items` | `list[string]` (optional) | Follow‑up tasks extracted from the utterance. |
+
+Example `conversation.json`:
 
