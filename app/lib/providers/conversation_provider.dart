@@ -11,7 +11,6 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
@@ -19,6 +18,7 @@ import 'package:omi/utils/logger.dart';
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
+
 /// Returns null when the check could not be made, so the caller keeps the
 /// last known answer instead of reading a failure as "no recaps".
 typedef DailySummariesChecker = Future<bool?> Function();
@@ -97,8 +97,6 @@ class ConversationProvider extends ChangeNotifier {
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
-
-  final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
 
@@ -1268,16 +1266,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> addConversation(ServerConversation conversation) async {
-    // Check if this is the first conversation
-    bool wasEmpty = conversations.isEmpty;
-
     conversations.insert(0, conversation);
     _groupConversationsByDateWithoutNotify();
-
-    // Mark first conversation for app review
-    if (wasEmpty && await _appReviewService.isFirstConversation()) {
-      await _appReviewService.markFirstConversation();
-    }
 
     notifyListeners();
   }

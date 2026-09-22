@@ -21,14 +21,12 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -47,6 +45,7 @@ import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/edit_segment_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/summary_tab.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 import 'widgets/speaker_summary_action.dart';
 
@@ -111,12 +110,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   final focusOverviewField = FocusNode();
   final GlobalKey _shareButtonKey = GlobalKey();
   TabController? _controller;
-  final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
   // Callback to seek audio to transcript segment (start, end) in wall seconds
   Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
+  bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
@@ -275,13 +274,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         }
       } else {
         _selectInitialTabIfNeeded(provider.conversation);
-      }
-
-      // Check if this is the first conversation and show app review prompt
-      if (await _appReviewService.isFirstConversation()) {
-        if (mounted) {
-          await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
-        }
       }
 
       // Auto-open share to contacts sheet if requested (from important conversation notification)
@@ -1173,6 +1165,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                   },
                                 ),
                                 SummaryTab(
+                                  reviewEnabled: !widget.isFromOnboarding &&
+                                      widget.initialSeekStart == null &&
+                                      selectedTab == ConversationTab.summary &&
+                                      !_controller!.indexIsChanging &&
+                                      !_isSearching &&
+                                      !_isSharing &&
+                                      !_isDownloadingAudio &&
+                                      !_reviewInterrupted,
                                   searchQuery: _searchQuery,
                                   currentResultIndex: getCurrentResultIndexForHighlighting(),
                                   onTapWhenSearchEmpty: () {
@@ -1214,6 +1214,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                       final hasActionItems =
                           conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                       return ConversationBottomBar(
+                        onAudioInteraction: () {
+                          if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+                        },
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
@@ -1402,78 +1405,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class SummaryTab extends StatefulWidget {
-  final String searchQuery;
-  final int currentResultIndex;
-  final VoidCallback? onTapWhenSearchEmpty;
-
-  const SummaryTab({super.key, this.searchQuery = '', this.currentResultIndex = -1, this.onTapWhenSearchEmpty});
-
-  @override
-  State<SummaryTab> createState() => _SummaryTabState();
-}
-
-class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return GestureDetector(
-      excludeFromSemantics: true,
-      behavior: HitTestBehavior.translucent,
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        // If search is empty, call the callback to close search
-        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-          widget.onTapWhenSearchEmpty!();
-        }
-      },
-      child: Selector<ConversationDetailProvider, bool>(
-        selector: (context, provider) => provider.conversation.discarded,
-        builder: (context, discarded, child) {
-          return Stack(
-            children: [
-              CustomScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                slivers: [
-                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
-                  discarded
-                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                      : GetAppsWidgets(
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                          canStartEditing: () {
-                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                            if (!connectivityProvider.isConnected) {
-                              ConnectivityProvider.showNoInternetDialog(context);
-                              return false;
-                            }
-                            return true;
-                          },
-                          onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
-                          onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
-                          onSaveSummarySelection: (selection, newContent) {
-                            PlatformManager.instance.analytics.editSummarySaved();
-                            context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                  selection,
-                                  newContent,
-                                );
-                          },
-                        ),
-                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
-                ],
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -1943,7 +1874,6 @@ class ActionItemDetailWidget extends StatefulWidget {
 
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
-  final AppReviewService _appReviewService = AppReviewService();
   Timer? _pendingClearTimer;
 
   @override
@@ -2076,13 +2006,6 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       if (currentIndex != -1) {
         if (newValue) {
           PlatformManager.instance.analytics.checkedActionItem(provider.conversation, currentIndex);
-
-          if (!await _appReviewService.hasCompletedFirstActionItem()) {
-            await _appReviewService.markFirstActionItemCompleted();
-            if (mounted) {
-              _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
-            }
-          }
         } else {
           PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);
         }
