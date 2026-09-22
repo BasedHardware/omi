@@ -172,7 +172,7 @@ checks:
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
@@ -532,6 +532,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
+  - id: ios-native-probe-compile
+    command: ["python3", "app/ios/test/phone_mic_probe/build.py", "--check"]
+    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/lib/services/devices/models.dart", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the native diagnostic app must compile with real UIKit/CoreBluetooth dependencies even when agents have no iPhone or signing identity"
+  - id: ios-phone-mic-lifecycle-replay
+    command: ["ruby", "app/ios/test/phone_mic_lifecycle_replay_test.rb"]
+    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_lifecycle_replay_test.*", "app/ios/test/phone_mic_probe/**", "app/test/fixtures/phone_mic_native_events/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native capture changes must preserve foreground continuity, interruption recovery, and stale-frame rejection without requiring a physical iPhone"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
     triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", "app/test/fixtures/capture_policy.json", ".github/checks-manifest.yaml"]
