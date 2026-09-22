@@ -1901,6 +1901,269 @@
         "mobile-review-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "productJourneyStarted",
+      "wire_name": "Product Journey Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "attempt",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyFirstResult",
+      "wire_name": "Product Journey First Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "progress",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyOutcome",
+      "wire_name": "Product Journey Outcome",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "outcome",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "success",
+            "empty",
+            "failure",
+            "cancelled",
+            "superseded",
+            "unobserved"
+          ]
+        },
+        "failure": {
+          "type": "enum",
+          "wire_name": "failure",
+          "values": [
+            "none",
+            "network",
+            "server",
+            "unauthorized",
+            "permission_denied",
+            "quota",
+            "timeout",
+            "invalid_response",
+            "incomplete",
+            "unknown"
+          ]
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "resultCount": {
+          "type": "int",
+          "wire_name": "result_count"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productValueEvent",
+      "wire_name": "Product Value",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "result_viewed",
+            "copied",
+            "shared",
+            "task_completed",
+            "memory_kept",
+            "feedback_helpful",
+            "search_result_opened",
+            "recording_recovered"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": null
     }
   ]
 }

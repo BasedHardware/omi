@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Волам да јадам сладолед...",
+    "memoryContentHint": "Претпочитам утрински состаноци.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10838,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Гласот е подготвен за препознавање} saved_sample_awaiting_embedding{Примерокот е зачуван, се чека обработка на гласот} not_learned{Гласот не е научен} other{Статусот на гласот е непознат}}",
     "tagSpeakerIncludingLaterSpeech": "Означи го и подоцнежниот говор на овој говорник",
     "updateSummaryWithNewNames": "Ажурирај го резимето со новите имиња",
-    "syncStatusUnsupportedAudio": "Аудиото не може да се прочита — не може да се синхронизира"
+    "syncStatusUnsupportedAudio": "Аудиото не може да се прочита — не може да се синхронизира",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Што можеш да направиш за мене?} goal{Помогни ми да поставам цел} activity{Сумирај ги моите неодамнешни активности} improve{Како можам да се подобрам?} other{}}",
+    "nextWeek": "Следната недела",
+    "clearSearch": "Исчисти го пребарувањето"
 }
