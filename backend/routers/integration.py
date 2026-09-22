@@ -700,7 +700,7 @@ def get_tasks_via_integration(
     for task in tasks:
         task_data = task.copy()
         if task_data.get('is_locked', False):
-            description = task_data.get('description', '')
+            description = task_data.get('description') or ''
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
         try:
             task_items.append(integration_models.TaskItem(**task_data))
