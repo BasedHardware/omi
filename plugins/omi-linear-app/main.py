@@ -415,13 +415,20 @@ def get_user_profile(uid: str) -> Optional[LinearUser]:
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
+    sig = ""
+    from linear_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
     if not uid:
         return templates.TemplateResponse("setup.html", {
             "request": request,
             "authenticated": False,
-            "error": "Missing user ID"
+            "error": "Missing user ID",
+            "disconnect_sig": sig,
         })
-    
+
     tokens = get_linear_tokens(uid)
     authenticated = tokens is not None
     
@@ -534,8 +541,10 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 
 
 @app.get("/disconnect")
-async def disconnect_linear(uid: str):
+async def disconnect_linear(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Linear account."""
+    from linear_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_linear_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 

@@ -229,7 +229,7 @@ def create_folder_name(title: str, finished_at: datetime) -> str:
 
 
 def get_home_page_html(
-    uid: str, connected: bool, display_name: str = "", email: str = "", settings: dict = None
+    uid: str, connected: bool, display_name: str = "", email: str = "", settings: dict = None, sig: str = ""
 ) -> str:
     """Generate home page HTML."""
     if settings is None:
@@ -299,7 +299,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={uid}&sig={sig}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
@@ -349,6 +349,16 @@ async def home(uid: str = Query(None)):
         )
 
     tokens = get_dropbox_tokens(uid)
+    # Compute a signed signature for the disconnect link so that an unauthenticated
+    # party cannot forge a crafted GET /disconnect?uid=<victim> URL.  When the
+    # signing secret is not configured the signature is omitted and the disconnect
+    # handler will reject with 503 / 401 (fail-closed).
+    sig = ""
+    from dropbox_disconnect_auth import _configured_secret, sign_uid
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
     if tokens:
         return HTMLResponse(
             get_home_page_html(
@@ -356,6 +366,7 @@ async def home(uid: str = Query(None)):
                 connected=True,
                 display_name=tokens.get("display_name", ""),
                 email=tokens.get("email", ""),
+                sig=sig,
             )
         )
     else:
@@ -496,8 +507,10 @@ async def auth_callback(
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Dropbox account."""
+    from dropbox_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_dropbox_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 

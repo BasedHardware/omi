@@ -1061,6 +1061,15 @@ async def root(uid: str = Query(None)):
         }
 
     tokens = get_notion_tokens(clean_uid)
+    # Compute a signed signature for the disconnect link so that an unauthenticated
+    # party cannot forge a crafted GET /disconnect?uid=<victim> URL.  When the
+    # signing secret is not configured the signature is omitted and the disconnect
+    # handler will reject with 503 / 401 (fail-closed).
+    sig = ""
+    from notion_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(clean_uid)
 
     if not tokens:
         safe_uid = html.escape(clean_uid, quote=True)
@@ -1131,7 +1140,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Search for budget in Notion"</div>
                 </div>
 
-                <a href="/disconnect?uid={safe_uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={safe_uid}&sig={sig}" class="btn btn-secondary btn-block">
                     Disconnect Notion
                 </a>
 
@@ -1297,8 +1306,10 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Notion."""
+    from notion_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     clean_uid = _sanitize_uid(uid)
     if not clean_uid:
         return RedirectResponse(url="/")

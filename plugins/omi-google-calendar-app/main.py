@@ -998,6 +998,16 @@ async def root(uid: str = Query(None)):
 
     tokens = get_google_tokens(uid)
 
+    # Compute a signed signature for the disconnect link so that an unauthenticated
+    # party cannot forge a crafted GET /disconnect?uid=<victim> URL.  When the
+    # signing secret is not configured the signature is omitted and the disconnect
+    # handler will reject with 503 / 401 (fail-closed).
+    sig = ""
+    from google_calendar_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
     if not tokens:
         # uid is client-controlled and lands in href/action attributes below;
         # percent-encode once so a quote cannot break out of the attribute.
@@ -1092,7 +1102,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"What do I have scheduled for Friday?"</div>
                 </div>
 
-                <a href="/disconnect?uid={quote(uid, safe='')}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={quote(uid, safe='')}&sig={sig}" class="btn btn-secondary btn-block">
                     Disconnect Google Calendar
                 </a>
 
@@ -1251,8 +1261,10 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Google Calendar."""
+    from google_calendar_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_google_tokens(uid)
     return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 

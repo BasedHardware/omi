@@ -1376,6 +1376,46 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int against booleans, protect null allergen sets, and handle product summaries hermetically"
+  - id: gcal-disconnect-auth-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_google_calendar_disconnect_auth.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: hive-disconnect-auth-tests
+    command: ["python3", "plugins/omi-hive-app/test_hive_disconnect_auth.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: linear-disconnect-auth-tests
+    command: ["python3", "plugins/omi-linear-app/test_linear_disconnect_auth.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: notion-disconnect-auth-tests
+    command: ["python3", "plugins/omi-notion-app/test_notion_disconnect_auth.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: dropbox-disconnect-auth-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_dropbox_disconnect_auth.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: shipbob-disconnect-auth-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_shipbob_disconnect_auth.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: ms365-disconnect-auth-tests
+    command: ["python3", "plugins/omi-ms365-app/test_ms365_disconnect_auth.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect requests must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
+  - id: shopify-disconnect-auth-tests
+    command: ["python3", "plugins/omi-shopify-app/test_shopify_disconnect_auth.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15589: GET /disconnect accepted any caller-supplied uid and revoked that user's OAuth credentials with no authentication; disconnect links must now carry an HMAC-SHA256 signature of the uid keyed with the shared disconnect secret, and the handler must fail closed with 503 when unconfigured and 401 on missing or wrong signatures"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
