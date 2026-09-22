@@ -20,6 +20,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
@@ -275,12 +276,13 @@ class _FCMNotificationService implements NotificationInterface {
       }
     });
 
-    void handleNotificationTap(RemoteMessage? message) {
+    Future<void> handleNotificationTap(RemoteMessage? message) async {
       if (message == null) return;
       final navigateTo = NotificationUtil.navigateToFromFcmData(message.data);
-      if (navigateTo != null) {
-        NotificationUtil.handleNavigateTo(navigateTo);
-      }
+      if (navigateTo == null) return;
+
+      final objectId = _notificationObjectId(message.data);
+      await NotificationUtil.handleNavigateTo(navigateTo, objectId: objectId);
     }
 
     // Background: app is backgrounded and the user taps a push notification (#5126).
@@ -288,6 +290,19 @@ class _FCMNotificationService implements NotificationInterface {
 
     // Terminated: app was killed and opened via notification tap (#5126).
     FirebaseMessaging.instance.getInitialMessage().then(handleNotificationTap);
+  }
+
+  RecordReference? _notificationObjectId(Map<String, dynamic> data) {
+    for (final key in const ['conversation_id', 'summary_id', 'message_id']) {
+      final value = data[key];
+      if (value is! String || value.isEmpty) continue;
+      try {
+        return RecordReference.fromId(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
