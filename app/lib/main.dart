@@ -178,7 +178,7 @@ Future _init() async {
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
-  await PhysicalQualification.startupStage('service_manager_init', ServiceManager.init);
+  await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
