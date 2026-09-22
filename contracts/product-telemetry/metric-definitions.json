@@ -1,0 +1,81 @@
+{
+  "schema_version": "product-scorecard.v1",
+  "event_time_policy": {
+    "cohort_field": "occurred_at",
+    "late_arrival_field": "ingested_at",
+    "deduplication": "event_id within namespace/environment/app_build",
+    "missing_data": "insufficient_evidence",
+    "maturity": "retention cohorts are counted only after the full D1/D7/D30 window"
+  },
+  "isolation": ["namespace", "environment", "app_build", "platform"],
+  "metrics": {
+    "journey_reliability": {
+      "definition": "successful Product Journey Outcome divided by Product Journey Started attempts",
+      "outcomes": ["success", "empty", "failure", "cancelled", "superseded", "unobserved"],
+      "policy": "Recording Completed alone proves neither server persistence nor usable content; native batch observation gaps are unknown"
+    },
+    "journey_pending_rate": {
+      "definition": "started attempts younger than one hour without an observed outcome"
+    },
+    "journey_unknown_rate": {
+      "definition": "started attempts older than one hour without an outcome, or explicitly unobserved"
+    },
+    "time_to_first_result_ms": {
+      "definition": "event-time latency from Product Journey Started to Product Journey First Result"
+    },
+    "activation_rate": {
+      "definition": "signed-up users with a Product Value event"
+    },
+    "time_to_value_seconds": {
+      "definition": "event-time latency from signup to first Product Value"
+    },
+    "retention_d1_d7_d30": {
+      "definition": "mature signup cohorts with Product Value in the closed [signup+n, signup+n+1) event-time window"
+    },
+    "helpfulness_exposure_response_rate": {
+      "definition": "users submitting feedback divided by users exposed to a feedback prompt"
+    },
+    "helpfulness_rate": {
+      "definition": "helpful feedback submissions divided by all feedback submissions"
+    },
+    "paid_churn_rate": {
+      "definition": "authoritative Billing Subscription Churned users after the selected start-of-window Billing Paid Population Snapshot divided by that snapshot's paid users; scheduled cancellation lifecycle events are excluded while an ended subscription remains churn",
+      "policy": "missing start-of-window snapshot is insufficient evidence; subscription-start events cannot manufacture the denominator"
+    },
+    "error_affected_user_rate": {
+      "definition": "active users with Product Error divided by active users"
+    },
+    "capture_observed_expected_ratio": {
+      "definition": "observed audio/transcription duration divided by expected capture duration"
+    },
+    "telemetry_health_observations": {
+      "definition": "count of explicit Mobile Telemetry Health observations, with dropped and handoff failure sums",
+      "policy": "absence is insufficient evidence; this does not prove backend delivery"
+    },
+    "render_slow_frame_rate": {
+      "definition": "frames over the fixed 32ms threshold divided by observed frame summaries",
+      "policy": "render timing only; no inference about network readiness, native hangs, battery, or usefulness"
+    },
+    "render_first_frame_ms": {
+      "definition": "mean duration to the first post-frame callback for bounded named surfaces"
+    },
+    "capture_audio_observation_rate": {
+      "definition": "recording sessions with an explicit audio observation divided by recording sessions that emitted Recording Started"
+    },
+    "capture_transcript_observation_rate": {
+      "definition": "recording sessions with an explicit transcript observation divided by recording sessions that emitted Recording Started"
+    },
+    "recording_conversation_linkage": {
+      "definition": "recording sessions with an explicit conversation_id/object_id join divided by recording sessions observed",
+      "policy": "timestamp proximity never establishes a join"
+    },
+    "cost_usd": {
+      "definition": "sum of explicitly attributed cost_usd properties; absent cost is insufficient evidence"
+    }
+  },
+  "agent_contract": {
+    "evidence_packet": "product-evidence-packet.v1",
+    "required_fields": ["status", "cohort", "comparison", "attribution", "evidence", "proposed_action"],
+    "production_rollout": "never automatic"
+  }
+}

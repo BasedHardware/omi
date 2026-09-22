@@ -650,7 +650,7 @@
     "allMemoriesPublicResult": "Todos los recuerdos son ahora públicos",
     "newMemory": "✨ Nueva memoria",
     "editMemory": "✏️ Editar memoria",
-    "memoryContentHint": "Me gusta el helado...",
+    "memoryContentHint": "Prefiero las reuniones por la mañana.",
     "failedToSaveMemory": "Error al guardar.",
     "saveMemory": "Guardar recuerdo",
     "retry": "Reintentar",
@@ -3251,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Voz lista para el reconocimiento} saved_sample_awaiting_embedding{Muestra guardada; falta procesar la voz} not_learned{Voz no aprendida} other{Estado de voz desconocido}}",
     "tagSpeakerIncludingLaterSpeech": "Etiquetar también el habla posterior de este hablante",
     "updateSummaryWithNewNames": "Actualizar el resumen con los nombres nuevos",
-    "syncStatusUnsupportedAudio": "No se pudo leer el audio — no se puede sincronizar"
+    "syncStatusUnsupportedAudio": "No se pudo leer el audio — no se puede sincronizar",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{¿Qué puedes hacer por mí?} goal{Ayúdame a fijar una meta} activity{Resume mi actividad reciente} improve{¿Cómo puedo mejorar?} other{}}",
+    "nextWeek": "La próxima semana",
+    "clearSearch": "Borrar búsqueda"
 }
