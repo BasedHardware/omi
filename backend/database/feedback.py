@@ -20,10 +20,13 @@ are operator data, read by admin.omi.me and by anyone with Firestore access in
 the GCP project, and never served to an end user.
 """
 
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+from google.api_core.exceptions import AlreadyExists, Conflict
 
 from database._client import get_firestore_client
 from database.firestore_index_registry import NEGATIVE_FEEDBACK_EVENTS_QUERY
@@ -36,6 +39,8 @@ from models.feedback import (
     FeedbackSurface,
     FeedbackTargetKind,
     MAX_COMMENT_LENGTH,
+    MobileFeedbackKind,
+    MobileFeedbackReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,8 +99,11 @@ def _normalized_reason(reason: Optional[str]) -> Optional[str]:
     try:
         return FeedbackReason(reason).value
     except ValueError:
-        logger.warning(f'Discarding unrecognized feedback reason {reason!r}; recording the rating without it.')
-        return None
+        try:
+            return MobileFeedbackReason(reason).value
+        except ValueError:
+            logger.warning(f'Discarding unrecognized feedback reason {reason!r}; recording the rating without it.')
+            return None
 
 
 def record_feedback_event(
@@ -115,6 +123,20 @@ def record_feedback_event(
     langsmith_run_id: Optional[str] = None,
     prompt_name: Optional[str] = None,
     prompt_commit: Optional[str] = None,
+    event_id: Optional[str] = None,
+    feedback_id: Optional[str] = None,
+    feedback_kind: Optional[MobileFeedbackKind] = None,
+    app_build: Optional[str] = None,
+    client_app_namespace: Optional[str] = None,
+    client_app_profile: Optional[str] = None,
+    backend_release: Optional[str] = None,
+    model_name: Optional[str] = None,
+    model_version: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    related_conversation_id: Optional[str] = None,
+    create_only: bool = False,
+    raise_on_error: bool = False,
 ) -> Optional[str]:
     """Append one rating to the ledger. Returns the event id, or None on failure.
 
@@ -133,7 +155,7 @@ def record_feedback_event(
 
     reason = _normalized_reason(reason)
 
-    event_id = str(uuid.uuid4())
+    event_id = event_id or str(uuid.uuid4())
     record: Dict[str, Any] = {
         'id': event_id,
         'uid': uid,
@@ -145,8 +167,9 @@ def record_feedback_event(
     }
     if reason:
         record['reason'] = reason
-    if comment:
-        record['comment'] = comment.strip()[:MAX_COMMENT_LENGTH]
+    normalized_comment = (comment or '').strip()[:MAX_COMMENT_LENGTH] or None
+    if normalized_comment:
+        record['comment'] = normalized_comment
     if platform:
         record['platform'] = platform
     if app_version:
@@ -163,14 +186,165 @@ def record_feedback_event(
         record['prompt_name'] = prompt_name
     if prompt_commit:
         record['prompt_commit'] = prompt_commit
+    optional_fields = {
+        'feedback_id': feedback_id,
+        'feedback_kind': feedback_kind.value if isinstance(feedback_kind, MobileFeedbackKind) else feedback_kind,
+        'app_build': app_build,
+        'client_app_namespace': client_app_namespace,
+        'client_app_profile': client_app_profile,
+        'backend_release': backend_release,
+        'model_name': model_name,
+        'model_version': model_version,
+        'trace_id': trace_id,
+        'correlation_id': correlation_id,
+        'related_conversation_id': related_conversation_id,
+    }
+    record.update({key: value for key, value in optional_fields.items() if value})
 
     try:
-        get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).set(record)
+        reference = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id)
+        if create_only:
+            reference.create(record)
+        else:
+            reference.set(record)
         return event_id
     except Exception as e:
         # The comment may hold user text, so log the shape and never the row.
         logger.error(f'Failed to record feedback event (surface={record["surface"]}, value={value}): {e}')
+        if raise_on_error:
+            raise
         return None
+
+
+class FeedbackPersistenceError(RuntimeError):
+    """A durable explicit feedback write could not be confirmed."""
+
+
+class FeedbackIdempotencyConflict(ValueError):
+    """A client reused a feedback id for a different immutable event."""
+
+
+def _idempotent_event_id(uid: str, feedback_id: str) -> str:
+    digest = hashlib.sha256(f'{uid}:{feedback_id}'.encode('utf-8')).hexdigest()
+    return f'mobile-feedback-{digest}'
+
+
+def record_feedback_event_idempotent(
+    uid: str,
+    surface: FeedbackSurface,
+    target_kind: FeedbackTargetKind,
+    target_id: str,
+    value: int,
+    *,
+    feedback_id: str,
+    reason: Optional[str] = None,
+    comment: Optional[str] = None,
+    platform: Optional[str] = None,
+    app_version: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    target_created_at: Optional[datetime] = None,
+    langsmith_run_id: Optional[str] = None,
+    prompt_name: Optional[str] = None,
+    prompt_commit: Optional[str] = None,
+    feedback_kind: Optional[MobileFeedbackKind] = None,
+    app_build: Optional[str] = None,
+    client_app_namespace: Optional[str] = None,
+    client_app_profile: Optional[str] = None,
+    backend_release: Optional[str] = None,
+    model_name: Optional[str] = None,
+    model_version: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    related_conversation_id: Optional[str] = None,
+) -> tuple[str, bool]:
+    """Create one durable mobile feedback row, atomically and idempotently.
+
+    The feedback id is scoped to the authenticated user and hashed into a
+    Firestore-safe document id.  Retries read back the existing immutable row;
+    reuse with a different payload raises ``FeedbackIdempotencyConflict``.
+    Unlike the legacy best-effort writers, this path raises on an unconfirmed
+    write so the mobile client can retry instead of receiving a false success.
+    """
+    normalized_feedback_id = str(feedback_id or '').strip()
+    if not normalized_feedback_id:
+        raise ValueError('feedback_id is required')
+    event_id = _idempotent_event_id(uid, normalized_feedback_id)
+    try:
+        record_id = record_feedback_event(
+            uid,
+            surface,
+            target_kind,
+            target_id,
+            value,
+            reason=reason,
+            comment=comment,
+            platform=platform,
+            app_version=app_version,
+            app_id=app_id,
+            chat_session_id=chat_session_id,
+            target_created_at=target_created_at,
+            langsmith_run_id=langsmith_run_id,
+            prompt_name=prompt_name,
+            prompt_commit=prompt_commit,
+            event_id=event_id,
+            feedback_id=normalized_feedback_id,
+            feedback_kind=feedback_kind,
+            app_build=app_build,
+            client_app_namespace=client_app_namespace,
+            client_app_profile=client_app_profile,
+            backend_release=backend_release,
+            model_name=model_name,
+            model_version=model_version,
+            trace_id=trace_id,
+            correlation_id=correlation_id,
+            related_conversation_id=related_conversation_id,
+            create_only=True,
+            raise_on_error=True,
+        )
+        if record_id:
+            return record_id, True
+    except (AlreadyExists, Conflict):
+        pass
+    except Exception as exc:
+        # The emulator/fakes and some Firestore transports surface an atomic
+        # create collision as a generic exception.  Read back before deciding
+        # that durability failed; a missing document remains a hard failure.
+        try:
+            existing_after_error = (
+                get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
+            )
+        except Exception as read_exc:
+            raise FeedbackPersistenceError('feedback write was not confirmed') from read_exc
+        if not getattr(existing_after_error, 'exists', False):
+            raise FeedbackPersistenceError('feedback write was not confirmed') from exc
+
+    try:
+        document = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
+    except Exception as exc:
+        raise FeedbackPersistenceError('feedback idempotency read failed') from exc
+    if not getattr(document, 'exists', False):
+        raise FeedbackPersistenceError('feedback write disappeared before read-back')
+    existing = document.to_dict() or {}
+    immutable = {
+        'uid': uid,
+        'surface': surface.value,
+        'target_kind': target_kind.value,
+        'target_id': target_id,
+        'value': int(value),
+        'feedback_id': normalized_feedback_id,
+        'reason': _normalized_reason(reason),
+        'comment': (comment or '').strip()[:MAX_COMMENT_LENGTH] or None,
+        'platform': platform or None,
+        'app_version': app_version or None,
+        'app_build': app_build or None,
+        'client_app_namespace': client_app_namespace or None,
+        'client_app_profile': client_app_profile or None,
+        'feedback_kind': feedback_kind.value if isinstance(feedback_kind, MobileFeedbackKind) else feedback_kind,
+    }
+    if any(existing.get(key) != expected for key, expected in immutable.items()):
+        raise FeedbackIdempotencyConflict('feedback_id is already bound to a different feedback event')
+    return event_id, False
 
 
 def get_feedback_event(event_id: str) -> Optional[FeedbackEvent]:
