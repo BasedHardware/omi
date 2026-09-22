@@ -10,12 +10,17 @@ python sdks/python-cli/examples/export_all.py snapshot.json
 Adjust how many records per resource to fetch (default 100):
 
 ```sh
-python sdks/python-cli/examples/export_all.py snapshot.json --limit 200
+python sdks/python-cli/examples/export_all.py snapshot.json --limit 50
 ```
+
+`--limit` is passed as-is to all four resources, so it must be a value every
+resource accepts. Per-resource caps today: memories 200, conversations 200,
+action items 500, goals 100 — so keep `--limit` at 100 or below, or the
+`goal list` fetch will fail and abort the whole export.
 
 ## Scope: overview snapshot, not a guaranteed-complete backup
 
-This is a **single page per resource** (bounded by `--limit`), not a paginated export — it's meant for a quick "what does my account look like right now" snapshot. If you need a guaranteed-complete backup of a single resource with an account beyond the page limit, use the paginated exporters instead: [`export_conversations.md`](export_conversations.md), [`export_action_items.md`](export_action_items.md), or [`export_open_action_items.md`](export_open_action_items.md).
+This is a **single page per resource** (bounded by `--limit`), not a paginated export — it's meant for a quick "what does my account look like right now" snapshot. If you need a guaranteed-complete backup of a single resource with an account beyond the page limit, use a dedicated paginated exporter for that resource instead.
 
 ## How it works
 

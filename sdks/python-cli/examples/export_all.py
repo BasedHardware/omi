@@ -5,9 +5,8 @@ goals into one JSON bundle.
 Runs `omi --json <resource> list` for each of the four resource types as
 subprocesses and combines the results into one object, with a metadata
 header recording when the snapshot was taken and how many records of each
-type were captured. This is a quick, one-command overview snapshot; for a
-guaranteed-complete, paginated backup of a single resource, see
-export_conversations.py / export_action_items.py.
+type were captured. This is a quick, one-command overview snapshot, not a
+paginated, guaranteed-complete backup of a single resource.
 
 Usage:
     python export_all.py OUTPUT.json [--limit N]
