@@ -74,6 +74,70 @@ omi --json local task search "taxes" --include-completed
 
 השלם או מחק משימות רק כאשר המשתמש מבקש זאת במפורש:
 
+השלם או מחק משימות רק כאשר המשתמש מבקש זאת במפורש:
+
 ```bash
-omi --json local task complete task_1
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
+
+`omi local screenshot SCREENSHOT_ID --output PATH` שומר את צילום המסך בדיסק ועדיין מדפיס JSON ל-stdout עבור סקריפטים. מזהה צילום המסך מגיע בדרך כלل מ-`local search-screen` או שאילתת SQL על טבלת `screenshots`. אם אפליקציית Desktop מחזירה שגיאה מובנית כמו `screenshot_pending`, `screenshot_file_missing`, או `screenshot_chunk_corrupted`, מצב JSON שומר על השדות `reason`, `hint`, ו-`screenshot_id` ב-stderr כדי שסוכנים יוכלו לנסות שוב עם מזהה ישן יותר או לדווח על החסימה המדויקת. אמת פלטים מוצלחים עם `file PATH` לפני העברתם לכלי ראייה ממוחשבת.
+
+## דוגמה מעשית: לולאת סוכן פייתון (Python)
+
+```python
+import json
+import subprocess
+from typing import Any
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        # The CLI prints structured errors to stderr in JSON mode:
+        # {"error": "...", "detail": "..."}
+        try:
+            err = json.loads(result.stderr)
+        except json.JSONDecodeError:
+            err = {"error": result.stderr.strip()}
+        raise RuntimeError(f"omi exited {result.returncode}: {err}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+# Read all open action items and mark anything older than 30 days complete.
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+items = omi("action-item", "list", "--open")
+for item in items or []:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## ניהול מגבלות קצב (Handling rate limits)
+
+זיכרונות: 120/שעה. שיחות: 25/שעה. יצירת אצוות: 15/שעה.
+
+```python
+result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
+if result.returncode == 4:                             # rate limited
+    err = json.loads(result.stderr)
+    # err["detail"] looks like: "Retry in 12s. ..."
+    time.sleep(parse_retry_window(err["detail"]) or 60)
+```
+
+## טיפים שימושיים (Tips)
+
+* השתמש ב-`--profile <name>` אם הסוכן שלך מנהל מספר חשבונות Omi. לכל פרופיל יש אישורים וכתובת API משלו.
+* השתמש ב-`--api-base http://localhost:8080` לבדיקות מול שרת מקומי.
+* השתמש ב-`OMI_LOCAL_API_URL` ו-`OMI_LOCAL_TOKEN` כדי לעקוף את הגדרות Desktop API של הפרופיל להרצה אחת.
+* השתמש ב-`--verbose` לניפוי שגיאות — מדפיס ל-stderr מבלי להשפיע על stdout, כך שפורמט ה-JSON נשאר תקין.
+* להזרמת תוכן לשיחה דרך צינור (pipe), השתמש ב-`--text -`:
+  ```bash
+  cat meeting_notes.md | omi conversation create --text - --text-source other_text
+  ```
