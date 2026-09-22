@@ -621,9 +621,7 @@ async def tool_search(request: Request):
 
     except Exception as e:
         log(f"Error searching: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        return ChatToolResponse(error="Search failed")
 
 
 @app.post("/tools/list_pages", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -667,7 +665,7 @@ async def tool_list_pages(request: Request):
 
     except Exception as e:
         log(f"Error listing pages: {e}")
-        return ChatToolResponse(error=f"Failed to list pages: {str(e)}")
+        return ChatToolResponse(error="Failed to list pages")
 
 
 @app.post("/tools/get_page", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -740,7 +738,7 @@ async def tool_get_page(request: Request):
 
     except Exception as e:
         log(f"Error getting page: {e}")
-        return ChatToolResponse(error=f"Failed to get page: {str(e)}")
+        return ChatToolResponse(error="Failed to get page")
 
 
 @app.post("/tools/create_page", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -894,7 +892,7 @@ async def tool_update_page(request: Request):
 
     except Exception as e:
         log(f"Error updating page: {e}")
-        return ChatToolResponse(error=f"Failed to update page: {str(e)}")
+        return ChatToolResponse(error="Failed to update page")
 
 
 @app.post("/tools/append_content", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -971,7 +969,7 @@ async def tool_list_databases(request: Request):
 
     except Exception as e:
         log(f"Error listing databases: {e}")
-        return ChatToolResponse(error=f"Failed to list databases: {str(e)}")
+        return ChatToolResponse(error="Failed to list databases")
 
 
 @app.post("/tools/query_database", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1023,7 +1021,7 @@ async def tool_query_database(request: Request):
 
     except Exception as e:
         log(f"Error querying database: {e}")
-        return ChatToolResponse(error=f"Failed to query database: {str(e)}")
+        return ChatToolResponse(error="Failed to query database")
 
 
 # ============================================
