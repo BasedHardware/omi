@@ -5,7 +5,7 @@ Use this recipe to export Omi conversations and structured summaries into an ele
 Export conversations:
 
 ```sh
-omi --json conversation list --limit 20 > conversations.json
+omi --json conversation list --include-transcript --limit 20 > conversations.json
 ```
 
 Generate HTML report:
