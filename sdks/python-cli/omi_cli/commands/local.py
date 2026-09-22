@@ -146,7 +146,7 @@ def screenshot(
     written = _write_screenshot_result(result, output)
     raw_metadata = result.get("metadata") if isinstance(result, Mapping) else None
     metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
-    ctx.renderer.success(f"Wrote screenshot to [bold]{written}[/bold].")
+    ctx.renderer.success(f"Wrote screenshot to [bold]{escape(str(written))}[/bold].")
     ctx.renderer.emit(
         {
             "path": str(written),
