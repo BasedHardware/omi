@@ -93,6 +93,7 @@ class CaptureController extends ChangeNotifier
   final SharedPreferencesUtil _preferences;
   final IMicRecorderService? _phoneMicBatchRecorder;
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
+  final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
   bool _sessionGeolocationPublishedToWal = false;
@@ -225,6 +226,7 @@ class CaptureController extends ChangeNotifier
     CaptureBleListeners? bleListeners,
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
+    Future<CreateConversationResponse?> Function()? processInProgressConversation,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -243,6 +245,7 @@ class CaptureController extends ChangeNotifier
         _bleListeners = bleListeners,
         _openSocketOverride = openSocket,
         _sessionOwner = sessionOwner,
+        _processInProgressConversationOverride = processInProgressConversation,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
@@ -2650,6 +2653,9 @@ class CaptureController extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
+      // Replace the optimistic Process Now placeholder once the server confirms
+      // a real processing row, so timeout/retry apply to the confirmed id.
+      externalActions.removeProcessingConversation('0');
       externalActions.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _pendingAutoSyncConversationId = event.memory.id;
@@ -2676,6 +2682,7 @@ class CaptureController extends ChangeNotifier
 
     if (event is ConversationEvent) {
       event.memory.isNew = true;
+      externalActions.removeProcessingConversation('0');
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
@@ -2763,35 +2770,64 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  /// Local-only optimistic row shown on Conversations immediately after Process Now.
+  static const String optimisticProcessingConversationId = '0';
+
+  ServerConversation _optimisticProcessingConversation() {
+    return ServerConversation(
+      id: optimisticProcessingConversationId,
+      createdAt: DateTime.now(),
+      structured: Structured('', ''),
+      status: ConversationStatus.processing,
+    );
+  }
+
+  bool _conversationHasTitleAndEmoji(ServerConversation conversation) {
+    final structured = conversation.structured;
+    return structured.title.trim().isNotEmpty && structured.emoji.trim().isNotEmpty;
+  }
+
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
 
-    // Force-drain tail buffer before clearing state
     final phoneSync = _wal.getSyncs().phone;
+    // Show the Conversations-tab skeleton before the WAL drain. Awaiting
+    // finalizeCurrentSession first is the 30–60s dead window users hit today.
+    // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    externalActions.addProcessingConversation(_optimisticProcessingConversation());
+
     await phoneSync.finalizeCurrentSession();
     _clearSessionLocation();
 
     _resetStateVariables();
-    externalActions.addProcessingConversation(
-      ServerConversation(
-        id: '0',
-        createdAt: DateTime.now(),
-        structured: Structured('', ''),
-        status: ConversationStatus.processing,
-      ),
-    );
-    processInProgressConversation().then((result) async {
+    final process = _processInProgressConversationOverride ?? processInProgressConversation;
+    process().then((result) async {
       if (result == null || result.conversation == null) {
-        externalActions.removeProcessingConversation('0');
+        externalActions.removeProcessingConversation(optimisticProcessingConversationId);
         return;
       }
-      externalActions.removeProcessingConversation('0');
-      result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
+      final conversation = result.conversation!;
+      final stillProcessing =
+          conversation.status == ConversationStatus.processing || conversation.status == ConversationStatus.merging;
+      if (stillProcessing || !_conversationHasTitleAndEmoji(conversation)) {
+        // Keep a processing skeleton until title + emoji arrive (websocket
+        // ConversationEvent or a later refresh). Do not publish a contentless
+        // real row into the completed list.
+        externalActions.removeProcessingConversation(optimisticProcessingConversationId);
+        externalActions.addProcessingConversation(conversation);
+        if (sessionStart > 0) {
+          await phoneSync.stampConversationId(sessionStart, conversation.id);
+          _autoSyncSessionWals();
+        }
+        return;
+      }
+      externalActions.removeProcessingConversation(optimisticProcessingConversationId);
+      conversation.isNew = true;
+      _processConversationCreated(conversation, result.messages);
 
       // Stamp WALs with conversation ID and auto-sync
-      if (sessionStart > 0 && result.conversation != null) {
-        await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
+      if (sessionStart > 0) {
+        await phoneSync.stampConversationId(sessionStart, conversation.id);
         _autoSyncSessionWals();
       }
     });
