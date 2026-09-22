@@ -821,6 +821,22 @@ def test_posted_agc_deadband_spares_already_levelled_sessions_but_not_admission(
     # boosted by at least that much, so the rule cannot silently become a no-op.
     assert window.bounded_agc_pcm16(pcm, peak=edge)[1] >= 2.0
 
+    # A growing window spanning a level change: loud prefix, quiet tail. Judged on
+    # the whole window's peak (0.431) this reads "not quiet" and the tail is lost —
+    # measured on dev, that swung earnings WER between 0.155 and 0.262 depending
+    # only on where the anchor fell. Judged on the tail it is rescued, and the
+    # boost is capped so the loud prefix cannot clip.
+    rate = 16000
+    tail_bytes = int(window.WINDOW_AGC_TAIL_SECONDS * rate) * 2
+    loud = (np.int16(14120) * np.ones(rate * 30, dtype=np.int16)).tobytes()  # 0.431
+    quiet = (np.int16(12121) * np.ones(rate * 10, dtype=np.int16)).tobytes()  # 0.370
+    g = window.posted_window_gain(loud + quiet, tail_bytes)
+    assert g > 1.0, 'a quiet tail behind a loud prefix must still be boosted'
+    assert 14120 * g <= 32767, 'the boost must not clip the louder prefix'
+
+    # An all-loud window is still left alone — this is what keeps substitutions down.
+    assert window.posted_window_gain(loud, tail_bytes) == 1.0
+
     # Admission is NOT deadbanded: a loud envelope still gains the scored copy.
     ingest = window.SessionPcmGain()
     ingest.peak = 17712.0
