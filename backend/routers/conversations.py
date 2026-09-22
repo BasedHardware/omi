@@ -13,7 +13,12 @@ import database.redis_db as redis_db
 import database.users as users_db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import (
+    delete_action_item_vector,
+    delete_action_item_vectors_batch,
+    delete_vector,
+    delete_transcript_chunk_vectors,
+)
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
@@ -1333,6 +1338,14 @@ def delete_conversation(
                 sync_action_item_reminder(
                     user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
                 )
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        if armed:
+            try:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
+            except Exception as e:
+                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
