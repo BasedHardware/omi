@@ -74,6 +74,70 @@ omi --json local task search "taxes" --include-completed
 
 เสร็จสิ้นหรือลบงานเมื่อผู้ใช้ร้องขออย่างชัดเจนเท่านั้น:
 
+เสร็จสิ้นหรือลบงานเมื่อผู้ใช้ร้องขออย่างชัดเจนเท่านั้น:
+
 ```bash
-omi --json local task complete task_1
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
+
+คำสั่ง `omi local screenshot SCREENSHOT_ID --output PATH` จะบันทึกภาพหน้าจอลงในดิสก์และพิมพ์ JSON ไปยัง stdout สำหรับสคริปต์ รหัสภาพหน้าจอมักจะได้มาจาก `local search-screen` หรือคำสั่ง SQL บนตาราง `screenshots` หาก Desktop ส่งคืนข้อผิดพลาดที่มีโครงสร้าง เช่น `screenshot_pending`, `screenshot_file_missing`, หรือ `screenshot_chunk_corrupted` โหมด JSON จะรักษาฟิลด์ `reason`, `hint`, และ `screenshot_id` ไว้บน stderr เพื่อให้ Agent สามารถลองรหัสเก่าอีกครั้งหรือรายงานอุปสรรคที่แน่นอนได้ ตรวจสอบความถูกต้องของผลลัพธ์ด้วย `file PATH` ก่อนส่งไปยังเครื่องมือประมวลผลภาพ
+
+## ตัวอย่างการทำงาน: ลูป Agent ภาษา Python
+
+```python
+import json
+import subprocess
+from typing import Any
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        # The CLI prints structured errors to stderr in JSON mode:
+        # {"error": "...", "detail": "..."}
+        try:
+            err = json.loads(result.stderr)
+        except json.JSONDecodeError:
+            err = {"error": result.stderr.strip()}
+        raise RuntimeError(f"omi exited {result.returncode}: {err}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+# Read all open action items and mark anything older than 30 days complete.
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+items = omi("action-item", "list", "--open")
+for item in items or []:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## การจัดการขีดจำกัดอัตรา (Handling rate limits)
+
+ความทรงจำ: 120 ครั้ง/ชม. บทสนทนา: 25 ครั้ง/ชม. การสร้างแบบกลุ่ม: 15 ครั้ง/ชม.
+
+```python
+result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
+if result.returncode == 4:                             # rate limited
+    err = json.loads(result.stderr)
+    # err["detail"] looks like: "Retry in 12s. ..."
+    time.sleep(parse_retry_window(err["detail"]) or 60)
+```
+
+## เคล็ดลับ (Tips)
+
+* ใช้ `--profile <name>` หาก Agent ของคุณจัดการบัญชี Omi หลายบัญชี แต่ละโปรไฟล์จะมีข้อมูลรับรองและ URL ฐาน API ของตัวเอง
+* ใช้ `--api-base http://localhost:8080` สำหรับการทดสอบแบ็กเอนด์ในเครื่อง
+* ใช้ `OMI_LOCAL_API_URL` และ `OMI_LOCAL_TOKEN` เพื่อแทนที่การตั้งค่า Desktop API สำหรับการรันหนึ่งครั้ง
+* ใช้ `--verbose` สำหรับการดีบัก — จะบันทึก `METHOD path → status (Ns)` ไปยัง stderr โดยไม่ส่งผลกระทบต่อ stdout ทำให้โหมด JSON ยังคงถูกต้อง
+* สำหรับการส่งข้อมูลไปยังการสนทนาผ่าน pipe ให้ใช้ `--text -`:
+  ```bash
+  cat meeting_notes.md | omi conversation create --text - --text-source other_text
+  ```
