@@ -60,7 +60,10 @@ import type {
   XStatus,
   XSyncResult,
   XRunState,
-  SignInProvider
+  SignInProvider,
+  ModelEntry,
+  ModelStatus,
+  ModelDownloadProgress
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
@@ -717,7 +720,20 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('agentControl:call', name, input),
   // No agentControlSetOwner: the renderer must not be able to repoint the
   // kernel's active owner. See src/main/ipc/agentControl.ts.
-  agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
+  agentControlTools: () => ipcRenderer.invoke('agentControl:tools'),
+  // --- Local model download manager ---
+  modelsList: (): Promise<ModelEntry[]> => ipcRenderer.invoke('models:list'),
+  modelsStatus: (): Promise<ModelStatus[]> => ipcRenderer.invoke('models:status'),
+  modelsDownload: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('models:download', id),
+  modelsCancel: (id: string): Promise<boolean> => ipcRenderer.invoke('models:cancel', id),
+  modelsDelete: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('models:delete', id),
+  onModelsProgress: (cb: (p: ModelDownloadProgress) => void): (() => void) => {
+    const listener = (_e: unknown, p: ModelDownloadProgress): void => cb(p)
+    ipcRenderer.on('models:progress', listener)
+    return () => ipcRenderer.removeListener('models:progress', listener)
+  }
 }
 
 const omiOverlay: OmiOverlayApi = {
