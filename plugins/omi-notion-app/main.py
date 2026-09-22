@@ -620,7 +620,7 @@ async def tool_search(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error searching: {e}")
+        log(f"Error searching: {type(e).__name__}")
         import traceback
         traceback.print_exc()
         return ChatToolResponse(error="Search failed")
@@ -666,7 +666,7 @@ async def tool_list_pages(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error listing pages: {e}")
+        log(f"Error listing pages: {type(e).__name__}")
         return ChatToolResponse(error="Failed to list pages")
 
 
@@ -739,7 +739,7 @@ async def tool_get_page(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting page: {e}")
+        log(f"Error getting page: {type(e).__name__}")
         return ChatToolResponse(error="Failed to get page")
 
 
@@ -829,7 +829,7 @@ async def tool_create_page(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except ValueError as e:
-        log(f"Validation error creating page: {e}")
+        log(f"Validation error creating page: {type(e).__name__}")
         return ChatToolResponse(error="Failed to create page: invalid arguments")
     except Exception:
         log("Error creating page")
@@ -894,7 +894,7 @@ async def tool_update_page(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error updating page: {e}")
+        log(f"Error updating page: {type(e).__name__}")
         return ChatToolResponse(error="Failed to update page")
 
 
@@ -971,7 +971,7 @@ async def tool_list_databases(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error listing databases: {e}")
+        log(f"Error listing databases: {type(e).__name__}")
         return ChatToolResponse(error="Failed to list databases")
 
 
@@ -1023,7 +1023,7 @@ async def tool_query_database(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error querying database: {e}")
+        log(f"Error querying database: {type(e).__name__}")
         return ChatToolResponse(error="Failed to query database")
 
 
