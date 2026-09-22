@@ -22,7 +22,10 @@ Run:
     python laya_server.py                 # http://127.0.0.1:8765/route
     python laya_server.py --device cpu --model ./models/laya --port 8765
 """
-from __future__ import annotations
+# NOTE: this module intentionally does NOT use `from __future__ import annotations`.
+# PEP 563 stringifies annotations, and FastAPI then fails to resolve the Pydantic
+# model `Req` defined locally inside create_app(), silently treating `body: Req` as a
+# query parameter -> every valid JSON POST to /route 422s with `{"loc":["query","body"]}`.
 
 import argparse
 import os
