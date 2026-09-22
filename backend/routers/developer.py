@@ -481,6 +481,51 @@ def search_memories_vector(
     }
 
 
+@router.get(
+    "/v1/dev/user/memories/{memory_id}",
+    tags=["Memories"],
+    response_model=DeveloperMemory,
+    operation_id="getMemory",
+)
+def get_memory_by_id(
+    memory_id: str,
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
+):
+    """Fetch a single developer-readable memory by ID.
+
+    Uses the same read authorization/policy as the memories list endpoint.
+    Registered after /memories/vector/search so that route keeps matching first.
+    """
+    uid = auth_context.uid
+
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail={
+                "enabled": False,
+                "reason": app_key_grant.reason,
+                "consumer": "developer_api",
+                "archive_default_visible": False,
+                "archive_capability": False,
+                "app_id": auth_context.app_id,
+                "key_id": auth_context.key_id,
+            },
+        )
+
+    try:
+        raw_memory = fetch_memory_dict(uid, memory_id, db_client=db)
+    except HTTPException:
+        raise
+    try:
+        return CleanerMemory.model_validate(raw_memory)
+    except (AttributeError, TypeError, ValidationError, ValueError):
+        # Mirror the list endpoint's malformed-record hardening: a record that
+        # cannot be represented in the current validated shape must not 500.
+        logger.warning("Skipping malformed memory in Developer API get-by-id")
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
