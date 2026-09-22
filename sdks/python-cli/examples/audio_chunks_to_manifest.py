@@ -1,134 +1,237 @@
 #!/usr/bin/env python3
 """
-Generate a SHA‑256 manifest for a directory of raw audio chunk files.
+audio_chunks_to_manifest.py
 
-The script walks the supplied input directory (optionally recursively),
-computes the SHA‑256 hash of each file, and writes a JSON manifest
-containing the relative file paths and their hashes.  The output file
-is written atomically to avoid partial writes.
+Recursively walks a directory containing raw audio chunk files and produces a
+JSON manifest that maps each file (relative to the input directory) to its
+SHA‑256 hash and size in bytes.
 
-Usage:
-    python audio_chunks_to_manifest.py --input-dir /path/to/chunks \
-                                       --output-file /path/to/manifest.json
+The manifest is written atomically – a temporary file is created in the same
+directory as the target manifest and then renamed into place.
 
-The resulting JSON has the following structure:
+Typical usage::
+
+    $ python -m sdks.python_cli.examples.audio_chunks_to_manifest \
+        --input-dir ./audio_chunks \
+        --output ./audio_chunks/manifest.json
+
+The generated JSON has the following structure::
 
 {
-    "chunks": [
-        {"path": "chunk1.wav", "sha256": "abcd1234..."},
-        {"path": "subdir/chunk2.wav", "sha256": "efgh5678..."},
-        ...
-    ]
+    "version": 1,
+    "generated_at": "2026-09-22T12:34:56Z",
+    "files": {
+        "chunk001.wav": {
+            "sha256": "3a7bd3e2360a...",
+            "size": 123456
+        },
+        "subdir/chunk002.wav": {
+            "sha256": "9c1e5f8b...",
+            "size": 98765
+        }
+    }
 }
 """
 
+from __future__ import annotations
+
 import argparse
-import hashlib
+import datetime
 import json
 import logging
 import os
+import pathlib
+import shutil
 import sys
-from pathlib import Path
-from typing import Dict, List
+import tempfile
+from hashlib import sha256
+from typing import Dict, Mapping
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
+# --------------------------------------------------------------------------- #
+# Logging configuration
+# --------------------------------------------------------------------------- #
+log = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(levelname)s: %(message)s")
+handler.setFormatter(formatter)
+log.addHandler(handler)
+log.setLevel(logging.INFO)
 
 
-def compute_sha256(file_path: Path) -> str:
-    """Return the SHA‑256 hex digest of the given file."""
-    hash_obj = hashlib.sha256()
+# --------------------------------------------------------------------------- #
+# Helper functions
+# --------------------------------------------------------------------------- #
+def compute_sha256(file_path: pathlib.Path, chunk_size: int = 8192) -> str:
+    """
+    Compute the SHA‑256 hash of a file.
+
+    Parameters
+    ----------
+    file_path: pathlib.Path
+        Path to the file.
+    chunk_size: int, optional
+        Number of bytes to read per iteration (default 8192).
+
+    Returns
+    -------
+    str
+        Hex‑encoded SHA‑256 digest.
+    """
+    h = sha256()
     try:
         with file_path.open("rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hash_obj.update(chunk)
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                h.update(chunk)
     except OSError as exc:
-        logger.error("Failed to read %s: %s", file_path, exc)
+        log.error("Failed to read %s: %s", file_path, exc)
         raise
-    return hash_obj.hexdigest()
+    return h.hexdigest()
 
 
-def collect_chunks(
-    input_dir: Path, recursive: bool = False
-) -> List[Dict[str, str]]:
-    """Return a list of dicts with relative path and SHA‑256 hash."""
-    if not input_dir.is_dir():
-        raise NotADirectoryError(f"Input path {input_dir} is not a directory")
+def index_directory(root_dir: pathlib.Path) -> Dict[str, Mapping[str, int | str]]:
+    """
+    Walk ``root_dir`` and build a manifest dictionary.
 
-    glob_pattern = "**/*" if recursive else "*"
-    files = sorted(
-        [p for p in input_dir.glob(glob_pattern) if p.is_file()],
-        key=lambda p: p.name,
-    )
+    Only regular files are indexed; directories themselves are ignored.
+    The keys of the returned dict are POSIX‑style relative paths.
 
-    if not files:
-        logger.warning("No files found in %s", input_dir)
+    Parameters
+    ----------
+    root_dir: pathlib.Path
+        Directory to walk.
 
-    chunks = []
-    for file_path in files:
-        rel_path = str(file_path.relative_to(input_dir))
-        try:
-            sha256 = compute_sha256(file_path)
-        except Exception as exc:
-            logger.error("Skipping %s due to error: %s", file_path, exc)
+    Returns
+    -------
+    dict
+        Mapping of relative path → {\"sha256\": ..., \"size\": ...}
+    """
+    if not root_dir.is_dir():
+        raise NotADirectoryError(f"{root_dir} is not a directory")
+
+    manifest: Dict[str, Mapping[str, int | str]] = {}
+    for path in root_dir.rglob("*"):
+        if not path.is_file():
             continue
-        chunks.append({"path": rel_path, "sha256": sha256})
-        logger.debug("Processed %s", rel_path)
+        rel_path = path.relative_to(root_dir).as_posix()
+        try:
+            file_hash = compute_sha256(path)
+            file_size = path.stat().st_size
+            manifest[rel_path] = {"sha256": file_hash, "size": file_size}
+            log.debug("Indexed %s → %s (%d bytes)", rel_path, file_hash, file_size)
+        except Exception:
+            # The error has already been logged in compute_sha256.
+            # Abort the whole operation – a manifest must be complete.
+            raise RuntimeError(f"Failed to process {path}") from None
+    return manifest
 
-    return chunks
 
+def write_manifest_atomic(
+    manifest: Mapping[str, Mapping[str, int | str]],
+    output_path: pathlib.Path,
+) -> None:
+    """
+    Write ``manifest`` to ``output_path`` atomically.
 
-def write_manifest_atomic(output_path: Path, data: Dict) -> None:
-    """Write JSON data to a temporary file and atomically replace the target."""
-    temp_path = output_path.with_suffix(".tmp")
+    The function creates a temporary file in the same directory as
+    ``output_path`` and then renames it over the target file.
+
+    Parameters
+    ----------
+    manifest: Mapping
+        The manifest data to serialize.
+    output_path: pathlib.Path
+        Destination file.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Prepare the full JSON payload
+    payload = {
+        "version": 1,
+        "generated_at": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "files": manifest,
+    }
+
+    # Write to a temporary file first
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+        dir=str(output_path.parent),
+        suffix=".tmp",
+    ) as tmp_file:
+        json.dump(payload, tmp_file, indent=2, sort_keys=True)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        temp_name = pathlib.Path(tmp_file.name)
+
+    # Atomic replace
     try:
-        with temp_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, sort_keys=True)
-        temp_path.replace(output_path)
-        logger.info("Manifest written to %s", output_path)
-    except OSError as exc:
-        logger.error("Failed to write manifest: %s", exc)
-        raise
+        os.replace(str(temp_name), str(output_path))
+        log.info("Manifest written atomically to %s", output_path)
+    finally:
+        # In case replace failed, ensure the temp file is removed
+        if temp_name.exists():
+            temp_name.unlink(missing_ok=True)
 
 
-def parse_args() -> argparse.Namespace:
+# --------------------------------------------------------------------------- #
+# CLI entry point
+# --------------------------------------------------------------------------- #
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate a SHA‑256 manifest for raw audio chunk files."
+        description="Index a directory of raw audio chunks into a SHA‑256 manifest."
     )
     parser.add_argument(
         "--input-dir",
+        "-i",
+        type=pathlib.Path,
         required=True,
-        type=Path,
-        help="Directory containing raw audio chunk files.",
+        help="Root directory containing audio chunk files.",
     )
     parser.add_argument(
-        "--output-file",
-        required=True,
-        type=Path,
-        help="Path to write the JSON manifest.",
+        "--output",
+        "-o",
+        type=pathlib.Path,
+        default=None,
+        help=(
+            "Path to write the manifest JSON. If omitted, a file named "
+            "'audio_chunks_manifest.json' will be created inside the input directory."
+        ),
     )
     parser.add_argument(
-        "--recursive",
+        "--quiet",
+        "-q",
         action="store_true",
-        help="Recursively walk subdirectories.",
+        help="Suppress informational log messages; only errors are shown.",
     )
-    return parser.parse_args()
+    return parser
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    if args.quiet:
+        log.setLevel(logging.ERROR)
+
+    input_dir: pathlib.Path = args.input_dir.resolve()
+    output_path: pathlib.Path = (
+        args.output.resolve()
+        if args.output
+        else input_dir / "audio_chunks_manifest.json"
+    )
+
+    log.info("Indexing audio chunks in %s", input_dir)
     try:
-        chunks = collect_chunks(args.input_dir, args.recursive)
-        manifest = {"chunks": chunks}
-        write_manifest_atomic(args.output_file, manifest)
-    except Exception as exc:
-        logger.error("Failed to generate manifest: %s", exc)
-        sys.exit(1)
+        manifest = index_directory(input_dir)
+        write_manifest_atomic(manifest, output_path)
+    except Exception as exc:  # pragma: no cover – top‑level error handling
+        log.error("Failed to generate manifest: %s", exc)
+        return 1
+
+    log.info("Successfully generated manifest with %d entries.", len(manifest))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

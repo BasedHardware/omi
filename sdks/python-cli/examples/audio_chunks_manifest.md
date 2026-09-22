@@ -1,15 +1,21 @@
 # Audio Chunks → Manifest Recipe
 
-This recipe converts a directory of raw audio chunk files into a validated
-SHA‑256 JSON manifest.  The manifest can be used by downstream services
-to verify file integrity, deduplicate uploads, or feed into a
-transcription pipeline.
+This recipe demonstrates how to turn a directory of raw audio chunk files into a
+validated SHA‑256 manifest JSON file using the provided `audio_chunks_to_manifest.py`
+script.
 
-## Prerequisites
+## What the script does
 
-- Python 3.8+ installed.
-- The `sdks/python-cli` package installed in your environment
-  (e.g. `pip install -e .` from the repository root).
+* Recursively walks the supplied directory.
+* Computes a SHA‑256 hash and records the size (in bytes) for **every regular file**.
+* Emits a JSON document with the following top‑level keys:
+  * `version` – manifest format version (currently `1`).
+  * `generated_at` – UTC timestamp of creation.
+  * `files` – a mapping of *relative file path* → `{ "sha256": "...", "size": N }`.
+
+The manifest is written **atomically**: a temporary file is created in the same
+directory as the target and then renamed, guaranteeing that a partially‑written
+file never appears on disk.
 
 ## Usage
 
