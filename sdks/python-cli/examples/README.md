@@ -108,3 +108,4 @@
 * [`quickstart.ty.md`](quickstart.ty.md) — te mau taahiraa matamua ma omi-cli (Tahitian Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
 * [`quickstart.bs.md`](quickstart.bs.md) — vodič za brzi početak rada s omi-cli (Bosnian Quickstart).
+- [Tasks to CSV](tasks_csv.md): Export action tasks to CSV with formula protection
