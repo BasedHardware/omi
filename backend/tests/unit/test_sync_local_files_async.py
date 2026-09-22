@@ -29,6 +29,12 @@ _BLOCKING_GATES = frozenset(
         "get_enforcement_stage",
         "is_dg_budget_exhausted",
         "record_usage",
+        "try_acquire_backfill_slot",
+        "reserve_backfill_speech",
+        "record_speech_ms",
+        "get_rolling_speech_ms",
+        "record_dg_usage_ms",
+        "release_backfill_slot",
     }
 )
 
@@ -95,3 +101,9 @@ class TestSyncLocalFilesOffload:
         assert offloaded["get_enforcement_stage"] == "db_executor"
         assert offloaded["is_dg_budget_exhausted"] == "db_executor"
         assert offloaded["record_usage"] == "db_executor"
+        assert offloaded["try_acquire_backfill_slot"] == "db_executor"
+        assert offloaded["reserve_backfill_speech"] == "db_executor"
+        assert offloaded["record_speech_ms"] == "db_executor"
+        assert offloaded["get_rolling_speech_ms"] == "db_executor"
+        assert offloaded["record_dg_usage_ms"] == "db_executor"
+        assert offloaded["release_backfill_slot"] == "db_executor"

@@ -606,7 +606,7 @@ async def sync_local_files(
     if lane_decision.lane == SyncLane.BACKFILL:
         backfill_slot_token = f'v1-{_uuid.uuid4()}'
         try:
-            if not try_acquire_backfill_slot(uid, backfill_slot_token):
+            if not await run_blocking(db_executor, try_acquire_backfill_slot, uid, backfill_slot_token):
                 return JSONResponse(
                     status_code=429,
                     headers={
@@ -661,7 +661,9 @@ async def sync_local_files(
         )
 
         if lane_decision.lane == SyncLane.BACKFILL:
-            reservation = reserve_backfill_speech(uid, backfill_slot_token or f'v1-{_uuid.uuid4()}', total_speech_ms)
+            reservation = await run_blocking(
+                db_executor, reserve_backfill_speech, uid, backfill_slot_token or f'v1-{_uuid.uuid4()}', total_speech_ms
+            )
             if not reservation.allowed:
                 return JSONResponse(
                     status_code=429,
@@ -678,11 +680,11 @@ async def sync_local_files(
 
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
-            record_speech_ms(uid, total_speech_ms, source=meter_source)
+            await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source=meter_source)
             if lane_decision.lane == SyncLane.FRESH:
                 fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                 fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                speech_totals = get_rolling_speech_ms(uid)
+                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                 triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
@@ -790,7 +792,7 @@ async def sync_local_files(
             try:
                 dg_ms = int(total_speech_seconds * 1000)
                 if dg_ms > 0:
-                    record_dg_usage_ms(uid, dg_ms)
+                    await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
@@ -846,7 +848,7 @@ async def sync_local_files(
         _cleanup_files(segmented_paths)  # Segmented wav files after processing
         if backfill_slot_token:
             try:
-                release_backfill_slot(uid, backfill_slot_token)
+                await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
             except Exception as e:
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
