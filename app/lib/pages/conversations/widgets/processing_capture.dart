@@ -874,8 +874,16 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
+  // Live events append new IDs; list position is not recency. Processing begins
+  // at capture end, while the optimistic Process Now row has only createdAt.
+  final newest = conversations.reduce((a, b) {
+    final aTime = a.finishedAt ?? a.createdAt;
+    final bTime = b.finishedAt ?? b.createdAt;
+    return bTime.isAfter(aTime) ? b : a;
+  });
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
+  );
 }
 
 // PROCESSING CONVERSATION

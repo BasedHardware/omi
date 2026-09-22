@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -56,7 +57,10 @@ class _InertPhoneCallProvider extends ChangeNotifier implements PhoneCallProvide
 /// its build method, use an offstage decoy, or construct default CaptureProvider.
 /// Include real MaterialApp localization delegates. Spine tests check actual page
 /// ancestry and behavior; fixture wiring is deliberately editable by the builder.
-Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async {
+Future<Widget> buildTypedConversationScreen(
+  ConversationProvider provider, {
+  DailySummariesFetcher? dailySummariesFetcher,
+}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   SharedPreferencesUtil().showGoalTrackerEnabled = false;
@@ -85,7 +89,9 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
       ],
-      child: const Scaffold(body: ConversationsPage(requestInitialLoad: false)),
+      child: Scaffold(
+        body: ConversationsPage(requestInitialLoad: false, dailySummariesFetcher: dailySummariesFetcher),
+      ),
     ),
   );
 }

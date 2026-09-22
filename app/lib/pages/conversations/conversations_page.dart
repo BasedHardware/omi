@@ -253,12 +253,13 @@ List<_ConversationListRow> _buildConversationListRows({
 }
 
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true});
+  const ConversationsPage({super.key, this.requestInitialLoad = true, this.dailySummariesFetcher});
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
   /// false so initState does not queue loopback I/O on the fake-async clock.
   final bool requestInitialLoad;
+  final DailySummariesFetcher? dailySummariesFetcher;
 
   @override
   State<ConversationsPage> createState() => _ConversationsPageState();
@@ -591,6 +592,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final bool hasProcessingConversations =
+            !snapshot.showDailySummaries && snapshot.processingConversations.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -660,7 +663,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 },
               ),
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-              getProcessingConversationsWidget(convoProvider.processingConversations),
 
               // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
               Selector<HomeProvider, bool>(
@@ -695,6 +697,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // users get the empty-state hero below instead.
               if (convoProvider.showDailySummaries ||
                   _nonDiscardedConversationCount(convoProvider) > 0 ||
+                  hasProcessingConversations ||
                   isShowingConversationSkeleton ||
                   _hasActiveFilter(convoProvider))
                 SliverToBoxAdapter(
@@ -733,6 +736,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // clear it, even when the filtered result is empty.
               if (!convoProvider.showDailySummaries &&
                   (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                      hasProcessingConversations ||
                       isShowingConversationSkeleton ||
                       _hasActiveFilter(convoProvider)))
                 Consumer<FolderProvider>(
@@ -753,10 +757,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     );
                   },
                 ),
+              // Process Now belongs to the Conversations list, below Goals and
+              // its heading/filters, where the completed conversation will land.
+              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
                   snapshot.conversations.isEmpty &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !_hasActiveFilter(convoProvider))
                 SliverFillRemaining(
@@ -764,14 +772,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
               else if (convoProvider.showDailySummaries)
-                const DailySummariesList()
+                DailySummariesList(fetchSummaries: widget.dailySummariesFetcher)
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
+              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
+                const SliverToBoxAdapter(child: SizedBox(height: 20))
               else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(
