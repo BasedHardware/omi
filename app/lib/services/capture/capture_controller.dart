@@ -319,11 +319,13 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
+        _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
           _wal.getSyncs().phone.onFrameCaptured(frame);
           if (_socket?.state == SocketServiceState.connected) {
             _socket?.send(frame.payload);
+            _recordingTelemetry.observeSent(frame.payload.length);
             _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
           }
         }
@@ -1471,6 +1473,7 @@ class CaptureController extends ChangeNotifier
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
+        _recordingTelemetry.observeAudio(snapshot.length);
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
@@ -1511,6 +1514,7 @@ class CaptureController extends ChangeNotifier
 
           // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
+          _recordingTelemetry.observeSent(socketPayload.length);
 
           // Mark frames as synced
           if (_isWalSupported) {
@@ -2083,6 +2087,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
+          _recordingTelemetry.observeAudio(bytes.length);
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
@@ -2091,6 +2096,7 @@ class CaptureController extends ChangeNotifier
 
             if (_socket?.state == SocketServiceState.connected) {
               _socket?.send(frame.payload);
+              _recordingTelemetry.observeSent(frame.payload.length);
               _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
             }
           }
@@ -2160,6 +2166,7 @@ class CaptureController extends ChangeNotifier
         _wal.getSyncs().phone.onFrameCaptured(frame);
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(frame.payload);
+          _recordingTelemetry.observeSent(frame.payload.length);
           _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
         }
       }
@@ -2476,6 +2483,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onError(Object err) {
+    _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
 
@@ -2485,6 +2493,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onConnected() {
+    _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
     // Restart mic on reconnect if interrupted (skip during active call).
     if (recordingState == RecordingState.interrupted && !_micInterrupted) {
@@ -3001,6 +3010,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
+    _recordingTelemetry.observeTranscript();
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;

@@ -16,6 +16,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -444,6 +445,11 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.taskMutation,
+      surface: ProductSurface.tasks,
+      objectId: RecordReference.fromId(item.id),
+    );
     try {
       final itemInList = _findAndUpdateItemState(item.id, newState);
       if (itemInList != null) {
@@ -456,6 +462,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
       // Cancel notification if the action item is marked as completed
@@ -463,11 +470,20 @@ class ActionItemsProvider extends ChangeNotifier {
         await ActionItemNotificationHandler.cancelNotification(item.id);
       }
       _pushUpdateToAppleReminder(item, completed: newState);
+      attempt.complete(ProductOutcome.success);
+      if (newState) {
+        ProductTelemetry.instance.value(
+          ProductValue.taskCompleted,
+          surface: ProductSurface.tasks,
+          objectId: RecordReference.fromId(item.id),
+        );
+      }
       return true;
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
       return false;
     }
   }
