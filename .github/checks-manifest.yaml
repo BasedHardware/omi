@@ -1301,6 +1301,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
+  - id: hive-error-handling-tests
+    command: ["python3", "plugins/omi-hive-app/test_error_handling.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Hive chat tool endpoints and API clients must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: omi-stack-overflow-tests
     command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
     triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
