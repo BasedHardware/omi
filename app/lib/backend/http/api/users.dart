@@ -77,20 +77,30 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
-    final feedbackId = payload['feedback_id'];
-    final eventId = payload['event_id'];
-    final created = payload['created'];
-    if (payload['schema_version'] != 'mobile_feedback_receipt.v1' ||
-        payload['persisted'] != true ||
-        feedbackId != expectedFeedbackId ||
-        eventId is! String ||
-        eventId.isEmpty ||
-        eventId.length > 128 ||
-        created is! bool) {
+  static MobileFeedbackReceipt? fromJson(
+    Map<String, dynamic> payload, {
+    required String expectedFeedbackId,
+  }) {
+    try {
+      final generated = wire.GeneratedMobileFeedbackReceipt.fromJson(payload);
+      return fromGenerated(generated, expectedFeedbackId: expectedFeedbackId);
+    } catch (_) {
       return null;
     }
-    return MobileFeedbackReceipt(feedbackId: expectedFeedbackId, eventId: eventId, created: created);
+  }
+
+  static MobileFeedbackReceipt? fromGenerated(
+    wire.GeneratedMobileFeedbackReceipt payload, {
+    required String expectedFeedbackId,
+  }) {
+    if (payload.schemaVersion != 'mobile_feedback_receipt.v1' ||
+        payload.persisted != true ||
+        payload.feedbackId != expectedFeedbackId ||
+        payload.eventId.isEmpty ||
+        payload.eventId.length > 128) {
+      return null;
+    }
+    return MobileFeedbackReceipt(feedbackId: expectedFeedbackId, eventId: payload.eventId, created: payload.created);
   }
 }
 
@@ -130,8 +140,8 @@ Future<MobileFeedbackReceipt?> submitMobileFeedback({
   );
   if (response?.statusCode != 201 || response == null) return null;
   try {
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return MobileFeedbackReceipt.fromJson(payload, expectedFeedbackId: id);
+    final payload = wire.GeneratedMobileFeedbackReceipt.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return MobileFeedbackReceipt.fromGenerated(payload, expectedFeedbackId: id);
   } catch (_) {
     return null;
   }

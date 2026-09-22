@@ -38,7 +38,6 @@ from utils.subscription import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
-from utils.observability.subscription_events import emit_billing_product_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -1134,6 +1133,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     # replacement subscription is reconciliation, not a start
                     # or churn attributable to this incoming Stripe event.
                     if billing_owner_confirmed and not adopted_active_paid:
+                        from utils.observability.subscription_events import emit_billing_product_event
+
                         emit_billing_product_event(
                             uid=uid,
                             stripe_event_id=str(event.get('id') or ''),
