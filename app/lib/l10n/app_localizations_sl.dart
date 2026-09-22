@@ -437,6 +437,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get autoSyncDescription => 'Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže';
 
   @override
+  String get omiButtonActions => 'Dejanja gumba Omi';
+
+  @override
   String get deviceSettings => 'Nastavitve naprave';
 
   @override
@@ -2144,7 +2147,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get alwaysInContext => 'Vedno v kontekstu';
 
   @override
-  String get memoryContentHint => 'Rad imam jesti sladoled...';
+  String get memoryContentHint => 'Raje imam jutranje sestanke.';
 
   @override
   String get failedToSaveMemory => 'Shranjevanje ni uspelo. Prosimo preverite vašo povezavo.';
@@ -10146,4 +10149,31 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Kaj lahko narediš zame?',
+        'goal': 'Pomagaj mi postaviti cilj',
+        'activity': 'Povzemi moje nedavne dejavnosti',
+        'improve': 'Kako lahko napredujem?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Naslednji teden';
+
+  @override
+  String get clearSearch => 'Počisti iskanje';
 }

@@ -138,6 +138,7 @@
     "offlineSync": "Sinkronisasi luring",
     "autoSync": "Sinkronisasi otomatis",
     "autoSyncDescription": "Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung",
+    "omiButtonActions": "Tindakan Tombol Omi",
     "deviceSettings": "Pengaturan Perangkat",
     "integrations": "Integrasi",
     "feedbackBug": "Masukan / Bug",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Semua memori sekarang publik",
     "newMemory": "✨ Memori Baru",
     "editMemory": "✏️ Edit Memori",
-    "memoryContentHint": "Saya suka makan es krim...",
+    "memoryContentHint": "Aku lebih suka rapat di pagi hari.",
     "failedToSaveMemory": "Gagal menyimpan. Silakan periksa koneksi Anda.",
     "saveMemory": "Simpan Memori",
     "retry": "Coba lagi",
@@ -3285,5 +3286,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Suara siap dikenali} saved_sample_awaiting_embedding{Sampel tersimpan; pemrosesan suara masih diperlukan} not_learned{Suara belum dipelajari} other{Status suara tidak diketahui}}",
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan berikutnya dari pembicara ini",
     "updateSummaryWithNewNames": "Perbarui ringkasan dengan nama baru",
-    "syncStatusUnsupportedAudio": "Audio tidak terbaca — tidak bisa disinkronkan"
+    "syncStatusUnsupportedAudio": "Audio tidak terbaca — tidak bisa disinkronkan",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Apa yang bisa kamu lakukan untukku?} goal{Bantu aku menetapkan tujuan} activity{Ringkas aktivitas terbaruku} improve{Bagaimana aku bisa menjadi lebih baik?} other{}}",
+    "nextWeek": "Minggu depan",
+    "clearSearch": "Hapus pencarian"
 }

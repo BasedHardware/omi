@@ -112,6 +112,9 @@ def test_shared_cleanup_retains_capture_and_propagates_task_failure(monkeypatch)
     monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: True)
     monkeypatch.setattr(merge, 'MemoryService', MagicMock())
     tasks = MagicMock(side_effect=RuntimeError('task store unavailable'))
+    # The current merge cleanup reads source tasks before deleting them so it
+    # can cancel client reminders. Keep this test hermetic across both the
+    # legacy delete-only path and the reminder-aware path.
     monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *a, **kw: [])
     monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', tasks)
     audio = MagicMock()
@@ -259,6 +262,8 @@ def test_sync_bridge_retraction_does_not_claim_the_account_destructive_gate(monk
 
     monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: False)
     monkeypatch.setattr(merge, 'MemoryService', FakeMemoryService)
+    # Source-task lookup is part of merge cleanup on current main; avoid
+    # constructing a real Firestore client in this seam-focused test.
     monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *a, **kw: [])
     monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', MagicMock(return_value=0))
     monkeypatch.setattr(merge, 'delete_conversation_audio_files', MagicMock())

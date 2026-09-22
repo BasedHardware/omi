@@ -225,6 +225,8 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert 'for THRESHOLD in 70 90' in action
     assert 'gcloud monitoring policies create' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
+    assert 'METRIC="sync_backfill_dispatch_abort"' in action
+    assert 'The request was aborted because there was no available instance' in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():

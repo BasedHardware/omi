@@ -18,13 +18,18 @@ if TYPE_CHECKING:
     from utils.stt.parakeet_window import SessionPcmGain
 
 # Windowed TDT admits speech-only audio with a short hangover. The billed Deepgram
-# gate keeps VAD_GATE_SPEECH_THRESHOLD (0.65) and a 4s tail. That start threshold
-# is above Silero's published default (0.5) and has no neg_threshold hysteresis:
-# frames that score under 0.65 never enter SPEECH and are never posted. Match
-# Silero's start / neg_threshold pair on this leg only.
+# gate keeps VAD_GATE_SPEECH_THRESHOLD (0.65) and a 4s tail; this leg keeps the same
+# start threshold but a much shorter tail, because a growing window re-posts its own
+# prefix and does not need 4s of trailing silence to avoid clipping a word.
+#
+# The threshold was briefly lowered to 0.5/0.35 to admit quiet far-field speech. That
+# is no longer what admits it: the gate now scores a level-corrected copy (see
+# SessionPcmGain), which lifts far-field admission from 73.7s to 91.7s on its own. The
+# extra hysteresis bought only 5.6s more on that clip while costing words on dense
+# speech, so the start threshold stays at the Deepgram value and gain does the work.
 WINDOW_VAD_HANGOVER_MS = 300
-WINDOW_VAD_SPEECH_THRESHOLD = 0.5
-WINDOW_VAD_CONTINUE_THRESHOLD = 0.35
+WINDOW_VAD_SPEECH_THRESHOLD = 0.65
+WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 
 
 class LiveChainSession:
