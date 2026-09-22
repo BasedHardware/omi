@@ -4,15 +4,15 @@
 
 ## Bí kílíì sì ṣe rẹ̀ rọ́ra fún àwọn ẹ̀rọ̀
 
-* **Òfin JSON tó rántì.** `--json ń tọ́jú ìwé JSON tó tọ́ sí stdout àti
+* **Òfin JSON tó rántì.** `--json` ń tọ́jú ìwé JSON tó tọ́ sí stdout àti
   ìwé JSON nìkan — kò sí ìwé ìlérí, kò sí àmì ìdúró. Àwọn àṣìṣe ń lọ sí
   stderr gẹ́gẹ́ bí `{"error": "...", "detail": "..."}`.
 * **Kọ́dí ìpadà tó rántì.** `0` ó yẹ / `1` èlò / `2` ìdánwò / `3` sàávù / `4` ìdí
   ìṣẹ́ / `5` a kò rí. Àwọn ẹ̀rọ̀ lè dá àwọn yìí sílẹ̀ láì ka àṣìṣe nínú
   èdè àlàáfìà.
-* **Kò sí ìbéèrè nínú kọ́ńtẹ́kstì headless.** Fi `--bya` (tàbí `-y`) kún àwọn
+* **Kò sí ìbéèrè nínú kọ́ńtẹ́kstì headless.** Fi `--yes` (tàbí `-y`) kún àwọn
   àṣàǹtọ́jú; fi `--api-key` tàbí fi `OMI_API_KEY` sórí àyẹ̀wò àjọ̀ṣepọ̀.
-* **Ìdánwò tó fúnnínú.** `429` àti `5xx ń tún dánwò pẹ̀lú backoff
+* **Ìdánwò tó fúnnínú.** `429` àti `5xx` ń tún dánwò pẹ̀lú backoff
   kí wọ́n tó hàn.
 
 ## Ìdánwò (oókan, láti ọ̀wọ̀ ènìyàn)
