@@ -271,7 +271,9 @@ async def finalize_persisted_conversation(
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+                await run_blocking(
+                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
+                )
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed during finalization uid=%s error=%s',
