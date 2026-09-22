@@ -163,3 +163,4 @@
 * [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
+* [`screen_history_csv.md`](screen_history_csv.md) — export screen history frames and OCR text to CSV.
