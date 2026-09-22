@@ -13,6 +13,9 @@ straight into the HTML it returns and the URLs it redirects to:
   query parameter into ``action``/``href`` targets, allowing attribute breakout and
   query-string corruption (stored XSS / parameter injection).
 * the OAuth token-exchange failure body reflected the Dropbox error response verbatim.
+* the generic ``except Exception`` handler on the same callback path rendered
+  ``str(e)`` raw into its ``500`` body, so a throw during the token exchange could
+  reflect attacker-influenced text there (the remaining hole from #14892).
 
 The fix escapes every one of those boundaries with ``html.escape(..., quote=True)``
 and ``quote(..., safe="")``.  This suite executes the real production functions from
@@ -260,6 +263,50 @@ class TokenExchangeErrorEscapingTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertNotIn(BREAKOUT, response.content)
         self.assertIn(html.escape(payload, quote=True), response.content)
+
+
+class CallbackExceptionEscapingTest(unittest.TestCase):
+    """A throw inside the callback must not reflect the exception text raw.
+
+    The token exchange runs on the same unauthenticated GET /auth/dropbox/callback
+    path, so the 500 body is an HTML sink exactly like the error-parameter body.
+    """
+
+    uid = "user-exc"
+
+    def _callback_raising(self, message):
+        _store_oauth_state(self.uid, f"{self.uid}:tok")
+        with patch.object(main.requests, "post", side_effect=RuntimeError(message)):
+            return asyncio.run(
+                main.auth_callback(
+                    code="code-1",
+                    state=f"{self.uid}:tok",
+                    error=None,
+                    error_description=None,
+                )
+            )
+
+    def test_exception_text_is_escaped_in_the_500_body(self):
+        payload = "token exchange blew up: <script>alert(1)</script>"
+        response = self._callback_raising(payload)
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("<script>alert(1)</script>", response.content)
+        self.assertNotIn(payload, response.content)
+        self.assertIn(html.escape(payload, quote=True), response.content)
+
+    def test_exception_text_with_quote_breakers_is_escaped(self):
+        payload = f"boom {QUOTE_BREAKER} {BREAKOUT}"
+        response = self._callback_raising(payload)
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn(BREAKOUT, response.content)
+        self.assertNotIn('"><script>', response.content)
+        self.assertIn(html.escape(payload, quote=True), response.content)
+
+    def test_benign_exception_text_stays_readable(self):
+        response = self._callback_raising("connection reset by peer")
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("Error during authorization", response.content)
+        self.assertIn("connection reset by peer", response.content)
 
 
 class RedirectQuotingTest(unittest.TestCase):
