@@ -3,13 +3,12 @@ import os
 import sys
 from pathlib import Path
 
-
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("memories", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected the JSON array from omi --json memory list")
+        raise ValueError("Expected JSON array from 'omi --json memory list'")
 
     dest = Path(destination)
     if dest.exists():
@@ -25,6 +24,8 @@ def convert(source, destination):
             "",
             "# Omi Memories",
             "",
+            "Exported from [[Omi]] device memory log.",
+            "",
         ]
         for mem in items:
             if not isinstance(mem, dict):
@@ -34,14 +35,15 @@ def convert(source, destination):
                 continue
             category = mem.get("category") or "general"
             created_at = mem.get("created_at") or ""
-            
-            # Format as blockquote with wikilink
-            lines.append(f"> {content}")
+
+            # Ensure multiline blockquote preserves '>'
+            quote_lines = [f"> {line}" for line in content.splitlines()]
+            lines.extend(quote_lines)
             lines.append(f"> — [[{category.title()}]] · *{created_at}*")
             lines.append("")
 
         with open(tmp, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+            f.write("\n".join(lines).strip() + "\n")
 
         os.replace(tmp, dest)
     finally:
@@ -51,9 +53,12 @@ def convert(source, destination):
             except OSError:
                 pass
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python memories_to_obsidian.py <source.json> <destination.md>", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    try:
+        convert(sys.argv[1], sys.argv[2])
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
