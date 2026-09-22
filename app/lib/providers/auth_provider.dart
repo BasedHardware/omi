@@ -66,6 +66,7 @@ class AuthenticationProvider extends BaseProvider {
 
     Future.microtask(() {
       _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+        PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
@@ -83,6 +84,7 @@ class AuthenticationProvider extends BaseProvider {
         notifyListeners();
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+        PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
