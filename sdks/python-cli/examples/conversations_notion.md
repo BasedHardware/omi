@@ -13,3 +13,18 @@ Convert to Notion blocks:
 ```sh
 python conversations_to_notion.py conversations.json notion_blocks.json
 ```
+
+
+## Appending Blocks to Notion Page
+To append converted blocks to a Notion page via the Notion API:
+
+```sh
+export NOTION_TOKEN="secret_..."
+PAGE_ID="your_page_id"
+
+curl -X PATCH "https://api.notion.com/v1/blocks/${PAGE_ID}/children" \
+  -H "Authorization: Bearer ${NOTION_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "Notion-Version: 2022-06-28" \
+  -d @notion_blocks.json
+```
