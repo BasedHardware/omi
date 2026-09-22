@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
     lanes: ["local", "ci"]
     reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
+  - id: plugin-oauth-error-params-escaped-tests
+    command: ["python3", "plugins/test_oauth_error_params_escaped.py"]
+    triggers: ["plugins/test_oauth_error_params_escaped.py", "plugins/omi-dropbox-app/**", "plugins/omi-notion-app/**", "plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "OAuth callback error params were rendered raw into HTML on dropbox/ms365/notion"
   - id: whoop-measurements-tests
     command: ["python3", "plugins/omi-whoop-app/test_main.py"]
     triggers: ["plugins/omi-whoop-app/**"]
