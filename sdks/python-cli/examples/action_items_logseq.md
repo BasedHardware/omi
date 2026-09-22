@@ -1,6 +1,6 @@
-# Convert action items to a Logseq page (native TODO/DONE tasks)
+# Convert action items to a Logseq page (native task markers)
 
-Use this recipe when your task tracking lives in [Logseq](https://logseq.com) — it writes a single Logseq-native outliner page where every action item is a real, checkable `TODO`/`DONE` block, not a GFM checkbox in a plain Markdown file. It reads a saved JSON export, makes no network requests, and complements [`action_items_markdown.md`](action_items_markdown.md) (which targets Obsidian/Notion specifically).
+Use this recipe when your task tracking lives in [Logseq](https://logseq.com) — it writes a single Logseq-native outliner page where every action item is a real, checkable Logseq task block, not a GFM checkbox in a plain Markdown file. It reads a saved JSON export, makes no network requests, and complements [`action_items_markdown.md`](action_items_markdown.md) (which targets Obsidian/Notion specifically). See below for the exact markers used.
 
 You need Python 3.10+ and an authenticated `omi-cli` for the initial export (no extra dependencies — stdlib only).
 
