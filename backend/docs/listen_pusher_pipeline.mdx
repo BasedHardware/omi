@@ -43,6 +43,22 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+Soniox streams final token deltas whose network-frame boundaries can split a
+word. Its adapter retains the pending word across frames, preserving subword
+text until whitespace, a speaker change, a gap of at least three seconds, or
+the provider's `<end>`/`<fin>` marker establishes a boundary. A 4,096-character
+limit bounds accumulation; non-final and translated tokens do not enter the
+spoken transcript. Segment times use the provider's `start_ms` and `end_ms`,
+minus speech-profile preroll, rather than extending to the next token's start.
+
+When VAD requests finalization, Soniox queues a `{"type":"finalize"}` text
+control after accepted audio. Receive completion and synchronous `finish()`
+flush the last committed word exactly once; asynchronous draining awaits that
+callback even when the provider completion deadline expires. Off-loop finish
+and finalize calls schedule their work on the provider loop. These contracts
+are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
+downstream transcript merge that inserts spaces between distinct segments.
+
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
