@@ -299,11 +299,18 @@ def format_datetime(dt_string: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
+    sig = ""
+    from shopify_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
     if not uid:
         return templates.TemplateResponse("setup.html", {
             "request": request,
             "authenticated": False,
-            "error": "Missing user ID"
+            "error": "Missing user ID",
+            "disconnect_sig": sig,
         })
     
     tokens = get_shopify_tokens(uid)
@@ -330,6 +337,7 @@ async def home(request: Request, uid: Optional[str] = None):
         "shop_info": shop_info,
         "recent_orders": recent_orders,
         "shop_domain": tokens.get("shop_domain") if tokens else None,
+        "disconnect_sig": sig,
     })
 
 
@@ -466,8 +474,10 @@ async def check_setup(uid: str):
 
 
 @app.get("/disconnect")
-async def disconnect_shopify(uid: str):
+async def disconnect_shopify(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Shopify account."""
+    from shopify_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_shopify_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 

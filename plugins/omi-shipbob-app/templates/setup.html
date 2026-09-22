@@ -395,7 +395,7 @@
             </div>
         </div>
 
-        <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small" style="margin-top: 16px;">
+        <a href="/disconnect?uid={{ uid }}{% if disconnect_sig %}&sig={{ disconnect_sig }}{% endif %}" class="btn btn-danger btn-small" style="margin-top: 16px;">
             Disconnect ShipBob
         </a>
 

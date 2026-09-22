@@ -59,7 +59,17 @@ async def root() -> str:
 async def setup_page(uid: str = Query(..., description="OMI user id")) -> str:
     """OMI loads this page inside its in-app webview when the user taps 'Setup'."""
     safe_uid = urllib.parse.quote(uid, safe="")
+    # Compute a signed signature for the disconnect link so that an unauthenticated
+    # party cannot forge a crafted POST /disconnect?uid=<victim> URL.  When the
+    # signing secret is not configured the signature is omitted and the disconnect
+    # handler will reject with 503 / 401 (fail-closed).
+    sig = ""
+    from ms365_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
     redirect = f"/auth/microsoft?uid={safe_uid}"
+    disconnect_href = f"/disconnect?uid={safe_uid}&sig={sig}" if sig else f"/disconnect?uid={safe_uid}"
     return f"""
     <html><body style="font-family: system-ui; max-width: 640px; margin: 40px auto;">
       <h2>Connect Microsoft 365</h2>
@@ -68,6 +78,9 @@ async def setup_page(uid: str = Query(..., description="OMI user id")) -> str:
       <p><a href="{redirect}"
          style="display:inline-block; background:#2563eb; color:white; padding:12px 20px;
          border-radius:8px; text-decoration:none;">Connect with Microsoft →</a></p>
+      <p><a href="{disconnect_href}"
+         style="display:inline-block; background:#dc3545; color:white; padding:12px 20px;
+         border-radius:8px; text-decoration:none;">Disconnect Microsoft 365 →</a></p>
     </body></html>
     """
 
@@ -132,8 +145,11 @@ async def setup_check(uid: str = Query(...)) -> dict[str, Any]:
         return {"is_setup_completed": False}
 
 
+@app.get("/disconnect")
 @app.post("/disconnect")
-async def disconnect(uid: str = Query(...)) -> dict[str, Any]:
+async def disconnect(uid: str = Query(...), sig: str = Query("")) -> dict[str, Any]:
+    from ms365_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     await auth.disconnect(uid)
     return {"status": "disconnected"}
 
