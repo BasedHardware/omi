@@ -101,7 +101,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           child: Text(
             context.l10n.conversationTitleDidntGenerate,
             key: const Key('conversation_failed_title_indicator'),
-            style: const TextStyle(color: Color(0xFFB39DDB), fontSize: 13, fontWeight: FontWeight.w500),
+            style: const TextStyle(color: Color(0xFFC4C4CC), fontSize: 13, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
