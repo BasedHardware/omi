@@ -68,6 +68,8 @@ def parse_offset(value):
     if len(value) != 6 or value[0] not in "+-" or value[3] != ":" or not (value[1:3] + value[4:]).isdigit():
         raise ValueError(f"UTC offset must look like +09:00, got {value!r}")
     delta = timedelta(hours=int(value[1:3]), minutes=int(value[4:]))
+    if int(value[4:]) > 59 or delta > timedelta(hours=14):
+        raise ValueError(f"UTC offset must be between -14:00 and +14:00, got {value!r}")
     return -delta if value[0] == "-" else delta
 
 
