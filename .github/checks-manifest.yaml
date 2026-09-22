@@ -344,6 +344,12 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+
+  - id: twitter-app-callback-error-escaping-tests
+    command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the OAuth callback error page interpolated the client-controlled state query param raw into its Try again href, so a quote plus script tag in state ran as script (reflected XSS) and & or # corrupted the query; the suite renders the real callback error page and the setup page's Connect link and pins a percent-encoded, round-trippable uid"
   - id: git-author-identity
     command: ["python3", ".github/scripts/check_git_author_identity.py", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
