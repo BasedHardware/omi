@@ -16,6 +16,6 @@ Run the converter:
 python sdks/python-cli/examples/conversations_to_jsonl.py conversations.json conversations.jsonl
 ```
 
-Each line is the original conversation object, byte-for-byte, with non-ASCII text preserved (`ensure_ascii=False`). The converter refuses to overwrite an existing destination, and a failed write leaves no partial file behind.
+Each line is the original conversation object, unchanged, with non-ASCII text preserved (`ensure_ascii=False`). The converter refuses to overwrite an existing destination, and a failed write leaves no partial file behind.
 
-For a full, paginated account backup beyond a single page, see [`export_conversations.md`](export_conversations.md) instead.
+This converts a single saved export, not a live paginated backup — for pulling more than one page with `--offset`, see the pagination guidance in [`conversations_sqlite.md`](conversations_sqlite.md).
