@@ -60,6 +60,7 @@ from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
+    verify_audio_merge_cloud_tasks_oidc,
     verify_cloud_tasks_oidc,
 )
 from utils.executors import (
@@ -1906,7 +1907,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
-async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
 
     Response semantics drive the queue: 2xx consumes the task, 409 while the
