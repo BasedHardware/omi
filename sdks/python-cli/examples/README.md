@@ -12,6 +12,18 @@
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
+* [`agent_quickstart.lu.md`](agent_quickstart.lu.md) — omi-cli pa ba
+  agents (Luba-Katanga agent guide).
+* [`agent_quickstart.kab.md`](agent_quickstart.kab.md) — omi-cli i
+  yis-agents (Kabyle agent guide).
+* [`agent_quickstart.av.md`](agent_quickstart.av.md) — omi-cli
+  агенталъе (Avar agent guide).
+* [`agent_quickstart.wa.md`](agent_quickstart.wa.md) — omi-cli po les
+  agents (Walloon agent guide).
+* [`agent_quickstart.os.md`](agent_quickstart.os.md) — omi-cli
+  агенттæн (Ossetian agent guide).
+* [`agent_quickstart.dv.md`](agent_quickstart.dv.md) — އޭޖަންޓުންނަށް
+  omi-cli (Dhivehi agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
@@ -163,3 +175,9 @@
 * [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
+* [`quickstart.lu.md`](quickstart.lu.md) — kusokela na omi-cli (Luba-Katanga Quickstart).
+* [`quickstart.kab.md`](quickstart.kab.md) — imeqriyen imezwura n omi-cli (Kabyle Quickstart).
+* [`quickstart.av.md`](quickstart.av.md) — omi-cli хӀалтӀизе байбихьи (Avar Quickstart).
+* [`quickstart.wa.md`](quickstart.wa.md) — prumîs pas avou omi-cli (Walloon Quickstart).
+* [`quickstart.os.md`](quickstart.os.md) — omi-cli баййафын (Ossetian Quickstart).
+* [`quickstart.dv.md`](quickstart.dv.md) — omi-cli ބޭނުންކުރަން ފަށާށެވެ (Dhivehi Quickstart).
