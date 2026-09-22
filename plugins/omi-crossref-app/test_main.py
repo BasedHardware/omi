@@ -453,19 +453,19 @@ class GetWorkHandlerTests(unittest.IsolatedAsyncioTestCase):
             main.GetWorkInput(doi="10..1234/x")
         )
         self.assertIsNone(response.result)
-        self.assertIn("Invalid DOI value", response.error)
+        self.assertIn("Invalid DOI format", response.error)
 
     async def test_get_work_formats_full_message(self):
         async def fake(_path, _params):
-            return _payload_message()
+            return _payload_message(DOI="10.1038/test")
 
         with patch.object(main, "crossref_get", fake):
             response = await main.get_crossref_work(
-                main.GetWorkInput(doi="10.1/test")
+                main.GetWorkInput(doi="10.1038/test")
             )
         self.assertIsNone(response.error)
         self.assertIn("Title: Machine Learning", response.result)
-        self.assertIn("DOI: 10.1/test", response.result)
+        self.assertIn("DOI: 10.1038/test", response.result)
         self.assertIn("Year: 2021", response.result)
         self.assertIn("Publisher: Test Publisher", response.result)
         self.assertIn("Abstract: A study.", response.result)
@@ -476,7 +476,7 @@ class GetWorkHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "crossref_get", fake):
             response = await main.get_crossref_work(
-                main.GetWorkInput(doi="10.1/test")
+                main.GetWorkInput(doi="10.1038/test")
             )
         self.assertIsNone(response.error)
         self.assertIn("Title: Untitled", response.result)
@@ -487,7 +487,7 @@ class GetWorkHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "crossref_get", boom):
             response = await main.get_crossref_work(
-                main.GetWorkInput(doi="10.1/missing")
+                main.GetWorkInput(doi="10.1038/missing")
             )
         self.assertIsNone(response.result)
         self.assertIn("Crossref request failed", response.error)
