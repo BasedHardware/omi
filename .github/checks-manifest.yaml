@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
+  - id: iq-rating-error-handling-tests
+    command: ["python3", "plugins/iq_rating/test_error_handling.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET /iq HTML dashboard error handler must not leak raw internal exception details or render unescaped exception text into HTML responses"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
