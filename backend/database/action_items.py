@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
@@ -294,9 +294,9 @@ def create_action_item(
             retry on flaky networks or duplicate event delivery — the previous
             behaviour silently allocated a fresh Firestore id on every call,
             producing user-visible duplicates. The key is stored on the
-            document so future calls can find it. Callers that want
-            content-based idempotency typically pass
-            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
+            document so future calls can find it. Pass a per-attempt client
+            key (for example an ``Idempotency-Key`` header), not a hash of
+            the description: task titles are not unique.
         document_id: Optional caller-reserved Firestore document id. Reusing
             the id returns the existing document without rewriting it, making
             a crash-retried create deterministic.
@@ -1415,12 +1415,12 @@ def unlock_all_action_items(uid: str) -> None:
 # ============================================================================
 
 
-def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
+def get_daily_score(uid: str, date: Optional[str] = None, tz: tzinfo = timezone.utc) -> Dict[str, Any]:
     """Compute productivity score for a single day from action_items."""
     if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
     else:
-        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
     day_end = day + timedelta(days=1)
     col = db.collection('users').document(uid).collection(action_items_collection)
@@ -1441,7 +1441,9 @@ def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
-def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = None) -> Dict[str, Any]:
+def get_scores(
+    uid: str, date: Optional[str] = None, *, firestore_client: Any = None, tz: tzinfo = timezone.utc
+) -> Dict[str, Any]:
     """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
     Takes a single date (or defaults to today) and returns:
@@ -1450,9 +1452,9 @@ def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = 
       overall — all non-deleted tasks
     """
     if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
     else:
-        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
     day_start = day
     day_end = day + timedelta(days=1)

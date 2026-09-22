@@ -152,11 +152,13 @@ final class RatingPromptCountingTests: XCTestCase {
     XCTAssertEqual(RatingPromptManager.shared.questionCount, 0)
   }
 
-  func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndEmptySubmits() {
+  func testQueryShellLedgerRejectsRetryBeforeAnySubmitAndUnresolvedSubmits() {
     let ledger = QueryShellSendLedger()
     XCTAssertNil(ledger.planRetry())
-    XCTAssertNil(ledger.planSubmit(nil))
-    XCTAssertNil(ledger.planSubmit(""))
+    XCTAssertNil(ledger.planSubmit(nil), "A bare empty field resolves to no question, and the ledger plans nothing")
+    // An empty *resolved* question is an attachment-only send (`QueryShellSubmission` only yields
+    // one when something is staged), so it is a real question for rating purposes.
+    XCTAssertEqual(ledger.planSubmit("")?.countsAsQuestion, true)
     XCTAssertEqual(ledger.planSubmit("q")?.countsAsQuestion, true)
     // Planning alone commits nothing; only acceptance does.
     XCTAssertNil(ledger.planRetry())

@@ -778,6 +778,10 @@ extension TranscriptionService {
     request.httpMethod = "POST"
     request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+    // Same provenance header the WebSocket upgrade sends (see connect):
+    // without it the backend labels desktop PTT dictation journeys
+    // client_platform=unknown on the voice_rest_pcm route.
+    request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
     if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
       request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
     }

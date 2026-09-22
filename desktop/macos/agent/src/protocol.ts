@@ -1,3 +1,4 @@
+import type { ModelHeadersReply } from "./runtime/model-fetch.js";
 // JSON lines protocol between Swift app and Node.js agent runtime
 // Extended from agent protocol with authentication message types
 
@@ -8,6 +9,7 @@ export const RUNTIME_CAPABILITIES = [
   "journal_import_remote_turn",
   "runtime_adapter_availability",
   "chat_first_capability_projection",
+  "request_scoped_model_credentials",
 ] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
@@ -398,7 +400,8 @@ export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
-  update: Record<string, unknown>;
+  /** Swift may append typed evidence atomically; the kernel still owns turn identity. */
+  update: Record<string, unknown> & { appendEvidence?: unknown[] };
 }
 
 export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
@@ -616,11 +619,11 @@ export interface ChatFirstDeferralDeliveryResultMessage extends ProtocolEnvelope
   errorCode?: string;
 }
 
-/** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
-export interface RefreshTokenMessage {
-  type: "refresh_token";
-  token: string;
-  ownerId: string;
+/** Request-scoped credentials; never persist or log this response. */
+export interface ModelHeadersResultMessage {
+  type: "model_headers_result";
+  requestId: string;
+  result: ModelHeadersReply;
 }
 
 /** Swift establishes the signed-in owner even when a local adapter needs no Firebase token. */
@@ -682,7 +685,7 @@ export type InboundMessage =
   | JournalBackendReconcileResultMessage
   | ChatFirstDeferralDeliveryResultMessage
   | ChatFirstHarnessExecutorBeginMessage
-  | RefreshTokenMessage
+  | ModelHeadersResultMessage
   | RefreshOwnerMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
@@ -779,6 +782,7 @@ export interface ExternalSurfaceRunBeginResultMessage extends OutboundEnvelope {
   type: "external_surface_run_begin_result";
   ownerId: string;
   sessionId: string;
+  surfaceKind?: string;
   turnId: string;
   ok: boolean;
   runId?: string;
@@ -814,6 +818,8 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
    * trusting a silent no-op (#12731).
    */
   finalTextPersisted?: boolean;
+  /** Whether completion left a canonical assistant row for this voice turn. */
+  journalMaterialized?: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -859,6 +865,7 @@ export interface ResultMessage extends QueryScopedOutbound {
   jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
+  providerTargets?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -893,7 +900,7 @@ export interface RuntimeFailurePayload {
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
+  retryDisposition?: "next_send" | "same_turn";
 }
 
 /// One concrete model identity observed serving this turn's completions.
@@ -1028,6 +1035,32 @@ export interface ContextSourceOutcomeProjection {
   payload: Record<string, unknown>;
 }
 
+/** Compact, untrusted evidence reference admitted into shared context. Full
+ * evidence remains local to the journal and is read through an owner-scoped
+ * kernel helper when the model actually needs it. */
+export interface ConversationEvidenceProjection {
+  evidenceId: string;
+  kind: "screen" | "document" | "attachment" | "tool_result";
+  title: string;
+  capturedAtMs: number;
+  availability: "pending" | "available" | "partial" | "unavailable";
+  extractionCompleteness: "complete" | "partial" | "none";
+  snippet?: string;
+  digest?: string;
+  fullReadRequired: boolean;
+}
+
+/** Bounded receipts derived from the existing operation ledger. They describe
+ * recorded tool outcomes only; they are not a replacement for tool authority. */
+export interface ConversationOperationReceiptProjection {
+  invocationId: string;
+  runId: string;
+  toolName: string;
+  status: "prepared" | "dispatched" | "succeeded" | "failed" | "outcome_unknown";
+  retryPolicy: "safe_retry" | "never_auto_retry";
+  updatedAtMs: number;
+}
+
 export interface ContextSnapshotProjection {
   snapshotId: string;
   version: string;
@@ -1059,6 +1092,8 @@ export interface ContextSnapshotProjection {
   ownerId: string;
   sessionId: string;
   conversationId: string;
+  /** Journal clear generation at admission; absent only on legacy snapshots. */
+  conversationGeneration?: number;
   recentTurns: Array<{
     turnId: string;
     turnSeq: number;
@@ -1069,7 +1104,15 @@ export interface ContextSnapshotProjection {
     createdAtMs: number;
     /** Text of what the user's screen showed when this turn was asked (historical). */
     screenContext?: string;
+    /** Present when the desktop journaled this assistant turn's answer text as
+     *  complete even though spoken delivery was cut (e.g. a PTT barge-in). */
+    answerTextCompleted?: true;
+    /** Bounded historical evidence references attached to this turn. */
+    evidence?: ConversationEvidenceProjection[];
+    /** True when an authorized evidence read is needed for complete detail. */
+    evidenceReadRequired?: boolean;
   }>;
+  recentOperations?: ConversationOperationReceiptProjection[];
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
     sessionId: string;
@@ -1282,7 +1325,16 @@ export interface ChatFirstDeferralDeliveryMessage extends OutboundEnvelope {
   payloadHash: string;
 }
 
+export interface ModelHeadersRequestMessage {
+  type: "model_headers_request";
+  protocolVersion: number;
+  requestId: string;
+  ownerId: string;
+  forceRefresh: boolean;
+}
+
 export type OutboundMessage =
+  | ModelHeadersRequestMessage
   | InitMessage
   | TextDeltaMessage
   | ToolUseMessage
@@ -1323,6 +1375,7 @@ type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> 
 
 /** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
 export type OutboundMessageDraft =
+  | DraftEnvelope<ModelHeadersRequestMessage>
   | DraftEnvelope<InitMessage>
   | AuthRequiredMessage
   | AuthSuccessMessage

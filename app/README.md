@@ -87,9 +87,38 @@ build.
    ```
 
 
+### Verifying changes
+
+The fast path for app changes is the unified verify entrypoint (no device, no
+credentials — loopback fixtures and synthetic data only):
+
+```bash
+make mobile-verify ARGS="doctor"                              # lane readiness + remedy
+make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"  # focused journeys
+make mobile-verify ARGS="fast --all"                          # full hermetic suite
+```
+
+Selection is mechanical: journeys are discovered from
+`integration_test/journeys/`, changed paths map to the behaviors they can
+break, unknown `app/lib` changes fall back to the full suite, and an empty
+selection fails instead of passing. CI runs the same command in the
+`journeys-hermetic` lane when app/journey inputs change. Receipts, selection
+rules, simulator smoke, and the separate physical-device path:
+[`scripts/dev-harness/MOBILE_VERIFY.md`](../scripts/dev-harness/MOBILE_VERIFY.md).
+
 ### Building and Deploying to iPhone
 
 To build and deploy the app to an iPhone so it can run independently from your laptop:
+
+The quick path is the setup wrapper with an AOT build mode:
+```bash
+OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # or release
+```
+A plain `bash setup.sh ios` installs a debug (JIT) build, which iOS only lets run
+while `flutter run` is attached; opened from the Home Screen it shows a notice
+explaining that instead of starting.
+
+Manual equivalent:
 
 1. Build the iOS app with release mode and specific flavor:
    ```bash

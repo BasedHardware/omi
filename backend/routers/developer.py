@@ -13,12 +13,15 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
+from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
@@ -44,10 +47,12 @@ from dependencies import (
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
     get_uid_with_conversations_read_ask,
+    get_uid_with_conversations_from_segments_write,
     get_uid_with_conversations_write,
     get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
+    get_developer_memory_default_memory_create_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
@@ -479,7 +484,7 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_create_context),
 ):
     """
     Create a new memory for the authenticated user.
@@ -749,12 +754,28 @@ class CreateActionItemRequest(BaseModel):
     )
 
 
+def _optional_patch_text(value: Optional[str], field_name: str) -> Optional[str]:
+    """Shared guard for optional PATCH text fields: an omitted field (None) leaves the stored value
+    unchanged, but a provided value must contain non-whitespace text and is stored stripped (#13933)."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f'{field_name} cannot be blank')
+    return stripped
+
+
 class UpdateActionItemRequest(BaseModel):
     model_config = ConfigDict(title='UpdateActionItemRequest')
 
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
+
+    @field_validator('description')
+    @classmethod
+    def description_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'description')
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -955,6 +976,7 @@ def delete_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     action_items_db.delete_action_item(uid, action_item_id)
+    sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
 
@@ -984,7 +1006,7 @@ def update_action_item(
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
-    # Build update data from non-None fields
+    # Build update data from explicitly provided fields so due_at=null can clear the date.
     update_data = {}
     if request.description is not None:
         update_data['description'] = request.description.strip()
@@ -995,7 +1017,7 @@ def update_action_item(
             update_data['completed_at'] = datetime.now(timezone.utc)
         else:
             update_data['completed_at'] = None
-    if request.due_at is not None:
+    if 'due_at' in request.model_fields_set:
         update_data['due_at'] = request.due_at
 
     if not update_data:
@@ -1121,6 +1143,11 @@ class UpdateConversationRequest(BaseModel):
     )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
+    @field_validator('title')
+    @classmethod
+    def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'title')
+
 
 class DevTranscriptSegment(BaseModel):
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
@@ -1195,6 +1222,20 @@ class CreateConversationFromTranscriptRequest(BaseModel):
             raise ValueError('client_session_id cannot be empty')
         return value
 
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Reject offset-naive timestamps with a 422 instead of a 500.
+
+        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
+        the reverse) makes the handler's ``finished_at <= started_at`` check
+        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
+        routes (developer and first-party) share this model, so both get the 422.
+        """
+        if value is not None and value.tzinfo is None:
+            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
+        return value
+
 
 class DeveloperFolder(BaseModel):
     model_config = ConfigDict(title='DeveloperFolder')
@@ -1210,6 +1251,83 @@ class DeveloperFolder(BaseModel):
     is_default: bool = False
     is_system: bool = False
     conversation_count: int = 0
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries",
+    response_model=DailySummariesResponse,
+    tags=["Daily Summaries"],
+    operation_id="listDailySummaries",
+)
+def get_developer_daily_summaries(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    end_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_read),
+    request: Request = None,
+):
+    """List the authenticated user's stored daily recaps.
+
+    Daily summaries are derived from conversations, so this read uses the same
+    `conversations:read` scope and aggregate read budget as conversation lists.
+    """
+    status = 500
+    returned_count = 0
+    try:
+        summaries = daily_summaries_db.get_daily_summaries(
+            auth.uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        returned_count = len(summaries)
+        status = 200
+        return {'summaries': summaries}
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='list_daily_summaries',
+            status=status,
+            limit=limit,
+            offset=offset,
+            returned_count=returned_count,
+        )
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries/{summary_id}",
+    response_model=DailySummaryResponse,
+    tags=["Daily Summaries"],
+    operation_id="getDailySummary",
+)
+def get_developer_daily_summary(
+    summary_id: str,
+    auth: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
+    request: Request = None,
+):
+    """Get one stored daily recap by ID."""
+    status = 500
+    returned_count = 0
+    try:
+        summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if not summary:
+            status = 404
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+        status = 200
+        returned_count = 1
+        return summary
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='get_daily_summary',
+            status=status,
+            returned_count=returned_count,
+            resource_id=summary_id,
+        )
 
 
 @router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
@@ -1773,6 +1891,8 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    client_kind: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1986,6 +2106,13 @@ def _create_conversation_from_segments(
     receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
+    # Only new successful ingests reach here; idempotent replays return above.
+    record_product_event(
+        "conversation_created",
+        client_kind=client_kind,
+        app_build=app_build,
+        uid=uid,
+    )
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -2011,6 +2138,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind=extract_client_kind(http_request),
+        app_build=extract_app_build(http_request),
     )
 
 
@@ -2023,7 +2152,7 @@ def create_conversation_from_segments_user(
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(get_uid_with_conversations_from_segments_write),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -2078,6 +2207,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind='unknown',
+        app_build='unknown',
     )
 
 
@@ -2104,7 +2235,11 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    # Lazy: keep developer routes off the merge/memory import graph so stubbed
+    # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
+    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+
+    delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
 

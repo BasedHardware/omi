@@ -124,7 +124,17 @@ enum AgentErrorClassifier {
     // (circuit open, transport failure, upstream timeout) as well as hard
     // rejections, and it does not distinguish them on the wire. Resending is
     // worth one attempt.
-    if lower.contains("upstream provider error") {
+    //
+    // Desktop-backend also answers a coded 503 with an empty body
+    // (`HTTP 503 status code (no body)`). That string never contains
+    // "Upstream provider error", so without a status-shaped rule it fell
+    // through to `unknown` and the generic "Omi couldn't answer this one".
+    if lower.contains("upstream provider error")
+      || lower.range(of: #"\bhttp[\s/]*503\b"#, options: .regularExpression) != nil
+      || lower.range(
+        of: #"\b(?:503\s+status|status(?:\s+code)?\s*[:=]?\s*503)\b"#,
+        options: .regularExpression) != nil
+    {
       return ClassifiedAgentError(
         code: .upstreamProviderFailed,
         userMessage:
@@ -149,8 +159,11 @@ enum AgentErrorClassifier {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,
         userMessage:
-          "Omi's AI service declined this request for billing reasons. "
-          + "Check Settings → Plan and Usage; resending the same message won't help.",
+          "Omi's managed AI service declined this request for billing reasons. "
+          + "This request ran on the managed lane — your own provider key is used only "
+          + "when the request goes to a provider you hold a key for. Check Settings → "
+          + "Plan and Usage, or add a key for the provider this path uses. "
+          + "Resending the same message won't help.",
         retryable: false)
     }
     if lower.contains("credit balance is too low") {

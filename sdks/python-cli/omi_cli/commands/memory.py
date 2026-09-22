@@ -51,7 +51,7 @@ def list_memories(
     for m in items or []:
         rows.append(
             {
-                "id": shorten(m.get("id"), 14),
+                "id": m.get("id"),
                 "category": m.get("category"),
                 "visibility": m.get("visibility"),
                 "content": shorten(m.get("content"), 60),
@@ -85,8 +85,9 @@ def get_memory(
                 if item.get("id") == memory_id:
                     ctx.renderer.emit(item, title="memory")
                     return
-            if len(page) < page_size:
-                raise NotFoundError(message=f"Memory not found: {memory_id}")
+            # The API validates records after applying its database offset, so
+            # malformed historical rows can make a non-final page short.
+            # Keep scanning at the next database offset in that case.
             offset += page_size
 
 
@@ -147,5 +148,7 @@ def delete_memory(
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/memories/{memory_id}")
+        result = client.delete(f"/v1/dev/user/memories/{memory_id}")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")

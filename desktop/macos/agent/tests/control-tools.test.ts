@@ -2657,6 +2657,152 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("normalizes a legacy Codex adapter alias only on an authorized managed Pi spawn", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const surface = {
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "voice-codex-alias",
+    };
+    const coordinator = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: surface,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+    });
+    const parent = await kernel.executeRun({
+      ownerId: "owner",
+      surfaceKind: surface.surfaceKind,
+      externalRefKind: surface.externalRefKind,
+      externalRefId: surface.externalRefId,
+      defaultAdapterId: "pi-mono",
+      adapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      model: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+      clientId: "realtime",
+      requestId: "voice-parent-codex-alias",
+      prompt: "Delegate this",
+      cwd: "/tmp",
+    });
+
+    const spawned = parseToolResult(await handleAgentControlToolCall(
+      {
+        ...ownerContext(kernel),
+        defaultAdapterId: "pi-mono",
+        providerBoundary: "managed_cloud",
+        callerSessionId: coordinator.agentSessionId,
+        executionRole: "coordinator",
+        authorizedCallerRunId: parent.run.runId,
+        authorizedProducerJournal: {
+          schemaVersion: 1,
+          surface,
+          continuityKey: "voice-codex-alias",
+          pillId: "pill-codex-alias",
+          userText: "Delegate this",
+          assistantText: "Delegating",
+          objective: "Use the managed provider",
+          title: "Managed child",
+        },
+        authorizedToolInvocation: {
+          invocationId: "voice-codex-alias-invocation",
+          runId: parent.run.runId,
+          attemptId: parent.attempt!.attemptId,
+          toolName: "spawn_agent",
+        },
+      },
+      "spawn_agent",
+      {
+        objective: "Use the managed provider",
+        adapterId: "codex",
+        visible: true,
+        externalRefId: "pill-codex-alias",
+        requestId: "voice-codex-alias-child",
+        clientId: "realtime",
+        ownerId: "owner",
+      },
+    ));
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.session).toMatchObject({
+      defaultAdapterId: "pi-mono",
+      providerBoundary: "managed_cloud",
+    });
+    await waitUntil(() => adapter.executed.length >= 2
+      && store.allRows("SELECT status FROM runs").every((row) => row.status === "succeeded"));
+    store.close();
+  });
+
+  it("does not normalize a Codex alias from signed direct control", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const result = parseToolResult(await handleAgentControlToolCall(
+      {
+        ...ownerContext(kernel),
+        defaultAdapterId: "pi-mono",
+        providerBoundary: "managed_cloud",
+        trustedUserControl: true,
+      },
+      "spawn_agent",
+      {
+        objective: "do not reinterpret a direct adapter override",
+        adapterId: "codex",
+        requestId: "direct-codex-alias",
+        clientId: "desktop-floating-pill",
+        ownerId: "owner",
+      },
+    ));
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed", message: "Unknown production adapter: codex" },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(0);
+    store.close();
+  });
+
+  it("projects response-observed providers separately from the requested model", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    adapter.deferResult();
+    const execution = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      model: "omi-sonnet",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    adapter.resolveDeferred({
+      text: "provider-aware answer",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+    const completed = await execution;
+    expect(JSON.parse(store.getRow("SELECT result_json FROM runs WHERE run_id = ?", [completed.run.runId]).result_json)).toMatchObject({
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+    });
+
+    const inspected = parseToolResult(await handleAgentControlToolCall(
+      ownerContext(kernel),
+      "get_agent_run",
+      { ownerId: "owner", runId: completed.run.runId },
+    ));
+    expect(inspected.run).toMatchObject({
+      requestedModelId: "omi-sonnet",
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-5.6-luna"],
+      result: {
+        providerTargets: ["openai-codex"],
+        modelsUsed: ["gpt-5.6-luna"],
+      },
+    });
+    store.close();
+  });
+
   it("rejects an explicit local ACP override from a managed agent", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
     const result = parseToolResult(

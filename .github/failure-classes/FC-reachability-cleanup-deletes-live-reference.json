@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-reachability-cleanup-deletes-live-reference",
+  "violated_contract": "A cleanup that deletes files it classifies as unreferenced must prove reachability against every import in the tree it is scanning, not a subset. Deleting a module that a live file still imports and renders breaks that consumer's typecheck and build (a build that runs typecheck first fails before it ever bundles), and the break is invisible until something happens to touch that specific path again.",
+  "canonical_prevention": "Before deleting a module as dead, grep the full worktree (not just the directory being cleaned) for every relative and aliased import of its basename, and diff the deletion against a fresh `tsc --noEmit` / bundler resolve on the affected package; a genuinely dead module leaves both clean.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/windows/src/renderer/**",
+    "desktop/macos/**"
+  ],
+  "status": "open"
+}

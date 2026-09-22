@@ -619,7 +619,6 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn("路径🚀", completed.stdout)
         self.assertEqual(log, "路径🚀\n")
 
-    @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
     def test_pr_preflight_emits_utf8_from_unicode_branch_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
@@ -627,16 +626,33 @@ class LaunchContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
             unicode_branch = "分支-🚀"
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             root.mkdir()
+            # Preflight selects from the invoking repository. Keep this fixture
+            # self-contained instead of depending on the source checkout's manifest.
+            manifest = root / ".github/checks-manifest.yaml"
+            manifest.parent.mkdir()
+            manifest.write_text(
+                'checks:\n  - id: unicode-fixture\n'
+                '    command: ["python3", "-c", "pass"]\n'
+                '    triggers: ["all"]\n    lanes: ["local", "ci"]\n'
+                '    reason: portable fixture selection\n',
+                encoding="utf-8",
+            )
             subprocess.run(
                 [git, "init", "--quiet"],
                 cwd=root,
+                env=env,
                 check=True,
                 capture_output=True,
             )
             subprocess.run(
                 [
                     git,
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "commit.gpgsign=false",
                     "-c",
                     "user.name=Omi portability test",
                     "-c",
@@ -648,11 +664,11 @@ class LaunchContractTests(unittest.TestCase):
                     "initial",
                 ],
                 cwd=root,
+                env=env,
                 check=True,
                 capture_output=True,
             )
-            subprocess.run([git, "branch", unicode_branch], cwd=root, check=True, capture_output=True)
-            env = os.environ.copy()
+            subprocess.run([git, "branch", unicode_branch], cwd=root, env=env, check=True, capture_output=True)
             env["PYTHONUTF8"] = "0"
             env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
@@ -673,7 +689,8 @@ class LaunchContractTests(unittest.TestCase):
                 check=False,
             )
 
-        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("SELECTED unicode-fixture", completed.stdout)
         self.assertIn("PR preflight:", completed.stdout)
         self.assertIn(f"head={unicode_branch}", completed.stdout)
 

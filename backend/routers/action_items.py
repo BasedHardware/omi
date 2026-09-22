@@ -1,13 +1,12 @@
 import asyncio
-import hashlib
 import logging
 import uuid
 
 from utils.executors import postprocess_executor, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from typing import Optional, List
+from typing import Annotated, Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
@@ -35,6 +34,7 @@ from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
@@ -154,6 +154,12 @@ def _wake_task_changes(uid: str, task_ids: List[str], mutation_key: object) -> N
         run_task_changed_wake(uid, task_id=task_id, mutation_key=mutation_key)
 
 
+def _schedule_action_item_reminder(uid: str, action_item_id: str, description: str, due_at: datetime) -> None:
+    send_action_item_data_message(
+        user_id=uid, action_item_id=action_item_id, description=description, due_at=due_at.isoformat()
+    )
+
+
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
     action_item = action_items_db.get_action_item(uid, action_item_id)
     if not action_item:
@@ -240,8 +246,11 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 
     # Pre-fetch items to skip locked ones
     locked_ids = set()
+    existing_items = {}
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
+        if existing:
+            existing_items[item.id] = existing
         if existing and existing.get('is_locked', False):
             locked_ids.add(item.id)
 
@@ -280,6 +289,24 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
+    # This route completes tasks and moves due dates too, so it owes the same reminder
+    # reconciliation as the single-item paths (#5085): otherwise the phone still fires a
+    # reminder for a task the user ticked off during an Apple Reminders sync.
+    for update in updates:
+        if update['id'] not in updated_ids:
+            continue
+        data = update['data']
+        if 'completed' not in data and 'due_at' not in data:
+            continue
+        stored = existing_items.get(update['id'], {})
+        sync_action_item_reminder(
+            user_id=uid,
+            action_item_id=update['id'],
+            description=data.get('description', stored.get('description', '')),
+            completed=bool(data['completed']) if 'completed' in data else bool(stored.get('completed')),
+            due_at=data['due_at'] if 'due_at' in data else stored.get('due_at'),
+        )
+
     return _batch_mutation_response(result, locked_ids=locked_ids)
 
 
@@ -288,30 +315,31 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 # *****************************
 
 
-def _content_idempotency_key(uid: str, description: str) -> str:
-    """Stable idempotency key from (uid, normalized description).
+def _client_idempotency_key(raw: Optional[str]) -> Optional[str]:
+    """Return a caller-supplied retry key, or None to always insert.
 
-    Two POSTs from the same user with the same description (modulo case +
-    surrounding whitespace) collapse to the same key, so a flaky-network
-    retry no longer creates a duplicate Firestore document.
-
-    Uses a length-prefixed encoding so the boundary between ``uid`` and
-    ``description`` is unambiguous: ``f"{len(uid)}:{uid}:{description}"``.
-    Without this, a uid containing ``:`` (federated identities, future
-    multi-tenant ids) could collide with a different ``(uid, description)``
-    pair after concatenation.
+    Task titles are not unique: hashing the description treated a second
+    "Buy milk" as a retry of the first and returned the existing document
+    (same due date, gone after reload). Real retries must send their own
+    ``Idempotency-Key``.
     """
-    normalized = (description or '').strip().lower()
-    payload = f"{len(uid)}:{uid}:{normalized}"
-    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    if raw is None:
+        return None
+    key = raw.strip()
+    return key or None
 
 
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
-def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_action_item(
+    request: ActionItemCreateRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    idempotency_key: Annotated[Optional[str], Header(alias='Idempotency-Key', max_length=256)] = None,
+    http_request: Request = None,  # type: ignore[assignment]
+):
     """Create a new action item.
 
-    Content-idempotent on (uid, normalized description): a retry of the same
-    request returns the original action_item rather than creating a duplicate.
+    Idempotent only when the client sends ``Idempotency-Key``. Two creates
+    with the same description (and different keys, or no key) are two tasks.
     """
     try:
         task_links.validate_task_links(uid, goal_id=request.goal_id, workstream_id=request.workstream_id)
@@ -319,9 +347,10 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item_data = request.storage_payload()
 
-    idempotency_key = _content_idempotency_key(uid, request.description)
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+        action_item_id = action_items_db.create_action_item(
+            uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key)
+        )
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
@@ -335,12 +364,7 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     # Schedule a reminder only for an open task with a due date — an already-completed item must
     # not arm a reminder (#5085).
     if request.due_at and not request.completed:
-        send_action_item_data_message(
-            user_id=uid,
-            action_item_id=action_item_id,
-            description=request.description,
-            due_at=request.due_at.isoformat(),
-        )
+        _schedule_action_item_reminder(uid, action_item_id, request.description, request.due_at)
 
     upsert_action_item_vector(uid, action_item_id, request.description)
 
@@ -349,6 +373,7 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
 
     submit_with_context(postprocess_executor, _run_auto_sync)
 
+    record_product_event('action_item_created', request=http_request)
     return ActionItemResponse(**action_item)
 
 
@@ -653,7 +678,10 @@ def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_use
 
 @router.patch("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def update_action_item(
-    action_item_id: str, request: ActionItemUpdateRequest, uid: str = Depends(auth.get_current_user_uid)
+    action_item_id: str,
+    request: ActionItemUpdateRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Update an action item."""
     # Check if action item exists
@@ -725,6 +753,7 @@ def update_action_item(
             due_at=updated_item.get('due_at'),
         )
 
+    record_product_event('action_item_mutated', request=http_request, op='update')
     return ActionItemResponse(**updated_item)
 
 
@@ -733,6 +762,7 @@ def toggle_action_item_completion(
     action_item_id: str,
     completed: bool = Query(description="Whether to mark as completed or not"),
     uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Mark an action item as completed or uncompleted."""
     # Check if action item exists
@@ -775,11 +805,16 @@ def toggle_action_item_completion(
                 f"{recipient_name} completed: {description}",
             )
 
+    record_product_event('action_item_mutated', request=http_request, op='toggle_complete')
     return ActionItemResponse(**updated_item)
 
 
 @router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
-def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
+):
     """Delete an action item."""
     _get_valid_action_item(uid, action_item_id)
     success = action_items_db.delete_action_item(uid, action_item_id)
@@ -791,6 +826,7 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
     # Send FCM deletion message to cancel scheduled notification
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
+    record_product_event('action_item_mutated', request=http_request, op='delete')
 
 
 class BatchDeleteActionItemsRequest(BaseModel):
@@ -798,7 +834,11 @@ class BatchDeleteActionItemsRequest(BaseModel):
 
 
 @router.post("/v1/action-items/batch-delete", response_model=BatchDeleteActionItemsResponse, tags=['action-items'])
-def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+def batch_delete_action_items(
+    request: BatchDeleteActionItemsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
+):
     """Delete multiple action items in one request.
 
     Firestore deletes go through chunked batched commits in the DB layer; the
@@ -820,6 +860,8 @@ def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str =
         delete_action_item_vectors_batch(uid, deleted_ids)
         send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
 
+    if deleted_ids:
+        record_product_event('action_item_mutated', request=http_request, op='batch_delete', count=len(deleted_ids))
     return {"status": "Ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
@@ -895,7 +937,9 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
 
 @router.post("/v1/action-items/batch", response_model=BatchCreateActionItemsResponse, tags=['action-items'])
 def create_action_items_batch(
-    action_items: List[ActionItemCreateRequest], uid: str = Depends(auth.get_current_user_uid)
+    action_items: List[ActionItemCreateRequest],
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Create multiple action items in a batch."""
     if not action_items:
@@ -928,12 +972,7 @@ def create_action_items_batch(
             # Send FCM data message if action item has a due date
             due_at = action_items[idx].due_at if idx < len(action_items) else None
             if due_at is not None:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=item_id,
-                    description=action_items[idx].description,
-                    due_at=due_at.isoformat(),
-                )
+                _schedule_action_item_reminder(uid, item_id, action_items[idx].description, due_at)
 
     upsert_action_item_vectors_batch(
         uid,
@@ -944,6 +983,8 @@ def create_action_items_batch(
     )
     _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
+    if created_ids:
+        record_product_event('action_item_created', request=http_request, count=len(created_ids))
     return {"action_items": created_items, "created_count": len(created_items)}
 
 
@@ -1064,6 +1105,8 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         new_id = action_items_db.create_action_item(uid, new_item)
         created_ids.append(new_id)
         upsert_action_item_vector(uid, new_id, new_item['description'])
+        if isinstance(new_item['due_at'], datetime):
+            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -209,14 +210,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return [];
+  if (response == null) return null;
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
@@ -229,12 +230,16 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
     people.sort((a, b) => a.name.compareTo(b.name));
     return people;
   }
-  return [];
+  return null;
 }
+
+@visibleForTesting
+String personNamePath(String personId, String newName) =>
+    'v1/users/people/$personId/name?value=${Uri.encodeQueryComponent(newName)}';
 
 Future<bool> updatePersonName(String personId, String newName) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people/$personId/name?value=$newName',
+    url: '${Env.apiBaseUrl}${personNamePath(personId, newName)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -270,9 +275,18 @@ Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
 
 /*Analytics*/
 
+@visibleForTesting
+String conversationSummaryRatingPath(String conversationId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value';
+  if (reason != null && reason.isNotEmpty) {
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
+  }
+  return path;
+}
+
 Future<bool> setConversationSummaryRating(String conversationId, int value, {String? reason}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value&reason=$reason',
+    url: '${Env.apiBaseUrl}${conversationSummaryRatingPath(conversationId, value, reason: reason)}',
     headers: {},
     method: 'POST',
     body: '',
@@ -284,16 +298,22 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   return data.status == 'ok';
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
-  // Build URL with required params
-  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
-
-  // Add reason param if provided (for thumbs down feedback)
+@visibleForTesting
+String chatMessageRatingPath(String messageId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/chat_message?message_id=$messageId&value=$value';
   if (reason != null && reason.isNotEmpty) {
-    url += '&reason=$reason';
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
   }
+  return path;
+}
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${chatMessageRatingPath(messageId, value, reason: reason)}',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
   if (response.statusCode != 200) return false;
@@ -409,19 +429,21 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   return null;
 }
 
-Future<Map<String, dynamic>> getTrainingDataOptIn() async {
+/// Returns `null` on a failed fetch, so a transient error is not read as a user
+/// who never opted in.
+Future<Map<String, dynamic>?> getTrainingDataOptIn() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return {'opted_in': false, 'status': null};
+  if (response == null) return null;
   Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
     return wire.GeneratedTrainingDataOptInResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
-  return {'opted_in': false, 'status': null};
+  return null;
 }
 
 Future<bool> setTrainingDataOptIn() async {
@@ -549,21 +571,23 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
 
 // Daily Summaries API
 
-Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+/// `ok` is false when the recaps could not be read (no response / non-200 /
+/// unparsable body). Callers must not treat that as the user having no recaps.
+Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null || response.statusCode != 200) return [];
+  if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaries?.map(DailySummary.fromGenerated).toList() ?? [];
+    return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
-    return [];
+    return (items: const <DailySummary>[], ok: false);
   }
 }
 
@@ -769,22 +793,45 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
 /// the entire JSON into memory. Returns the file path on success, null on failure.
 Future<String?> exportUserDataToFile(String filePath) async {
+  final file = File(filePath);
+  IOSink? sink;
   try {
     final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
     if (response.statusCode != 200) {
       Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
       return null;
     }
-    final file = File(filePath);
-    final sink = file.openWrite();
+    final downloadSink = file.openWrite();
+    sink = downloadSink;
+    var bytesWritten = 0;
     await for (final chunk in response.stream) {
-      sink.add(chunk);
+      downloadSink.add(chunk);
+      bytesWritten += chunk.length;
     }
-    await sink.flush();
-    await sink.close();
+    await downloadSink.flush();
+    await downloadSink.close();
+    sink = null;
+    if (bytesWritten == 0) {
+      Logger.debug('exportUserDataToFile failed: empty response body');
+      if (await file.exists()) {
+        await file.delete();
+      }
+      return null;
+    }
     return filePath;
   } catch (e) {
     Logger.debug('exportUserDataToFile error: $e');
+    final openSink = sink;
+    if (openSink != null) {
+      try {
+        await openSink.close();
+      } catch (_) {}
+    }
+    if (await file.exists()) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
     return null;
   }
 }

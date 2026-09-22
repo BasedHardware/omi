@@ -22,12 +22,21 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
+    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
 )
 
-# backend-listen finalizes a live conversation; cloud_run/backend runs process_conversation
-# inline for POST /v1/conversations/{id}/reprocess. Both must agree or "regenerate" produces
-# a different summary pipeline than the one that captured the conversation.
-SUMMARY_PIPELINE_SCOPES = ('gke/backend-listen', 'cloud_run/backend')
+# backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
+# process_conversation path after 2026-08-30; cloud_run/backend runs it inline
+# for POST /v1/conversations/{id}/reprocess; cloud_run/backend-sync is the
+# Cloud Tasks conversation-finalization writer for pendant/phone. All four
+# must agree or a captured conversation and a regenerate/sync finalization
+# produce different pipelines.
+SUMMARY_PIPELINE_SCOPES = (
+    'gke/backend-listen',
+    'gke/pusher',
+    'cloud_run/backend',
+    'cloud_run/backend-sync',
+)
 
 
 @functools.cache
@@ -38,7 +47,9 @@ def _composed() -> dict:
 def _env_maps(environment: dict) -> dict[str, dict]:
     return {
         'gke/backend-listen': environment['gke']['backend-listen']['env'],
+        'gke/pusher': environment['gke']['pusher']['env'],
         'cloud_run/backend': environment['cloud_run']['services']['backend']['env'],
+        'cloud_run/backend-sync': environment['cloud_run']['services']['backend-sync']['env'],
     }
 
 
@@ -69,6 +80,13 @@ def test_prod_keeps_calendar_and_ocr_context_flags_dark():
             assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
 
 
+def test_prod_keeps_basic_plan_eager_extraction_gate_dark():
+    """PR #14165's identified-basic first-open deny stays prod-off until a separate ask."""
+    env_maps = _env_maps(_composed()['environments']['prod'])
+    for scope in SUMMARY_PIPELINE_SCOPES:
+        assert _value(env_maps[scope], 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED') == 'false', scope
+
+
 def test_reprocess_cannot_disagree_with_live_finalization():
     """The defect this guards is silent: flags declared on only one service.
 
@@ -81,17 +99,22 @@ def test_reprocess_cannot_disagree_with_live_finalization():
             values = {scope: _value(env_maps[scope], flag) for scope in SUMMARY_PIPELINE_SCOPES}
             assert len(set(values.values())) == 1, f'{flag}: {values}'
             assert values['gke/backend-listen'] != '', flag
+            assert values['gke/pusher'] != '', flag
+            assert values['cloud_run/backend'] != '', flag
+            assert values['cloud_run/backend-sync'] != '', flag
 
 
 def test_the_deployed_chart_values_match_the_composed_manifest():
     """Helm reads the values file, not runtime_env.yaml, so drift here is what actually ships."""
     composed = _composed()
-    for environment, chart in (
-        ('dev', 'dev_omi_backend_listen_values.yaml'),
-        ('prod', 'prod_omi_backend_listen_values.yaml'),
+    for environment, chart_dir, chart, scope in (
+        ('dev', 'backend-listen', 'dev_omi_backend_listen_values.yaml', 'gke/backend-listen'),
+        ('prod', 'backend-listen', 'prod_omi_backend_listen_values.yaml', 'gke/backend-listen'),
+        ('dev', 'pusher', 'dev_omi_pusher_values.yaml', 'gke/pusher'),
+        ('prod', 'pusher', 'prod_omi_pusher_values.yaml', 'gke/pusher'),
     ):
-        values = yaml.safe_load((BACKEND / 'charts/backend-listen' / chart).read_text(encoding='utf-8'))
+        values = yaml.safe_load((BACKEND / 'charts' / chart_dir / chart).read_text(encoding='utf-8'))
         rendered = {entry['name']: str(entry.get('value', '')).strip().lower() for entry in values['env']}
-        expected = _env_maps(composed['environments'][environment])['gke/backend-listen']
+        expected = _env_maps(composed['environments'][environment])[scope]
         for flag in ROLLOUT_FLAGS:
-            assert rendered.get(flag) == _value(expected, flag), f'{environment}:{flag}'
+            assert rendered.get(flag) == _value(expected, flag), f'{environment}:{scope}:{flag}'

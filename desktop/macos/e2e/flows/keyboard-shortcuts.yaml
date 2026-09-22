@@ -18,7 +18,7 @@ steps:
       params:
         shortcut: "1"
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S2
     name: Navigate Memories via Cmd+3 equivalent
@@ -27,7 +27,7 @@ steps:
       params:
         shortcut: "3"
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S3
     name: Navigate Settings via Cmd+, equivalent
@@ -36,7 +36,7 @@ steps:
       params:
         shortcut: ","
     wait:
-      state.selectedTabIndex: 9
+      state.chatFirstRoute: more.settings
 
   - id: S4
     name: Logs clean

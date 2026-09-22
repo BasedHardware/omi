@@ -40,6 +40,7 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "advanced_settings_snapshot",
       "settings_aichat_snapshot",
       "assign_speaker_fixture",
+      "local_summary_benchmark",
     ] {
       XCTAssertTrue(
         source.contains("name: \"\(action)\""),
@@ -58,6 +59,18 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     )
     XCTAssertTrue(
       try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
+  }
+
+  func testLocalSummaryBenchmarkReturnsReportPath() throws {
+    let source = try bridgeSource()
+    let body = try actionBody(named: "local_summary_benchmark", in: source)
+    for key in ["path", "schema_valid_count", "kind", "MemoryLocalProjectionStore"] {
+      XCTAssertTrue(body.contains(key), "local_summary_benchmark should expose \(key)")
+    }
+    XCTAssertTrue(
+      body.contains("AppBuild.isNonProduction"),
+      "benchmark action must stay off production bundles"
     )
   }
 
@@ -117,6 +130,34 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog"))
     XCTAssertFalse(body.contains("OnboardingImportEvidenceService.save"))
     XCTAssertFalse(body.contains("ConnectorImportOperations.memoryLogOutcome"))
+  }
+
+  @MainActor
+  func testMutatingActionsExposeAccurateDiscoveryMetadata() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptors = registry.descriptors()
+
+    let importProbe = try XCTUnwrap(
+      descriptors.first { $0.name == "memory_log_import_probe" })
+    XCTAssertEqual(importProbe.category, "write")
+    XCTAssertEqual(importProbe.surfaces, ["import_connectors"])
+    XCTAssertEqual(importProbe.safety, "remote_write")
+    XCTAssertEqual(
+      importProbe.sideEffects,
+      ["may call model/backend services", "may save imported memory data"])
+
+    let clearState = try XCTUnwrap(
+      descriptors.first { $0.name == "clear_owner_surface_state" })
+    XCTAssertEqual(clearState.category, "write")
+    XCTAssertEqual(clearState.surfaces, ["main_chat"])
+    XCTAssertEqual(clearState.safety, "remote_write")
+    XCTAssertEqual(
+      clearState.sideEffects,
+      [
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ])
   }
 
   func testFloatingIdleWaitRequiresObservedSubmission() throws {

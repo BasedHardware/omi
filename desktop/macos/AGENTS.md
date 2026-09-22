@@ -203,11 +203,12 @@ do not hand-edit those paths to match a specific machine.
 ## Key Architecture Notes
 
 ### Authentication
-- Firebase Auth with Apple/Google Sign-In
-- Desktop apps should use backend OAuth flow: `/v1/auth/authorize`
+- Firebase (Apple/Google); desktop OAuth: `/v1/auth/authorize`
 - Apple Services ID: `me.omi.web` (shared across all apps)
 - iOS apps use native Sign-In, Desktop uses backend OAuth + custom token
 - Session death is owned by `AuthSessionCoordinator` (`INV-AUTH-1`); use `invalidateSession` for expired/revoked Firebase creds, not nuclear `signOut()`.
+
+- [Agent credentials](docs/agent-model-credentials.md).
 
 #### Session 401 vs BYOK/provider 401
 
@@ -226,9 +227,10 @@ do not hand-edit those paths to match a specific machine.
 
 ### Screen activity sync rollout
 
-- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
+- Local embeddings (opt-in): [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
@@ -246,8 +248,7 @@ User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
 runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/agent-docs/desktop-user-extensions.md).
 
 ### Known Limitations
-- Firestore has no collection group indexes for `source` field
-- Counting users by platform requires iterating all users (slow)
+- Firestore has no collection group indexes for `source`; counting users by platform is a full scan
 - Apple Sign-In: Only one Services ID per Firebase project
 
 ## Development Workflow
@@ -287,8 +288,9 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 **Rules:**
 - NEVER use the default `./run.sh` (which overwrites "Omi Dev") when testing a specific feature — always set `OMI_APP_NAME`
 - **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
-- Keep the name short and descriptive (it becomes both the app name and bundle ID suffix)
+- Use short names: the name sets the app name and bundle ID suffix.
 - The named bundle gets its own permissions and writable database. A full `./run.sh` install auto-seeds auth/onboarding and a one-time consistent Rewind snapshot from the shared local profile; every full or fast named-bundle launch mirrors the curated settings allowlist — including both hotkeys — from the resolved settings authority: `OMI_SETTINGS_SEED_SOURCE` if set (fail-closed when that domain is missing), else production "Omi" (`com.omi.computer-macos`) when installed, else "Omi Dev". Set `OMI_SKIP_REWIND_SEED=1` to start with an empty Rewind profile or `OMI_SKIP_SETTINGS_SEED=1` to preserve intentional bundle-local settings.
+- JIT QA: [runbook](../../backend/docs/runbooks/jit-qa-cloud-run.md).
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch, falling back to the production "Omi" session when Omi Dev's is missing (`OMI_AUTH_DUMP_SOURCE=<bundle-id>` pins a source explicitly).
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.

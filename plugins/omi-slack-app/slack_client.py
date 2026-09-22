@@ -67,7 +67,6 @@ class SlackClient:
                         print(f"⚠️  Check Slack app settings - ensure User Token Scopes are set", flush=True)
                     else:
                         print("✅ Using USER token (messages will appear as user)", flush=True)
-                        print(f"✅ User token starts with: {user_token[:15]}...", flush=True)
                     
                     return {
                         "access_token": user_token,
@@ -97,7 +96,8 @@ class SlackClient:
         try:
             cursor = None
             page_count = 0
-            
+            seen_cursors = set()
+
             while True:
                 # Get channels with pagination
                 params = {
@@ -136,9 +136,15 @@ class SlackClient:
                 # Check if there are more pages
                 response_metadata = result.get("response_metadata", {})
                 cursor = response_metadata.get("next_cursor")
-                
+
+                if cursor and cursor in seen_cursors:
+                    print("⚠️  Pagination stalled: repeated cursor, stopping", flush=True)
+                    break
+
                 if not cursor:
                     break
+
+                seen_cursors.add(cursor)
             
             # Log summary
             public_channels = [c for c in channels if not c.get("is_private")]
@@ -177,14 +183,12 @@ class SlackClient:
         With user tokens, messages automatically post as the user.
         Returns message data if successful.
         """
-        client = WebClient(token=access_token)
-        
-        # Debug: Check token type
-        token_prefix = access_token[:15] if access_token else "None"
-        token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
-        print(f"🔑 Sending with {token_type} token: {token_prefix}...", flush=True)
-        
         try:
+            client = WebClient(token=access_token)
+            
+            # Debug: Check token type
+            token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
+            print(f"🔑 Sending with {token_type} token", flush=True)
             # Note: as_user parameter is deprecated and not needed with user tokens
             # User tokens automatically post messages as the authenticated user
             result = client.chat_postMessage(
@@ -230,7 +234,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error sending message"
             }
     
     def get_channel_history(
@@ -245,9 +249,8 @@ class SlackClient:
         Use this for getting recent messages (like today's messages).
         Requires channels:history scope.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
             params = {
                 "channel": channel_id,
                 "limit": limit
@@ -283,7 +286,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error getting channel history"
             }
     
     async def search_messages(
@@ -297,9 +300,9 @@ class SlackClient:
         For recent messages in a specific channel, prefers using channel history.
         Returns list of matching messages.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
+            
             # If searching in a specific channel and query is simple (like "today" or empty),
             # use channel history instead of search API for better results
             if channel:
@@ -324,6 +327,10 @@ class SlackClient:
                             channel_name = ch["name"]
                             break
                 
+                if not channel_id:
+                    # An explicit channel must never degrade into a workspace-wide search.
+                    return {"success": False, "error": "channel_not_found_or_unavailable"}
+
                 if channel_id:
                     # Check if query is asking for recent messages (today, recent, etc.)
                     query_lower = query.lower().strip()
@@ -383,19 +390,8 @@ class SlackClient:
             # Use search API for general searches
             search_query = query
             if channel:
-                # If channel is provided, search within that channel
-                if not channel.startswith('C') and not channel.startswith('G'):
-                    # It's a channel name, need to find the ID
-                    channels = self.list_channels(access_token)
-                    channel_id = None
-                    for ch in channels:
-                        if ch["name"].lower() == channel.lower().lstrip('#'):
-                            channel_id = ch["id"]
-                            break
-                    if channel_id:
-                        search_query = f"in:{channel_id} {query}"
-                else:
-                    search_query = f"in:{channel} {query}"
+                # Reuse the resolved ID, including when channel history fails.
+                search_query = f"in:{channel_id} {query}"
             
             print(f"🔍 Using search API with query: '{search_query}'", flush=True)
             result = client.search_messages(query=search_query)
@@ -427,7 +423,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error searching messages"
             }
     
     def search_channels(

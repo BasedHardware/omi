@@ -235,7 +235,7 @@ extension RealtimeHubController {
     switch evidence?.captureFailure {
     case .screenRecordingPermissionRequired: return "permission_required"
     case .screenRecordingNeedsRelaunch: return "needs_relaunch"
-    case .captureUnavailable, nil: return "screen_unverified"
+    case .captureUnavailable, .automationBypass, nil: return "screen_unverified"
     }
   }
 
@@ -385,6 +385,7 @@ extension RealtimeHubController {
     }
 
     assistantText = presentedFailure
+    externalRunAuthorityState?.answer.replace(with: presentedFailure)
     _ = enqueueAuthoritativeScreenEvidenceFailurePersistence(
       ownerID: ownerID,
       assistantText: presentedFailure)
@@ -483,8 +484,20 @@ extension RealtimeHubController {
   /// Non-production bridge diagnostics deliberately expose state labels and outcome classes
   /// only. They are enough to pinpoint a stuck protocol without logging pixels, app identity,
   /// evidence IDs, transcripts, or model text.
+  func automationScreenEvidenceAdmissionLabel() -> String {
+    guard let evidence = screenEvidence else { return "pending" }
+    if evidence.descriptor.captureFailure == .automationBypass {
+      return "skipped"
+    }
+    if evidence.descriptor.canVerifyCurrentScreen || evidence.preOverlayImage != nil || evidence.jpeg != nil {
+      return "captured"
+    }
+    return "unavailable"
+  }
+
   func automationScreenEvidenceDiagnostics() -> [String: String] {
     [
+      "screen_evidence": automationScreenEvidenceAdmissionLabel(),
       "screen_evidence_state": screenGroundingState.diagnosticsLabel,
       "screen_evidence_protocol_active": screenGroundingState.protocolToken == nil ? "false" : "true",
       "screen_evidence_last_completion": lastScreenEvidenceProtocolCompletion.rawValue,
@@ -508,6 +521,7 @@ extension RealtimeHubController {
       "stale_event_count": "\(coordinator.model.staleEventCount)",
       "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
       "pending_tool_count": "\(turn?.pendingToolCallIDs.count ?? 0)",
+      "hub_ready": isTransportReady ? "true" : "false",
       // Live animation inputs — lets automation assert the notch waveform /
       // speaking pulse actually receive audio levels during a real turn.
       "live_mic_level": String(format: "%.4f", AudioLevelMonitor.shared.liveMicrophoneLevel),
@@ -533,6 +547,7 @@ extension RealtimeHubController {
     guard !screenFailurePresented else { return }
     screenFailurePresented = true
     assistantText = failure.trimmingCharacters(in: .whitespacesAndNewlines)
+    externalRunAuthorityState?.answer.replace(with: assistantText)
     guard !assistantText.isEmpty else { return }
     // The moment the local string is actually spoken. Recording it here — not at the rejection —
     // makes the user-visible failure rate queryable without inferring it from fallback events

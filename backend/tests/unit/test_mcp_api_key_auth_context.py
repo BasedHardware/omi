@@ -68,7 +68,9 @@ class _FakeQuery:
     def limit(self, _limit):
         return self
 
-    def stream(self):
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def stream(self, **_read_options):
         return list(self._docs)
 
 
@@ -121,7 +123,7 @@ class _FakeGrantDoc:
     def set(self, payload, merge=False):
         self.parent.grant_sets.append((self.user_id, self.collection_name, self.doc_id, payload, merge))
 
-    def get(self):
+    def get(self, **_read_options):
         return SimpleNamespace(exists=False, to_dict=lambda: {})
 
 

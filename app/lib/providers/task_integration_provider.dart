@@ -11,6 +11,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
+  final Future<bool> Function(String appKey) _setDefaultTaskIntegration;
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
@@ -19,8 +20,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool _appleRemindersPermissionManuallySet = false;
   int _sessionGeneration = 0;
 
-  TaskIntegrationProvider()
-      : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+  TaskIntegrationProvider({
+    Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn,
+  })  : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
+        _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
@@ -85,15 +88,22 @@ class TaskIntegrationProvider extends ChangeNotifier {
     }
   }
 
-  /// Set default app and save to backend
-  Future<void> setSelectedApp(TaskIntegrationApp app) async {
-    _selectedApp = app;
-    notifyListeners();
-
+  /// Set default app and save to backend.
+  ///
+  /// Only publishes the selection after the server accepts it so local state
+  /// cannot claim a default that was never persisted.
+  Future<bool> setSelectedApp(TaskIntegrationApp app) async {
+    final generation = _sessionGeneration;
     try {
-      await setDefaultTaskIntegration(app.key);
+      final success = await _setDefaultTaskIntegration(app.key);
+      if (generation != _sessionGeneration || !success) return false;
+
+      _selectedApp = app;
+      notifyListeners();
+      return true;
     } catch (e) {
       Logger.debug('Error saving default task integration: $e');
+      return false;
     }
   }
 

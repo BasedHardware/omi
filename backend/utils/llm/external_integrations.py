@@ -15,6 +15,7 @@ from models.daily_summary_payload import DailySummaryDayStatsPayload, DailySumma
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from models.other import Person
+from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
@@ -23,6 +24,11 @@ from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Read-time address fills per generated summary (see the pins loop below):
+# bounds geocode attempts — and therefore worst-case wall-clock — per summary
+# generation; pins past the cap keep an empty address ("Unknown" in the app).
+_DAILY_SUMMARY_GEOCODE_ATTEMPT_CAP = 10
 
 
 def _content_str(response: Any) -> str:
@@ -266,8 +272,30 @@ def generate_comprehensive_daily_summary(
     # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
     # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
     locations: List[Dict[str, Any]] = []
+    geocode_attempts = 0
     for c in non_discarded:
         if c.geolocation:
+            address = c.geolocation.address
+            if not address and geocode_attempts < _DAILY_SUMMARY_GEOCODE_ATTEMPT_CAP:
+                # Read-time fill for conversations created before write-time
+                # enrichment existed (notably the sync path): look the address up
+                # through the shared ~100m-rounded geocode cache, so a day whose
+                # conversations were already enriched costs no extra upstream call.
+                # A geocode miss or error leaves the address empty — the pin stays
+                # and the app labels it "Unknown"; a pin is never dropped.
+                # The attempt cap bounds wall-clock: cache hits are cheap, but
+                # attempts (hits and misses alike) are the deterministic bound —
+                # 10 attempts x the geocoder's 10s worst case stays far inside
+                # the summary job's budget. Pins past the cap keep an empty
+                # address and fall back to the app's "Unknown" label.
+                geocode_attempts += 1
+                try:
+                    geocoded = get_google_maps_location(c.geolocation.latitude, c.geolocation.longitude)
+                except Exception as error:
+                    logger.warning('daily summary address geocode failed error_type=%s', type(error).__name__)
+                    geocoded = None
+                if geocoded is not None:
+                    address = geocoded.address
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:
@@ -279,7 +307,7 @@ def generate_comprehensive_daily_summary(
                 {
                     "latitude": c.geolocation.latitude,
                     "longitude": c.geolocation.longitude,
-                    "address": c.geolocation.address,
+                    "address": address,
                     "conversation_id": c.id,
                     "time": local_time,
                 }

@@ -159,11 +159,14 @@ actor FileIndexerService {
     log("FileIndexer: Starting background rescan")
 
     let home = FileManager.default.homeDirectoryForCurrentUser
-    let folders = scanPolicy.automaticScanRoots(
+    let scanPlan = scanPolicy.automaticScanPlan(
       homeURL: home,
       fullDiskAccessGranted: fullDiskAccessGranted)
 
-    let count = await scanFolders(folders, incremental: true)
+    let count = await scanFolders(
+      scanPlan.roots,
+      incremental: true,
+      retentionProtectedPrefixes: scanPlan.retainedPrefixes)
     log("FileIndexer: Background rescan complete, \(count) files indexed")
   }
 
@@ -175,6 +178,7 @@ actor FileIndexerService {
   func scanFolders(
     _ folders: [URL],
     incremental: Bool = false,
+    retentionProtectedPrefixes: Set<String> = [],
     shouldContinue: @escaping @Sendable () -> Bool = { !Task.isCancelled }
   ) async -> Int {
     activeScanOperations += 1
@@ -191,11 +195,14 @@ actor FileIndexerService {
     // For incremental scans, load existing index for O(1) lookup
     let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
     var scannedPaths = Set<String>()
-    // ~-relative prefixes of directories whose enumeration FAILED (permission
-    // revoked, transient I/O). Files under these were not scanned, but that is
-    // a read error — not deletion — so they must be excluded from the retention
-    // diff (otherwise a single unreadable folder purges its whole index subtree).
-    var failedDirectories = Set<String>()
+    // ~-relative prefixes of subtrees that were NOT scanned, for either of two
+    // reasons: enumeration failed (permission revoked, transient I/O), or the
+    // caller deliberately omitted a TCC-protected root it has no access to and
+    // passed it in as `retentionProtectedPrefixes`. Neither is deletion, so both
+    // must be excluded from the retention diff — otherwise one unreadable folder,
+    // or one root left out for want of Full Disk Access, purges its whole index
+    // subtree.
+    var failedDirectories = retentionProtectedPrefixes
 
     if incremental {
       log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")

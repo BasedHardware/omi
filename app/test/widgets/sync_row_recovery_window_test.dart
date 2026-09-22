@@ -20,9 +20,11 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
-/// A recording the server permanently refused for being older than the
-/// automatic-recovery window must say so on its row, and must not offer a
-/// Retry that can never succeed (#10975).
+/// A recording the server will never accept must say so on its row, and must
+/// not offer a Retry that can never succeed: too old for the automatic-recovery
+/// window (#10975), or audio the transcription job cannot read. Both offer
+/// deletion instead, because otherwise the "needs attention" banner is permanent
+/// and the only way out is an unlabelled swipe.
 
 class _Listener implements IWalSyncListener {
   @override
@@ -163,5 +165,23 @@ void main() {
 
     expect(find.text('Failed — tap Retry'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing, reason: 'a deliberate retry can still succeed here');
+  });
+
+  testWidgets('unreadable audio explains itself and offers Delete, not Retry', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.unsupportedAudio));
+
+    expect(find.text("Audio couldn't be read — can't be synced"), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.text('Failed — tap Retry'), findsNothing);
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
+  testWidgets('every unsyncable state offers the same way out', (tester) async {
+    for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
+      await pumpRow(tester, makeWal(status));
+      expect(find.text('Delete'), findsOneWidget, reason: '$status has no other resolution');
+      expect(find.text('Retry'), findsNothing, reason: '$status cannot be retried into success');
+    }
   });
 }

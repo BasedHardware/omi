@@ -1,7 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Dict, List, Literal, Optional
-import uuid
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -23,7 +22,7 @@ from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
 from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
@@ -34,6 +33,11 @@ __all__ = [
     'Conversation',
     'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
+    'ConversationSyncConflictResponse',
+    'ConversationSyncOperation',
+    'ConversationSyncMutationRequest',
+    'ConversationSyncMutationResponse',
+    'ConversationSyncState',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -44,6 +48,8 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'SetConversationStarredOperation',
+    'SetConversationTitleOperation',
     'TranscriptMatchSnippet',
     'SharedActionItem',
     'SharedAppResult',
@@ -282,6 +288,8 @@ class TranscriptMatchSnippet(BaseModel):
 
 
 class Conversation(BaseModel):
+    sync_content_revision: Optional[int] = None
+    sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
     created_at: datetime
     # Firestore's document update time, attached by the database read layer.
@@ -295,10 +303,9 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
-    # provider, so no Omi transcription credits were consumed. Provenance only:
-    # post-processing does not gate on it — custom-STT conversations get the same
-    # Omi-paid enrichment as any other. The marker keeps custom-STT spend
-    # queryable, and feeds the isolated fair-use lane (#7690).
+    # provider, so no Omi transcription credits were consumed. Provenance for
+    # the isolated fair-use lane and the conversation-processing credit gate:
+    # custom-STT still hits LLM/post-processing metering (#7690).
     uses_custom_stt: bool = False
 
     structured: Structured
@@ -384,12 +391,7 @@ class Conversation(BaseModel):
                 if isinstance(raw_segment, Mapping):
                     segment = dict(raw_segment)
                     if not segment.get('id'):
-                        segment['id'] = str(
-                            uuid.uuid5(
-                                uuid.NAMESPACE_URL,
-                                f'omi/conversations/{conversation_id}/transcript-segments/{index}',
-                            )
-                        )
+                        segment['id'] = legacy_conversation_segment_id(conversation_id, index)
                     normalized_segments.append(segment)
                 else:
                     normalized_segments.append(raw_segment)
@@ -437,6 +439,74 @@ class ConversationMutationResponse(BaseModel):
 
     status: str
     conversation: Conversation
+
+
+class SetConversationTitleOperation(BaseModel):
+    """User-owned title mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_title'] = 'set_title'
+    title: str = Field(min_length=1, max_length=256, strict=True)
+
+
+class SetConversationStarredOperation(BaseModel):
+    """User-owned starred mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_starred'] = 'set_starred'
+    starred: bool = Field(strict=True)
+
+
+ConversationSyncOperation = Annotated[
+    Union[SetConversationTitleOperation, SetConversationStarredOperation],
+    Field(discriminator='type'),
+]
+
+
+class ConversationSyncMutationRequest(BaseModel):
+    """One immutable client intent against a known canonical revision."""
+
+    model_config = {'extra': 'forbid'}
+
+    client_mutation_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$',
+        strict=True,
+    )
+    base_revision: datetime
+    operation: ConversationSyncOperation
+
+
+class ConversationSyncState(BaseModel):
+    """Compact canonical projection needed to settle an optimistic mutation."""
+
+    revision: datetime
+    title: Optional[str] = None
+    starred: bool = False
+    folder_id: Optional[str] = None
+    visibility: ConversationVisibility = ConversationVisibility.private
+
+
+class ConversationSyncMutationResponse(BaseModel):
+    """Durable response replayed byte-for-byte for one mutation id."""
+
+    status: Literal['ok'] = 'ok'
+    client_mutation_id: str
+    conversation_id: str
+    conversation: ConversationSyncState
+
+
+class ConversationSyncConflictResponse(BaseModel):
+    """Typed immutable conflict recorded for a stale mutation attempt."""
+
+    status: Literal['conflict'] = 'conflict'
+    code: Literal['base_revision_mismatch', 'mutation_id_reused', 'revision_unavailable']
+    client_mutation_id: str
+    conversation_id: str
+    conversation: Optional[ConversationSyncState] = None
 
 
 class CreateConversation(BaseModel):

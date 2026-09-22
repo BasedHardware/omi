@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.vertex_pt_routing import is_prohibited_company_paid_model
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,37 @@ _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 _byok_profile_name = 'byok'
 _byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
+
+def validate_no_prohibited_company_paid_models(
+    profiles: Dict[str, Dict[str, Tuple[str, str]]], pinned: Dict[str, Tuple[str, str]]
+) -> None:
+    """Fail closed when a company-paid profile or pin resolves a Pro/image model (SCA-481).
+
+    Pro-text and image-output Gemini shapes are PayGo-only SKUs with no
+    reservation behind them; managed (company-paid) profiles and pinned
+    features — extraction, proactivity, summarization, every managed feature —
+    must never resolve one. BYOK pays for what it asks, so the byok profile is
+    exempt.
+    """
+    for profile_name, profile in profiles.items():
+        if profile_name == _byok_profile_name:
+            continue
+        for feature, (model, _provider) in profile.items():
+            if is_prohibited_company_paid_model(model):
+                raise RuntimeError(
+                    f'Model QoS profile {profile_name!r} feature {feature!r} resolves prohibited '
+                    f'company-paid model {model!r}; Pro/image-output SKUs cannot serve managed '
+                    'traffic (SCA-481)'
+                )
+    for feature, (model, _provider) in pinned.items():
+        if is_prohibited_company_paid_model(model):
+            raise RuntimeError(
+                f'Pinned feature {feature!r} resolves prohibited company-paid model {model!r}; '
+                'Pro/image-output SKUs cannot serve managed traffic (SCA-481)'
+            )
+
+
+validate_no_prohibited_company_paid_models(MODEL_QOS_PROFILES, _PINNED_FEATURES)
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
 # chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
 _ANTHROPIC_ONLY_FEATURES: set[str] = set()
@@ -188,6 +220,15 @@ _FOREGROUND_TIMEOUT_FEATURES = frozenset(
         'conv_structure',
         'conv_app_result',
         'daily_summary',
+        # Fifth instance of the class, 2026-09-05: the L1 memory extractor
+        # (`get_llm('memory_l1')` behind extract_l1_memory_archive_items_from_text)
+        # runs in conversation finalization with strict=True, so every extraction
+        # that outlived the 15s background gateway deadline raised
+        # APITimeoutError and dropped that conversation's whole memory batch —
+        # prod pusher 2026-09-01..05: "Error extracting memory L1 archive items:
+        # invoke_failed:APITimeoutError" 9-21×/day, no retry. The extractor reads
+        # the whole transcript in one structured call, like its siblings above.
+        'memory_l1',
     }
 )
 

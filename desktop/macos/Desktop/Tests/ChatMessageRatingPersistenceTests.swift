@@ -265,6 +265,52 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertFalse(provider.pendingMessageRatings.contains(messageId))
   }
 
+  /// A journal refresh can echo every row it reads unchanged. The citation
+  /// chips a row borrows from an earlier turn are a projection (they are never
+  /// persisted), so a no-op refresh must still run the citation inheritance
+  /// and publish what it bound — otherwise the chips never land on a row the
+  /// journal already mirrors exactly.
+  func testNoOpRefreshStillBindsCitationsInheritedFromEarlierTurn() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let borrowed = ChatCitationReference(
+      ordinal: 5, kind: .conversation, sourceID: "c1", preview: "Trip planning")
+    let turnDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let earlier = ChatMessage(
+      id: "assistant-earlier",
+      text: "Here are that day's trips [5].",
+      createdAt: turnDate,
+      sender: .ai,
+      isSynced: true,
+      contentBlocks: [
+        .text(id: "t1", text: "Here are that day's trips [5]."),
+        .citation(id: "citation-5-c1", reference: borrowed),
+      ],
+      turnOwner: .mainChat)
+    let followUp = ChatMessage(
+      id: "assistant-followup",
+      text: "Pick one from that day [5].",
+      createdAt: turnDate,
+      sender: .ai,
+      isSynced: false,
+      turnOwner: .mainChat,
+      journalStatus: .completed)
+    provider.messages = [earlier, followUp]
+
+    // A journal echo identical to the published row: no row replacement.
+    provider.projectJournalTurn(
+      try makeTurn(
+        surface: surface,
+        turnId: "assistant-followup",
+        content: "Pick one from that day [5]."))
+
+    let bound = provider.messages.last?.contentBlocks.compactMap { block -> ChatCitationReference? in
+      guard case .citation(_, let reference) = block else { return nil }
+      return reference
+    }
+    XCTAssertEqual(bound, [borrowed], "the no-op refresh still binds the borrowed citation")
+  }
+
   /// Thread 2 regression: a thumbs tap on the live tail is keyed by the local
   /// in-memory id, but journal projection replaces that row with the kernel
   /// turnId. The queued rating must survive the remap and PATCH with the

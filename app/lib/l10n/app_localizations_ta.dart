@@ -244,7 +244,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchConversations => 'உரையாடல்களைத் தேடுங்கள்...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return '$count தேர்ந்தெடுக்கப்பட்ட';
   }
 
@@ -1874,9 +1874,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openSettings => 'அமைப்புகளைத் திறக்கவும்';
 
   @override
-  String get wantDifferentName => 'வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?';
-
-  @override
   String get whatsYourName => 'உங்கள் பெயர் என்ன?';
 
   @override
@@ -2057,7 +2054,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryDeleted => 'பதிவு நீக்கப்பட்டுள்ளது.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.';
+
+  @override
+  String get memoryHistory => 'வரலாறு';
+
+  @override
+  String get memoryAllowUse => 'பயன்படுத்த அனுமதி';
+
+  @override
+  String get memoryDontUse => 'பயன்படுத்தாதே';
 
   @override
   String get undo => 'மறுசெய்க';
@@ -2675,9 +2682,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewAndManageConversations => 'உங்கள் கைப்பற்றிய உரையாடல்களை மீளாய்வு செய்க மற்றும் நிர்வகிக்கவும்';
 
   @override
-  String get startCapturingConversations => 'உங்கள் Omi சாதனம் உடன் உரையாடல்களை கைப்பற்ற தொடங்கவும் அவற்றை இங்கே காண.';
-
-  @override
   String get useMobileAppToCapture => 'ஆடியோ கைப்பற்ற உங்கள் மொபைல் ஆப்பைப் பயன்படுத்தவும்';
 
   @override
@@ -3177,9 +3181,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribing => 'மொழிபெயர்க்கிறது...';
-
-  @override
-  String get transcriptionFailed => 'மொழிபெயர்ப்பு தோல்வியுற்றது';
 
   @override
   String get discardedConversation => 'கைவிடப்பட்ட உரையாடல்';
@@ -3705,10 +3706,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get preparingSystemAudioCapture => 'கணினி ஆடியோ பிடிப்பைத் தயாரிக்கிறது';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'நிகழ்நேர எழுத்தாக்கம், AI நுண்ணறிவுகள் மற்றும் தானாக சேமிக்கத்திற்கான ஆடியோவைப் பிடிக்க பொத்தானைக் கிளிக் செய்யவும்.';
-
-  @override
   String get reconnecting => 'மீண்டும் இணைக்கிறது...';
 
   @override
@@ -3754,9 +3751,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'நிகழ்நேர எழுத்தாக்கம் பார்க்க பதிவை தொடங்கவும்';
-
-  @override
   String get paused => 'இடைநிறுத்தப்பட்டுள்ளது';
 
   @override
@@ -3775,9 +3769,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'கணினி ஆடியோ பிடிப்பை அமைக்கிறது';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'ஆடியோவைப் பிடித்து எழுத்தாக்கத்தை உருவாக்கிறது';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'கணினி ஆடியோவைப் பதிவு செய்ய தொடங்க கிளிக் செய்யவும்';
@@ -8831,6 +8822,43 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'தானாகவே ஒத்திசைக்கப்படும்';
 
   @override
@@ -9987,10 +10015,33 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name இன் குரல் சுயவிவரம்';
+  }
+
+  @override
+  String get play => 'இயக்கு';
+
+  @override
+  String get redo => 'மீண்டும் பதிவு செய்';
+
+  @override
+  String get answerWithYourVoice => 'உங்கள் குரலில் பதிலளிக்கவும்:';
+
+  @override
+  String get speechProfileTopicLocation => 'நீங்கள் எங்கு வசிக்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicWork => 'நீங்கள் என்ன வேலை செய்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicGoal => 'உங்கள் நீண்டகால இலக்கு என்ன?';
+
+  @override
   String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'பதிவைத் தொடங்க + ஐத் தட்டவும்';
 
   @override
   String get chatBlockTask => 'பணி';
@@ -10027,4 +10078,115 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.';
+
+  @override
+  String get home => 'முகப்பு';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'அடிப்படை நிலையைப் புதுப்பிக்க முடியவில்லை.';
+
+  @override
+  String get unstarConversation => 'உரையாடல் நட்சத்திரத்தை அகற்று';
+
+  @override
+  String get moreOptions => 'மேலும் விருப்பங்கள்';
+
+  @override
+  String get filterByDate => 'தேதியின்படி வடிகட்டு';
+
+  @override
+  String get memoryGraph => 'நினைவு வரைபடம்';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'குரல் அடையாளம் காணத் தயார்',
+        'saved_sample_awaiting_embedding': 'மாதிரி சேமிக்கப்பட்டது; குரல் செயலாக்கம் இன்னும் தேவை',
+        'not_learned': 'குரல் கற்றுக்கொள்ளப்படவில்லை',
+        'other': 'குரலின் நிலை தெரியவில்லை',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு';
+
+  @override
+  String get updateSummaryWithNewNames => 'புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது';
 }

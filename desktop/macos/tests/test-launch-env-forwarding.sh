@@ -18,7 +18,7 @@ fi
 
 # Unset: no --env arguments, so a normal launch is untouched.
 (
-  unset OMI_FORCE_CANONICAL_MEMORY_ATLAS
+  unset OMI_FORCE_CANONICAL_MEMORY_ATLAS OMI_FORCE_BUCKET_CANDIDATES OMI_FORCE_BUCKET_WORKSTREAMS
   eval "$BUILD_FUNCTION"
   build_launch_env_args
 
@@ -26,6 +26,25 @@ fi
     echo "FAIL: expected no --env arguments when the override is unset, got: ${LAUNCH_ENV_ARGS[*]}" >&2
     exit 1
   fi
+)
+
+# The reserved JIT QA wrapper pins both sibling loops off; run.sh must carry
+# those explicit values across launchd's environment boundary.
+(
+  unset OMI_FORCE_CANONICAL_MEMORY_ATLAS
+  export OMI_FORCE_BUCKET_CANDIDATES=0
+  export OMI_FORCE_BUCKET_WORKSTREAMS=0
+  eval "$BUILD_FUNCTION"
+  build_launch_env_args
+
+  if [ "${#LAUNCH_ENV_ARGS[@]}" -ne 4 ]; then
+    echo "FAIL: expected 4 --env arguments for JIT sibling-loop isolation, got ${#LAUNCH_ENV_ARGS[@]}: ${LAUNCH_ENV_ARGS[*]}" >&2
+    exit 1
+  fi
+  test "${LAUNCH_ENV_ARGS[0]}" = "--env"
+  test "${LAUNCH_ENV_ARGS[1]}" = "OMI_FORCE_BUCKET_CANDIDATES=0"
+  test "${LAUNCH_ENV_ARGS[2]}" = "--env"
+  test "${LAUNCH_ENV_ARGS[3]}" = "OMI_FORCE_BUCKET_WORKSTREAMS=0"
 )
 
 # Set: forwarded verbatim as an `open --env` pair.
@@ -69,6 +88,11 @@ fi
 # Documented overrides must stay documented: help text and forwarding agree.
 if ! grep -q "OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA override" "$RUN"; then
   echo "FAIL: OMI_FORCE_CANONICAL_MEMORY_ATLAS is forwarded but no longer documented in run.sh --help" >&2
+  exit 1
+fi
+
+if ! grep -q "OMI_FORCE_BUCKET_CANDIDATES" "$RUN" || ! grep -q "OMI_FORCE_BUCKET_WORKSTREAMS" "$RUN"; then
+  echo "FAIL: JIT sibling-loop overrides are not present in the launch forwarding contract" >&2
   exit 1
 fi
 

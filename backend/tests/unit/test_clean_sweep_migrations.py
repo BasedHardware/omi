@@ -11,7 +11,6 @@ Covers round 2:
 - utils/app_integrations.py: requests → httpx for GitHub docs
 - utils/stt/speaker_embedding.py: requests → httpx for embedding API
 - utils/stt/vad.py: requests → httpx for hosted VAD
-- utils/stt/speech_profile.py: requests → httpx for speech profile matching
 - utils/conversations/location.py: requests → httpx for Google Maps geocoding
 
 Covers round 3:
@@ -222,19 +221,6 @@ class TestVadHttpxMigration:
         """No bare threading.Thread usage in VAD module."""
         src = _read_source('utils/stt/vad.py')
         assert 'threading.Thread(' not in src
-
-
-class TestSpeechProfileHttpxMigration:
-    """Verify speech_profile sync functions use httpx, not requests."""
-
-    def test_speech_profile_uses_httpx(self):
-        src = _read_source('utils/stt/speech_profile.py')
-        assert 'import httpx' in src
-        assert 'import requests' not in src
-
-    def test_speech_profile_uses_httpx_post(self):
-        src = _read_source('utils/stt/speech_profile.py')
-        assert 'httpx.post(' in src
 
 
 class TestLocationHttpxMigration:

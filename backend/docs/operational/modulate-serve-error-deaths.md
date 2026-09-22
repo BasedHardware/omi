@@ -37,14 +37,15 @@ configured right behind it.
 |---|---|---|---|
 | `Internal server error` | `modulate_serve_error` | **ERROR** | yes — one cooldown window |
 | `Unable to complete the request…` | `modulate_serve_error` | **ERROR** | yes |
-| `Monthly usage limit reached.` | `modulate_serve_error` | **ERROR** | yes |
+| `Monthly usage limit reached.` | `provider_budget_exhausted` | **ERROR** | yes |
 | `Invalid input audio` | untyped | WARNING | no — our/client fault |
 | `rate limit`, unknown wordings | untyped | WARNING | no — session-scoped |
 
 - `modulate_death_reason()` (utils/stt/streaming.py) bounds the provider's
-  free-text frame to `MODULATE_DEATH_SERVE_ERROR` for server-fault shapes
-  only; everything else degrades to untyped rather than growing the bounded
-  vocabulary per provider wording.
+  free-text frame to `provider_budget_exhausted` for monthly/quota wording and
+  `MODULATE_DEATH_SERVE_ERROR` for 5xx serve-fault shapes; everything else
+  degrades to untyped rather than growing the bounded vocabulary per provider
+  wording.
 - The socket latches the typed reason next to the raw text on the death
   latch; severity follows fault origin at the frame (serve error stays ERROR
   — it IS the outage signal).
@@ -52,11 +53,14 @@ configured right behind it.
   `connection`) and `_CIRCUIT_OPENING_REASONS`, so both the failover seam
   (`note_typed_provider_death`) and the terminal funnel
   (`terminate_live_stt_session`) open `_modulate_circuit`.
-- Recovery is unchanged: one `record_serve_failure` opens the circuit for
-  one cooldown window (default 30s, `MODULATE_CIRCUIT_COOLDOWN_SECONDS`);
-  the half-open probe restores Velma as soon as one stream serves again.
-  Sessions already running fail over as before — close codes, client-visible
-  events, and the fallback chain are untouched.
+- Recovery: one `record_serve_failure` opens the circuit for the serve-error
+  cooldown (default 180s, `MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS`),
+  distinct from the connect-path 30s window. Re-admission requires three
+  consecutive half-open successes (`MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE`)
+  so a 5xx storm that still accepts connects cannot flap every 30s. Connect-path
+  failures still close on the first probe success. Sessions already running fail
+  over as before — close codes, client-visible events, and the fallback chain
+  are untouched.
 
 ## Signals after the fix
 

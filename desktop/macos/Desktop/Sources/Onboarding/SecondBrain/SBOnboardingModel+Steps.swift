@@ -340,7 +340,10 @@ extension SBOnboardingModel {
     advance(userAnswer: allowed ? "Allowed" : "Skip", to: .systemAudio)
   }
 
-  func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
+  func answerSystemAudio() {
+    UserDefaults.standard.set(sysState != .on, forKey: .onboardingSystemAudioSkipped)
+    advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen)
+  }
 
   /// Skip on the screen step is a durable off for screen analysis — completion and
   /// every later automatic restore read this as the user's standing intent instead
@@ -349,13 +352,17 @@ extension SBOnboardingModel {
     AssistantSettings.shared.screenAnalysisEnabled = scrState == .on
     advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files)
   }
-  /// Restores the legacy Files-stage contract: scan what is readable after the
-  /// Full Disk Access choice, then form the aggregate local-file memories
-  /// before moving on. A skipped FDA grant still scans folders macOS permits.
+  /// A granted Files step builds the local-file profile. A skipped step must
+  /// not enumerate Desktop/Documents/Downloads: touching those folders can
+  /// itself raise Files & Folders consent when Full Disk Access is absent.
   func answerFiles() {
+    guard fdaState == .on else {
+      advance(userAnswer: "Skip", to: .accessibility)
+      return
+    }
     switch localFileProfileState {
     case .idle:
-      thread.append(Msg(isOmi: false, text: fdaState == .on ? "Allowed" : "Skip"))
+      thread.append(Msg(isOmi: false, text: "Allowed"))
       startLocalFileScan()
     case .scanning:
       break

@@ -10,8 +10,8 @@ import secrets
 import struct
 import wave
 from collections import defaultdict
-from datetime import datetime, timedelta
-from typing import Dict, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import requests
@@ -103,8 +103,13 @@ def get_valid_access_token(uid: str) -> Optional[str]:
             expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
             if datetime.now(expires_at.tzinfo) >= expires_at - timedelta(minutes=5):
                 # Token expired or about to expire, refresh it
-                new_token = refresh_access_token(refresh_token)
-                if new_token:
+                token_data = refresh_access_token_full(refresh_token)
+                if token_data:
+                    new_token = token_data.get("access_token")
+                    new_expires_at = token_data.get("expires_at")
+                    new_refresh = token_data.get("refresh_token")
+                    if new_token and new_expires_at:
+                        update_dropbox_tokens(uid, new_token, new_expires_at, new_refresh)
                     return new_token
                 return None
         except Exception:
@@ -114,7 +119,13 @@ def get_valid_access_token(uid: str) -> Optional[str]:
 
 
 def refresh_access_token(refresh_token: str) -> Optional[str]:
-    """Refresh the access token using refresh token."""
+    """Refresh the access token using refresh token, returning token string."""
+    data = refresh_access_token_full(refresh_token)
+    return data.get("access_token") if data else None
+
+
+def refresh_access_token_full(refresh_token: str) -> Optional[Dict[str, Any]]:
+    """Refresh the access token using refresh token, returning token metadata."""
     try:
         response = requests.post(
             DROPBOX_TOKEN_URL,
@@ -124,16 +135,22 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
                 "client_id": DROPBOX_APP_KEY,
                 "client_secret": DROPBOX_APP_SECRET,
             },
+            timeout=10,
         )
 
         if response.status_code == 200:
             data = response.json()
             new_access_token = data.get("access_token")
+            if not new_access_token:
+                return None
             expires_in = data.get("expires_in", 14400)  # Default 4 hours
-            new_expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+            new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            # Note: We can't update tokens here without uid, caller should handle
-            return new_access_token
+            return {
+                "access_token": new_access_token,
+                "expires_at": new_expires_at,
+                "refresh_token": data.get("refresh_token", refresh_token),
+            }
 
         return None
     except Exception:
@@ -702,8 +719,11 @@ async def tool_search_dropbox(request: Request):
     """Search for files in Dropbox."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        query = body.get("query", "")
+        raw_query = body.get("query")
+        query = str(raw_query).strip() if raw_query is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}
@@ -752,8 +772,11 @@ async def tool_list_dropbox(request: Request):
     """List files in Dropbox folder."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        folder = body.get("folder", "")
+        raw_folder = body.get("folder")
+        folder = str(raw_folder).strip() if raw_folder is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}
@@ -806,8 +829,11 @@ async def tool_read_dropbox_file(request: Request):
     """Read and extract text content from a file in Dropbox."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        path = body.get("path", "")
+        raw_path = body.get("path")
+        path = str(raw_path).strip() if raw_path is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}

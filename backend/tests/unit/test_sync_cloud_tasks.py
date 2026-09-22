@@ -7,6 +7,12 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+
 import asyncio
 import hashlib
 import json
@@ -21,6 +27,11 @@ import fakeredis
 import pytest
 
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
+
+
+async def _passthrough_async_resolve_geolocation(geolocation):
+    """Identity stub for utils.conversations.location: the real resolver returns its input on a miss."""
+    return geolocation
 
 
 def _load_module_with_stubs(relative_path, module_name, stubs):
@@ -972,6 +983,10 @@ def _load_sync_router_for_fast_path():
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
+    from utils.stt import speaker_match as actual_speaker_match
+    from utils.stt import speaker_identity as actual_speaker_identity
+    from utils import manual_speaker_assignments as actual_manual_assignments
+    from utils.sync import lanes as actual_sync_lanes
 
     saved_modules = {}
     prior_utils_sync = sys.modules.get('utils.sync')
@@ -1009,7 +1024,9 @@ def _load_sync_router_for_fast_path():
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.conversations.factory',
+        'utils.conversations.location',
         'utils.other',
         'utils.other.endpoints',
         'utils.other.storage',
@@ -1022,6 +1039,12 @@ def _load_sync_router_for_fast_path():
         'utils.observability',
         'utils.observability.fallback',
         'utils.metrics',
+        'utils.product_metrics',
+        'utils.journey_metrics_contract',
+        'utils.sync.rate_limit',
+        'utils.sync.lanes',
+        'utils.sync.provenance',
+        'utils.sync.capture_manifest',
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.multipart',
@@ -1042,7 +1065,23 @@ def _load_sync_router_for_fast_path():
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
 
+    # utils.conversations is a namespace package on disk (no __init__.py), so the
+    # sync pipeline's submodule imports resolve only through a real __path__.
+    # Replace the heavy_deps MagicMock parent with a real-path package and keep
+    # the existing submodule stubs on top of it — otherwise a new module-level
+    # import like utils.conversations.deterministic_minimum fails with
+    # "'utils.conversations' is not a package" during the file-path re-exec below.
+    conv_pkg = types.ModuleType('utils.conversations')
+    conv_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'conversations')]
+    saved_modules['utils.conversations'] = sys.modules.get('utils.conversations')
+    sys.modules['utils.conversations'] = conv_pkg
+    sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
+
     sys.modules['utils'].__path__ = []
+    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
+    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
+    # since a MagicMock parent does not resolve submodules by itself.
+    sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
     sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -1158,12 +1197,27 @@ def _load_sync_router_for_fast_path():
     transcription_mod.record_sync_transcription_outcome = MagicMock()
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
+    saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
+    saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
+    # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+    # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+    # decision whose fields blow up the %.3f log formatting even on an empty match set.
+    sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+    # Keep allocator + receipt policy real: assignment.py imports both at module
+    # scope, and MagicMock parents for utils / utils.stt are not packages.
+    sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+    saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
+    # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
+    # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.
+    sys.modules['utils.sync.lanes'] = actual_sync_lanes
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
 
     class _AudioPrecacheResponse(BaseModel):
@@ -2172,6 +2226,45 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_destructive_operation_fence_retries_with_typed_error_code():
+    '''A transient destructive-op fence must stay retryable and not look like STT failure.'''
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=DestructiveOperationInProgress('legal_hold_deletion_gates kind=retention_cleanup'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 1, 'destructive_operation_in_progress'
+        )
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

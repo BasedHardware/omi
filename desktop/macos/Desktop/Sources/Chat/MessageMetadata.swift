@@ -30,10 +30,17 @@ struct MessageMetadata: Equatable {
   /// from the provider RESPONSE stream (e.g. the gateway lane's resolved
   /// upstream model), never assumed from the request. Empty = unobserved.
   var modelsUsed: [String]
+  /// Provider targets observed on completion events. This must never be
+  /// synthesized from the runtime adapter or requested model.
+  var providerTargets: [String]
   /// What was on the user's screen when this turn was asked, as text (the voice hub's accepted
   /// screen observation, bounded). Journaled on the user row so later turns can answer "do you
   /// remember what I was reading?" from conversation history even when Rewind has no frame yet.
   var screenContext: String?
+  /// Bounded, typed source evidence attached to the user turn. The runtime
+  /// renders compact references and keeps the full body behind an evidence read
+  /// boundary; this local model retains the body only for journal replay.
+  var evidence: [ConversationEvidence]
 
   init(
     hasScreenshot: Bool = false,
@@ -49,7 +56,9 @@ struct MessageMetadata: Equatable {
     adapterId: String = "",
     credentialScopeLabel: String = "",
     modelsUsed: [String] = [],
-    screenContext: String? = nil
+    providerTargets: [String] = [],
+    screenContext: String? = nil,
+    evidence: [ConversationEvidence] = []
   ) {
     self.hasScreenshot = hasScreenshot
     self.screenshotSizeBytes = screenshotSizeBytes
@@ -64,7 +73,9 @@ struct MessageMetadata: Equatable {
     self.adapterId = adapterId
     self.credentialScopeLabel = credentialScopeLabel
     self.modelsUsed = modelsUsed
+    self.providerTargets = providerTargets
     self.screenContext = screenContext
+    self.evidence = evidence
   }
 
   static func fromCompletedTurn(
@@ -74,7 +85,8 @@ struct MessageMetadata: Equatable {
     toolNames: [String],
     sqlRowsReturned: Int,
     sqlQueryCount: Int,
-    modelsUsed: [String] = []
+    modelsUsed: [String] = [],
+    providerTargets: [String] = []
   ) -> MessageMetadata {
     let allowedToolNames = snapshot.capabilities["allowedToolNames"] as? [String] ?? []
     return MessageMetadata(
@@ -90,7 +102,8 @@ struct MessageMetadata: Equatable {
       offeredToolCount: allowedToolNames.count,
       adapterId: profile.adapterId,
       credentialScopeLabel: Self.credentialLabel(profile.credentialScope),
-      modelsUsed: modelsUsed
+      modelsUsed: modelsUsed,
+      providerTargets: providerTargets
     )
   }
 
@@ -117,6 +130,10 @@ struct MessageMetadata: Equatable {
   /// = none observed (the row is hidden rather than guessed).
   var modelsSummary: String {
     modelsUsed.joined(separator: ", ")
+  }
+
+  var providersSummary: String {
+    providerTargets.joined(separator: ", ")
   }
 
   var pathSummary: String {

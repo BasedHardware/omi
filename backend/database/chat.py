@@ -195,23 +195,63 @@ def add_summary_message(text: str, uid: str) -> Message:
 def get_app_messages(
     uid: str, app_id: str, limit: int = 20, include_conversations: bool = False
 ) -> List[Dict[str, Any]]:
+    """Return an app's newest visible messages, up to ``limit``.
+
+    ``reported`` is intentionally filtered in Python because the legacy data
+    model permits the field to be absent.  The Firestore limit must therefore
+    not run before that visibility rule: a reported row inside the raw page
+    would otherwise consume a caller-visible slot and leave an older visible
+    message unfetched.  This follows the same bounded visible-row scan as
+    ``get_messages`` below.
+    """
+    visible_limit = max(0, int(limit))
+    if visible_limit == 0:
+        return []
+
     user_ref = db.collection('users').document(uid)
-    messages_ref = (
+    query: Any = (
         user_ref.collection('messages')
         .where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(limit)
     )
+    # A clean page needs exactly ``visible_limit`` raw rows.  Bound only the
+    # extra rows needed to cross reported records, so this cannot become an
+    # unbounded history read while a deep run of reported rows still has a
+    # flat allowance to cross.
+    scan_budget = visible_limit + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
+    scanned = 0
+    reported_row_seen = False
+    cursor_snapshot: Any = None
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
 
-    # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
-        if message.get('reported') is True:
-            continue
-        messages.append(message)
-        conversations_id.update(message.get('memories_id', []))
+    while scanned < scan_budget and len(messages) < visible_limit:
+        # A clean page reads exactly its requested visible rows, even when it
+        # needs more than one capped 100-row batch. Once a reported row has
+        # appeared, use capped batches to cross a dense hidden run without
+        # turning a missing visible row into one read per document.
+        batch_limit = min(100, scan_budget - scanned)
+        if not reported_row_seen:
+            batch_limit = min(batch_limit, max(1, visible_limit - len(messages)))
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            message: Dict[str, Any] = _typed_doc(document)
+            if message.get('reported') is True:
+                reported_row_seen = True
+                continue
+            messages.append(message)
+            conversations_id.update(message.get('memories_id', []))
+            if len(messages) == visible_limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
 
     if not include_conversations:
         return messages

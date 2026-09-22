@@ -39,7 +39,10 @@ class AuthState: ObservableObject {
   // UserDefaults keys (must match AuthService)
   private static let kAuthIsSignedIn = "auth_isSignedIn"
   private static let kAuthUserEmail = "auth_userEmail"
-  private static let kAuthUserId = "auth_userId"
+  /// `nonisolated` so the automation bridge can answer "which account is this"
+  /// without hopping to the main actor. It is an immutable String; the
+  /// isolation bought nothing and cost the identity check its callers.
+  nonisolated private static let kAuthUserId = "auth_userId"
 
   @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
@@ -48,6 +51,22 @@ class AuthState: ObservableObject {
 
   var isSignedIn: Bool { sessionPhase == .authenticated }
   var isRestoringAuth: Bool { sessionPhase == .restoring }
+
+  /// The signed-in uid, for the non-production automation bridge only.
+  ///
+  /// Read from the same `auth_userId` default `AuthService` writes, rather than
+  /// from Firebase, so it answers during `.restoring` too — a harness that
+  /// checks identity right after launch must not get `nil` merely because the
+  /// credential has not finished validating.
+  nonisolated static func automationAccountUserID(
+    defaults: UserDefaults = .standard,
+    isNonProduction: Bool = AppBuild.isNonProduction
+  ) -> String? {
+    guard isNonProduction else { return nil }
+    let raw = defaults.string(forKey: kAuthUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return (raw?.isEmpty ?? true) ? nil : raw
+  }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -236,7 +255,7 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation, @unchecked Sendable {
   /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
   /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
   /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
@@ -989,6 +1008,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openItem.target = self
     menu.addItem(openItem)
 
+    let undoDictationItem = NSMenuItem(
+      title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
+    undoDictationItem.target = self
+    menu.addItem(undoDictationItem)
+
     menu.addItem(NSMenuItem.separator())
 
     // Check for Updates
@@ -1105,11 +1129,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
-  /// Land on the chat with `draft` already in the composer, focused, and not
-  /// sent. The only "ask this" entry that leaves the send to the user; every
-  /// other prefill path auto-sends.
-  @MainActor func openMainAppChat(prefilledDraft draft: String) {
-    MainChatNavigationRequestStore.shared.request(draft: draft)
+  /// Land on the chat with `draft` in the composer, focused and unsent — the
+  /// only "ask this" entry that leaves the send to the user. `attachedFrame`
+  /// stages the first-real-app card's screen referent alongside the draft.
+  @MainActor func openMainAppChat(prefilledDraft draft: String, attachedFrame: ChatAttachment? = nil) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, attachment: attachedFrame)
+    openMainAppWindow()
+  }
+
+  /// Merge an offline question only once the actual composer has restored its draft.
+  @MainActor func openMainAppChat(appendingDraft draft: String, authorization: RuntimeOwnerAuthorizationSnapshot) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, disposition: .append, authorization: authorization)
     openMainAppWindow()
   }
 
@@ -1122,6 +1152,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    // The screen still shows the app the user is leaving; pin it now — once
+    // Omi is front, the periodic capture skips Omi and nothing fresher exists.
+    if !alreadyFrontmost {
+      RewindFrameLoader.shared.recordSummonBoundary()
+    }
     NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
@@ -1278,6 +1313,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     let outcome = SystemCaptureControls.setAudioRecording(enabled)
     sender.state = outcome.resultingIsOn ? .on : .off
+  }
+
+  @MainActor @objc private func undoLastDictationFromMenu() {
+    PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
+  }
+
+  @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if menuItem.action == #selector(undoLastDictationFromMenu) {
+      return PushToTalkManager.shared.canUndoLastDictation
+    }
+    return true
   }
 
   // MARK: - NSMenuDelegate

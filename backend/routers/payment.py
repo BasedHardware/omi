@@ -48,7 +48,7 @@ from database.users import (
     get_user_profile,
 )
 from utils import stripe as stripe_utils
-from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
+from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
@@ -1193,6 +1193,23 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 except Exception as e:
                     logger.error(f"Error updating subscription after schedule cancellation: {e}")
 
+    if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
+        invoice = event['data']['object']
+        subscription_id = invoice.get('subscription')
+        if subscription_id:
+            try:
+                subscription = await run_blocking(
+                    stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                )
+                metadata = subscription.get('metadata') or {}
+                app_id = metadata.get('app_id')
+                uid = metadata.get('uid')
+                if app_id and uid:
+                    await run_blocking(db_executor, paid_app, app_id, uid)
+                    logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+            except Exception as e:
+                logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
+
     return {"status": "success"}
 
 
@@ -1487,10 +1504,6 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
     """Get user's subscription for a specific app"""
     try:
 
-        paid_app_check = get_is_user_paid_app(app_id, uid)
-        if not paid_app_check:
-            return {"subscription": None}
-
         latest_subscription = find_app_subscription(app_id, uid, status_filter='all')
 
         if latest_subscription:
@@ -1519,10 +1532,6 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
 def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel user's subscription for a specific app"""
     try:
-
-        paid_app_check = get_is_user_paid_app(app_id, uid)
-        if not paid_app_check:
-            raise HTTPException(status_code=404, detail="No active subscription found for this app")
 
         target_subscription = find_app_subscription(app_id, uid, status_filter='active')
 

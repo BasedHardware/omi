@@ -149,7 +149,9 @@ def test_fully_suppressed_offset_read_stays_within_a_bounded_scan_cost(service_m
     assert stats["hydrated"] <= HYDRATED_DOCUMENT_BUDGET
     # Canonical status is a stable read within one request, so a repeated
     # prefix must not be re-queried: previously 30 batch gets / 3,000 documents.
-    assert db.get_all_calls <= 8
+    # Override docs are a second batch only for the missing-item subset; this
+    # fully-suppressed fixture has no items, so each chunk is two get_all calls.
+    assert db.get_all_calls <= 16
     assert len(db.read_paths) == len(set(db.read_paths))
 
 

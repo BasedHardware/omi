@@ -109,7 +109,16 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   func testFloatingBarRendersPTTHintText() throws {
     let view = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarView.swift")
     XCTAssertTrue(view.contains("state.pttHintText"))
-    XCTAssertTrue(view.contains("Text(state.pttHintText)"))
+    XCTAssertTrue(view.contains("PTTStatusBannerContent(hint: state.pttHintText)"))
+    XCTAssertEqual(
+      PTTStatusBannerPresentation.text(hint: "Hold longer to record", hasQuestion: false),
+      "Hold longer to record")
+    XCTAssertEqual(
+      PTTStatusBannerPresentation.text(hint: "Check the editor before pasting again", hasQuestion: true),
+      "Check the editor before pasting again",
+      "An older offline question must not hide a later error")
+    let offlineHint = try XCTUnwrap(VoiceTurnUICopy.terminalHint(for: .noNetwork))
+    XCTAssertEqual(PTTStatusBannerPresentation.text(hint: offlineHint, hasQuestion: true), "Question kept")
     let state = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarState.swift")
     XCTAssertTrue(state.contains("var pttHintText: String"))
   }
@@ -120,7 +129,7 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     let view = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarView.swift")
     XCTAssertTrue(view.contains("pttStatusBanner"))
     XCTAssertTrue(view.contains("showingPTTStatusBanner"))
-    XCTAssertTrue(view.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
+
     XCTAssertFalse(view.contains("showingNotchPttHint"))
     XCTAssertFalse(view.contains("notchPttHintRow"))
     // Waveform no longer excludes open chat; thinking still does (chat has its own loader).

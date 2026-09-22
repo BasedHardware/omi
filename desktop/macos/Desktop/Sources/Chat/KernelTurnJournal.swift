@@ -161,6 +161,10 @@ struct KernelJournalTurnUpdate: Sendable {
   let appendContentBlocksJSON: String?
   let resourcesJSON: String?
   let appendResourcesJSON: String?
+  /// One evidence object to atomically append to the row's `evidence` metadata
+  /// namespace. The runtime owns merge/idempotency; Swift never replaces the
+  /// full metadata blob for a late OCR result.
+  let appendEvidenceJSON: String?
   let metadataJSON: String?
   /// Narrow authority flag for revising an optimistically sealed terminal row:
   /// the same desktop client that sealed a row `.completed` before delivery
@@ -185,6 +189,7 @@ struct KernelJournalTurnUpdate: Sendable {
       appendContentBlocksJSON: nil,
       resourcesJSON: nil,
       appendResourcesJSON: nil,
+      appendEvidenceJSON: nil,
       metadataJSON: nil,
       terminalRevision: false
     )
@@ -193,13 +198,20 @@ struct KernelJournalTurnUpdate: Sendable {
   /// Downgrades an optimistically sealed `.completed` row to `.failed` with
   /// its truncation cause, carrying no payload: content, content blocks,
   /// resources, and existing metadata (model attribution, continuity) stay
-  /// untouched while `terminalReason` merges into the row's metadata.
+  /// untouched while `terminalReason` (and, when the answer text completed
+  /// before delivery was cut, `answerTextCompleted`) merges into the row's
+  /// metadata.
   static func sealedTerminalRevision(
     turnId: String,
-    terminalReason: String
+    terminalReason: String,
+    answerTextCompleted: Bool = false
   ) -> KernelJournalTurnUpdate {
+    var revisionMetadata: [String: Any] = ["terminalReason": terminalReason]
+    if answerTextCompleted {
+      revisionMetadata["answerTextCompleted"] = true
+    }
     let encodedReason: String
-    if let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+    if let data = try? JSONSerialization.data(withJSONObject: revisionMetadata),
       let encoded = String(data: data, encoding: .utf8)
     {
       encodedReason = encoded
@@ -214,6 +226,7 @@ struct KernelJournalTurnUpdate: Sendable {
       appendContentBlocksJSON: nil,
       resourcesJSON: nil,
       appendResourcesJSON: nil,
+      appendEvidenceJSON: nil,
       metadataJSON: encodedReason,
       terminalRevision: true
     )
@@ -235,8 +248,21 @@ struct KernelJournalTurnUpdate: Sendable {
     if let appendResourcesJSON {
       value["appendResources"] = KernelJournalTurnWrite.jsonArray(appendResourcesJSON)
     }
+    if let appendEvidenceJSON {
+      // The wire contract mirrors appendResources: one late evidence item is
+      // carried as a one-element array so the kernel can merge each item by
+      // stable ID in one transaction.
+      value["appendEvidence"] = [Self.jsonObject(appendEvidenceJSON)]
+    }
     if let metadataJSON { value["metadataJson"] = metadataJSON }
     if terminalRevision { value["terminalRevision"] = true }
+    return value
+  }
+
+  private static func jsonObject(_ raw: String) -> [String: Any] {
+    guard let data = raw.data(using: .utf8),
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return [:] }
     return value
   }
 }
@@ -342,15 +368,30 @@ extension KernelJournalTurn {
       journalStatus: status,
       hidesEmptyStreamingPlaceholder: metadata["hiddenUntilOutput"] as? Bool ?? false
     )
+    if message.sender == .user {
+      let evidence = ConversationEvidenceMetadataCodec.envelope(from: metadataJSON)?.items ?? []
+      if !evidence.isEmpty || metadata["screen_context"] as? String != nil {
+        message.metadata = MessageMetadata(
+          screenContext: metadata["screen_context"] as? String,
+          evidence: evidence
+        )
+      }
+    }
     // Persisted served-model attribution: lets a journaled voice turn (or a
     // restored one) show the Response Context Model row that in-memory
     // metadata would otherwise lose.
-    if message.sender == .ai, let models = metadata["modelsUsed"] as? [String], !models.isEmpty {
-      message.metadata = MessageMetadata(
-        adapterId: origin == "realtime_voice" ? "realtime" : "",
-        modelsUsed: models
-      )
+    if message.sender == .ai {
+      let models = metadata["modelsUsed"] as? [String] ?? []
+      let providers = metadata["providerTargets"] as? [String] ?? []
+      if !models.isEmpty || !providers.isEmpty {
+        message.metadata = MessageMetadata(
+          adapterId: origin == "realtime_voice" ? "realtime" : "",
+          modelsUsed: models,
+          providerTargets: providers
+        )
+      }
     }
+    message.failureCode = (metadata["failureCode"] as? String).flatMap(AgentRuntimeFailureCode.init(rawValue:))
     return message
   }
 
@@ -371,14 +412,25 @@ extension ChatMessage {
     appId: String? = nil,
     sessionId: String? = nil,
     messageSource: String? = nil,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
+    if let failureCode { metadata["failureCode"] = failureCode.rawValue }
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
     if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
+    if let providers = self.metadata?.providerTargets, !providers.isEmpty {
+      metadata["providerTargets"] = providers
+    }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
     if let screenContext = self.metadata?.screenContext, !screenContext.isEmpty {
       metadata["screen_context"] = String(screenContext.prefix(1_200))
+    }
+    if let evidence = self.metadata?.evidence, !evidence.isEmpty {
+      let envelope = ConversationEvidenceEnvelope(items: evidence)
+      if let encoded = ConversationEvidenceMetadataCodec.encodeEnvelope(envelope) {
+        metadata[ConversationEvidenceMetadataCodec.metadataKey] = encoded
+      }
     }
     // These rollback-compatible fields are consumed only by the kernel outbox
     // renderer for the existing /v2/desktop/messages POST shape.
@@ -386,6 +438,7 @@ extension ChatMessage {
     if let sessionId { metadata["sessionId"] = sessionId }
     if let messageSource { metadata["messageSource"] = messageSource }
     if let terminalReason { metadata["terminalReason"] = terminalReason }
+    if answerTextCompleted == true { metadata["answerTextCompleted"] = true }
     let metadataJSON: String
     let encodedMetadata: String
     if let data = try? JSONSerialization.data(withJSONObject: metadata),
@@ -415,11 +468,15 @@ extension ChatMessage {
 
   func journalUpdate(
     status: KernelJournalTurnStatus? = nil,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnUpdate {
+    var updateMetadata: [String: Any] = [:]
+    if let terminalReason { updateMetadata["terminalReason"] = terminalReason }
+    if answerTextCompleted == true { updateMetadata["answerTextCompleted"] = true }
     var metadataJSON: String?
-    if let terminalReason,
-      let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+    if !updateMetadata.isEmpty,
+      let data = try? JSONSerialization.data(withJSONObject: updateMetadata),
       let encoded = String(data: data, encoding: .utf8)
     {
       metadataJSON = encoded
@@ -432,6 +489,7 @@ extension ChatMessage {
       appendContentBlocksJSON: nil,
       resourcesJSON: ChatResource.encodeResourcesForPersistence(displayResources) ?? "[]",
       appendResourcesJSON: nil,
+      appendEvidenceJSON: nil,
       metadataJSON: metadataJSON,
       terminalRevision: false
     )

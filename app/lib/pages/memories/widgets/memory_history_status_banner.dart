@@ -3,18 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
-/// Explains that the history projection is usable but incomplete.
-///
-/// This is intentionally informational: a truncated history response has no
-/// resumable cursor, so the client must not invent a retry/continuation action.
+/// Explains that the history projection is usable but incomplete and offers
+/// the server-provided bounded continuation when one is available.
 class MemoryHistoryStatusBanner extends StatelessWidget {
-  const MemoryHistoryStatusBanner({super.key});
+  final VoidCallback? onLoadMore;
+
+  const MemoryHistoryStatusBanner({super.key, this.onLoadMore});
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
-      excludeSemantics: true,
+      excludeSemantics: onLoadMore == null,
       liveRegion: true,
       label: context.l10n.memoryHistoryPartial,
       child: Container(
@@ -37,6 +37,12 @@ class MemoryHistoryStatusBanner extends StatelessWidget {
                 style: TextStyle(color: AppStyles.textSecondary, fontSize: 12),
               ),
             ),
+            if (onLoadMore != null)
+              TextButton(
+                key: const Key('memory_history_load_more'),
+                onPressed: onLoadMore,
+                child: Text(context.l10n.showMore),
+              ),
           ],
         ),
       ),

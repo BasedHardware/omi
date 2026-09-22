@@ -69,6 +69,8 @@ def _make_client():
     notifications = _install('utils.notifications')
     notifications.send_notification = MagicMock()
     notifications.send_notification_async = AsyncMock()
+    notifications.send_client_displayed_notification = MagicMock()
+    notifications.send_client_displayed_notification_async = AsyncMock()
 
     fallback_obs = _install('utils.observability.fallback')
     fallback_obs.record_fallback = MagicMock()

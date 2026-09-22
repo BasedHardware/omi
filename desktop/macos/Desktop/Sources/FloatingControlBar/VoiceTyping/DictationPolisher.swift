@@ -17,6 +17,15 @@ import Foundation
 /// or timeout. Offline it does not run at all.
 enum DictationPolisher {
 
+  /// Whether a transcript still needs the judgement that only the polisher
+  /// can provide. The local formatter is deliberately not treated as a
+  /// replacement for this decision: only the finite safe-utterance set can
+  /// bypass the model.
+  enum Policy: Equatable {
+    case skip
+    case required
+  }
+
   struct Context: Equatable {
     /// Display name of the application the text is going into, when known.
     var appName: String?
@@ -25,6 +34,20 @@ enum DictationPolisher {
     var keywords: [String] = []
     /// The transcription language setting ("en", "multi", …).
     var language: String = "en"
+  }
+
+  /// Decides whether the remote rewrite can be omitted without changing the
+  /// conservative dictation contract. This is a finite allowlist of short,
+  /// common acknowledgements and greetings. Arbitrary prose stays on the
+  /// model path, because no local cue list can safely recognize every
+  /// correction, address, stutter, or spoken formatting instruction.
+  static func policy(original: String, formatted: String, context: Context) -> Policy {
+    let source = original.trimmingCharacters(in: .whitespacesAndNewlines)
+    let clean = formatted.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard languageBase(context.language) == "en" else { return .required }
+    guard source == clean else { return .required }
+    guard context.keywords.isEmpty else { return .required }
+    return safeShortUtterances.contains(clean.lowercased()) ? .skip : .required
   }
 
   /// The on-screen words worth offering the model as spelling hints: names,
@@ -205,6 +228,27 @@ enum DictationPolisher {
     using client: GeminiClient,
     timeout: TimeInterval = DictationPolisher.timeout
   ) async throws -> String? {
+    try await polish(text, context: context, timeout: timeout) { prompt, systemPrompt, requestTimeout in
+      try await client.sendTextRequest(
+        prompt: prompt, systemPrompt: systemPrompt, maxRetries: 0, timeout: requestTimeout, thinkingBudget: 0)
+    }
+  }
+
+  /// Testable request seam for the bounded polish operation. Production uses
+  /// the `GeminiClient` overload above; tests can supply a deterministic
+  /// response and prove the deadline/acceptance boundary without a network
+  /// request or a wall-clock wait.
+  typealias TextRequest =
+    @Sendable (
+      _ prompt: String, _ systemPrompt: String, _ timeout: TimeInterval
+    ) async throws -> String
+
+  static func polish(
+    _ text: String,
+    context: Context,
+    timeout: TimeInterval = DictationPolisher.timeout,
+    using request: @escaping TextRequest
+  ) async throws -> String? {
     let system = systemPrompt(context: context)
     // The deadline is enforced at the boundary (`DeadlinedOperation`): a
     // request stuck before its first cancellation check — in the auth header
@@ -212,8 +256,7 @@ enum DictationPolisher {
     let candidate: String
     do {
       candidate = try await DeadlinedOperation.run(seconds: timeout) {
-        try await client.sendTextRequest(
-          prompt: text, systemPrompt: system, maxRetries: 0, timeout: timeout, thinkingBudget: 0)
+        try await request(text, system, timeout)
       }
     } catch DeadlinedOperation.Failure.timedOut {
       throw PolishError.timedOut
@@ -224,6 +267,24 @@ enum DictationPolisher {
   enum PolishError: Error {
     case timedOut
   }
+
+  private static func languageBase(_ language: String) -> String {
+    language.lowercased().split(separator: "-").first.map(String.init) ?? language.lowercased()
+  }
+
+  /// These phrases are complete text in their own right and do not benefit
+  /// from speech-specific rewriting. Keep this set finite and explicit; an
+  /// utterance outside it must retain the model's self-correction,
+  /// formatting, and address handling.
+  private static let safeShortUtterances: Set<String> = [
+    "hello", "hello.", "hi", "hi.", "hey", "hey.",
+    "good morning", "good morning.", "good afternoon", "good afternoon.",
+    "good evening", "good evening.", "good night", "good night.",
+    "yes", "yes.", "no", "no.", "okay", "okay.", "ok", "ok.",
+    "sure", "sure.", "got it", "got it.", "sounds good", "sounds good.",
+    "all right", "all right.", "alright", "alright.", "thank you", "thank you.",
+    "thanks", "thanks.", "please", "please.",
+  ]
 
   private static func wordCount(_ text: String) -> Int {
     text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count

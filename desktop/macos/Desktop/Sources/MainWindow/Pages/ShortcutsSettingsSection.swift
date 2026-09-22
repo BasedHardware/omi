@@ -1,6 +1,25 @@
 import OmiTheme
 import SwiftUI
 
+enum PushToTalkSettingsGuidance {
+  static func lines(
+    pttEnabled: Bool,
+    doubleTapForLock: Bool,
+    shortcutLabel: String
+  ) -> [String] {
+    guard pttEnabled else {
+      return ["Enable Push to Talk to use voice input."]
+    }
+
+    let hold = "Hold \(shortcutLabel) to speak, then release to send."
+    let handsFree =
+      doubleTapForLock
+      ? "Double-tap to keep listening hands-free; tap again to send."
+      : "Turn on Double-tap for Locked Mode for hands-free listening."
+    return [hold, handsFree, "Say “type…” to dictate into the focused app."]
+  }
+}
+
 struct ShortcutsSettingsSection: View {
   @ObservedObject private var settings = ShortcutSettings.shared
   @Binding var highlightedSettingId: String?
@@ -131,6 +150,21 @@ struct ShortcutsSettingsSection: View {
           helperText: "Use a modifier key or a key combination."
         )
       }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        ForEach(
+          PushToTalkSettingsGuidance.lines(
+            pttEnabled: settings.pttEnabled,
+            doubleTapForLock: settings.doubleTapForLock,
+            shortcutLabel: settings.pttShortcut.displayLabel
+          ),
+          id: \.self
+        ) { line in
+          Text(line)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
+      }
     }
     .padding(OmiSpacing.xl)
     .background(
@@ -161,9 +195,13 @@ struct ShortcutsSettingsSection: View {
         Text("Double-tap for Locked Mode")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
-        Text("Double-tap the push-to-talk key to keep listening hands-free. Tap again to send.")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
+        Text(
+          settings.doubleTapForLock
+            ? "Double-tap the push-to-talk key to keep listening hands-free. Tap again to send."
+            : "Turn this on to keep listening hands-free with a double-tap."
+        )
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
       }
       Spacer()
       Toggle("", isOn: $settings.doubleTapForLock)

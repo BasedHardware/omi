@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import yaml
+import pytest
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_manual_operator.yml"
 QA_CLOUD_WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_cloud_run.yml"
@@ -96,6 +97,25 @@ def test_sweep_verify_joins_server_run_to_real_job_and_content_free_output():
     assert "notification" not in command.casefold()
     assert '"scheduler_mutation": False' in command
     assert "poll_deadline" in command
+
+
+def test_sweep_repair_step_is_qa_fenced_and_content_free():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    step = _step("Repair one tombstoned QA sweep model invocation")
+    command = step["run"]
+    assert step["if"] == "${{ inputs.operation == 'sweep-repair' }}"
+    assert step["env"]["OMI_JIT_QA_AUTH_ONLY"] == "true"
+    assert step["env"]["OMI_JIT_QA_UID_ALLOWLIST"] == "${{ env.QA_UID }}"
+    assert step["env"]["FIRESTORE_DATABASE_ID"] == "${{ env.QA_DATABASE }}"
+    assert "jit_qa_sweep_repair.py list" in command
+    assert "jit_qa_sweep_repair.py repair" in command
+    assert '--invocation-id "$INVOCATION_ID"' in command
+    assert "sweep-repair-receipt.json" in command
+    assert "run jobs execute" not in command
+    assert '"model_calls": False' in command
+    assert '"scheduler_mutation": False' in command
+    assert "sweep-repair" in text
+    assert "SWEEP_REPAIR_QA" in text
 
 
 def test_every_workflow_shell_block_is_valid_bash():
@@ -444,3 +464,36 @@ def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
         assert receipt["source_sha"] == "a" * 40
         assert not (operator_dir / "operation.json").exists()
         assert [path.name for path in (operator_dir / "artifacts").iterdir()] == ["operator-receipt.json"]
+
+
+@pytest.mark.parametrize(
+    "confirmation,reference,allowed",
+    [
+        ("", "", True),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "incident:reviewed", True),
+        ("", "incident:reviewed", False),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "", False),
+        ("no_recorded_attempt", "incident:reviewed", False),
+    ],
+)
+def test_repair_attestation_workflow_admission_requires_explicit_pair(confirmation, reference, allowed):
+    # Exercise local input admission only; stop before any git/network operation.
+    admission = _step("Admit exact source and operation")["run"].split("git fetch --no-tags", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", admission],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GITHUB_REF": "refs/heads/main",
+            "SOURCE_SHA": "a" * 40,
+            "OPERATION": "sweep-repair",
+            "CONFIRMATION": "SWEEP_REPAIR_QA",
+            "INVOCATION_ID": "inv-1",
+            "RUN_ID": "",
+            "RESUME_EXECUTION": "",
+            "REPAIR_ATTESTATION_CONFIRMATION": confirmation,
+            "REPAIR_ATTESTATION_REFERENCE": reference,
+        },
+    )
+    assert (result.returncode == 0) is allowed, result.stderr

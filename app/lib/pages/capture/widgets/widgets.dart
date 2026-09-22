@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
@@ -204,9 +203,7 @@ getTranscriptWidget(
   bool isConversationDetail = false,
   double bottomMargin = 100.0,
   Function(String, int)? editSegment,
-  Map<String, SpeakerLabelSuggestionEvent> suggestions = const {},
   List<String> taggingSegmentIds = const [],
-  Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
   String searchQuery = '',
   int currentResultIndex = -1,
   VoidCallback? onTapWhenSearchEmpty,
@@ -247,9 +244,7 @@ getTranscriptWidget(
       isConversationDetail: isConversationDetail,
       bottomMargin: bottomMargin,
       editSegment: editSegment,
-      suggestions: suggestions,
       taggingSegmentIds: taggingSegmentIds,
-      onAcceptSuggestion: onAcceptSuggestion,
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,

@@ -296,6 +296,62 @@ extension SettingsContentView {
         }
       }
 
+      // Silent Type
+      settingsCard(settingId: "transcription.silenttype") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack {
+            Image(systemName: "keyboard.badge.eye")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Silent Type")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
+
+              Text("Keeps what you dictate with Omi Type out of the chat.")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $shortcutSettings.silentTypeEnabled)
+              .toggleStyle(OmiToggleStyle())
+          }
+        }
+      }
+
+      // Ignore dictation apps
+      settingsCard(settingId: "transcription.ignoredictationapps") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack {
+            Image(systemName: "mic.slash")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Ignore Dictation Apps")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
+
+              Text(
+                "While Wispr Flow, superwhisper, or macOS Dictation is using the microphone, Omi stops listening so dictations don't become conversations. Calls are never muted."
+              )
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $shortcutSettings.ambientIgnoresDictationApps)
+              .toggleStyle(OmiToggleStyle())
+          }
+        }
+      }
+
     }
   }
 

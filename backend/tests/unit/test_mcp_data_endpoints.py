@@ -834,6 +834,30 @@ class TestPeople:
 
 
 class TestScreenActivity:
+    def test_summary_coverage_survives_rest_serialization_and_sse_dispatch(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        coverage = {
+            'source': 'synced_screen_activity',
+            'row_limit': 5000,
+            'truncated': True,
+            'first_observed_at': '2026-07-03 01:00:00.000',
+            'last_observed_at': '2026-07-03 12:00:00.000',
+            'capture_completeness': 'unknown',
+        }
+        summary = {'apps': {}, 'total_screenshots': 5000, 'coverage': coverage}
+        monkeypatch.setattr(rest.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
+        monkeypatch.setattr(sse.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
+        app = FastAPI()
+        app.include_router(rest.router)
+        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+        with TestClient(app) as client:
+            response = client.get('/v1/mcp/screen-activity?summary=true')
+        assert response.status_code == 200
+        assert response.json()['coverage'] == coverage
+        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == coverage
+
     def _row(self):
         return {
             'id': 's1',

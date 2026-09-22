@@ -48,10 +48,28 @@ void main() {
     expect(source, contains('request.taskHint = .dictation'));
     expect(
       source,
-      contains('''if #available(iOS 16, *) {
-                request.addsPunctuation = true
-            }'''),
+      matches(RegExp(r'if #available\(iOS 16, \*\) \{\s+request.addsPunctuation = true\s+\}')),
     );
+  });
+
+  test('Apple recognition timeouts propagate for retry and remove the temporary audio', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final tempDir = await Directory.systemTemp.createTemp('apple-timeout-');
+    const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+    const speechChannel = MethodChannel('com.omi.ios/speech');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(pathChannel, (_) async => tempDir.path);
+    messenger.setMockMethodCallHandler(speechChannel, (_) async {
+      throw PlatformException(code: 'RECOGNITION_TIMEOUT', message: 'native recognition stopped');
+    });
+    try {
+      await expectLater(OnDeviceAppleProvider().transcribe(_loudPcmWav()), throwsA(isA<PlatformException>()));
+      expect(await tempDir.list().toList(), isEmpty);
+    } finally {
+      messenger.setMockMethodCallHandler(pathChannel, null);
+      messenger.setMockMethodCallHandler(speechChannel, null);
+      await tempDir.delete(recursive: true);
+    }
   });
 
   test('Apple on-device STT drops low-energy filler transcripts', () async {

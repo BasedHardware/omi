@@ -192,6 +192,9 @@ def tombstone_and_delete_empty_conversation(
         if (
             conversation.get('status') != 'in_progress'
             or conversation.get('discarded')
+            or conversation.get('deleted')
+            or conversation.get('is_locked')
+            or conversation.get('sync_content_revision')
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False

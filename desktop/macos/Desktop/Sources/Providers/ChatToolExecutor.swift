@@ -552,6 +552,11 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "search_transcripts" {
+        return await ChatLocalHybridTool.execute(
+          toolCall.arguments, runID: originatingRunId, attemptID: originatingAttemptId,
+          expectedOwnerID: expectedOwnerID, sourceKinds: [.transcriptChunk])
+      }
       if toolCall.name == "web_search" {
         return await executeWebSearch(
           toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -1771,12 +1776,33 @@ class ChatToolExecutor {
 
   // MARK: - Semantic Search
 
+  private struct ScreenHistorySearchResult: Sendable {
+    let screenshotId: Int64
+    let score: Double
+    let relevance: String
+    let isLocal: Bool
+  }
+
+  struct SemanticSearchDependencies: Sendable {
+    var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var legacySearch:
+      @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
+        query, start, end, app, topK in
+        try await OCREmbeddingService.shared.searchSimilar(
+          query: query, startDate: start, endDate: end, appFilter: app, topK: topK)
+      }
+    var screenshot: @Sendable (Int64) async throws -> Screenshot? = { id in
+      try await RewindDatabase.shared.getScreenshot(id: id)
+    }
+  }
+
   /// Search screenshots using vector similarity
-  private static func executeSemanticSearch(
+  static func executeSemanticSearch(
     _ args: [String: Any],
     runID: String?,
     attemptID: String?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    dependencies: SemanticSearchDependencies = SemanticSearchDependencies()
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1792,16 +1818,34 @@ class ChatToolExecutor {
     let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
 
     do {
-      let vectorResults = try await OCREmbeddingService.shared.searchSimilar(
-        query: query,
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        topK: max(limit * 2, 20)
-      )
+      let runtime = dependencies.runtime
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+        guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
+          throw LocalMutationAuthorizationError.revoked
+        }
+        let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+        let search = LocalHybridSearch(
+          store: store, runtime: runtime,
+          authorization: LocalMutationAuthorization { owner.isCurrent() })
+        let hits = try await search.search(
+          query: query, engine: engine, startDate: startDate,
+          endDate: endDate, appFilter: appFilter, limit: limit, sourceKinds: [.screenshot])
+        return hits.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.sourceId, score: $0.fusedScore,
+            relevance: "hybrid: \($0.matchedBy.rawValue)", isLocal: true)
+        }
+      } legacy: {
+        let results = try await dependencies.legacySearch(query, startDate, endDate, appFilter, max(limit * 2, 20))
+        return results.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.screenshotId, score: Double($0.similarity),
+            relevance: "similarity: \(String(format: "%.2f", $0.similarity))", isLocal: false)
+        }
+      }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-      log("Tool semantic_search: vector returned \(vectorResults.count) results")
+      log("Tool semantic_search returned \(searchResults.count) candidates")
 
       // Filter by similarity threshold and fetch screenshot details
       let displayTimeZone = TimeZone.current
@@ -1810,12 +1854,12 @@ class ChatToolExecutor {
       var sources = [APIClient.ToolSource]()
       var count = 0
 
-      for result in vectorResults where result.similarity > 0.3 {
+      for result in searchResults where result.isLocal || result.score > Double(Float(0.3)) {
         guard isExpectedOwnerCurrent(expectedOwnerID) else {
           return authorizedOwnerChangedResult()
         }
         guard
-          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId)
+          let screenshot = try? await dependencies.screenshot(result.screenshotId)
         else {
           continue
         }
@@ -1829,7 +1873,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), \(result.relevance))"
         )
 
         // Include OCR text preview (truncated)
@@ -2229,9 +2273,14 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
       // System Settings from a chat turn repeats the auto-reprompt class. Report it.
-      if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
-        == .surfacePermissionAlert
-      {
+      let microphoneAction = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus())
+      if microphoneAction == .surfacePermissionAlert {
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
         appState?.hasMicrophonePermission = false
         return permissionRequestResult(
           type: type, granted: false,
@@ -2269,14 +2318,14 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       // Same rule as microphone: a denied authorization is spent — no re-request,
       // no forced System Settings jump from a chat turn.
-      let preStatus = await withCheckedContinuation {
-        (continuation: CheckedContinuation<UNAuthorizationStatus, Never>) in
-        UserNotificationCallbackBridge.authorizationStatus { status in
-          continuation.resume(returning: status)
-        }
-      }
+      guard let preStatus = await notificationAuthorizationStatusDirectly(),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
       if preStatus == .denied {
         appState?.hasNotificationPermission = false
+        appState?.notificationAuthorizationStatus = .denied
         return permissionRequestResult(
           type: type, granted: false,
           pendingMessage:
@@ -2290,6 +2339,10 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
       if !granted, preStatus == .notDetermined {
+        // The user just answered the system prompt with No, so the real TCC state
+        // is now .denied. Without this the cache still reads .notDetermined and a
+        // later caller treats a spent authorization as still askable.
+        appState?.notificationAuthorizationStatus = .denied
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
@@ -2308,6 +2361,7 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      UserDefaults.standard.set(false, forKey: .onboardingAccessibilitySkipped)
       requestAccessibilityPermissionDirectly(
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
@@ -2535,6 +2589,14 @@ class ChatToolExecutor {
     await awaitCancellablePermissionRequest { completion in
       UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
         completion(authorizationStatus == .authorized)
+      }
+    }
+  }
+
+  private static func notificationAuthorizationStatusDirectly() async -> UNAuthorizationStatus? {
+    await awaitCancellablePermissionRequest { completion in
+      UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
+        completion(authorizationStatus)
       }
     }
   }

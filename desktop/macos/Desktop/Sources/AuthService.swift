@@ -90,9 +90,9 @@ class AuthService {
   // Keys are defined once in `DefaultsKey` and read/written through the typed
   // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
   //
-  // Keychain service is team+bundle scoped so local Dev / named-bundle builds
-  // cannot poison each other or notarized Beta/Prod (login-keychain password
-  // dialog). See DesktopKeychainStore.scopedService.
+  // Secret-store service is team+bundle scoped so local Dev / named-bundle builds
+  // cannot poison each other or notarized Beta/Prod (keychain on shipped bundles,
+  // file store on developer bundles). See DesktopKeychainStore.scopedService.
   private let authTokenKeychainAccount = "firebase-rest-tokens"
   private var authTokenKeychainService: String {
     DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
@@ -121,11 +121,11 @@ class AuthService {
     var deleteKeychainString: (_ service: String, _ account: String) -> Void
     var recordsFallbackTelemetry: Bool
 
-    // Security invariant: new auth tokens live in the Keychain on EVERY build,
-    // including Sparkle beta. Plaintext UserDefaults fallback is disabled for new
-    // sign-ins. The read path remains only for transactional migration of older
-    // installs: keep that already-existing copy until Keychain read-back plus a
-    // forced refresh commit the new store.
+    // Security invariant: new auth tokens live in DesktopKeychainStore on every
+    // build (login keychain on shipped bundles, file store otherwise). Plaintext
+    // UserDefaults fallback is disabled for new sign-ins. The read path remains
+    // only for transactional migration of older installs: keep that existing
+    // copy until secret-store read-back plus a forced refresh commit the new store.
     nonisolated(unsafe) static let live = TokenStorageHooks(
       usesKeychainTokenStorage: { true },
       allowsUserDefaultsFallback: { false },
@@ -152,6 +152,7 @@ class AuthService {
 
   struct TokenRefreshHooks {
     var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
+    var now: () -> Date = Date.init
 
     nonisolated(unsafe) static let live = TokenRefreshHooks(dataForRequest: nil)
   }
@@ -289,9 +290,8 @@ class AuthService {
     // The REST-backed session remains authoritative if the Firebase SDK was
     // unavailable at launch. Only clear an SDK session when one exists.
     do {
-      return try await commitSignedOutSession(
+      return try await commitLightInvalidatedSession(
         attempt: attempt,
-        phase: .needsReauth,
         beforeClearingCredentials: { [self] in
           if let auth = configuredFirebaseAuth() {
             try auth.signOut()
@@ -547,6 +547,8 @@ class AuthService {
       // never proof of a usable session. Keep every authenticated surface gated
       // until a forced refresh succeeds.
       validateRestoredSession(attempt: attempt)
+    } else if preservedReauthOwnerId() != nil {
+      restorePreservedReauthOwner(email: savedEmail)
     } else {
       NSLog("OMI AUTH: No saved auth state found")
       guard
@@ -663,10 +665,7 @@ class AuthService {
           let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
           log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self.isSignedIn)")
           if !savedSignedIn {
-            // No saved session either - user is truly signed out
-            log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
-            AuthState.shared.transition(to: .signedOut)
-            AuthState.shared.userEmail = nil
+            await MainActor.run { self.handleFirebaseNilUserWithoutSavedSignedIn() }
           } else {
             log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
             await self.validateSavedSessionAfterFirebaseNil()
@@ -1851,7 +1850,7 @@ class AuthService {
 
   func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) throws {
     // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
-    let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
+    let expiryTime = tokenRefreshHooks.now().addingTimeInterval(TimeInterval(expiresIn - 300))
     let tokens = StoredAuthTokens(
       idToken: idToken,
       refreshToken: refreshToken,
@@ -1919,11 +1918,11 @@ class AuthService {
   /// the app really uses — so a harness can then relaunch and prove the app refreshes an
   /// expired idToken *without signing the user out*.
   ///
-  /// Why this exists: the tokens moved to the Keychain, so the old harness trick of
+  /// Why this exists: the tokens moved to the secret store, so the old harness trick of
   /// `defaults write <bundle> auth_tokenExpiry -float 1000` now tampers a key the app
   /// no longer reads — the probe silently measured nothing and reported a false
   /// regression. Going through `saveTokens` keeps the seam correct for BOTH backends
-  /// (keychain and the UserDefaults fallback) and is inert if the storage changes again.
+  /// (secret store and the UserDefaults fallback) and is inert if the storage changes again.
   ///
   /// `expiresIn: 0` lands at `now - 300` (saveTokens subtracts the 5-min buffer), i.e.
   /// already expired. Token material never leaves the process — only a redacted status.
@@ -2136,7 +2135,7 @@ class AuthService {
   private var isTokenExpired: Bool {
     let expiryTime = storedTokens()?.expiryTime ?? 0
     guard expiryTime > 0 else { return true }
-    return Date().timeIntervalSince1970 > expiryTime
+    return tokenRefreshHooks.now().timeIntervalSince1970 >= expiryTime
   }
 
   // MARK: - Firebase REST API Token Exchange

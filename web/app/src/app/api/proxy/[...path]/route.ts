@@ -2,6 +2,27 @@ import { moonshineJson } from '@tschk/moonshine-next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 
+const FORWARDED_RESPONSE_HEADERS = [
+  'X-Omi-Memory-As-Of',
+  'X-Omi-Memory-Belief-Enabled',
+  'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+  'X-Omi-Memory-Default-Delete-Supported',
+  'X-Omi-Memory-Device-Scope-Supported',
+  'X-Omi-Memory-Next-Cursor',
+  'X-Omi-List-Truncated',
+];
+
+function forwardedResponseHeaders(response: Response, initial?: HeadersInit): Headers {
+  const headers = new Headers(initial);
+  for (const name of FORWARDED_RESPONSE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value !== null) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
 /**
  * API Proxy to avoid CORS issues during development
  * Forwards requests from /api/proxy/* to https://api.omi.me/*
@@ -45,14 +66,18 @@ async function handleRequest(request: Request) {
       Authorization: authHeader,
     };
 
-    // Forward custom headers for FCM token registration
+    // Forward custom headers for FCM token registration and create retries
     const appPlatform = request.headers.get('X-App-Platform');
     const deviceIdHash = request.headers.get('X-Device-Id-Hash');
+    const idempotencyKey = request.headers.get('Idempotency-Key');
     if (appPlatform) {
       headers['X-App-Platform'] = appPlatform;
     }
     if (deviceIdHash) {
       headers['X-Device-Id-Hash'] = deviceIdHash;
+    }
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
     }
 
     if (!isMultipart && request.method !== 'GET') {
@@ -100,9 +125,9 @@ async function handleRequest(request: Request) {
       const text = await response.text();
       return new Response(text, {
         status: response.status,
-        headers: {
+        headers: forwardedResponseHeaders(response, {
           'Content-Type': responseContentType || 'text/plain',
-        },
+        }),
       });
     }
 
@@ -111,10 +136,10 @@ async function handleRequest(request: Request) {
     if (contentDisposition) {
       return new Response(response.body, {
         status: response.status,
-        headers: {
+        headers: forwardedResponseHeaders(response, {
           'Content-Type': responseContentType || 'application/octet-stream',
           'Content-Disposition': contentDisposition,
-        },
+        }),
       });
     }
 
@@ -136,17 +161,22 @@ async function handleRequest(request: Request) {
 
       return moonshineJson(data, {
         status: response.status,
-        headers: cacheHeaders,
+        headers: forwardedResponseHeaders(response, cacheHeaders),
       });
     }
 
-    // Default: return as text
-    const data = await response.text();
-    return new Response(data, {
+    // Default: stream the body through untouched. Reading it as text would
+    // decode binary payloads (e.g. /v1/static-map PNGs) as UTF-8 and corrupt them.
+    const passthroughHeaders: HeadersInit = {
+      'Content-Type': responseContentType || 'text/plain',
+    };
+    const cacheControl = response.headers.get('cache-control');
+    if (cacheControl) {
+      passthroughHeaders['Cache-Control'] = cacheControl;
+    }
+    return new Response(response.body, {
       status: response.status,
-      headers: {
-        'Content-Type': responseContentType || 'text/plain',
-      },
+      headers: forwardedResponseHeaders(response, passthroughHeaders),
     });
   } catch (error) {
     console.error('Proxy error:', error);

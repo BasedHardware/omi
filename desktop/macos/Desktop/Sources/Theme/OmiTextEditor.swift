@@ -59,17 +59,50 @@ private class OmiNSTextView: NSTextView {
   var onFileDrop: ((URL) -> Void)?
   /// See `OmiTextEditor.onFileDragTargeted`.
   var onFileDragTargeted: ((Bool) -> Void)?
+  /// See `OmiTextEditor.onPasteAttachments`.
+  var onPasteAttachments: (() -> Void)?
 
-  private var handlesFileDrops: Bool { onFileDrop != nil }
+  private var handlesPasteAttachments: Bool { onPasteAttachments != nil }
+
+  /// AppKit disables Edit ▸ Paste — and its ⌘V key equivalent resolves through
+  /// that menu item — when the pasteboard holds no text flavor, which is exactly
+  /// what a screenshot copied to the clipboard is. The host's attachment
+  /// staging *is* the paste in that case, so the item has to validate.
+  override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+    if item.action == #selector(paste(_:)), handlesPasteAttachments,
+      OmiTextEditor.pasteCarriesAttachments(NSPasteboard.general)
+    {
+      return true
+    }
+    return super.validateUserInterfaceItem(item)
+  }
+
+  override func paste(_ sender: Any?) {
+    guard handlesPasteAttachments,
+      OmiTextEditor.pasteCarriesAttachments(NSPasteboard.general)
+    else { return super.paste(sender) }
+    onPasteAttachments?()
+    // A copied selection can carry its caption alongside the image; after the
+    // host has staged the attachments, let the default paste insert that text.
+    // A bare screenshot or a Finder file copy carries no string, so there is
+    // nothing to insert and the paste consumed nothing visually.
+    let string = NSPasteboard.general.string(forType: .string) ?? ""
+    if !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      super.paste(sender)
+    }
+  }
 
   /// Handling the drag here, rather than leaving it to a SwiftUI `.onDrop` layered behind, is what
   /// makes the *whole* editor a drop target: the text view covers that layer, so without this only
   /// the few points of padding around it ever saw a file — and dropping on the text itself made
-  /// AppKit insert the file's path.
+  /// AppKit insert the file's path. That fallback is also why a host that stages no files must see
+  /// the drag **declined** here rather than handed to AppKit: an editor with no `onFileDrop` has
+  /// nothing to stage, and AppKit's own handling would write the path into the text instead.
   override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.draggingEntered(sender)
     }
+    guard onFileDrop != nil else { return [] }
     onFileDragTargeted?(true)
     return .copy
   }
@@ -87,30 +120,42 @@ private class OmiNSTextView: NSTextView {
   }
 
   override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.draggingUpdated(sender)
     }
+    guard onFileDrop != nil else { return [] }
     return .copy
   }
 
   override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-    guard let onFileDrop, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.performDragOperation(sender)
     }
+    // Never `super` for a file drag without a handler: that is the path that inserts the dropped
+    // file's *path* into the text. Decline instead — nothing staged, nothing inserted.
+    guard let onFileDrop else { return false }
     onFileDragTargeted?(false)
-    guard
-      let url = sender.draggingPasteboard.readObjects(
-        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])?.first as? URL
-    else { return false }
-    onFileDrop(url)
+    let urls =
+      (sender.draggingPasteboard.readObjects(
+        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? [])
+      .compactMap { $0 as? URL }
+    guard !urls.isEmpty else { return false }
+    // Every file on the drag, one callback each: hosts stage through the same capped paths as the
+    // shell's `.onDrop` (`ChatProvider.addAttachments` / `kMaxChatAttachments`), which read their
+    // authoritative store synchronously, so a multi-file drop cannot exceed the cap.
+    for url in urls {
+      onFileDrop(url)
+    }
     return true
   }
 
   /// AppKit re-registers a text view's default dragged types when it joins a window, so the
-  /// registration must be re-asserted there rather than once at construction.
+  /// registration must be re-asserted there rather than once at construction. Registered even when
+  /// the host stages no files: an unregistered view never sees file drags, so AppKit's own
+  /// path-insertion fallback would handle them instead of the explicit decline in the overrides
+  /// above.
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    guard handlesFileDrops else { return }
     registerForDraggedTypes([.fileURL])
   }
 
@@ -153,12 +198,19 @@ package struct OmiTextEditor: NSViewRepresentable {
   /// that is already `true` cannot ask for the caret back after AppKit gave it to something else.
   var focusRequest: Int = 0
   /// Receive files dropped anywhere on the editor. Set this and AppKit's own handling — which
-  /// inserts the dropped file's *path* — is replaced by this callback for file drags; text drags
-  /// are untouched. Leave it nil and the editor behaves exactly as AppKit intends.
+  /// inserts the dropped file's *path* — is replaced by this callback for file drags, one call per
+  /// dropped file; text drags are untouched. Leave it nil and file drags are **declined**: the
+  /// drag is never handed to AppKit, so no path is ever inserted into the text.
   var onFileDrop: ((URL) -> Void)? = nil
   /// Whether a file drag is currently over the editor, so the host can draw the same highlight it
   /// draws for the padding around it.
   var onFileDragTargeted: ((Bool) -> Void)? = nil
+  /// Receive content pasted onto the editor. Set this and ⌘V stops being a
+  /// text-only operation: when the pasteboard carries attachable content (see
+  /// `pasteCarriesAttachments`), the host decides what to stage, and any text
+  /// riding along still goes through the default paste. Leave it nil and the
+  /// editor behaves exactly as AppKit intends — text pastes only.
+  var onPasteAttachments: (() -> Void)? = nil
 
   // Optional height tracking (for floating bar's window resize flow)
   var minHeight: CGFloat? = nil
@@ -177,6 +229,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     focusRequest: Int = 0,
     onFileDrop: ((URL) -> Void)? = nil,
     onFileDragTargeted: ((Bool) -> Void)? = nil,
+    onPasteAttachments: (() -> Void)? = nil,
     minHeight: CGFloat? = nil,
     maxHeight: CGFloat? = nil,
     onHeightChange: ((CGFloat) -> Void)? = nil
@@ -192,6 +245,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     self.focusRequest = focusRequest
     self.onFileDrop = onFileDrop
     self.onFileDragTargeted = onFileDragTargeted
+    self.onPasteAttachments = onPasteAttachments
     self.minHeight = minHeight
     self.maxHeight = maxHeight
     self.onHeightChange = onHeightChange
@@ -203,6 +257,18 @@ package struct OmiTextEditor: NSViewRepresentable {
   package static func dragCarriesFile(_ pasteboard: NSPasteboard) -> Bool {
     pasteboard.canReadObject(
       forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+  }
+
+  /// Whether a paste is carrying content a host stages as attachments rather
+  /// than inserts: file URLs (a Finder copy) or image data (a screenshot copied
+  /// to the clipboard). A board with readable text is a text paste even when it
+  /// also carries image flavors — copying a paragraph from a web page must not
+  /// summon phantom attachments.
+  package static func pasteCarriesAttachments(_ pasteboard: NSPasteboard) -> Bool {
+    if dragCarriesFile(pasteboard) { return true }
+    let string = pasteboard.string(forType: .string) ?? ""
+    if !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+    return pasteboard.canReadObject(forClasses: [NSImage.self])
   }
 
   package func makeNSView(context: Context) -> NSScrollView {
@@ -219,6 +285,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.onFileDrop = onFileDrop
     textView.onFileDragTargeted = onFileDragTargeted
+    textView.onPasteAttachments = onPasteAttachments
     textView.onMarkedTextStatusChange = { [weak coordinator = context.coordinator] hasMarkedText in
       coordinator?.updateMarkedTextState(hasMarkedText)
     }
@@ -257,6 +324,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     context.coordinator.updateTextBinding($text)
     (textView as? OmiNSTextView)?.onFileDrop = onFileDrop
     (textView as? OmiNSTextView)?.onFileDragTargeted = onFileDragTargeted
+    (textView as? OmiNSTextView)?.onPasteAttachments = onPasteAttachments
 
     if textView.string != text, !textView.hasMarkedText() {
       context.coordinator.isUpdating = true

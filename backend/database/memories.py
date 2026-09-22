@@ -35,6 +35,8 @@ from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_s
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
+BATCH_LIMIT = 500  # Firestore hard limit
+
 logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
@@ -499,8 +501,33 @@ def get_memories(
     return result
 
 
+def _query_has_any(query: Any) -> bool:
+    limited = query.limit(1) if callable(getattr(query, 'limit', None)) else query
+    return next(iter(limited.stream()), None) is not None
+
+
+def _aggregation_count(query: Any) -> Optional[int]:
+    try:
+        aggregation: Any = query.count()
+        rows = aggregation.get()
+        return int(rows[0][0].value)
+    except Exception:
+        return None
+
+
+def _id_union(canonical_query: Any, legacy_query: Any) -> int:
+    canonical_ids = {doc.id for doc in canonical_query.stream()}
+    legacy_ids = {doc.id for doc in legacy_query.stream()}
+    return len(canonical_ids | legacy_ids)
+
+
 def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *, firestore_client: Any = None) -> int:
-    """Count canonical memory items with legacy compatibility, deduplicated by stable id."""
+    """Count canonical memory items with legacy compatibility, deduplicated by stable id.
+
+    Do not add independent collection ``count()`` results: dual-store IDs would
+    be double-counted. When one store is empty, aggregation count on the other
+    is exact. When both have rows, stream the date-bounded ID union.
+    """
     database = _get_db(firestore_client)
     legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
     legacy_query = MEMORIES_CREATED_RANGE_QUERY.build(
@@ -514,9 +541,17 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
         {'start': start_date, 'end': end_date},
         field_filter_factory=FieldFilter,
     )
-    canonical_ids = {doc.id for doc in canonical_query.stream()}
-    legacy_ids = {doc.id for doc in legacy_query.stream()}
-    return len(canonical_ids | legacy_ids)
+    canonical_any = _query_has_any(canonical_query)
+    legacy_any = _query_has_any(legacy_query)
+    if canonical_any and legacy_any:
+        return _id_union(canonical_query, legacy_query)
+    if canonical_any:
+        counted = _aggregation_count(canonical_query)
+        return counted if counted is not None else 0
+    if legacy_any:
+        counted = _aggregation_count(legacy_query)
+        return counted if counted is not None else 0
+    return 0
 
 
 _HISTORICAL_SCAN_PAGE_MAX = 500
@@ -1498,6 +1533,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
 
     # Create batch for destination user
     batch = database.batch()
+    batch_count = 0
     new_user_ref = database.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection(memories_collection)
 
@@ -1520,8 +1556,14 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
     # Commit batch
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
     logger.info(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
     return len(memories_to_migrate)
