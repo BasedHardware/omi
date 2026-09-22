@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-FIELDS = ("id", "content", "category", "created_at", "source")
+FIELDS = ("id", "content", "category", "visibility", "tags", "created_at")
 
 
 def spreadsheet_text(value):
@@ -13,7 +13,6 @@ def spreadsheet_text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    # Neutralize spreadsheet formula injection attacks
     if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
         return "'" + value
     return value
@@ -33,18 +32,21 @@ def convert(source, destination):
     tmp = dest.with_suffix(dest.suffix + ".partial")
     try:
         with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f)
+            writer = csv.writer(f, lineterminator="\r\n")
             writer.writerow(FIELDS)
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                writer.writerow([
-                    spreadsheet_text(item.get("id")),
-                    spreadsheet_text(item.get("content")),
-                    spreadsheet_text(item.get("category")),
-                    spreadsheet_text(item.get("created_at")),
-                    spreadsheet_text(item.get("source")),
-                ])
+                row = [
+                    item.get("id", ""),
+                    spreadsheet_text(item.get("content") or item.get("text") or ""),
+                    spreadsheet_text(item.get("category") or ""),
+                    spreadsheet_text(item.get("visibility") or ""),
+                    spreadsheet_text(item.get("tags") or []),
+                    item.get("created_at") or "",
+                ]
+                writer.writerow(row)
+
         os.replace(tmp, dest)
     finally:
         if tmp.exists():

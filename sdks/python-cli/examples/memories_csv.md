@@ -1,14 +1,12 @@
-# Convert a memory-list export to CSV
+# Convert memories to CSV
 
-Use this recipe to review memory metadata in a spreadsheet (Excel, Google Sheets). It reads a saved JSON export, makes no network requests, and neutralizes formula injection. You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
+Use this recipe to export saved memories from Omi into a spreadsheet-safe CSV file (UTF-8 with BOM, compatible with Excel, Google Sheets, and Numbers). It neutralizes spreadsheet formula injection risks and safely formats categories, tags, and timestamps.
 
-Export up to 200 memories:
+Export memories:
 
 ```sh
-omi --json memory list --limit 200 --offset 0 > memories.json
+omi --json memory list --limit 100 > memories.json
 ```
-
-Check that the command succeeded before converting the file.
 
 Convert to CSV:
 
@@ -16,4 +14,15 @@ Convert to CSV:
 python memories_to_csv.py memories.json memories.csv
 ```
 
-The script includes formula-injection protection (prefixes potential formula cells with `'`), writes UTF-8 with BOM (`utf-8-sig`) for seamless opening in Microsoft Excel, and uses atomic file replacement.
+## Schema Breakdown
+
+The generated CSV contains the following fields matching the `DeveloperMemory` schema:
+
+| Column | Description |
+|---|---|
+| `id` | Unique memory identifier |
+| `content` | Stored memory text |
+| `category` | Memory category (e.g. work, lifestyle, skills) |
+| `visibility` | Privacy scope (`private` or `public`) |
+| `tags` | JSON-encoded array of associated tags |
+| `created_at` | Timestamp when the memory was captured |
