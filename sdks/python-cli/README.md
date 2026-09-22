@@ -1,6 +1,7 @@
 # omi-cli
 
 [Русский: быстрый старт](README.ru.md) · [日本語 README](README.ja.md)
+- **[فارسی (Persian)](examples/agent_quickstart.fa.md)**
 
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
