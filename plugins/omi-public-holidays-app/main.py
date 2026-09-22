@@ -6,6 +6,7 @@ supported country codes through the public Nager.Date API.
 """
 
 import json
+import logging
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -14,6 +15,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 NAGER_BASE_URL = "https://date.nager.at/api/v3"
@@ -245,8 +248,14 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"holiday lookup failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"holiday lookup failed: {exc}")
+        logger.error("holiday lookup failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="holiday lookup failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during holiday lookup: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="holiday lookup failed.")
 
 
 @app.post("/tools/get_next_public_holidays", response_model=ChatToolResponse)
@@ -262,8 +271,14 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"upcoming holiday lookup failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
+        logger.error("upcoming holiday lookup failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="upcoming holiday lookup failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during upcoming holiday lookup: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="upcoming holiday lookup failed.")
 
 
 @app.post("/tools/get_long_weekends", response_model=ChatToolResponse)
@@ -279,8 +294,14 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
         if len(weekends) > request.limit:
             lines.append(f"... {len(weekends) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"long-weekend lookup failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
+        logger.error("long-weekend lookup failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="long-weekend lookup failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during long-weekend lookup: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="long-weekend lookup failed.")
 
 
 @app.post("/tools/list_supported_countries", response_model=ChatToolResponse)
@@ -293,5 +314,11 @@ async def list_supported_countries() -> ChatToolResponse:
         for item in countries:
             lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"country list request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"country list request failed: {exc}")
+        logger.error("country list request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="country list request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during country list request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="country list request failed.")
