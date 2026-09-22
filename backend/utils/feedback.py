@@ -40,6 +40,7 @@ def record_chat_message_feedback(
     comment: Optional[str] = None,
     platform: Optional[str] = None,
     app_version: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> Optional[str]:
     """Append a chat-message rating to the ledger. Returns the event id or None.
 
@@ -78,6 +79,7 @@ def record_chat_message_feedback(
         comment=comment,
         platform=platform,
         app_version=app_version,
+        app_build=app_build,
         app_id=app_id,
         chat_session_id=chat_session_id,
         target_created_at=target_created_at,
