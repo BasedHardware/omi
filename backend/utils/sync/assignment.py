@@ -7,7 +7,8 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 
 from copy import deepcopy
 import re
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Mapping
+from typing import Any, TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
 
@@ -17,7 +18,7 @@ except ModuleNotFoundError:
     # A few sync import-isolation tests intentionally replace ``utils`` with a
     # non-package module. Keep the assignment policy importable there without
     # making that harness reconstruct the whole conversation package graph.
-    def is_low_signal_sync_fragment(data):
+    def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:
         if not data or getattr(data.get('status'), 'value', data.get('status')) != 'completed':
             return False
         if data.get('sync_relevance') != 'review' or data.get('sync_relevance_user_kept'):
