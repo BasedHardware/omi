@@ -31,6 +31,8 @@ import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_sheet.dart';
@@ -121,6 +123,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   bool _providerInitialized = false;
   bool _didInitialSeek = false;
   bool _hasExplicitTabSelection = false;
+  bool _resultViewedRecorded = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -243,6 +246,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
       final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final identityEpoch = AnalyticsManager.identityEpoch;
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
@@ -259,6 +263,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
 
       await provider.initConversation();
+      _recordResultViewed(provider, identityEpoch);
       if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
@@ -267,7 +272,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           // holding the destination's startup sequence on this request. The
           // provider re-locates the conversation by ID after the await because
           // refreshes can reorder or replace the grouped list meanwhile.
-          unawaited(_refreshDetailsAndSelectInitialTab(conversationProvider, provider, conversationId));
+          unawaited(_refreshDetailsAndSelectInitialTab(conversationProvider, provider, conversationId, identityEpoch));
         } else {
           provider.updateConversation(provider.conversation.id, provider.selectedDate);
           _selectInitialTabIfNeeded(provider.conversation);
@@ -293,20 +298,60 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
   }
 
+  void _recordResultViewed(ConversationDetailProvider provider, int identityEpoch) {
+    if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+      final route = ModalRoute.of(context);
+      if (route != null && !route.isCurrent) return;
+      final conversation = provider.conversationOrNull;
+      if (conversation == null ||
+          conversation.id.isEmpty ||
+          conversation.id != widget.conversation.id ||
+          !_hasRenderedDetailContent(provider)) {
+        return;
+      }
+      _resultViewedRecorded = true;
+      ProductTelemetry.instance.value(
+        ProductValue.resultViewed,
+        surface: ProductSurface.conversationDetail,
+        objectId: RecordReference.fromId(conversation.id),
+      );
+    });
+  }
+
+  bool _hasRenderedDetailContent(ConversationDetailProvider provider) {
+    final conversation = provider.conversationOrNull;
+    if (conversation == null) return false;
+    return switch (selectedTab) {
+      ConversationTab.transcript => conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty),
+      ConversationTab.summary => provider.getSummarySelection().content.trim().isNotEmpty,
+      ConversationTab.actionItems =>
+        conversation.structured.actionItems.any((item) => !item.deleted && item.description.trim().isNotEmpty),
+    };
+  }
+
   Future<void> _refreshDetailsAndSelectInitialTab(
     ConversationProvider conversationProvider,
     ConversationDetailProvider provider,
     String conversationId,
+    int identityEpoch,
   ) async {
+    if (identityEpoch != AnalyticsManager.identityEpoch) return;
     try {
       await conversationProvider.updateSearchedConvoDetails(conversationId);
     } catch (_) {
       // The list projection is still valid enough to render. Apply the same
       // fallback selection below if the detail refresh is unavailable.
     }
-    if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+    if (!mounted ||
+        identityEpoch != AnalyticsManager.identityEpoch ||
+        provider.conversationOrNull?.id != conversationId) {
+      return;
+    }
     provider.updateConversation(conversationId, provider.selectedDate);
     _selectInitialTabIfNeeded(provider.conversation);
+    _recordResultViewed(provider, identityEpoch);
   }
 
   void _selectInitialTabIfNeeded(ServerConversation conversation) {
@@ -787,13 +832,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                       children: [
                         // Ask about this conversation (#4515)
                         Container(
-                          width: 36,
-                          height: 36,
+                          height: 44,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: context.l10n.askAboutThisConversation,
+                          child: TextButton.icon(
+                            key: const Key('conversation_ask_omi'),
+                            style: TextButton.styleFrom(
+                                shape: const StadiumBorder(),
+                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12)),
+                            label: Text(context.l10n.askOmi),
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               final convo = provider.conversation;
@@ -815,9 +863,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         ),
                         // Star button (first) - toggle starred status
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(
                             color: provider.conversation.starred
                                 ? Colors.amber.withValues(alpha: 0.3)
@@ -889,9 +937,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         // Share button (second) - directly share summary link
                         Container(
                           key: _shareButtonKey,
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
@@ -951,47 +999,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                 : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
-                        // Search button (second) - only show on transcript and summary tabs
-                        if (_controller?.index != 2)
-                          Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: _isSearching
-                                  ? Colors.deepPurple.withValues(alpha: 0.8)
-                                  : Colors.grey.withValues(alpha: 0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              tooltip: context.l10n.search,
-                              onPressed: () {
-                                setState(() {
-                                  _isSearching = !_isSearching;
-                                  if (!_isSearching) {
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                    _searchFocusNode.unfocus();
-                                  } else {
-                                    _searchFocusNode.requestFocus();
-                                    PlatformManager.instance.analytics.conversationDetailSearchClicked(
-                                      conversationId: provider.conversation.id,
-                                    );
-                                  }
-                                });
-                                HapticFeedback.mediumImpact();
-                              },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                            ),
-                          ),
                         // Developer Tools button (third) - iOS style pull-down menu
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           child: PullDownButton(
                             itemBuilder: (context) => [
+                              if (_controller?.index != 2)
+                                PullDownMenuItem(
+                                  title: context.l10n.search,
+                                  iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
+                                  onTap: () {
+                                    setState(() {
+                                      _isSearching = !_isSearching;
+                                      if (!_isSearching) {
+                                        _searchQuery = '';
+                                        _searchController.clear();
+                                        _searchFocusNode.unfocus();
+                                      } else {
+                                        _searchFocusNode.requestFocus();
+                                        PlatformManager.instance.analytics.conversationDetailSearchClicked(
+                                          conversationId: provider.conversation.id,
+                                        );
+                                      }
+                                    });
+                                    HapticFeedback.mediumImpact();
+                                  },
+                                ),
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
                                 iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
