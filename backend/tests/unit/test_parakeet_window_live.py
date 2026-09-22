@@ -799,15 +799,23 @@ def test_posted_agc_deadband_spares_already_levelled_sessions_but_not_admission(
     """
     pcm = (np.int16(6000) * np.ones(320, dtype=np.int16)).tobytes()
 
-    # Measured session envelopes from the qualification clips.
-    assert window.posted_agc_applies(8598.0)  # far-field, 0.26 of full scale
-    assert not window.posted_agc_applies(17712.0)  # dense speech, 0.54
-    assert not window.posted_agc_applies(22405.0)  # clean, 0.68
+    # Measured peaks from the qualification clips.
+    assert window.window_needs_gain(8598.0)  # far-field, 0.26 of full scale
+    assert not window.window_needs_gain(17712.0)  # dense speech loud passage, 0.54
+    assert not window.window_needs_gain(22405.0)  # clean, 0.68
+
+    # Quiet passages *inside* that loud dense-speech clip. Judged on the session
+    # envelope (0.54) these are denied gain and go missing entirely; judged on
+    # their own peak they are rescued. This is the whole reason the rule is
+    # per-window rather than per-session.
+    assert window.window_needs_gain(12121.0)  # 0.370
+    assert window.window_needs_gain(12921.0)  # 0.394
+    assert not window.window_needs_gain(13828.0)  # 0.422, captured without gain
 
     # The boundary belongs to the gained side; one count above it does not.
     edge = window.WINDOW_AGC_DEADBAND_PEAK * 32767.0
-    assert window.posted_agc_applies(edge)
-    assert not window.posted_agc_applies(edge + 1.0)
+    assert window.window_needs_gain(edge)
+    assert not window.window_needs_gain(edge + 1.0)
 
     # Equivalently: never apply less than 2x. Anything the deadband admits is
     # boosted by at least that much, so the rule cannot silently become a no-op.

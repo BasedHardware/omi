@@ -46,15 +46,18 @@ from utils.stt.window_anchor import (
 WINDOW_AGC_TARGET_PEAK = 0.8
 WINDOW_AGC_MAX_GAIN = 4.0
 WINDOW_INGEST_AGC = True
-# Deadband on the *posted* (decode) stage only. A session already peaking above
-# this fraction of full scale is not quiet, and gaining it costs accuracy: on a
-# dense-speech clip peaking at 0.54, adding 1.48x moved substitutions from 27 to
-# 37 and never moved them back when the VAD threshold was reverted. Below the
-# deadband the boost is worth its distortion; above it there is nothing to
-# rescue. 0.4 is equivalent to "never apply less than 2x (6 dB)", and sits
-# between the measured far-field session peak (0.26) and dense speech (0.54).
-# Admission is deliberately NOT deadbanded — the copy Silero scores is still
-# always gained, which is what admits quiet far-field.
+# Deadband on the *posted* (decode) stage only, applied per window. Audio already
+# peaking above this fraction of full scale is not quiet, and gaining it costs
+# accuracy: on a dense-speech clip, gaining loud passages moved substitutions from
+# 27 to 37, and reverting the VAD threshold never moved them back. Below the
+# deadband the boost is worth its distortion; above it there is nothing to rescue.
+# 0.4 is equivalent to "never apply less than 2x (6 dB)".
+#
+# It is judged per posted window, not on the session envelope. On the same clip,
+# passages peaking at 0.37 and 0.39 were dropped entirely (37 reference words)
+# when the session peak of 0.54 denied them gain, while every passage at 0.42 and
+# above survived. Admission is deliberately NOT deadbanded — the copy Silero
+# scores is still always gained, which is what admits quiet far-field.
 WINDOW_AGC_DEADBAND_PEAK = 0.4
 _INT16_ABS_MAX = 32767.0
 
@@ -94,11 +97,13 @@ def bounded_agc_pcm16(
     return out.tobytes(), float(gain)
 
 
-def posted_agc_applies(peak: float) -> bool:
-    """Whether the POSTED (decode) stage should gain a session with this envelope.
+def window_needs_gain(peak: float) -> bool:
+    """Whether the POSTED (decode) stage should gain a window with this peak.
 
-    False once the session is already well levelled. Admission does not consult this:
-    the copy Silero scores is always gained, which is what admits quiet far-field.
+    Judged per posted window, never on the session envelope: a loud session still
+    contains quiet passages, and those need the boost. Admission does not consult
+    this at all — the copy Silero scores is always gained, which is what admits
+    quiet far-field.
     """
     return peak <= WINDOW_AGC_DEADBAND_PEAK * _INT16_ABS_MAX
 
@@ -286,14 +291,24 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._agc_peak = peak
 
     def _normalize_posted_pcm(self, pcm: bytes) -> bytes:
-        # Buffer is original-level. One uniform scale for this window; gain is
-        # taken from the session envelope frozen at POST start (see _post_window).
-        # Above the deadband the session is already well levelled, so post it
-        # untouched rather than trading accuracy for a boost it does not need.
-        if not posted_agc_applies(self._agc_peak):
+        # Buffer is original-level. One uniform scale for this window, taken from
+        # *this window's* own peak — not the session envelope.
+        #
+        # The session envelope is the wrong reference for the deadband. A clip
+        # whose loudest moment is 0.54 of full scale still contains passages at
+        # 0.37, and judging those by the session peak denies them a boost they
+        # do need: two such passages went missing entirely (37 reference words)
+        # while every passage at 0.42 and above was captured. Scoring each window
+        # on itself gains the quiet stretches and leaves the loud ones alone.
+        #
+        # Each POST remains internally uniform, which is the property that
+        # matters — the failure mode fixed in #15566 was several gain levels
+        # inside one posted window, not different gains between windows.
+        window_peak = pcm16_peak(pcm)
+        if not window_needs_gain(window_peak):
             self._agc_last_gain = 1.0
             return pcm
-        out, gain = bounded_agc_pcm16(pcm, peak=self._agc_peak)
+        out, gain = bounded_agc_pcm16(pcm, peak=window_peak)
         self._agc_last_gain = gain
         return out
 
