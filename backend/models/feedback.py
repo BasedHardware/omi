@@ -18,7 +18,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class FeedbackSurface(str, Enum):
@@ -42,6 +42,9 @@ class FeedbackSurface(str, Enum):
     memory = 'memory'
     """A single extracted memory, kept or discarded in the memories list."""
 
+    recording_quality = 'recording_quality'
+    """Explicit quality feedback about a user-owned recording session."""
+
 
 class FeedbackTargetKind(str, Enum):
     """Which collection `target_id` points into. Drives context resolution."""
@@ -49,6 +52,8 @@ class FeedbackTargetKind(str, Enum):
     chat_message = 'chat_message'
     conversation = 'conversation'
     memory = 'memory'
+
+    recording = 'recording'
 
 
 class FeedbackReason(str, Enum):
@@ -76,6 +81,55 @@ class FeedbackReason(str, Enum):
     not_useful = 'not_useful'
 
 
+class MobileFeedbackKind(str, Enum):
+    """Explicit mobile feedback surfaces with separate reason taxonomies."""
+
+    summary_helpfulness = 'summary_helpfulness'
+    recording_quality = 'recording_quality'
+
+
+class MobileFeedbackReason(str, Enum):
+    """Closed reasons mobile can attach to explicit output feedback.
+
+    Reasons intentionally describe the failure mode rather than asking a
+    model to classify free text.  Positive feedback can omit a reason;
+    negative feedback may send one of these values only.
+    """
+
+    summary_inaccurate = 'summary_inaccurate'
+    summary_incomplete = 'summary_incomplete'
+    summary_irrelevant = 'summary_irrelevant'
+    summary_wrong_context = 'summary_wrong_context'
+    summary_other = 'summary_other'
+    recording_missing_audio = 'recording_missing_audio'
+    recording_poor_transcription = 'recording_poor_transcription'
+    recording_wrong_speaker = 'recording_wrong_speaker'
+    recording_delayed_or_stuck = 'recording_delayed_or_stuck'
+    recording_fragmented_or_duplicated = 'recording_fragmented_or_duplicated'
+    recording_other = 'recording_other'
+
+
+SUMMARY_FEEDBACK_REASONS = frozenset(
+    {
+        MobileFeedbackReason.summary_inaccurate,
+        MobileFeedbackReason.summary_incomplete,
+        MobileFeedbackReason.summary_irrelevant,
+        MobileFeedbackReason.summary_wrong_context,
+        MobileFeedbackReason.summary_other,
+    }
+)
+RECORDING_FEEDBACK_REASONS = frozenset(
+    {
+        MobileFeedbackReason.recording_missing_audio,
+        MobileFeedbackReason.recording_poor_transcription,
+        MobileFeedbackReason.recording_wrong_speaker,
+        MobileFeedbackReason.recording_delayed_or_stuck,
+        MobileFeedbackReason.recording_fragmented_or_duplicated,
+        MobileFeedbackReason.recording_other,
+    }
+)
+
+
 MAX_COMMENT_LENGTH = 1000
 
 
@@ -92,7 +146,7 @@ class FeedbackEvent(BaseModel):
     value: int = Field(description='1 = thumbs up, -1 = thumbs down, 0 = rating cleared')
     created_at: datetime
 
-    reason: Optional[FeedbackReason] = None
+    reason: Optional[FeedbackReason | MobileFeedbackReason] = None
     comment: Optional[str] = None
 
     platform: Optional[str] = None
@@ -109,6 +163,75 @@ class FeedbackEvent(BaseModel):
     langsmith_run_id: Optional[str] = None
     prompt_name: Optional[str] = None
     prompt_commit: Optional[str] = None
+
+    # Explicit mobile feedback metadata.  These values are copied only when
+    # the caller supplied them or the backend already had an authoritative
+    # value; missing provenance stays missing rather than becoming a guess.
+    feedback_id: Optional[str] = None
+    feedback_kind: Optional[MobileFeedbackKind] = None
+    app_build: Optional[str] = None
+    client_app_namespace: Optional[str] = None
+    client_app_profile: Optional[str] = None
+    backend_release: Optional[str] = None
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
+    trace_id: Optional[str] = None
+    correlation_id: Optional[str] = None
+    related_conversation_id: Optional[str] = None
+
+
+class MobileFeedbackRequest(BaseModel):
+    """Authenticated, idempotent mobile summary/recording feedback write."""
+
+    schema_version: Literal['mobile_feedback.v1'] = 'mobile_feedback.v1'
+    feedback_id: str = Field(min_length=1, max_length=128)
+    kind: MobileFeedbackKind
+    # Recording-quality feedback may target either the recording-session
+    # binding (the original contract) or the owning conversation when the
+    # client only has the conversation coordinate. Callers should send this
+    # discriminator explicitly; omission preserves legacy session semantics.
+    target_kind: Optional[Literal['conversation', 'recording']] = None
+    target_id: str = Field(min_length=1, max_length=256)
+    value: Literal[-1, 1]
+    reason: Optional[MobileFeedbackReason] = None
+    comment: Optional[str] = Field(default=None, max_length=MAX_COMMENT_LENGTH)
+    app_version: Optional[str] = Field(default=None, max_length=64)
+    app_build: Optional[str] = Field(default=None, max_length=64)
+    platform: Optional[str] = Field(default=None, max_length=32)
+    client_app_namespace: Optional[str] = Field(default=None, max_length=128)
+    client_app_profile: Optional[str] = Field(default=None, max_length=32)
+    correlation_id: Optional[str] = Field(default=None, max_length=128)
+
+    @field_validator('feedback_id', 'target_id')
+    @classmethod
+    def _trim_identifiers(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('feedback identifiers must not be blank')
+        return normalized
+
+    @model_validator(mode='after')
+    def _validate_reason_surface(self) -> 'MobileFeedbackRequest':
+        if self.kind is MobileFeedbackKind.summary_helpfulness and self.target_kind not in {None, 'conversation'}:
+            raise ValueError('summary feedback must target a conversation')
+        if self.reason is None:
+            return self
+        allowed = (
+            SUMMARY_FEEDBACK_REASONS
+            if self.kind is MobileFeedbackKind.summary_helpfulness
+            else RECORDING_FEEDBACK_REASONS
+        )
+        if self.reason not in allowed:
+            raise ValueError(f'reason {self.reason.value!r} does not belong to {self.kind.value}')
+        return self
+
+
+class MobileFeedbackReceipt(BaseModel):
+    schema_version: Literal['mobile_feedback_receipt.v1'] = 'mobile_feedback_receipt.v1'
+    feedback_id: str
+    event_id: str
+    created: bool
+    persisted: Literal[True] = True
 
 
 class MemoryUseFeedback(BaseModel):

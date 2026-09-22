@@ -2964,7 +2964,13 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+            if is_reprocess:
+                # Same fail-closed idea as memory source replacement: a transient
+                # destructive-op fence must be observable on the sync reprocess
+                # path instead of disappearing into postprocess_executor.
+                _save_action_items(uid, conversation, people)
+            else:
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.
