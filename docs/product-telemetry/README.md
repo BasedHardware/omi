@@ -45,8 +45,12 @@ variant.
 PostHog can be used only with an explicit checked-in HogQL file and
 `POSTHOG_HOST`, `POSTHOG_PROJECT_ID`, and `POSTHOG_PERSONAL_API_KEY` in the
 environment, plus explicit `--since` and `--until` UTC bounds. The CLI renders
-only those validated date placeholders; it never interpolates arbitrary query
-input. The adapters are in
+only those validated date placeholders and requires every query to use the
+`LIMIT 50001` sentinel. It refuses redirects, non-HTTPS origins, embedded
+credentials, nonnumeric project IDs, partial responses, `hasMore=true`, an
+ambiguous missing completeness marker, or a response at the safety cap. Narrow
+the time window or provide a complete local export when a response is rejected;
+it never silently scores the first page. The adapters are in
 [`contracts/product-telemetry/posthog/`](../../contracts/product-telemetry/posthog/).
 
 Paid churn requires an owner-authorized start-of-window billing export. Convert

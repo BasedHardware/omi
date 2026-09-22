@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -35,6 +36,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+from urllib.parse import urlsplit
 
 
 SCHEMA_VERSION = "product-scorecard.v1"
@@ -44,6 +46,7 @@ SUCCESS_OUTCOMES = {"success"}
 PENDING_AFTER = timedelta(hours=1)
 DEFAULT_EXPERIMENT_VARIANTS = frozenset({"control", "candidate", "treatment", "holdout", "compact", "default"})
 EXPERIMENT_METRICS = frozenset({"success", "failure", "helpful", "value"})
+POSTHOG_RESULT_LIMIT = 50001
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -250,14 +253,86 @@ def events_from_posthog_response(payload: Mapping[str, Any]) -> list[Event]:
     """Adapt PostHog ``/query`` results without depending on the PostHog SDK."""
     rows = payload.get("results")
     columns = payload.get("columns")
-    if isinstance(rows, list) and isinstance(columns, list):
-        return [event for row in rows if isinstance(row, list) and (event := Event.from_mapping(dict(zip(columns, row))))]
-    if isinstance(rows, list):
-        return [event for row in rows if isinstance(row, Mapping) and (event := Event.from_mapping(row))]
-    return []
+    if not isinstance(rows, list):
+        raise RuntimeError("PostHog response results must be a row list")
+    if isinstance(columns, list):
+        if any(not isinstance(row, list) or len(row) != len(columns) for row in rows):
+            raise RuntimeError("PostHog response contains malformed rows; use a complete local export")
+        events = [Event.from_mapping(dict(zip(columns, row))) for row in rows]
+    elif all(isinstance(row, Mapping) for row in rows):
+        events = [Event.from_mapping(row) for row in rows]
+    else:
+        raise RuntimeError("PostHog response has no usable columns or row objects; use a complete local export")
+    if any(event is None for event in events):
+        raise RuntimeError("PostHog response contains unusable event rows; use a complete local export")
+    return [event for event in events if event is not None]
+
+
+def _posthog_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _posthog_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return None
+
+
+def _validate_posthog_completeness(payload: Mapping[str, Any]) -> None:
+    """Reject query responses whose rows may be truncated or partial."""
+    rows = payload.get("results")
+    if not isinstance(rows, list):
+        raise RuntimeError("PostHog response has no results rows; use a bounded local export or a narrower window")
+    if len(rows) >= POSTHOG_RESULT_LIMIT:
+        raise RuntimeError(
+            f"PostHog response reached the {POSTHOG_RESULT_LIMIT - 1}-row safety cap; narrow --since/--until or use a complete local export"
+        )
+    for key in ("error", "errors", "exception"):
+        value = payload.get(key)
+        if value:
+            raise RuntimeError(f"PostHog response is incomplete ({key}); narrow --since/--until or use a complete local export")
+    for key in ("partial", "is_partial", "truncated", "is_truncated"):
+        value = payload.get(key)
+        if value is not None and (_posthog_bool(value) is not False):
+            raise RuntimeError(f"PostHog response is incomplete ({key}); narrow --since/--until or use a complete local export")
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"error", "partial", "truncated", "incomplete"}:
+        raise RuntimeError(f"PostHog response is incomplete (status={status}); narrow --since/--until or use a complete local export")
+
+    has_more_keys = [key for key in ("hasMore", "has_more") if key in payload]
+    if has_more_keys:
+        values = {key: payload[key] for key in has_more_keys}
+        if any(_posthog_bool(value) is True for value in values.values()):
+            raise RuntimeError("PostHog response has more rows; narrow --since/--until or use a complete local export")
+        if not all(_posthog_bool(value) is False for value in values.values()):
+            raise RuntimeError("PostHog response has an ambiguous hasMore marker; use a complete local export")
+        return
+
+    row_count = next((payload[key] for key in ("total_rows", "totalRows") if key in payload), None)
+    parsed_row_count = _posthog_int(row_count)
+    if parsed_row_count is None or parsed_row_count != len(rows):
+        raise RuntimeError(
+            "PostHog response lacks an explicit complete row-count proof; narrow --since/--until or use a complete local export"
+        )
 
 
 def _render_posthog_query(query: str, *, since: str, until: str) -> str:
+    if "{date_from}" not in query or "{date_to}" not in query:
+        raise ValueError("HogQL query must contain both {date_from} and {date_to} placeholders")
+    if not re.search(r"\bLIMIT\s+50001\b", query, flags=re.IGNORECASE):
+        raise ValueError("HogQL query must include LIMIT 50001 as the completeness sentinel")
     start = _parse_time(since)
     end = _parse_time(until)
     if start is None or end is None or end <= start:
@@ -269,8 +344,6 @@ def _render_posthog_query(query: str, *, since: str, until: str) -> str:
     rendered = query
     for marker, value in replacements.items():
         rendered = rendered.replace(marker, value)
-    if "{date_from}" in rendered or "{date_to}" in rendered:
-        raise ValueError("HogQL query did not contain supported date placeholders")
     return rendered
 
 
@@ -280,6 +353,19 @@ def fetch_posthog_events(query: str, *, since: str, until: str) -> list[Event]:
     api_key = os.getenv("POSTHOG_PERSONAL_API_KEY") or os.getenv("POSTHOG_API_KEY")
     if not host or not project_id or not api_key:
         raise RuntimeError("PostHog fetch requires POSTHOG_HOST, POSTHOG_PROJECT_ID, and POSTHOG_PERSONAL_API_KEY")
+    parsed_host = urlsplit(host)
+    if (
+        parsed_host.scheme != "https"
+        or not parsed_host.hostname
+        or parsed_host.username
+        or parsed_host.password
+        or parsed_host.path not in {"", "/"}
+        or parsed_host.query
+        or parsed_host.fragment
+    ):
+        raise RuntimeError("POSTHOG_HOST must be an HTTPS origin without embedded credentials or a path")
+    if not re.fullmatch(r"[1-9][0-9]*", project_id):
+        raise RuntimeError("POSTHOG_PROJECT_ID must be a positive numeric project id")
     rendered_query = _render_posthog_query(query, since=since, until=until)
     body = json.dumps({"query": {"kind": "HogQLQuery", "query": rendered_query}}).encode("utf-8")
     request = urllib.request.Request(
@@ -289,13 +375,22 @@ def fetch_posthog_events(query: str, *, since: str, until: str) -> list[Event]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                raise RuntimeError("PostHog redirect refused")
+
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(request, timeout=20) as response:
             payload = json.load(response)
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"PostHog query failed: {type(exc).__name__}") from exc
     if not isinstance(payload, Mapping):
         raise RuntimeError("PostHog query returned a non-object response")
-    return events_from_posthog_response(payload)
+    _validate_posthog_completeness(payload)
+    events = events_from_posthog_response(payload)
+    if len(events) != len(payload["results"]):
+        raise RuntimeError("PostHog response dropped event rows; use a complete local export")
+    return events
 
 
 def _matches(event: Event, *, namespace: str | None, environment: str | None, build: str | None) -> bool:

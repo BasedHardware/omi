@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 from pathlib import Path
@@ -233,7 +234,7 @@ def test_posthog_mapping_prefers_product_time_and_namespace_and_keeps_repeats_wi
 
 def test_posthog_query_requires_and_renders_bounded_window():
     rendered = scorecard_module._render_posthog_query(
-        "SELECT * FROM events WHERE timestamp >= {date_from} AND timestamp < {date_to}",
+        "SELECT * FROM events WHERE timestamp >= {date_from} AND timestamp < {date_to} LIMIT 50001",
         since="2026-09-01T00:00:00Z",
         until="2026-09-02T00:00:00Z",
     )
@@ -241,6 +242,116 @@ def test_posthog_query_requires_and_renders_bounded_window():
     assert "toDateTime('2026-09-01T00:00:00Z')" in rendered
     with pytest.raises(ValueError):
         scorecard_module._render_posthog_query("SELECT 1", since="2026-09-02T00:00:00Z", until="2026-09-01T00:00:00Z")
+    with pytest.raises(ValueError, match="placeholders"):
+        scorecard_module._render_posthog_query("SELECT 1 LIMIT 50001", since="2026-09-01T00:00:00Z", until="2026-09-02T00:00:00Z")
+    with pytest.raises(ValueError, match="LIMIT 50001"):
+        scorecard_module._render_posthog_query("SELECT * FROM events WHERE timestamp >= {date_from} AND timestamp < {date_to}", since="2026-09-01T00:00:00Z", until="2026-09-02T00:00:00Z")
+
+
+def test_checked_in_posthog_queries_have_bounded_window_and_sentinel_limit():
+    query_dir = Path(__file__).parents[2] / "contracts/product-telemetry/posthog"
+    for path in sorted(query_dir.glob("*.hogql")):
+        query = path.read_text(encoding="utf-8")
+        assert "{date_from}" in query and "{date_to}" in query
+        assert "LIMIT 50001" in query
+        rendered = scorecard_module._render_posthog_query(
+            query,
+            since="2026-09-01T00:00:00Z",
+            until="2026-09-02T00:00:00Z",
+        )
+        assert "{date_from}" not in rendered and "{date_to}" not in rendered
+
+
+class _PostHogResponse(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+
+
+class _PostHogOpener:
+    def __init__(self, payload):
+        self.payload = payload
+        self.request = None
+
+    def open(self, request, timeout):
+        self.request = request
+        return _PostHogResponse(json.dumps(self.payload).encode("utf-8"))
+
+
+def _posthog_query_fixture():
+    return "SELECT * FROM events WHERE timestamp >= {date_from} AND timestamp < {date_to} LIMIT 50001"
+
+
+def test_posthog_fetch_requires_explicit_complete_marker_and_sends_sentinel_limit(monkeypatch):
+    payload = {
+        "columns": ["event_id", "event_name", "user_id", "occurred_at", "namespace", "environment", "app_build", "properties"],
+        "results": [["e1", "Product Value", "u1", "2026-09-01T00:00:00Z", "mobile", "production", "1", {}]],
+        "hasMore": False,
+    }
+    opener = _PostHogOpener(payload)
+    monkeypatch.setenv("POSTHOG_HOST", "https://posthog.example")
+    monkeypatch.setenv("POSTHOG_PROJECT_ID", "123")
+    monkeypatch.setenv("POSTHOG_PERSONAL_API_KEY", "secret")
+    monkeypatch.setattr(scorecard_module.urllib.request, "build_opener", lambda *_args: opener)
+
+    events = scorecard_module.fetch_posthog_events(
+        _posthog_query_fixture(),
+        since="2026-09-01T00:00:00Z",
+        until="2026-09-02T00:00:00Z",
+    )
+
+    assert len(events) == 1
+    sent_query = json.loads(opener.request.data.decode("utf-8"))["query"]["query"]
+    assert "LIMIT 50001" in sent_query
+    assert "{date_from}" not in sent_query
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"hasMore": True},
+        {"partial": True},
+        {"hasMore": "ambiguous"},
+        {"row_count": 2},
+    ],
+)
+def test_posthog_fetch_rejects_incomplete_or_ambiguous_results(monkeypatch, metadata):
+    payload = {"results": [["e1"]], **metadata}
+    opener = _PostHogOpener(payload)
+    monkeypatch.setenv("POSTHOG_HOST", "https://posthog.example")
+    monkeypatch.setenv("POSTHOG_PROJECT_ID", "123")
+    monkeypatch.setenv("POSTHOG_PERSONAL_API_KEY", "secret")
+    monkeypatch.setattr(scorecard_module.urllib.request, "build_opener", lambda *_args: opener)
+
+    with pytest.raises(RuntimeError, match="complete local export|more rows|incomplete|ambiguous"):
+        scorecard_module.fetch_posthog_events(
+            _posthog_query_fixture(),
+            since="2026-09-01T00:00:00Z",
+            until="2026-09-02T00:00:00Z",
+        )
+
+
+def test_posthog_fetch_rejects_safety_cap_and_invalid_connection_settings(monkeypatch):
+    with pytest.raises(RuntimeError, match="safety cap"):
+        scorecard_module._validate_posthog_completeness({"results": [None] * scorecard_module.POSTHOG_RESULT_LIMIT, "hasMore": False})
+
+    query = _posthog_query_fixture()
+    monkeypatch.setenv("POSTHOG_HOST", "http://posthog.example")
+    monkeypatch.setenv("POSTHOG_PROJECT_ID", "123")
+    monkeypatch.setenv("POSTHOG_PERSONAL_API_KEY", "secret")
+    with pytest.raises(RuntimeError, match="HTTPS origin"):
+        scorecard_module.fetch_posthog_events(query, since="2026-09-01T00:00:00Z", until="2026-09-02T00:00:00Z")
+
+    monkeypatch.setenv("POSTHOG_HOST", "https://user:password@posthog.example")
+    with pytest.raises(RuntimeError, match="HTTPS origin"):
+        scorecard_module.fetch_posthog_events(query, since="2026-09-01T00:00:00Z", until="2026-09-02T00:00:00Z")
+
+    monkeypatch.setenv("POSTHOG_HOST", "https://posthog.example")
+    monkeypatch.setenv("POSTHOG_PROJECT_ID", "project")
+    with pytest.raises(RuntimeError, match="numeric"):
+        scorecard_module.fetch_posthog_events(query, since="2026-09-01T00:00:00Z", until="2026-09-02T00:00:00Z")
 
 
 def test_retention_uses_account_created_and_closed_day_windows():

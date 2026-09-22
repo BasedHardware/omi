@@ -1,13 +1,13 @@
 SELECT
-    coalesce(properties.billing_event_id, properties.event_id, properties['$insert_id'], uuid) AS event_id,
+    coalesce(nullIf(toString(properties.billing_event_id), ''), nullIf(toString(properties.event_id), ''), nullIf(toString(properties['$insert_id']), ''), toString(uuid)) AS event_id,
     event AS event_name,
     distinct_id AS user_id,
-    coalesce(properties.occurred_at, timestamp) AS occurred_at,
+    coalesce(nullIf(toString(properties.occurred_at), ''), toString(timestamp)) AS occurred_at,
     timestamp AS ingested_at,
-    coalesce(properties.client_app_namespace, properties['$app_namespace'], properties.namespace, 'unknown') AS namespace,
-    coalesce(properties.client_app_profile, properties['$environment'], properties.environment, 'unknown') AS environment,
-    coalesce(properties.server_environment, properties.backend_environment, 'unknown') AS server_environment,
-    coalesce(properties['$app_build'], properties.app_build, 'unknown') AS app_build,
+    coalesce(nullIf(toString(properties.client_app_namespace), ''), nullIf(toString(properties['$app_namespace']), ''), nullIf(toString(properties.namespace), ''), 'unknown') AS namespace,
+    coalesce(nullIf(toString(properties.client_app_profile), ''), nullIf(toString(properties['$environment']), ''), nullIf(toString(properties.environment), ''), 'unknown') AS environment,
+    coalesce(nullIf(toString(properties.server_environment), ''), nullIf(toString(properties.backend_environment), ''), 'unknown') AS server_environment,
+    coalesce(nullIf(toString(properties['$app_build']), ''), nullIf(toString(properties.app_build), ''), 'unknown') AS app_build,
     properties
 FROM events
 WHERE event IN (
@@ -17,3 +17,4 @@ WHERE event IN (
 )
   AND timestamp >= {date_from}
   AND timestamp < {date_to}
+LIMIT 50001
