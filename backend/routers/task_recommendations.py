@@ -43,13 +43,13 @@ def _raise_store_error(exc: Exception) -> NoReturn:
     if isinstance(exc, recommendation_db.AttributionChainNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Attribution chain not found') from exc
     if isinstance(exc, recommendation_db.IdempotencyConflictError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Recommendation idempotency conflict. Please retry.') from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, recommendation_db.StaleSnapshotError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Recommendation snapshot is stale. Please refresh.') from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, recommendation_db.RecommendationGenerationMismatchError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Recommendation generation mismatch. Please refresh.') from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, recommendations.SnapshotValidationError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Invalid recommendation snapshot payload.') from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     raise exc
 
 
