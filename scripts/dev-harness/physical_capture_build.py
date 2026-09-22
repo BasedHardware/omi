@@ -196,8 +196,12 @@ def main():
     profile = plistlib.loads(subprocess.check_output(["security", "cms", "-D", "-i", str(args.profile)]))
     if args.team not in profile["TeamIdentifier"]:
         parser.error("profile team does not match --team")
-    certificate_fingerprints = {hashlib.sha1(cert).hexdigest().upper()
-                                for cert in profile.get("DeveloperCertificates", [])}
+    # Apple exposes development identities as SHA-1 certificate fingerprints.
+    # This is an identifier comparison, never a security digest or trust check.
+    certificate_fingerprints = {
+        hashlib.sha1(cert, usedforsecurity=False).hexdigest().upper()
+        for cert in profile.get("DeveloperCertificates", [])
+    }
     if args.identity.upper() not in certificate_fingerprints:
         parser.error("--identity must be the SHA-1 fingerprint of a certificate authorized by the profile")
     profile_app = profile["Entitlements"]["application-identifier"]
