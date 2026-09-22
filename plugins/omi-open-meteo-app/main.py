@@ -431,8 +431,8 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
             f"Wind: {_format_number(_as_number(current.get('wind_speed_10m')), wind_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
-    except MalformedResponseError as exc:
-        return ChatToolResponse(error=f"Open-Meteo request failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Open-Meteo request failed.")
     except Exception:
         return ChatToolResponse(error="Open-Meteo request failed.")
 
@@ -491,8 +491,8 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
-    except MalformedResponseError as exc:
-        return ChatToolResponse(error=f"Open-Meteo forecast request failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Open-Meteo forecast request failed.")
     except Exception:
         return ChatToolResponse(error="Open-Meteo forecast request failed.")
 
@@ -536,7 +536,7 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
             f"Nitrogen dioxide: {_format_number(_as_number(current.get('nitrogen_dioxide')), no2_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
-    except MalformedResponseError as exc:
-        return ChatToolResponse(error=f"Open-Meteo air-quality request failed: {exc}")
+    except httpx.HTTPError:
+        return ChatToolResponse(error="Open-Meteo air-quality request failed.")
     except Exception:
         return ChatToolResponse(error="Open-Meteo air-quality request failed.")
