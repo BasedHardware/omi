@@ -138,6 +138,7 @@
     "offlineSync": "Offline synchronizace",
     "autoSync": "Automatická synchronizace",
     "autoSyncDescription": "Automaticky synchronizovat offline nahrávky při připojení zařízení",
+    "omiButtonActions": "Akce tlačítka Omi",
     "deviceSettings": "Nastavení zařízení",
     "integrations": "Integrace",
     "feedbackBug": "Zpětná vazba / Chyba",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Všechny vzpomínky jsou nyní veřejné",
     "newMemory": "✨ Nová vzpomínka",
     "editMemory": "✏️ Upravit vzpomínku",
-    "memoryContentHint": "Rád/a jím zmrzlinu...",
+    "memoryContentHint": "Dávám přednost ranním schůzkám.",
     "failedToSaveMemory": "Uložení se nezdařilo. Zkontrolujte prosím připojení.",
     "saveMemory": "Uložit vzpomínku",
     "retry": "Opakovat",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Hlas je připraven k rozpoznání} saved_sample_awaiting_embedding{Vzorek uložen, čeká na zpracování hlasu} not_learned{Hlas nebyl naučen} other{Stav hlasu není znám}}",
     "tagSpeakerIncludingLaterSpeech": "Označit i pozdější řeč tohoto mluvčího",
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
-    "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná"
+    "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
+    "nextWeek": "Příští týden",
+    "clearSearch": "Vymazat hledání"
 }

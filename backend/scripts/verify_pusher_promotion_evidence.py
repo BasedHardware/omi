@@ -99,6 +99,7 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         "synthetic_uid_class",
         "producer_observation",
         "consumer_readback",
+        "live_segment_window",
     }
     if set(probe) != expected_fields:
         errors.append("semantic probe evidence has an unexpected schema")
@@ -143,6 +144,14 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         or failed != 0
     ):
         errors.append("semantic probe PASS requires at least one sample, all successful and none failed")
+    live_segment_window = probe.get("live_segment_window") if isinstance(probe.get("live_segment_window"), dict) else {}
+    if set(live_segment_window) != {"matched", "segment_text_chars"}:
+        errors.append("semantic probe live_segment_window must declare matched and segment_text_chars")
+    if not isinstance(live_segment_window.get("matched"), bool):
+        errors.append("semantic probe live_segment_window.matched must be a boolean")
+    segment_text_chars = live_segment_window.get("segment_text_chars")
+    if not isinstance(segment_text_chars, int) or isinstance(segment_text_chars, bool) or segment_text_chars < 0:
+        errors.append("semantic probe live_segment_window.segment_text_chars must be a non-negative integer")
     return errors
 
 

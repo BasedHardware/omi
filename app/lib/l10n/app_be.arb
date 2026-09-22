@@ -557,6 +557,7 @@
     "offlineSync": "Аўтаномная сінхранізацыя",
     "autoSync": "Аўтасінхранізацыя",
     "autoSyncDescription": "Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады",
+    "omiButtonActions": "Дзеянні кнопкі Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Мне нравіцца есці мароженае...",
+    "memoryContentHint": "Я аддаю перавагу ранішнім сустрэчам.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10837,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Голас гатовы да распазнавання} saved_sample_awaiting_embedding{Узор захаваны, чакае апрацоўкі голасу} not_learned{Голас не вывучаны} other{Стан голасу невядомы}}",
     "tagSpeakerIncludingLaterSpeech": "Таксама пазначыць пазнейшую мову гэтага спікера",
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
-    "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая"
+    "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Што ты можаш зрабіць для мяне?} goal{Дапамажы мне паставіць мэту} activity{Падсумуй маю нядаўнюю дзейнасць} improve{Як я магу палепшыцца?} other{}}",
+    "nextWeek": "На наступным тыдні",
+    "clearSearch": "Ачысціць пошук"
 }
