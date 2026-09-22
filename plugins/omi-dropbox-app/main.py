@@ -492,7 +492,7 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={uid}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        return HTMLResponse("Error during authorization", status_code=500)
 
 
 @app.get("/disconnect")
@@ -764,7 +764,7 @@ async def tool_search_dropbox(request: Request):
         return {"result": output}
 
     except Exception as e:
-        return {"error": f"Search error: {str(e)}"}
+        return {"error": "Search error"}
 
 
 @app.post("/tools/list")
@@ -821,7 +821,7 @@ async def tool_list_dropbox(request: Request):
         return {"result": output}
 
     except Exception as e:
-        return {"error": f"List error: {str(e)}"}
+        return {"error": "List error"}
 
 
 @app.post("/tools/read")
@@ -881,7 +881,7 @@ async def tool_read_dropbox_file(request: Request):
             except ImportError:
                 return {"error": "PDF reading is not available. Please contact support."}
             except Exception as e:
-                return {"error": f"Error reading PDF: {str(e)}"}
+                return {"error": "Error reading PDF"}
 
         elif file_ext in [
             "txt",
@@ -940,7 +940,7 @@ async def tool_read_dropbox_file(request: Request):
         return {"result": output}
 
     except Exception as e:
-        return {"error": f"Read error: {str(e)}"}
+        return {"error": "Read error"}
 
 
 # ============== Audio Streaming Endpoint ==============
@@ -967,7 +967,7 @@ async def receive_audio(
         return {"status": "ok"}
     except Exception as e:
         print(f"[AUDIO] Error receiving audio: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Failed to process audio"}
 
 
 # ============== Run Server ==============
