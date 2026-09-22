@@ -2129,7 +2129,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get alwaysInContext => 'תמיד בהקשר';
 
   @override
-  String get memoryContentHint => 'אני אוהב לאכול גלידה...';
+  String get memoryContentHint => 'אני מעדיף פגישות בבוקר.';
 
   @override
   String get failedToSaveMemory => 'שמירה נכשלה. בבקשה בדוק את החיבור שלך.';
@@ -10038,4 +10038,31 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'מה אפשר לעשות בשבילי?',
+        'goal': 'עזור לי להגדיר מטרה',
+        'activity': 'סכם את הפעילות האחרונה שלי',
+        'improve': 'איך אוכל להשתפר?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'בשבוע הבא';
+
+  @override
+  String get clearSearch => 'ניקוי החיפוש';
 }
