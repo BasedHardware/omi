@@ -24,6 +24,11 @@ checks:
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
+  - id: frankfurter-error-handling-tests
+    command: ["python3", "plugins/omi-frankfurter-app/test_error_handling.py"]
+    triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Frankfurter currency conversion, latest rates, and supported currencies endpoints must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: iq-rating-app-tests
     command: ["python3", "plugins/iq_rating/test_main.py"]
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
