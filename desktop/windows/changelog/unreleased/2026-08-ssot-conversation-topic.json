@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "A just-saved conversation gets its provisional emoji and title from Omi’s managed model instead of a separate desktop model."
-  ]
-}
