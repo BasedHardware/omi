@@ -249,8 +249,8 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         return templates.TemplateResponse("notion_success.html", {"request": request})
 
     except Exception as e:
-        logger.error(f"Error in notion_callback: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.error(f"Error in notion_callback: {type(e).__name__}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error processing Notion authentication callback")
 
 
 @router.get("/import", response_class=HTMLResponse)
@@ -303,8 +303,9 @@ async def search_notion(request: NotionSearchRequest):
         return response.json()
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error searching Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error searching Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error searching Notion workspace"
         )
 
 
@@ -330,8 +331,9 @@ async def get_blocks(
         return response.json()
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error getting blocks from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error getting blocks from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving blocks from Notion"
         )
 
 
@@ -368,8 +370,9 @@ async def get_page(
         return {"page": page_data, "blocks": blocks_data}
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error getting page from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error getting page from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error retrieving page from Notion"
         )
 
 
@@ -416,8 +419,9 @@ async def extract_memories(uid: str, block_type: str = Form("page"), block_id: s
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported block type: {block_type}")
 
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error extracting memories from Notion: {type(e).__name__}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error extracting memories from Notion: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error extracting memories from Notion"
         )
 
 
@@ -544,38 +548,35 @@ def contains_personal_info(text):
     return any(keyword.lower() in text_lower for keyword in personal_keywords)
 
 
-def format_as_memory(text):
-    """Format text as a memory about the user"""
-    text_lower = text.lower()
+def format_as_memory(sentence):
+    """Format sentence as a memory statement"""
+    # Remove leading/trailing whitespace and ensure proper capitalization
+    sentence = sentence.strip()
+    if not sentence:
+        return None
 
-    def _sub(pattern: str, repl: str) -> str:
-        import re
+    # Replace first-person pronouns with third-person
+    replacements = [
+        (r"\bI am\b", "User is"),
+        (r"\bI\'m\b", "User is"),
+        (r"\bI have\b", "User has"),
+        (r"\bI\'ve\b", "User has"),
+        (r"\bI like\b", "User likes"),
+        (r"\bI love\b", "User loves"),
+        (r"\bI enjoy\b", "User enjoys"),
+        (r"\bI prefer\b", "User prefers"),
+        (r"\bI don\'t like\b", "User doesn't like"),
+        (r"\bI hate\b", "User hates"),
+        (r"\bmy\b", "User's"),
+        (r"\bmine\b", "User's"),
+        (r"\bme\b", "User"),
+    ]
 
-        return re.sub(pattern, repl, text, count=1, flags=re.IGNORECASE)
+    for pattern, replacement in replacements:
+        sentence = re.sub(pattern, replacement, sentence, flags=re.IGNORECASE)
 
-    # Replace first-person pronouns with "User" (case-insensitive).
-    if "i am" in text_lower or "i'm" in text_lower:
-        return _sub(r"\bi am\b", "User is") if "i am" in text_lower else _sub(r"\bi'm\b", "User is")
-    elif "i like" in text_lower:
-        return _sub(r"\bi like\b", "User likes")
-    elif "i love" in text_lower:
-        return _sub(r"\bi love\b", "User loves")
-    elif "i enjoy" in text_lower:
-        return _sub(r"\bi enjoy\b", "User enjoys")
-    elif "i prefer" in text_lower:
-        return _sub(r"\bi prefer\b", "User prefers")
-    elif "i don't like" in text_lower or "i do not like" in text_lower:
-        if "i don't like" in text_lower:
-            return _sub(r"\bi don't like\b", "User doesn't like")
-        return _sub(r"\bi do not like\b", "User does not like")
-    elif "i hate" in text_lower:
-        return _sub(r"\bi hate\b", "User hates")
-    elif "my favorite" in text_lower:
-        return _sub(r"\bmy favorite\b", "User's favorite")
-    elif "i have" in text_lower:
-        return _sub(r"\bi have\b", "User has")
-    elif "my friend" in text_lower:
-        return _sub(r"\bmy friend\b", "User's friend")
-    else:
-        # If no specific pattern is matched, prepend with "User:"
-        return f"User note: {text}"
+    # Ensure sentence ends with period
+    if not sentence.endswith("."):
+        sentence += "."
+
+    return sentence
