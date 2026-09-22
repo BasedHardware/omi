@@ -75,19 +75,22 @@ void main() {
     await tester.idle();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(analytics.events, ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
+    expect(_legacyEvents(analytics.events), ['Permissions Interstitial Shown', 'Permissions Interstitial Completed']);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(app());
     await AnalyticsManager.flushPending(force: true);
 
-    expect(analytics.events, [
+    expect(_legacyEvents(analytics.events), [
       'Permissions Interstitial Shown',
       'Permissions Interstitial Completed',
       'Permissions Interstitial Shown',
     ]);
   });
 }
+
+List<String> _legacyEvents(Iterable<String> events) =>
+    events.where((event) => !event.startsWith('Product Journey ')).toList();
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {
   final List<String> events = [];
