@@ -161,6 +161,14 @@ async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
     return payload
 
 
+async def _validate_identity_currency(code: str) -> None:
+    currencies = await _request_json("/currencies")
+    if not isinstance(currencies, dict) or not currencies:
+        raise ValueError("currency list request returned no currencies")
+    if code not in currencies:
+        raise ValueError(f"unsupported currency: {code}")
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     first_error = exc.errors()[0] if exc.errors() else {}
@@ -262,6 +270,9 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
         base_curr = request.from_currency
         date_val = "latest"
 
+        if same_currency_targets and not other_targets:
+            await _validate_identity_currency(request.from_currency)
+
         if other_targets:
             payload = await _request_json(
                 "/latest",
@@ -274,6 +285,8 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
             if not isinstance(payload, dict):
                 return ChatToolResponse(error="no rates returned for the requested currencies")
             rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+            if any(code not in rates or rates[code] is None for code in other_targets):
+                return ChatToolResponse(error="no rates returned for the requested currencies")
             base_curr = payload.get("base") or request.from_currency
             date_val = payload.get("date") or "latest"
 
@@ -312,6 +325,9 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
         base_curr = request.base_currency
         date_val = "latest"
 
+        if wants_base and not other_targets:
+            await _validate_identity_currency(request.base_currency)
+
         if not request.to_currencies or other_targets:
             params: dict[str, Any] = {"from": request.base_currency}
             if other_targets:
@@ -320,6 +336,8 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
             if not isinstance(payload, dict):
                 return ChatToolResponse(error="no rates returned")
             rates = payload.get("rates") if isinstance(payload.get("rates"), dict) else {}
+            if other_targets and any(code not in rates or rates[code] is None for code in other_targets):
+                return ChatToolResponse(error="no rates returned")
             base_curr = payload.get("base") or request.base_currency
             date_val = payload.get("date") or "latest"
 

@@ -1,9 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 void main() {
-  setUp(AnalyticsManager.resetForTesting);
+  setUp(() async {
+    AnalyticsManager.resetForTesting();
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
   tearDown(AnalyticsManager.resetForTesting);
 
   test('guided intro events carry bounded funnel properties without content', () async {

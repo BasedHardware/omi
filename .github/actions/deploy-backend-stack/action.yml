@@ -22,6 +22,15 @@ inputs:
       firebase_probe_signer_service_account.
     required: false
     default: ''
+  dev_free_tier_local_processing_cohort:
+    description: >-
+      Development-only free-tier cohort (`uid:<uid>[,uid:<uid>]`, or empty).
+      An input, not `vars.…`: a composite action cannot read the `vars` context
+      and fails to LOAD if it tries, which stops every deploy that uses it.
+      Callers pass it for development only; the prod overlay renders a literal
+      empty regardless of what arrives here.
+    required: false
+    default: ''
   deploy_profile:
     description: 'manual or auto-dev orchestration profile'
     required: true
@@ -540,6 +549,7 @@ runs:
       id: runtime-env
       shell: bash
       env:
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
         LISTEN_FINALIZATION_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_handler_url }}
         LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
@@ -564,6 +574,7 @@ runs:
     - name: Validate backend runtime env before deploy
       shell: bash
       env:
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
@@ -955,6 +966,7 @@ runs:
         ENVIRONMENT: ${{ inputs.runtime_env }}
         RUNTIME_ENV_MANIFEST: ${{ github.workspace }}/backend/deploy/runtime_env.yaml
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         CONVERSATION_SUMMARIZED_APP_IDS: ${{ env.CONVERSATION_SUMMARIZED_APP_IDS }}
         GOOGLE_CLIENT_ID: ${{ env.GOOGLE_CLIENT_ID }}
         MCP_AUTHORIZATION_SERVER_URL: ${{ env.MCP_AUTHORIZATION_SERVER_URL }}

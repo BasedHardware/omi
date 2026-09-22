@@ -104,7 +104,10 @@ struct ConversationRowView: View {
   }
 
   private var isSettlingDerived: Bool {
-    conversation.status == .completed && appState.processingWatcher.isSettlingDerived(conversation.id)
+    ConversationProcessingProgress.showsSettlingDerived(
+      displayState: conversation.displayState,
+      isSettling: appState.processingWatcher.isSettlingDerived(conversation.id)
+    )
   }
 
   private func processingPhase(now: Date) -> ConversationProcessingPhase {

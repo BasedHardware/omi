@@ -231,7 +231,7 @@ class FileChatTool:
         self.chat_session = ChatSession(**session_data)
 
     @staticmethod
-    def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
+    def upload(file_path: Union[str, Path], file_name: Optional[str] = None) -> Dict[str, Any]:
         # OpenAI Files upload/download stays direct by design: it is the file
         # bytes/file_id lifecycle, not a model call; only the completions hop
         # is gateway-metered.
@@ -257,7 +257,11 @@ class FileChatTool:
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
             try:
-                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+                # file_path is a randomized temp name on the upload routes; send the
+                # provider the name the user picked so it is what lands on the chat
+                # record, not the temp basename the provider would echo back.
+                upload_file = (Path(file_name).name, f) if file_name else f
+                response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
@@ -483,7 +487,12 @@ class FileChatTool:
     def cleanup(self) -> None:
         """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""
         logger.info("start cleanup chat with file")
-        files = chat_db.get_chat_files(self.uid)
+        # Only this session's files: get_chat_files with no ids answers with every
+        # file the account owns, so clearing one chat wiped attachments from the rest.
+        file_ids = list(self.chat_session.file_ids or [])
+        if not file_ids:
+            return
+        files = chat_db.get_chat_files(self.uid, file_ids)
         if files:
             # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).

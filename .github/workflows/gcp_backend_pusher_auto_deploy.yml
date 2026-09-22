@@ -96,6 +96,35 @@ jobs:
               exit 1
               ;;
           esac
+          # The deploy identity must be able to sign as the Firebase project's
+          # signer. Discovering a denial only after the build and rollout
+          # wastes the whole lane on a run that cannot pass; a rotated
+          # credential for the wrong service account fails this same check, so
+          # fail fast with the resolved caller and both possible causes.
+          caller="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          # gcloud cannot dry-run service-account permissions, so prove the
+          # grant by signing a throwaway JWT exactly the way the probe
+          # minter will. A denial here fails the lane before build+rollout
+          # with the resolved caller named.
+          probe_payload="$(mktemp "$RUNNER_TEMP/omi-signjwt-probe.XXXXXX")"
+          probe_signed="$(mktemp "$RUNNER_TEMP/omi-signjwt-probe.XXXXXX")"
+          cleanup_signing_probe() { rm -f "$probe_payload" "$probe_signed"; }
+          trap cleanup_signing_probe EXIT
+          probe_now="$(date +%s)"
+          printf '{"aud":"pusher-preflight-probe","exp":%s,"iat":%s}\n' \
+            "$((probe_now + 300))" "$probe_now" > "$probe_payload"
+          if ! gcloud iam service-accounts sign-jwt \
+            "$probe_payload" "$probe_signed" \
+            --iam-account="$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" >/dev/null 2>&1; then
+              echo "Deploy identity '$caller' cannot sign a Firebase custom token as $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+              echo "Check the active identity first: a GCP_CREDENTIALS key rotated to another" >&2
+              echo "service account produces this same denial. If '$caller' is the intended deploy" >&2
+              echo "identity, apply the one-time grant (project owner):" >&2
+              echo "  gcloud iam service-accounts add-iam-policy-binding $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT \\" >&2
+              echo "    --member='serviceAccount:$caller' \\" >&2
+              echo "    --role='roles/iam.serviceAccountTokenCreator' --project=based-hardware" >&2
+              exit 1
+          fi
 
       - name: Verify live finalization alert route before publishing
         env:

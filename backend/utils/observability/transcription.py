@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from time import monotonic
@@ -17,6 +18,7 @@ from utils.metrics import (
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
+    OMI_SYNC_INTAKE_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
     OMI_TRANSCRIPTION_ACCEPTED_TOTAL,
@@ -28,6 +30,8 @@ from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 
+logger = logging.getLogger(__name__)
+
 _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
 _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
 _REVISION_PATTERN = re.compile(r'[^a-zA-Z0-9_.-]')
@@ -37,6 +41,7 @@ _LIVE_PHASES = {'connection', 'initialization', 'send'}
 _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
 _LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
+_SYNC_INTAKE_OUTCOMES = frozenset({'created', 'merged'})
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
 
@@ -242,6 +247,49 @@ def record_sync_transcription_outcome(
         outcome=outcome.value,
         deployment_version=_deployment_version(),
     ).inc()
+
+
+def record_live_stt_pre_audio_failure(
+    *,
+    provider: str | None,
+    platform: str | None,
+    phase: LiveSTTTerminalPhase | str,
+) -> None:
+    """Count an initialize_stt() (or other pre-audio) death as a live-STT terminal.
+
+    ``LiveSTTAttempt`` is constructed only after first audio. A session that dies
+    in ``initialize_stt()`` never builds one, so ``omi_live_stt_terminal_total``
+    and ``omi_live_stt_accepted_total`` both stay at zero and the existing
+    failure-ratio alert is structurally blind. This increments both series with
+    ``phase="initialization"`` (or the caller-supplied bounded phase) without
+    emitting product analytics for a transcript that never started.
+    """
+
+    bounded_phase: str = phase if phase in _LIVE_TERMINAL_PHASES else 'initialization'
+    labels = {
+        'provider': bounded_provider(provider),
+        'client_platform': _bounded_platform(platform),
+        'deployment_environment': _deployment_environment(),
+    }
+    OMI_LIVE_STT_ACCEPTED_TOTAL.labels(**labels).inc()
+    OMI_LIVE_STT_TERMINAL_TOTAL.labels(
+        **labels,
+        outcome='failure',
+        phase=bounded_phase,
+    ).inc()
+
+
+def record_sync_intake_outcome(*, created: bool) -> None:
+    """Count one sync intake as created or merged. Never labeled by uid."""
+
+    outcome = 'created' if created else 'merged'
+    if outcome not in _SYNC_INTAKE_OUTCOMES:
+        raise ValueError(f'unknown sync intake outcome: {outcome}')
+    OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome).inc()
+    try:
+        logger.info('omi_sync_intake outcome=%s', outcome)
+    except Exception:
+        pass
 
 
 def record_live_stt_failure(

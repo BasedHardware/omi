@@ -10,7 +10,7 @@ from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config
-from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
 
@@ -450,12 +450,15 @@ def evaluate_relevance(
     cache_enabled = bool(uid) and has_cacheable_prefix(stable) and gate_cache_enabled()
     messages = build_gate_messages(stable, volatile, cache_enabled=cache_enabled)
 
-    llm = get_llm(
-        'proactive_notification',
-        cache_key=gate_cache_key(uid) if cache_enabled and uid else None,
-        prompt_cache_options=dict(EXPLICIT_CACHE_OPTIONS) if cache_enabled else None,
-    )
-    with_parser = llm.with_structured_output(RelevanceResult)
+    # Bind cache options AFTER with_structured_output. Binding first via
+    # get_llm(..., prompt_cache_options=...) is a silent no-op: RunnableBinding
+    # has no with_structured_output, so the lookup forwards to the unbound model
+    # and prompt_cache_options never reach the wire. That drop is why a split
+    # prefix still recorded zero cached tokens (see prompt_cache.bind_explicit_cache).
+    llm = get_llm('proactive_notification')
+    with_parser: Any = llm.with_structured_output(RelevanceResult)
+    if cache_enabled and uid:
+        with_parser = bind_explicit_cache(with_parser, cache_key=gate_cache_key(uid))
     result = cast(RelevanceResult, with_parser.invoke(messages))
     return result
 

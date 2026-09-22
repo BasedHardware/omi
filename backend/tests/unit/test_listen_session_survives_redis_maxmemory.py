@@ -41,6 +41,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import pytest
@@ -162,6 +163,7 @@ class _Host:
         self.storage_calls: List[str] = []
         self.transcripts = SimpleNamespace(flush_speaker_assignments=self._flush_speakers)
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         index = min(self._wait_index, len(self._wait_returns) - 1)
@@ -425,6 +427,7 @@ async def test_prepare_stale_pointer_rolls_over_under_maxmemory():
     stale = {
         'id': 'conv-old',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc) - timedelta(seconds=600),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=stale)
@@ -442,6 +445,7 @@ async def test_prepare_attach_existing_never_writes_pointer():
     fresh = {
         'id': 'conv-1',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=fresh)

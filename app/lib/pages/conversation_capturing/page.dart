@@ -4,17 +4,21 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/widgets/speaker_label.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -23,6 +27,12 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
+
+/// Switch the home IndexedStack to Conversations *before* popping the capturing
+/// route so the user lands on that tab with no flash of the previous page.
+void switchHomeToConversationsTab(BuildContext context) {
+  context.read<HomeProvider>().setIndex(1);
+}
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -90,6 +100,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     super.dispose();
   }
 
+  @visibleForTesting
+  Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
+
   int convertDateTimeToSeconds(DateTime dateTime) {
     DateTime now = DateTime.now();
     Duration difference = now.difference(dateTime);
@@ -122,6 +135,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
         if (mounted) {
+          switchHomeToConversationsTab(context);
           Navigator.of(context).pop();
         }
         return;
@@ -157,6 +171,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
                   if (context.mounted) {
+                    switchHomeToConversationsTab(context);
                     Navigator.of(context).pop();
                     Navigator.of(context).pop();
                   }
@@ -262,21 +277,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           provider.photos,
                                           deviceProvider.connectedDevice,
                                           bottomMargin: 0,
-                                          suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
                                           transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
                                           followLatest: true,
                                           scrollState: transcriptScrollState,
                                           jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
                                           contentVersion: provider.segmentsPhotosVersion,
-                                          onAcceptSuggestion: (suggestion) {
-                                            provider.assignSpeakerToConversation(
-                                              suggestion.speakerId,
-                                              suggestion.personId,
-                                              suggestion.personName,
-                                              [suggestion.segmentId],
-                                            );
-                                          },
                                           editSegment: (segmentId, speakerId) {
                                             final connectivityProvider = Provider.of<ConnectivityProvider>(
                                               context,
@@ -303,13 +309,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                                   segmentId: segmentId,
                                                   segments: provider.segments,
                                                   suggestion: suggestion,
-                                                  onSpeakerAssigned:
-                                                      (speakerId, personId, personName, segmentIds) async {
-                                                    await provider.assignSpeakerToConversation(
+                                                  defaultApplyToSpeaker: true,
+                                                  onSpeakerAssigned: (speakerId, personId, personName, segmentIds,
+                                                      applyToSpeaker) async {
+                                                    return provider.assignSpeakerToConversation(
                                                       speakerId,
                                                       personId,
                                                       personName,
                                                       segmentIds,
+                                                      applyToSpeaker: applyToSpeaker,
                                                     );
                                                   },
                                                 );
@@ -349,6 +357,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     children: [
                       // Process Now button
                       GestureDetector(
+                        key: const Key('process_now_button'),
                         onTap: () => _stopConversation(provider),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -417,6 +426,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
 
     // Group consecutive photos taken within 30 seconds of each other
     final List<List<ConversationPhoto>> photoGroups = [];
@@ -456,7 +466,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       layoutIdentity: 'photo-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people),
     );
   }
 
@@ -642,16 +652,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           segmentId: segment.id,
           segments: provider.segments,
           suggestion: suggestion,
-          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-            await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds);
+          defaultApplyToSpeaker: true,
+          onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+            return provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
+                applyToSpeaker: applyToSpeaker);
           },
         );
       },
     );
   }
 
-  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider) {
+  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
     final bool isUser = segment.isUser;
+    final name = speakerLabel(context, segment, personById(people, segment.personId));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -681,15 +694,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFF8B5CF6).withValues(alpha: 0.8) : const Color(0xFF2A2A32),
+                  color: isUser ? Colors.blueGrey.withValues(alpha: 0.8) : const Color(0xFF2A2A32),
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4, offset: const Offset(0, 1)),
                   ],
                 ),
-                child: Text(
-                  segment.text,
-                  style: TextStyle(color: isUser ? Colors.white : Colors.grey.shade100, fontSize: 15, height: 1.4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(segment.text,
+                        style:
+                            TextStyle(color: isUser ? Colors.white : Colors.grey.shade100, fontSize: 15, height: 1.4)),
+                  ],
                 ),
               ),
             ),
@@ -702,7 +721,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    backgroundColor: Colors.blueGrey.withValues(alpha: 0.3),
                     child: const Icon(Icons.person, size: 16, color: Colors.white70),
                   ),
                   const SizedBox(height: 2),
@@ -827,7 +846,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   bool _isTerminalWalState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
-      state == WalSyncDisplayState.outsideRecoveryWindow;
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio;
 
   String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;

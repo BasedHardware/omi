@@ -25,7 +25,7 @@ import tiktoken
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
-from utils.llm.byok_errors import handle_llm_error
+from utils.llm.byok_errors import handle_llm_error, handle_llm_error_async
 from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
@@ -384,7 +384,9 @@ class _OpenAIEmbeddingsProxy:
             return await ainvoke_openai_embeddings_gateway(texts, byok_api_key=byok)
         except Exception as e:
             if byok:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_gateway_key_failure(e):
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
@@ -437,7 +439,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_query(text)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_query')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_query'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_query(text)
@@ -454,7 +458,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_documents(texts)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_documents(texts)
@@ -472,7 +478,9 @@ class _OpenAIEmbeddingsProxy:
                     return await attr(*args, **kwargs)
                 except Exception as e:
                     if inst is not self._default:
-                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        await handle_llm_error_async(
+                            e, 'openai', feature='embeddings', model=self._model, operation=name
+                        )
                         if self._is_key_failure(e):
                             logger.warning(
                                 "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
