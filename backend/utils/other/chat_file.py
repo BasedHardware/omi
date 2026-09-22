@@ -487,7 +487,12 @@ class FileChatTool:
     def cleanup(self) -> None:
         """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""
         logger.info("start cleanup chat with file")
-        files = chat_db.get_chat_files(self.uid)
+        # Only this session's files: get_chat_files with no ids answers with every
+        # file the account owns, so clearing one chat wiped attachments from the rest.
+        file_ids = list(self.chat_session.file_ids or [])
+        if not file_ids:
+            return
+        files = chat_db.get_chat_files(self.uid, file_ids)
         if files:
             # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).

@@ -1670,6 +1670,43 @@ def _replacement_mutation_count(
     return count
 
 
+def _empty_replacement_commit_id(
+    *,
+    uid: str,
+    conversation_id: str,
+    bumped_control: MemoryControlState,
+    replacement_operation: MemoryOperation,
+    deletion_gate_token: str | None,
+    require_deletion_gate: bool,
+) -> str:
+    """Commit id for an empty source replacement (pure retraction).
+
+    Account-scale privacy deletion keys the epoch on the exclusive gate token.
+    Sync-bridge donor retraction is admitted without that lock
+    (``require_deletion_gate=False``); fence on the replacement operation
+    instead. A bare ``assert deletion_gate_token is not None`` here made every
+    donor that still had canonical rows fail with an empty AssertionError and
+    retry forever.
+    """
+    if deletion_gate_token is not None:
+        return (
+            "commit_"
+            + deterministic_contract_id(
+                "memory-privacy-epoch",
+                {
+                    "uid": uid,
+                    "deletion_gate_token": deletion_gate_token,
+                    "commit_sequence": bumped_control.commit_sequence + 1,
+                },
+            )[:32]
+        )
+    if require_deletion_gate:
+        raise ConversationSourceReplacementConflict(
+            f"empty replacement requires privacy gate authority uid={uid} conversation_id={conversation_id}"
+        )
+    return bumped_control.next_commit_id(replacement_operation.operation_id)
+
+
 @transactional
 def _replace_conversation_source_firestore_transaction(
     transaction: Any,
@@ -1691,7 +1728,9 @@ def _replace_conversation_source_firestore_transaction(
         assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
     else:
         if deletion_gate_token is None:
-            raise ConversationSourceReplacementConflict("empty replacement requires privacy gate authority")
+            raise ConversationSourceReplacementConflict(
+                f"empty replacement requires privacy gate authority uid={uid} conversation_id={conversation_id}"
+            )
         assert_destructive_operation_transaction(
             transaction,
             db_client,
@@ -1990,17 +2029,13 @@ def _replace_conversation_source_firestore_transaction(
         replacement_commit_id = bumped_control.next_commit_id(replacement_operation.operation_id)
         replacement_control = bumped_control.advance_head(replacement_commit_id)
     else:
-        assert deletion_gate_token is not None
-        replacement_commit_id = (
-            "commit_"
-            + deterministic_contract_id(
-                "memory-privacy-epoch",
-                {
-                    "uid": uid,
-                    "deletion_gate_token": deletion_gate_token,
-                    "commit_sequence": bumped_control.commit_sequence + 1,
-                },
-            )[:32]
+        replacement_commit_id = _empty_replacement_commit_id(
+            uid=uid,
+            conversation_id=conversation_id,
+            bumped_control=bumped_control,
+            replacement_operation=replacement_operation,
+            deletion_gate_token=deletion_gate_token,
+            require_deletion_gate=require_deletion_gate,
         )
         replacement_control = bumped_control.advance_head(replacement_commit_id).model_copy(
             update={

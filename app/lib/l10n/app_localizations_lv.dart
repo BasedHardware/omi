@@ -439,6 +439,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
+  String get omiButtonActions => 'Omi pogas darbības';
+
+  @override
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override
@@ -10136,4 +10139,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Atjaunināt kopsavilkumu ar jaunajiem vārdiem';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

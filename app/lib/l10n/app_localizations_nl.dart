@@ -439,6 +439,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get autoSyncDescription => 'Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt';
 
   @override
+  String get omiButtonActions => 'Omi-knopacties';
+
+  @override
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override
@@ -10140,4 +10143,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Samenvatting bijwerken met nieuwe namen';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio niet leesbaar — kan niet worden gesynchroniseerd';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

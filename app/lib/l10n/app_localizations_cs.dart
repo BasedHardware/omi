@@ -438,6 +438,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
 
   @override
+  String get omiButtonActions => 'Akce tlačítka Omi';
+
+  @override
   String get deviceSettings => 'Nastavení zařízení';
 
   @override
@@ -10112,4 +10115,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Aktualizovat souhrn s novými jmény';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk nelze přečíst — synchronizace není možná';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

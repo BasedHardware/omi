@@ -440,6 +440,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
+  String get omiButtonActions => 'Omi gombműveletek';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
@@ -10153,4 +10156,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Összefoglaló frissítése az új nevekkel';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

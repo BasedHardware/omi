@@ -1044,3 +1044,79 @@ final class TypeExtensionProbe extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"enabled": enabled, "count": count, "mode": mode.wireName};
 }
+
+enum AppReviewOpportunityMoment {
+  dailySummaryRead("daily_summary_read"),
+  conversationRead("conversation_read");
+  const AppReviewOpportunityMoment(this.wireName);
+  final String wireName;
+}
+
+enum AppReviewOpportunityDecision {
+  eligible("eligible"),
+  notIosOrAndroid("not_ios_or_android"),
+  storageError("storage_error"),
+  notFamiliar("not_familiar"),
+  migrationCooldown("migration_cooldown"),
+  cooldown("cooldown"),
+  budgetExhausted("budget_exhausted"),
+  versionAlreadyAttempted("version_already_attempted"),
+  sessionAlreadyAttempted("session_already_attempted"),
+  lifecycleNotAppropriate("lifecycle_not_appropriate"),
+  lifecycleChanged("lifecycle_changed"),
+  availabilityError("availability_error"),
+  unavailable("unavailable"),
+  requestError("request_error");
+  const AppReviewOpportunityDecision(this.wireName);
+  final String wireName;
+}
+
+final class AppReviewOpportunity extends RegisteredEvent {
+  const AppReviewOpportunity({required this.moment, required this.decision});
+  final AppReviewOpportunityMoment moment;
+  final AppReviewOpportunityDecision decision;
+  @override
+  String get wireName => "App Review Opportunity";
+  @override
+  Map<String, Object> get properties => {"moment": moment.wireName, "decision": decision.wireName};
+}
+
+enum AppReviewRequestAttemptedMoment {
+  dailySummaryRead("daily_summary_read"),
+  conversationRead("conversation_read");
+  const AppReviewRequestAttemptedMoment(this.wireName);
+  final String wireName;
+}
+
+final class AppReviewRequestAttempted extends RegisteredEvent {
+  const AppReviewRequestAttempted({required this.moment});
+  final AppReviewRequestAttemptedMoment moment;
+  @override
+  String get wireName => "App Review Request Attempted";
+  @override
+  Map<String, Object> get properties => {"moment": moment.wireName};
+}
+
+enum AppReviewRequestFinishedMoment {
+  dailySummaryRead("daily_summary_read"),
+  conversationRead("conversation_read");
+  const AppReviewRequestFinishedMoment(this.wireName);
+  final String wireName;
+}
+
+enum AppReviewRequestFinishedResult {
+  returned("returned"),
+  error("error");
+  const AppReviewRequestFinishedResult(this.wireName);
+  final String wireName;
+}
+
+final class AppReviewRequestFinished extends RegisteredEvent {
+  const AppReviewRequestFinished({required this.moment, required this.result});
+  final AppReviewRequestFinishedMoment moment;
+  final AppReviewRequestFinishedResult result;
+  @override
+  String get wireName => "App Review Request Finished";
+  @override
+  Map<String, Object> get properties => {"moment": moment.wireName, "result": result.wireName};
+}

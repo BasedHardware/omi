@@ -29,6 +29,7 @@ class IntegrationProvider extends ChangeNotifier {
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+  bool _needsRetry = false;
   int _sessionGeneration = 0;
   Future<void>? _inFlightLoad;
 
@@ -67,15 +68,23 @@ class IntegrationProvider extends ChangeNotifier {
       final responses = await Future.wait(keys.map(_fetchStatus));
       if (!_isCurrent(generation)) return;
 
+      var allFetched = true;
       for (var i = 0; i < keys.length; i++) {
-        final connected = responses[i]?.connected ?? false;
-        _integrations[keys[i]] = connected;
-        await _persistPref(prefKeyFor(keys[i]), connected);
+        final key = keys[i];
+        final response = responses[i];
+        if (response == null) {
+          allFetched = false;
+          _integrations.putIfAbsent(key, () => SharedPreferencesUtil().getBool(prefKeyFor(key)));
+          continue;
+        }
+        _integrations[key] = response.connected;
+        await _persistPref(prefKeyFor(key), response.connected);
         if (!_isCurrent(generation)) return;
       }
 
       if (!_isCurrent(generation)) return;
       _hasLoaded = true;
+      _needsRetry = !allFetched;
     } catch (e) {
       if (!_isCurrent(generation)) return;
       Logger.debug('Error loading integrations from backend: $e');
@@ -88,7 +97,7 @@ class IntegrationProvider extends ChangeNotifier {
   }
 
   Future<void> ensureLoaded() async {
-    if (_hasLoaded) return;
+    if (_hasLoaded && !_needsRetry) return;
     await loadFromBackend();
   }
 
@@ -136,6 +145,7 @@ class IntegrationProvider extends ChangeNotifier {
     _integrations.clear();
     _isLoading = false;
     _hasLoaded = false;
+    _needsRetry = false;
     for (final key in trackedAppKeys) {
       _persistPref(prefKeyFor(key), false);
     }

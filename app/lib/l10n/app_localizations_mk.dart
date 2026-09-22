@@ -440,6 +440,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
 
   @override
+  String get omiButtonActions => 'Дејства на копчето Omi';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override
@@ -10166,4 +10169,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Ажурирај го резимето со новите имиња';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Аудиото не може да се прочита — не може да се синхронизира';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

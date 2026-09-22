@@ -1806,7 +1806,7 @@ async def _chat_completions_unobserved(
                 web_search_authorization = await _web_search_authorized(uid)
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_desktop_chat_quota(uid, platform=x_app_platform)
+        await run_blocking(db_executor, enforce_desktop_chat_quota, uid, platform=x_app_platform)
         await _meter_server_request(uid, request_id=request_id)
     except HTTPException:
         raise

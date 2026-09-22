@@ -441,6 +441,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
 
   @override
+  String get omiButtonActions => 'Ενέργειες κουμπιού Omi';
+
+  @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
@@ -10182,4 +10185,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Ενημέρωση περίληψης με τα νέα ονόματα';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

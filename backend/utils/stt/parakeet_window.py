@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, cast
 
 import httpx
+import numpy as np
 
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import record_fallback
@@ -37,6 +38,91 @@ from utils.stt.window_anchor import (
     read_max_context_seconds,
     read_pace_seconds,
 )
+
+# Two jobs, two stages, same 0.8 / 4× bound (the cap RNNT's peak<1 skip lacks).
+# Admission: LiveLegSocket gains a *copy* for Silero. Decoding: one uniform
+# scale of the original-level buffer at POST time. The stored bytes are never
+# gained, so the posted stage cannot compound with ingest.
+WINDOW_AGC_TARGET_PEAK = 0.8
+WINDOW_AGC_MAX_GAIN = 4.0
+WINDOW_INGEST_AGC = True
+# Deadband on the *posted* (decode) stage only. A session already peaking above
+# this fraction of full scale is not quiet, and gaining it costs accuracy: on a
+# dense-speech clip peaking at 0.54, adding 1.48x moved substitutions from 27 to
+# 37 and never moved them back when the VAD threshold was reverted. Below the
+# deadband the boost is worth its distortion; above it there is nothing to
+# rescue. 0.4 is equivalent to "never apply less than 2x (6 dB)", and sits
+# between the measured far-field session peak (0.26) and dense speech (0.54).
+# Admission is deliberately NOT deadbanded — the copy Silero scores is still
+# always gained, which is what admits quiet far-field.
+WINDOW_AGC_DEADBAND_PEAK = 0.4
+_INT16_ABS_MAX = 32767.0
+
+
+def pcm16_peak(pcm: bytes) -> float:
+    if len(pcm) < 2:
+        return 0.0
+    samples = np.frombuffer(pcm, dtype=np.int16)
+    if samples.size == 0:
+        return 0.0
+    return float(np.max(np.abs(samples.astype(np.int32))))
+
+
+def bounded_agc_pcm16(
+    pcm: bytes,
+    *,
+    peak: float | None = None,
+    target: float | None = None,
+    max_gain: float | None = None,
+) -> tuple[bytes, float]:
+    """Boost PCM16 toward WINDOW_AGC_TARGET_PEAK of full scale, at most WINDOW_AGC_MAX_GAIN.
+
+    Never attenuates. Digital silence (peak 0) is unchanged. `peak` is the session
+    envelope; when omitted or not yet observed, this buffer's own peak is used.
+    """
+    if peak is None or peak <= 0.0:
+        peak = pcm16_peak(pcm)
+    if peak <= 0.0:
+        return pcm, 1.0
+    target_peak = WINDOW_AGC_TARGET_PEAK if target is None else target
+    cap = WINDOW_AGC_MAX_GAIN if max_gain is None else max_gain
+    gain = min(cap, (_INT16_ABS_MAX * target_peak) / peak)
+    if gain <= 1.0:
+        return pcm, 1.0
+    samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+    out = np.clip(samples * gain, -32768, 32767).astype(np.int16)
+    return out.tobytes(), float(gain)
+
+
+def posted_agc_applies(peak: float) -> bool:
+    """Whether the POSTED (decode) stage should gain a session with this envelope.
+
+    False once the session is already well levelled. Admission does not consult this:
+    the copy Silero scores is always gained, which is what admits quiet far-field.
+    """
+    return peak <= WINDOW_AGC_DEADBAND_PEAK * _INT16_ABS_MAX
+
+
+class SessionPcmGain:
+    """Causal bounded peak AGC. Fast attack, no release, never attenuates.
+
+    The first chunk uses its own peak (maximum immediate boost, up to the cap).
+    Later chunks use the session running-max of *pre-gain* peaks. There is no
+    warm-up and no initial peak guess: both would under-gain the opening
+    utterance, which is when this decoder is most start-sensitive.
+    """
+
+    def __init__(self) -> None:
+        self.peak = 0.0
+        self.last_gain = 1.0
+
+    def apply(self, pcm: bytes) -> bytes:
+        chunk_peak = pcm16_peak(pcm)
+        if chunk_peak > self.peak:
+            self.peak = chunk_peak
+        out, gain = bounded_agc_pcm16(pcm, peak=self.peak)
+        self.last_gain = gain
+        return out
 
 
 class QueueTimeout(TimeoutError):
@@ -129,6 +215,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._anchor_bytes = 0
         self._now_bytes = 0
         self._last_emitted_end = 0.0
+        self._agc_peak = 0.0
+        self._agc_last_gain = 1.0
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
@@ -176,10 +264,38 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._received_bytes += len(data)
         accepted = super().send(data)
         if accepted and data:
+            self._observe_agc_peak(data)
             self._last_accepted_at = time.monotonic()
             self._idle_flushed = False
         self._wake.set()
         return accepted
+
+    def observe_session_peak(self, peak: float) -> None:
+        """Fold a pre-VAD incoming peak into the posted envelope.
+
+        LiveLegSocket observes every chunk, including those the gate later
+        drops. Posted AGC must use that same running-max so VAD and TDT share
+        one session envelope. Does not mark the buffer as gained.
+        """
+        if peak > self._agc_peak:
+            self._agc_peak = peak
+
+    def _observe_agc_peak(self, data: bytes) -> None:
+        peak = pcm16_peak(data)
+        if peak > self._agc_peak:
+            self._agc_peak = peak
+
+    def _normalize_posted_pcm(self, pcm: bytes) -> bytes:
+        # Buffer is original-level. One uniform scale for this window; gain is
+        # taken from the session envelope frozen at POST start (see _post_window).
+        # Above the deadband the session is already well levelled, so post it
+        # untouched rather than trading accuracy for a boost it does not need.
+        if not posted_agc_applies(self._agc_peak):
+            self._agc_last_gain = 1.0
+            return pcm
+        out, gain = bounded_agc_pcm16(pcm, peak=self._agc_peak)
+        self._agc_last_gain = gain
+        return out
 
     def finalize(self) -> None:
         self._pause_requested = True
@@ -431,6 +547,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             return self._last_speaker
 
     async def _post_window(self, pcm: bytes) -> httpx.Response:
+        # Snapshot the uniform scale before the first await so a later send
+        # cannot change this POST's envelope. Overlapping later POSTs may use a
+        # lower gain if the session peak grew; each POST stays internally flat.
+        wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         acquired = False
         try:
             async with asyncio.timeout(self._post_timeout):
@@ -438,7 +558,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     acquired = True
                     return await get_stt_client().post(
                         self._url,
-                        files={'file': ('audio.wav', _pcm16_to_wav_bytes(pcm, self._sample_rate), 'audio/wav')},
+                        files={'file': ('audio.wav', wav, 'audio/wav')},
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -498,6 +618,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 raise ValueError('Invalid TDT timestamps')
             rel_start = min(dur, max(0.0, segment.start))
             rel_end = min(dur, max(rel_start, segment.end))
+            # Buffer is original-level capture. Embeddings slice that PCM, not
+            # the posted uniform-gain copy the decoder hears.
             speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
             abs_start = min(now, max(start, self._last_emitted_end, start + rel_start))
             abs_end = min(now, max(abs_start, start + rel_end))

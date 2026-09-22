@@ -25,7 +25,12 @@ ConversationDetailProvider _provider(ServerConversation conversation) {
   return provider;
 }
 
-Future<void> _pumpBar(WidgetTester tester, ConversationDetailProvider provider) async {
+Future<void> _pumpBar(
+  WidgetTester tester,
+  ConversationDetailProvider provider, {
+  VoidCallback? onAudioInteraction,
+  void Function(Future<void> Function(double, double))? onSeekFunctionReady,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
@@ -36,6 +41,8 @@ Future<void> _pumpBar(WidgetTester tester, ConversationDetailProvider provider) 
         child: Scaffold(
           body: ConversationBottomBar(
             mode: ConversationBottomBarMode.detail,
+            onAudioInteraction: onAudioInteraction,
+            onSeekFunctionReady: onSeekFunctionReady,
             selectedTab: ConversationTab.summary,
             onTabSelected: (_) {},
             onStopPressed: () {},
@@ -60,5 +67,22 @@ void main() {
     expect(find.text('Unknown ...'), findsOneWidget);
     expect(find.byIcon(Icons.apps_outlined), findsOneWidget);
     expect(find.text('Summary'), findsNothing);
+  });
+
+  testWidgets('transcript playback intent suppresses reviews even if audio is unavailable', (tester) async {
+    final provider = _provider(_conversation(appResults: []));
+    addTearDown(provider.dispose);
+    Future<void> Function(double, double)? seek;
+    var interactions = 0;
+    await _pumpBar(
+      tester,
+      provider,
+      onAudioInteraction: () => interactions++,
+      onSeekFunctionReady: (callback) => seek = callback,
+    );
+    expect(interactions, 0);
+    await seek!(0, 1);
+    expect(interactions, 1);
+    expect(tester.takeException(), isNull);
   });
 }

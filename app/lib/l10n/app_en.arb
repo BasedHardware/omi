@@ -572,6 +572,10 @@
     "@autoSyncDescription": {
         "description": "Subtitle explaining the Auto-Sync toggle in device settings"
     },
+    "omiButtonActions": "Omi Button Actions",
+    "@omiButtonActions": {
+        "description": "Toggle in device settings that controls whether the mobile app responds to Omi button actions"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -11925,5 +11929,17 @@
         }
     },
     "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker",
-    "updateSummaryWithNewNames": "Update summary with new names"
+    "updateSummaryWithNewNames": "Update summary with new names",
+    "syncStatusUnsupportedAudio": "Audio couldn't be read — can't be synced",
+    "@syncStatusUnsupportedAudio": {
+        "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
+    },
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "@conversationTitleDidntGenerate": {
+        "description": "Inline conversation-row hint when processing finished but the title pass produced nothing"
+    },
+    "conversationReprocess": "Reprocess",
+    "@conversationReprocess": {
+        "description": "Inline conversation-row action to rerun title and summary generation"
+    }
 }

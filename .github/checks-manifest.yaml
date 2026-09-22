@@ -14,11 +14,21 @@ checks:
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a non-object element or non-integer iq in the AI score array must skip only that element, not discard the whole batch's scores"
+  - id: notion-id-sanitization-tests
+    command: ["python3", "plugins/omi-notion-app/test_notion_id_sanitization.py"]
+    triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Frankfurter currency conversion, latest rates, and supported currencies must safely handle unmanaged HTTP client contexts, non-dict API responses, and non-finite numbers without 500s or AttributeErrors"
+  - id: iq-rating-app-tests
+    command: ["python3", "plugins/iq_rating/test_main.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
@@ -334,6 +344,12 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+
+  - id: twitter-app-callback-error-escaping-tests
+    command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the OAuth callback error page interpolated the client-controlled state query param raw into its Try again href, so a quote plus script tag in state ran as script (reflected XSS) and & or # corrupted the query; the suite renders the real callback error page and the setup page's Connect link and pins a percent-encoded, round-trippable uid"
   - id: git-author-identity
     command: ["python3", ".github/scripts/check_git_author_identity.py", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -1151,6 +1167,16 @@ checks:
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "escapes Slack channel and workspace names at HTML boundaries, percent-encodes reflected uid parameter to prevent attribute breakout and URL query corruption in setup and OAuth callback pages"
+  - id: slack-error-handling-tests
+    command: ["python3", "plugins/omi-slack-app/test_error_handling.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "prevents internal exception traces, database paths, and secrets from leaking into client HTTP responses across all Slack app endpoints"
+  - id: slack-chat-tools-tests
+    command: ["python3", "plugins/omi-slack-app/test_slack_chat_tools.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Slack chat tools must resolve raw channel IDs, mention syntax (<#C...>), and archive URLs, while rejecting malformed/non-string parameters with 400 validation errors instead of uncaught AttributeErrors"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
@@ -1166,6 +1192,11 @@ checks:
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+  - id: plugin-db-eval-security-tests
+    command: ["python3", "plugins/test_db.py"]
+    triggers: ["plugins/db.py", "plugins/test_db.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "eval in get_upsert_segment_to_transcript_plugin executed arbitrary python code from Redis transcript buffer; literal_eval prevents code execution"
   - id: plugin-mentor-session-auth-tests
     command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
@@ -1191,6 +1222,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: clickup-app-error-messages-dont-leak-tests
+    command: ["python3", "plugins/omi-clickup-app/test_error_messages_dont_leak.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "/update-list, /update-timezone, /refresh-lists and /logout returned f\"{e}\" straight to the chat tool caller on any unhandled exception instead of the type(e).__name__-only convention this file already uses elsewhere; the suite proves a raw exception message never reaches the response"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
@@ -1211,6 +1247,11 @@ checks:
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13976: update_task_status disambiguates matching task candidates instead of mutating the first search hit, and exposes task IDs across get_tasks and search"
+  - id: hive-search-tasks-multi-project-tests
+    command: ["python3", "plugins/omi-hive-app/test_search_tasks_multi_project.py"]
+    triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "search_tasks fetched a single workspaces/{id}/actions?limit=50 -- a cap on the 50 most recently touched actions across the whole workspace, not per project -- so a task outside that window was silently unfindable by exact name no matter how small its own project was, breaking update_task_status and create_task's parent-task lookup on any workspace with more than 50 actions in flight; it now scans every project the same way get_project_tasks already does"
   - id: hive-create-task-ambiguous-target-tests
     command: ["python3", "plugins/omi-hive-app/test_create_task_ambiguous_target.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
@@ -1231,11 +1272,21 @@ checks:
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "get_timeline, get_my_tweets, get_mentions and search_tweets clamped max_results only at 100, so a request for fewer posts than the X endpoint floor (10 for search, 5 for user posts and mentions) was sent as is and rejected with HTTP 400; the suite drives the real handlers against a seam that enforces the documented ranges"
+  - id: twitter-chat-tools-api-failure-message-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_api_failure_messages.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "twitter_api_request returns None on a failed token refresh or request exception; the chat tools called .get on it, so users saw \"'NoneType' object has no attribute 'get'\", and unlike/delete guarded with `if result and` so a failed call still reported the tweet as unliked or deleted"
   - id: ms365-tool-dispatch-tests
     command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the ms365 dispatcher read tool parameters from body.args, which the Omi backend never sends, so every tool with a required parameter answered HTTP 400 and optional parameters were dropped; the suite drives the real dispatcher with the backend's flat envelope"
+  - id: ms365-input-coercion-tests
+    command: ["python3", "plugins/omi-ms365-app/test_input_coercion.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15116: normalize recipient inputs and safely coerce date range parameters"
   - id: wikipedia-request-boundary-tests
     command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
@@ -1246,11 +1297,26 @@ checks:
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: shipbob-create-wro-disambiguation-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13946: ensure omitted or malformed limit inputs are coerced safely without TypeError"
+  - id: shopify-robustness-and-null-guards-tests
+    command: ["python3", "plugins/omi-shopify-app/test_robustness_and_null_guards.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15122: guard null analytics metrics, list error responses, and discount code attributes against unhandled TypeError and AttributeError"
+  - id: shopify-error-handling-tests
+    command: ["python3", "plugins/omi-shopify-app/test_error_handling.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the shared shopify_api_request helper and all six chat-tool handlers returned str(e) verbatim, reflecting internal socket errors, filesystem paths and provider details to the OMI backend and chat clients; the suite drives the real handlers against raising seams and asserts no exception text reaches a response"
   - id: hive-app-tests
     command: ["python3", "plugins/omi-hive-app/test_main.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
@@ -1266,6 +1332,11 @@ checks:
     triggers: ["plugins/omi-google-calendar-app/**"]
     lanes: ["local", "ci"]
     reason: "GET /auth/google/callback interpolated the raw error query param into HTML text and GET / reflected the client-controlled uid into href attributes and a hidden input value; both routes are unauthenticated"
+  - id: gcal-attendee-normalization-and-safety-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_attendee_and_input_safety.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#15126: normalize delimited attendees, validate event time bounds, and guard tool inputs"
   - id: twitter-tweet-offset-tests
     command: ["python3", "plugins/omi-twitter-app/test_tweet_offsets.py"]
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
@@ -1321,6 +1392,11 @@ checks:
     triggers: ["plugins/chatgpt/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "ChatGPT plugin must return timezone-aware UTC ISO timestamps in /stats and properly validate and redirect user IDs"
+  - id: openfoodfacts-app-tests
+    command: ["python3", "plugins/omi-openfoodfacts-app/test_main.py"]
+    triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

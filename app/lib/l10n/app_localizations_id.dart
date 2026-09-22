@@ -438,6 +438,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
 
   @override
+  String get omiButtonActions => 'Tindakan Tombol Omi';
+
+  @override
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override
@@ -10122,4 +10125,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Perbarui ringkasan dengan nama baru';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak terbaca — tidak bisa disinkronkan';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

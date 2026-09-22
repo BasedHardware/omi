@@ -439,6 +439,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
 
   @override
+  String get omiButtonActions => 'Omi బటన్ చర్యలు';
+
+  @override
   String get deviceSettings => 'ডివైస్ సెట్టింగ్‌లు';
 
   @override
@@ -10160,4 +10163,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

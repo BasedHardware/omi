@@ -431,6 +431,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get autoSyncDescription => '기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다';
 
   @override
+  String get omiButtonActions => 'Omi 버튼 동작';
+
+  @override
   String get deviceSettings => '기기 설정';
 
   @override
@@ -9945,4 +9948,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => '새 이름으로 요약 업데이트';
+
+  @override
+  String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

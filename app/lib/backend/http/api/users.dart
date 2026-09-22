@@ -429,19 +429,21 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   return null;
 }
 
-Future<Map<String, dynamic>> getTrainingDataOptIn() async {
+/// Returns `null` on a failed fetch, so a transient error is not read as a user
+/// who never opted in.
+Future<Map<String, dynamic>?> getTrainingDataOptIn() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return {'opted_in': false, 'status': null};
+  if (response == null) return null;
   Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
     return wire.GeneratedTrainingDataOptInResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
-  return {'opted_in': false, 'status': null};
+  return null;
 }
 
 Future<bool> setTrainingDataOptIn() async {
@@ -569,21 +571,23 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
 
 // Daily Summaries API
 
-Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+/// `ok` is false when the recaps could not be read (no response / non-200 /
+/// unparsable body). Callers must not treat that as the user having no recaps.
+Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null || response.statusCode != 200) return [];
+  if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaries?.map(DailySummary.fromGenerated).toList() ?? [];
+    return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
-    return [];
+    return (items: const <DailySummary>[], ok: false);
   }
 }
 

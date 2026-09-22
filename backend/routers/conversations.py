@@ -125,6 +125,9 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
@@ -748,6 +751,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_sync_review = conversation.get('sync_relevance') == 'review'
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -767,6 +771,12 @@ def reprocess_conversation(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # Successful explicit recovery is a durable user choice, including when
+    # the selected app supplies the summary rather than the default overview.
+    if was_sync_review and not processed_conversation.discarded:
+        if lifecycle_service.restore_discarded(uid, conversation_id):
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 
@@ -1413,10 +1423,22 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}

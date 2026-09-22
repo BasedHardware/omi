@@ -440,6 +440,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
 
   @override
+  String get omiButtonActions => 'Acțiuni buton Omi';
+
+  @override
   String get deviceSettings => 'Setări dispozitiv';
 
   @override
@@ -10159,4 +10162,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Actualizează rezumatul cu numele noi';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

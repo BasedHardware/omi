@@ -419,7 +419,19 @@ class ListenSessionRuntime:
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
         ):
-            self.has_speech_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            # A Firestore voiceprint is sufficient for matching even if its GCS
+            # audio cache has disappeared. Only probe audio for legacy profiles
+            # whose embedding still needs to be extracted.
+            try:
+                embedding = await self.persistence.call(user_db.get_user_speaker_embedding, request.uid)
+            except Exception as error:
+                logger.error('Speaker ID user embedding availability failed type=%s', type(error).__name__)
+                embedding = None
+            self.has_speech_profile = bool(embedding) or await self.persistence.call(
+                get_user_has_speech_profile, request.uid
+            )
+            if not self.has_speech_profile:
+                logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
@@ -643,7 +655,10 @@ class ListenSessionRuntime:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
         seconds = billable_transcription_seconds(
-            self.state.last_usage_record_timestamp, self.state.last_audio_received_time, now
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            now,
+            getattr(self.state, 'last_audio_resume_time', None),
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0

@@ -11,7 +11,6 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
@@ -19,7 +18,10 @@ import 'package:omi/utils/logger.dart';
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
-typedef DailySummariesChecker = Future<bool> Function();
+
+/// Returns null when the check could not be made, so the caller keeps the
+/// last known answer instead of reading a failure as "no recaps".
+typedef DailySummariesChecker = Future<bool?> Function();
 typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
   String query, {
   int? page,
@@ -95,8 +97,6 @@ class ConversationProvider extends ChangeNotifier {
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
-
-  final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
 
@@ -386,6 +386,24 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Apply a list-row reprocess response: processing/merging rows leave the
+  /// completed list and join the processing skeleton; a titled (or otherwise
+  /// settled) result upserts in place.
+  void applyConversationReprocessResult(ServerConversation updated) {
+    if (_isActiveProcessingStatus(updated.status)) {
+      conversations.removeWhere((conversation) => conversation.id == updated.id);
+      searchedConversations.removeWhere((conversation) => conversation.id == updated.id);
+      if (hasActiveSearch) {
+        _groupSearchConvosByDateWithoutNotify();
+      } else {
+        _groupConversationsByDateWithoutNotify();
+      }
+      addProcessingConversation(updated);
+      return;
+    }
+    upsertConversation(updated);
+  }
+
   void removeProcessingConversation(String conversationId) {
     _bumpProcessingStateRevision(conversationId);
     processingConversations.removeWhere((m) => m.id == conversationId);
@@ -503,8 +521,9 @@ class ConversationProvider extends ChangeNotifier {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
     final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+        getDailySummaries(limit: 1, offset: 0).then((result) => result.ok ? result.items.isNotEmpty : null));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
+    if (hasSummaries == null) return true;
     hasDailySummaries = hasSummaries;
     notifyListeners();
     return true;
@@ -1265,16 +1284,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> addConversation(ServerConversation conversation) async {
-    // Check if this is the first conversation
-    bool wasEmpty = conversations.isEmpty;
-
     conversations.insert(0, conversation);
     _groupConversationsByDateWithoutNotify();
-
-    // Mark first conversation for app review
-    if (wasEmpty && await _appReviewService.isFirstConversation()) {
-      await _appReviewService.markFirstConversation();
-    }
 
     notifyListeners();
   }

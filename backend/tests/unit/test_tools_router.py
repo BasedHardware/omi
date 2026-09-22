@@ -113,6 +113,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tools.calendar_tools",
     "utils.retrieval.safety",
     "utils.retrieval.tool_services",
+    "utils.retrieval.memory_evidence",
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
     "utils.retrieval.tool_services.action_items",
@@ -418,6 +419,10 @@ retrieval_safety = _load_module_from_file(
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
+)
+memory_evidence = _load_module_from_file(
+    "utils.retrieval.memory_evidence",
+    BACKEND_DIR / "utils" / "retrieval" / "memory_evidence.py",
 )
 memories_svc = _load_module_from_file(
     "utils.retrieval.tool_services.memories",
@@ -727,7 +732,7 @@ class TestGetMemoriesText:
             {'id': 'mem-2', 'content': 'locked', 'is_locked': True, 'created_at': datetime.now(timezone.utc)},
         ]
         result = memories_svc.get_memories_text(uid="test-uid")
-        assert "1 total" in result
+        assert "1 shown" in result
 
     def test_limit_cap(self):
         memories_svc.get_memories_text(uid="test-uid", limit=99999)
@@ -1338,7 +1343,7 @@ class TestSearchMemoriesLockedFiltering:
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
         assert "visible" in result
         assert "locked" not in result
-        assert "1 memories" in result
+        assert "1 shown" in result
 
     def test_search_memories_all_locked_returns_empty(self):
         """All locked memories in search returns 'no memories' message."""

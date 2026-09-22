@@ -437,6 +437,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get autoSyncDescription => 'আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন';
 
   @override
+  String get omiButtonActions => 'Omi বোতাম অ্যাকশন';
+
+  @override
   String get deviceSettings => 'ডিভাইস সেটিংস';
 
   @override
@@ -10118,4 +10121,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'নতুন নাম দিয়ে সারাংশ আপডেট করুন';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }
