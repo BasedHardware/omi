@@ -1,9 +1,8 @@
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
-
+from pathlib import Path
 
 def format_ical_datetime(dt_str):
     if not dt_str:
@@ -15,13 +14,12 @@ def format_ical_datetime(dt_str):
     except Exception:
         return None
 
-
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("action_items", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected the JSON array from omi --json action-item list")
+        raise ValueError("Expected JSON array from 'omi --json action-item list'")
 
     dest = Path(destination)
     if dest.exists():
@@ -41,9 +39,9 @@ def convert(source, destination):
                 continue
             aid = str(act.get("id", "task"))
             raw_summary = act.get("description") or act.get("title") or "Action Item"
-            summary = raw_summary.replace("\r", " ").replace("\n", " ")
+            summary = raw_summary.replace("\r", " ").replace("\n", " ").replace(";", "\;").replace(",", "\,")
             status = "COMPLETED" if act.get("completed") else "NEEDS-ACTION"
-            due = format_ical_datetime(act.get("due_date") or act.get("due_at"))
+            due = format_ical_datetime(act.get("due_at") or act.get("due_date"))
 
             lines.append("BEGIN:VTODO")
             lines.append(f"UID:{aid}@omi.me")
@@ -66,9 +64,12 @@ def convert(source, destination):
             except OSError:
                 pass
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python action_items_to_ics.py <source.json> <destination.ics>", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    try:
+        convert(sys.argv[1], sys.argv[2])
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
