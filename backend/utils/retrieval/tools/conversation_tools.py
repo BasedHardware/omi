@@ -235,7 +235,7 @@ def get_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
+        logger.error("❌ get_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -265,8 +265,8 @@ def get_conversations_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
 
     if end_date:
         try:
@@ -275,8 +275,8 @@ def get_conversations_tool(
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
     # reach the result. The legacy path intentionally retains its existing limit.
@@ -392,7 +392,7 @@ def get_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error("Error parsing conversation %s: %s", conv_data.get('id'), type(e).__name__)
                 continue
 
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
@@ -418,12 +418,12 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error formatting conversations: {str(e)}"
-        logger.info(f"❌ get_conversations_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Found {len(conversations_data)} conversations but encountered an error formatting them: {str(e)}"
+        logger.error(
+            "get_conversations_tool formatting failed (%s)",
+            type(e).__name__,
+            exc_info=True,
+        )
+        return f"Found {len(conversations_data)} conversations but encountered an error formatting them."
 
 
 @tool
@@ -504,7 +504,7 @@ def search_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
+        logger.error("❌ search_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -542,8 +542,8 @@ def search_conversations_tool(
             logger.info(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             start_dt = dt
             starts_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
 
     if end_date:
         try:
@@ -553,8 +553,8 @@ def search_conversations_tool(
             logger.info(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             end_dt = dt
             ends_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     # Limit to reasonable max
     limit = min(limit, 20)
