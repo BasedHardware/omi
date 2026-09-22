@@ -554,7 +554,8 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        print(f"[OAUTH] Authorization callback failed: {e}")
+        return HTMLResponse("Error during authorization", status_code=500)
 
 
 @app.get("/disconnect")
@@ -1068,7 +1069,7 @@ async def receive_audio(
         return {"status": "ok"}
     except Exception as e:
         print(f"[AUDIO] Error receiving audio: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Audio processing error"}
 
 
 # ============== Run Server ==============
