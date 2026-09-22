@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 DASH_DIR = HERE / "dashboards"
 BASE_PATH = DASH_DIR / "omi-tv.json"
 
-PROFIT_PATH = "/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3"
+PROFIT_PATH = "/api/omi/stats/profitability?days=30"
 VIRAL_PATH = "/api/omi/stats/viral-metrics?days=60"
 PROXY = "http://127.0.0.1:8899"
 RFC3339 = "2006-01-02T15:04:05Z07:00"

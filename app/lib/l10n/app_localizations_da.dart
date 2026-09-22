@@ -438,6 +438,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
 
   @override
+  String get omiButtonActions => 'Omi-knaphandlinger';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
@@ -10083,4 +10086,33 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Stemmen er klar til genkendelse',
+        'saved_sample_awaiting_embedding': 'Prøve gemt, afventer stemmebehandling',
+        'not_learned': 'Stemmen er ikke lært',
+        'other': 'Stemmestatus ukendt',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Mærk også senere tale fra denne taler';
+
+  @override
+  String get updateSummaryWithNewNames => 'Opdater resuméet med de nye navne';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke læses — kan ikke synkroniseres';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

@@ -1436,6 +1436,8 @@ public enum OmiAPI {
     public let status: ConversationStatus?
     public let structured: Structured
     public let suggestedSummarizationApps: [String]?
+    public let syncContentRevision: Int?
+    public let syncRelevance: String?
     public let transcriptSegments: [TranscriptSegment]?
     public let transcriptSegmentsCompressed: Bool?
     public let updatedAt: String?
@@ -1481,6 +1483,8 @@ public enum OmiAPI {
       case status
       case structured
       case suggestedSummarizationApps = "suggested_summarization_apps"
+      case syncContentRevision = "sync_content_revision"
+      case syncRelevance = "sync_relevance"
       case transcriptSegments = "transcript_segments"
       case transcriptSegmentsCompressed = "transcript_segments_compressed"
       case updatedAt = "updated_at"
@@ -1528,6 +1532,8 @@ public enum OmiAPI {
       status = try c.decodeIfPresent(ConversationStatus.self, forKey: .status)
       structured = try c.decode(Structured.self, forKey: .structured)
       suggestedSummarizationApps = try c.decodeIfPresent([String].self, forKey: .suggestedSummarizationApps)
+      syncContentRevision = try c.decodeIfPresent(Int.self, forKey: .syncContentRevision)
+      syncRelevance = try c.decodeIfPresent(String.self, forKey: .syncRelevance)
       transcriptSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments)
       transcriptSegmentsCompressed = try c.decodeIfPresent(Bool.self, forKey: .transcriptSegmentsCompressed)
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -1535,7 +1541,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1574,6 +1580,8 @@ public enum OmiAPI {
       self.status = status
       self.structured = structured
       self.suggestedSummarizationApps = suggestedSummarizationApps
+      self.syncContentRevision = syncContentRevision
+      self.syncRelevance = syncRelevance
       self.transcriptSegments = transcriptSegments
       self.transcriptSegmentsCompressed = transcriptSegmentsCompressed
       self.updatedAt = updatedAt

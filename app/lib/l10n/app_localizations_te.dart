@@ -439,6 +439,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
 
   @override
+  String get omiButtonActions => 'Omi బటన్ చర్యలు';
+
+  @override
   String get deviceSettings => 'ডివైస్ సెట్టింగ్‌లు';
 
   @override
@@ -10147,4 +10150,33 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'స్వరాన్ని గుర్తించడానికి సిద్ధంగా ఉంది',
+        'saved_sample_awaiting_embedding': 'నమూనా సేవ్ అయింది; స్వర ప్రాసెసింగ్ ఇంకా అవసరం',
+        'not_learned': 'స్వరాన్ని నేర్చుకోలేదు',
+        'other': 'స్వరం స్థితి తెలియదు',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'ఈ స్పీకర్ తర్వాతి మాటను కూడా ట్యాగ్ చేయండి';
+
+  @override
+  String get updateSummaryWithNewNames => 'కొత్త పేర్లతో సారాంశాన్ని నవీకరించండి';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

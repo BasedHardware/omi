@@ -1,6 +1,12 @@
 """Renderer for backend Cloud Run runtime env."""
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+
+import yaml
 import runpy
 from copy import deepcopy
 from pathlib import Path
@@ -614,3 +620,87 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
             assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
             continue
         assert f'{name}={value}' in workflow, f'{env_name}: {name}={value} is not what the workflow deploys'
+
+
+@pytest.mark.parametrize('cohort', [None, '', 'uid:fixture-a,uid:fixture-b'])
+def test_free_tier_cohort_renders_empty_or_escaped_on_every_cloud_run_host(monkeypatch, cohort):
+    key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
+    if cohort is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, cohort)
+    for environment in ('dev', 'prod'):
+        config = _MANIFEST['environments'][environment]
+        hosts = [config['desktop_backend'], *config['cloud_run']['services'].values()]
+        expected = (cohort or '') if environment == 'dev' else ''
+        for host in hosts:
+            binding = {key: host['env'][key]}
+            assert _MODULE['_render_env_entries'](binding) == [{'name': key, 'value': expected}]
+            assert _MODULE['_render_env_vars'](binding) == f'{key}=' + expected.replace(',', r'\,')
+
+
+def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'uid:')
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+    with pytest.raises(ValueError, match='uid:<non-empty>'):
+        _MODULE['main']()
+    assert not state.exists()
+    assert capsys.readouterr().out == ''
+
+
+def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path, capsys):
+    cohort = 'uid:fixture-a,uid:fixture-b'
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', cohort)
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+    assert _MODULE['main']() == 0
+    assert capsys.readouterr().out == 'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
+
+
+def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
+    """Exercise the workflow's actual local staging commands and import closure."""
+    repo = _SCRIPT.parents[2]
+    workflow = yaml.safe_load((repo / '.github/workflows/desktop_backend_prod.yml').read_text())
+    staging = next(
+        step
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('name') == 'Stage immutable desktop backend controls'
+    )
+    source = tmp_path / '.workflow-source'
+    # Copy only the paths that the staging commands name. Never copy credentials
+    # or the working checkout; the shell operates solely inside this temp tree.
+    for line in staging['run'].splitlines():
+        if line.strip().startswith('cp .workflow-source/'):
+            relative = line.strip().split()[1].removeprefix('.workflow-source/')
+            target = source / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(repo / relative, target)
+    runner_temp = tmp_path / 'runner'
+    runner_temp.mkdir()
+    environment = {**os.environ, 'RUNNER_TEMP': str(runner_temp), 'GITHUB_ENV': str(tmp_path / 'github-env')}
+    subprocess.run(['bash', '-c', staging['run']], cwd=tmp_path, env=environment, check=True)
+    controls = runner_temp / 'desktop-backend-deploy-controls'
+    state = tmp_path / 'state.json'
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(controls / 'backend/scripts/render_backend_runtime_env.py'),
+            '--env',
+            'prod',
+            '--desktop-state-output',
+            str(state),
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout == 'free_tier_local_processing_cohort=\n'
+    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries

@@ -337,6 +337,69 @@ def record_chat_quota_question(
     )
 
 
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _release_chat_quota_question_transaction(
+    transaction: Any,
+    usage_ref: Any,
+    event_ref: Any,
+    doc_id: str,
+) -> bool:
+    """Give back one recorded question, exactly once.
+
+    Returns False when the event was never recorded (nothing charged) or was
+    already released — a retried failure path must not double-refund. The
+    decrement lands in the plan bucket the question was attributed to, read
+    from the stored event rather than re-resolved, so a plan change between
+    the charge and the release cannot leak the refund into the wrong bucket.
+    """
+    event_snapshot = event_ref.get(transaction=transaction)
+    if not getattr(event_snapshot, "exists", False):
+        return False
+    event = event_snapshot.to_dict() or {}
+    if event.get('released'):
+        return False
+
+    now = datetime.now(timezone.utc)
+    transaction.set(event_ref, {'released': True, 'released_at': now}, merge=True)
+    plan_key = event.get('plan_id') or _UNATTRIBUTED_PLAN
+    update: Dict[str, Any] = {
+        'backend_chat.quota_questions': firestore.Increment(-1),
+        'date': doc_id,
+        'last_updated': now,
+    }
+    _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
+    transaction.set(usage_ref, _nested(update), merge=True)
+    return True
+
+
+def release_chat_quota_question(
+    uid: str,
+    idempotency_key: str,
+    *,
+    firestore_client: Any | None = None,
+) -> bool:
+    """Release one question previously recorded by :func:`record_chat_quota_question`.
+
+    Called when the billable turn failed terminally after the question was
+    charged — the user should not pay quota for a failed answer. Idempotent:
+    keyed on the same ``uid:idempotency_key`` event doc, marked ``released`` in
+    the same transaction as the decrement.
+    """
+    if not idempotency_key:
+        return False
+
+    doc_id = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+
+    client = _usage_client(firestore_client)
+    user_ref = client.collection('users').document(uid)
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
+
+    transaction = client.transaction()
+    return _release_chat_quota_question_transaction(transaction, usage_ref, event_ref, doc_id)
+
+
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
     """
     Get LLM usage for a specific day.

@@ -440,6 +440,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
+  String get omiButtonActions => 'Omi gombműveletek';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
@@ -10140,4 +10143,33 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'A hang készen áll a felismerésre',
+        'saved_sample_awaiting_embedding': 'Minta mentve, a hang feldolgozása még szükséges',
+        'not_learned': 'A hang nincs megtanulva',
+        'other': 'A hang állapota ismeretlen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Jelöld meg ennek a beszélőnek a későbbi beszédét is';
+
+  @override
+  String get updateSummaryWithNewNames => 'Összefoglaló frissítése az új nevekkel';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

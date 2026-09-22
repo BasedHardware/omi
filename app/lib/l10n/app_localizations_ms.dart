@@ -438,6 +438,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
 
   @override
+  String get omiButtonActions => 'Tindakan Butang Omi';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
@@ -10126,4 +10129,33 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Suara sedia untuk pengecaman',
+        'saved_sample_awaiting_embedding': 'Sampel disimpan; pemprosesan suara masih diperlukan',
+        'not_learned': 'Suara belum dipelajari',
+        'other': 'Status suara tidak diketahui',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan kemudian daripada penceramah ini';
+
+  @override
+  String get updateSummaryWithNewNames => 'Kemas kini ringkasan dengan nama baharu';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

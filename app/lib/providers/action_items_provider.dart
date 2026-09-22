@@ -30,19 +30,29 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
+  String id, {
+  String? description,
+  bool? completed,
+  DateTime? dueAt,
+});
+
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    UpdateActionItemRequest? updateActionItemRequest,
     api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final UpdateActionItemRequest _updateActionItemRequest;
   final api.ActionItemsApi? _actionItemsApi;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
@@ -432,69 +442,71 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
     try {
       final itemInList = _findAndUpdateItemState(item.id, newState);
       if (itemInList != null) {
         notifyListeners();
       }
 
-      final success = await api.updateActionItem(
-        item.id,
-        description: item.description,
-        completed: newState,
-        dueAt: item.dueAt,
-      );
+      final success = await _updateActionItemRequest(item.id, completed: newState);
 
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
-      } else {
-        // Cancel notification if the action item is marked as completed
-        if (newState == true) {
-          await ActionItemNotificationHandler.cancelNotification(item.id);
-        }
-        _pushUpdateToAppleReminder(item, completed: newState);
+        return false;
       }
+      // Cancel notification if the action item is marked as completed
+      if (newState == true) {
+        await ActionItemNotificationHandler.cancelNotification(item.id);
+      }
+      _pushUpdateToAppleReminder(item, completed: newState);
+      return true;
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
+      return false;
     }
   }
 
-  Future<void> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
     try {
       final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
       if (itemInList != null) {
         notifyListeners();
       }
 
-      final updatedItem = await api.updateActionItem(item.id, description: newDescription);
+      final updatedItem = await _updateActionItemRequest(item.id, description: newDescription);
 
-      if (updatedItem != null) {
-        // Update the local item with server response
-        final index = _actionItems.indexWhere((i) => i.id == item.id);
-        if (index != -1) {
-          _actionItems[index] = updatedItem;
-          notifyListeners();
-        }
-        _pushUpdateToAppleReminder(item, title: newDescription);
-      } else {
+      if (updatedItem == null) {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
         notifyListeners();
         Logger.debug('Failed to update action item description on server');
+        return false;
       }
+      // Update the local item with server response
+      final index = _actionItems.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        _actionItems[index] = updatedItem;
+        notifyListeners();
+      }
+      _pushUpdateToAppleReminder(item, title: newDescription);
+      return true;
     } catch (e) {
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
       Logger.debug('Error updating action item description: $e');
+      return false;
     }
   }
 
-  Future<void> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
     // Optimistic update: update locally first for instant UI feedback
     final index = _actionItems.indexWhere((i) => i.id == item.id);
     ActionItemWithMetadata? originalItem;
@@ -529,6 +541,7 @@ class ActionItemsProvider extends ChangeNotifier {
           notifyListeners();
         }
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
+        return true;
       } else {
         // Revert on failure — re-find index in case list changed during await
         if (originalItem != null) {
@@ -539,6 +552,7 @@ class ActionItemsProvider extends ChangeNotifier {
           }
         }
         Logger.debug('Failed to update action item due date on server');
+        return false;
       }
     } catch (e) {
       // Revert on error — re-find index in case list changed during await
@@ -550,6 +564,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
       Logger.debug('Error updating action item due date: $e');
+      return false;
     }
   }
 
@@ -618,6 +633,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.add(item.id);
 
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
+    final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
@@ -628,6 +644,7 @@ class ActionItemsProvider extends ChangeNotifier {
         Logger.debug('Failed to delete action item on server');
         // On failure, remove from pending set so a future reload can re-fetch it
         _pendingDeletionIds.remove(item.id);
+        _restoreDeletedItem(item, index);
       }
       // On success, the tombstone is intentionally retained: a refresh that
       // started before the server processed the deletion may still return the
@@ -638,8 +655,15 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error deleting action item: $e');
       // On error, remove from pending set so a future reload can re-fetch it
       _pendingDeletionIds.remove(item.id);
+      _restoreDeletedItem(item, index);
       return false;
     }
+  }
+
+  void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
+    if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
+    _actionItems.insert(index.clamp(0, _actionItems.length), item);
+    notifyListeners();
   }
 
   Future<ActionItemWithMetadata?> createActionItem({

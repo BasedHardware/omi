@@ -373,6 +373,7 @@ jobs:
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         env:
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -454,6 +455,8 @@ jobs:
 
       - name: Exercise isolated production Pusher finalization semantics
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           umask 077
@@ -554,6 +557,7 @@ jobs:
         if: env.SERVICE == 'pusher'
         env:
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -671,6 +675,8 @@ jobs:
 
       - name: Verify final production Pusher matches the canary-qualified candidate
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           EXPECTED_CANARY_WORKFLOW_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/gcp_backend_pusher.yml" --jq .id)"
           python3 backend/scripts/verify_pusher_promotion_evidence.py \

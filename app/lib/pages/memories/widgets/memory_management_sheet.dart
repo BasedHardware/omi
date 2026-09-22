@@ -266,12 +266,12 @@ class MemoryManagementSheet extends StatelessWidget {
 
   void _makeAllMemoriesPrivate(BuildContext context) async {
     Navigator.pop(context);
-    await provider.updateAllMemoriesVisibility(true);
+    final updated = await provider.updateAllMemoriesVisibility(true);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.allMemoriesPrivateResult),
+          content: Text(updated ? context.l10n.allMemoriesPrivateResult : context.l10n.somethingWentWrong),
           backgroundColor: AppStyles.backgroundTertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -284,12 +284,12 @@ class MemoryManagementSheet extends StatelessWidget {
 
   void _makeAllMemoriesPublic(BuildContext context) async {
     Navigator.pop(context);
-    await provider.updateAllMemoriesVisibility(false);
+    final updated = await provider.updateAllMemoriesVisibility(false);
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.l10n.allMemoriesPublicResult),
+          content: Text(updated ? context.l10n.allMemoriesPublicResult : context.l10n.somethingWentWrong),
           backgroundColor: AppStyles.backgroundTertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -328,13 +328,15 @@ class MemoryManagementSheet extends StatelessWidget {
             child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
           ),
           TextButton(
-            onPressed: () {
-              provider.deleteAllMemories();
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              final l10n = context.l10n;
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Close sheet
-              ScaffoldMessenger.of(context).showSnackBar(
+              final cleared = await provider.deleteAllMemories();
+              messenger.showSnackBar(
                 SnackBar(
-                  content: Text(context.l10n.memoryClearedSuccess),
+                  content: Text(cleared ? l10n.memoryClearedSuccess : l10n.somethingWentWrong),
                   backgroundColor: AppStyles.backgroundTertiary,
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,

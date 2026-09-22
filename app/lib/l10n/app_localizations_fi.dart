@@ -436,6 +436,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
+  String get omiButtonActions => 'Omi-painikkeen toiminnot';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
@@ -10100,4 +10103,33 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Ääni on valmis tunnistettavaksi',
+        'saved_sample_awaiting_embedding': 'Näyte tallennettu, äänen käsittelyä tarvitaan vielä',
+        'not_learned': 'Ääntä ei ole opittu',
+        'other': 'Äänen tila tuntematon',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merkitse myös tämän puhujan myöhempi puhe';
+
+  @override
+  String get updateSummaryWithNewNames => 'Päivitä yhteenveto uusilla nimillä';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
 }

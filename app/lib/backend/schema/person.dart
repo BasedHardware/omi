@@ -40,6 +40,7 @@ class Person {
   final List<String>? speechSampleTranscripts;
   final int speechSamplesVersion;
   final int? colorIdx;
+  final String voiceReadiness;
 
   Person({
     required this.id,
@@ -50,6 +51,7 @@ class Person {
     this.speechSampleTranscripts,
     this.speechSamplesVersion = 1,
     this.colorIdx,
+    this.voiceReadiness = 'unknown',
   });
 
   factory Person.fromJson(Map<String, dynamic> json) {
@@ -74,6 +76,7 @@ class Person {
       speechSamples: generated.speechSamples,
       speechSampleTranscripts: generated.speechSampleTranscripts,
       speechSamplesVersion: generated.speechSamplesVersion,
+      voiceReadiness: generated.voiceReadiness,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }
@@ -87,6 +90,7 @@ class Person {
       speechSamples: speechSamples ?? const [],
       speechSampleTranscripts: speechSampleTranscripts,
       speechSamplesVersion: speechSamplesVersion,
+      voiceReadiness: voiceReadiness,
     );
   }
 

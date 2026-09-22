@@ -8,6 +8,7 @@ query parameter). Stubs go through ``testing.import_isolation`` so a stub-fed
 """
 
 import asyncio
+import os
 import types
 import unittest
 from contextlib import contextmanager
@@ -133,8 +134,20 @@ def _make_httpx(captured):
 def loaded_social(captured):
     stubs = _install_stubs()
     stubs["httpx"] = _make_httpx(captured)
-    with stub_modules(stubs):
-        yield load_module_fresh("utils.social", str(_BACKEND / "utils" / "social.py"))
+    # The fetchers fail fast when RapidAPI credentials are unset; this suite
+    # asserts URL construction, so give it a configured-looking environment.
+    env_overrides = {"RAPID_API_HOST": "twt-api.p.rapidapi.com", "RAPID_API_KEY": "test-key"}
+    originals = {name: os.environ.get(name) for name in env_overrides}
+    os.environ.update(env_overrides)
+    try:
+        with stub_modules(stubs):
+            yield load_module_fresh("utils.social", str(_BACKEND / "utils" / "social.py"))
+    finally:
+        for name, value in originals.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 class TwitterHandleEncodingTests(unittest.TestCase):

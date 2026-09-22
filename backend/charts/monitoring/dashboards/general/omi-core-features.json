@@ -1,5 +1,5 @@
 {
-  "description": "User-facing feature health for Omi, grounded only in metric families that exist in production Prometheus. Three journeys carry the real user outcomes; the two sections below them are the subsystems those journeys depend on. Graph rows ship collapsed and every timeseries pins a 5m query interval so the first-paint /api/ds/query batch stays far under the 30s monitor proxy budget; expand a row to load its graphs.",
+  "description": "User-facing feature health for Omi, grounded only in metric families that exist in production Prometheus. Three journeys carry the real user outcomes; the two sections below them are the subsystems those journeys depend on. Conversation shape (length, short share) is a collapsed row: live/desktop/import/integration histograms scrape today, sync histograms do not until backend-sync is added to the Cloud Run exporter \u2014 that panel uses Cloud Logging of omi_sync_intake instead. Graph rows ship collapsed and every timeseries pins a 5m query interval so the first-paint /api/ds/query batch stays far under the 30s monitor proxy budget; expand a row to load its graphs.",
   "graphTooltip": 1,
   "links": [
     {
@@ -2289,6 +2289,191 @@
         }
       ],
       "title": "Push-to-talk (desktop realtime voice) \u2014 transport health",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 45,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Wall-clock duration (finished_at - started_at) at first durable completed persist. Live / desktop / import / integration are scraped today (backend-listen, pusher, Cloud Run backend + desktop-backend). Sync is emitted from Cloud Run backend-sync, which Prometheus does not scrape \u2014 that series is empty until the exporter allowlist grows; use the Cloud Logging panel beside this graph. A 09-19-shaped live incident is a p50 collapse toward tens of seconds. Healthy sync first chunks are ~60s, so sync p50 dropping toward ~11s is the fragment tell, not the <2min share.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 16
+          },
+          "id": 46,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.10, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p10",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.50, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p50",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.90, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p90",
+              "refId": "C"
+            }
+          ],
+          "title": "Conversation length p10 / p50 / p90 by source",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Share of first-completed conversations shorter than 2 minutes, by source. This is the live fragmentation graph: a healthy live p50 of minutes would make a 09-19-shaped live day jump toward 100%. For sync, healthy WAL first chunks are already ~60s, so this line stays high even when assignment is healthy \u2014 read p50 and the Cloud Logging created-vs-merged panel instead. Sync Prometheus series are empty until backend-sync is scraped.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "max": 100,
+              "min": 0,
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 16
+          },
+          "id": 47,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * sum by (source) (rate(omi_conversation_duration_seconds_bucket{le=\"120.0\"}[5m])) / sum by (source) (rate(omi_conversation_duration_seconds_count[5m]))",
+              "legendFormat": "{{source}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Short conversations (< 2 min) by source",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "description": "Sync intake created vs merged, read from Cloud Logging of backend-sync `omi_sync_intake outcome=created|merged`. This is the signal that works today: Prometheus `omi_sync_intake_total` is dark because backend-sync is not in the Cloud Run metrics exporter allowlist (backend + desktop-backend only). Same query as alert omi-sync-intake-fragmented. A 09-19-shaped day is created share approaching 1.0 (one conversation per WAL chunk). Grafana log volume in this panel is the graph; the rows are the raw lines.",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 16
+          },
+          "id": 48,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "googlecloud-logging-datasource",
+                "uid": "deuxlwt1d569sb"
+              },
+              "projectId": "based-hardware",
+              "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync\" AND (textPayload:\"omi_sync_intake outcome=\" OR jsonPayload.message:\"omi_sync_intake outcome=\")",
+              "refId": "A"
+            }
+          ],
+          "title": "Sync intake created vs merged (Cloud Logging \u2014 works today)",
+          "type": "logs"
+        }
+      ],
+      "title": "Conversation shape \u2014 whole conversations vs fragments",
       "type": "row"
     }
   ],

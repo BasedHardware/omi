@@ -570,7 +570,9 @@ class ServerConversation {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'source': source?.toString(),
+      // Cache/webhook payloads use the wire value (for example `sdcard`),
+      // not Dart's enum rendering (`ConversationSource.sdcard`).
+      'source': source?.name,
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
@@ -691,6 +693,24 @@ class ServerConversation {
     }
 
     return lastEndTime.toInt();
+  }
+
+  /// Matches desktop's recoverable-content heuristic: one transcript segment
+  /// with at least this many words is treated as real speech, not ambient noise.
+  static const int substantialTranscriptMinWords = 5;
+
+  /// True when any transcript segment is long enough to plausibly deserve a title.
+  bool get hasSubstantialTranscriptSegment =>
+      transcriptSegments.any((segment) => segment.wordCount >= substantialTranscriptMinWords);
+
+  /// Completed processing, empty title, and a substantial transcript — a silent
+  /// title-pass failure the user can recover with Reprocess. Discarded, locked,
+  /// in-flight, and ambient/short captures stay quiet.
+  bool get isFailedTitleRecoverable {
+    if (discarded || isLocked) return false;
+    if (status != ConversationStatus.completed) return false;
+    if (structured.title.trim().isNotEmpty) return false;
+    return hasSubstantialTranscriptSegment;
   }
 
   /// Check if this conversation has audio files available
