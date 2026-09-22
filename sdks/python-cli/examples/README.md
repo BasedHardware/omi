@@ -9,6 +9,7 @@
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
+* [`agent_quickstart.ko.md`](agent_quickstart.ko.md) — 에이전트를 위한 omi-cli 안내서 (Korean agent guide).
   agents (French agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
