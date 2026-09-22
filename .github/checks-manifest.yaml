@@ -1376,6 +1376,11 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int against booleans, protect null allergen sets, and handle product summaries hermetically"
+  - id: web-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_web_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/web_tools.py", "backend/tests/unit/test_web_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Prevent internal exception leak and sensitive connection details in web retrieval tools"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
