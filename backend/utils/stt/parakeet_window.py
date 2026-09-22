@@ -495,6 +495,24 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 force = False
                 pause = self._pause_requested
             elif self._pause_requested:
+                # A pause is a speech boundary, so the FIRST post after an anchor honours
+                # it immediately — that is how a completed sentence reaches the user
+                # promptly when the speaker stops, and three tests pin it.
+                #
+                # Re-posting the *same* anchor on every subsequent pause is what makes
+                # window size depend on GPU speed. The gate fires finalize() dozens of
+                # times a session; when POSTs return in 7s each pause is serviced on its
+                # own and one anchor gets re-transcribed about seven times, where a
+                # slower GPU coalesces them into one large window. Measured on dev that
+                # was the whole gap between WER 0.158 and 0.242 on identical audio —
+                # each re-transcription can overwrite a better earlier one, because the
+                # last version of a segment wins.
+                #
+                # So a repeat pause on an anchor already posted waits for the ordinary
+                # growth floor. The request stays pending, and silence_flush/idle_flush
+                # above still emit the held sentence if speech has genuinely stopped.
+                if self._anchor_bytes == self._last_post_anchor and received < stepped:
+                    return None
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = False
                 pause = True
