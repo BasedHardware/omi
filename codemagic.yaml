@@ -3083,3 +3083,27 @@ workflows:
     artifacts:
       - dist/*.dmg
       - dist/*.zip
+
+  mobile-store-promote:
+    name: Submit existing iOS build for App Review
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      groups:
+        - appstore_credentials
+    # API starts ignore this. It keeps a normal push from running the workflow.
+    when:
+      changeset:
+        includes:
+          - '.never-auto-trigger-mobile-store-promote'
+    scripts:
+      - name: Submit pinned iOS build for review
+        script: |
+          set -euo pipefail
+          if [ "${CONFIRM:-}" != "submit-for-review" ]; then
+            echo "ABORT: CONFIRM must be submit-for-review" >&2
+            exit 3
+          fi
+          python3 -m pip install --user 'PyJWT==2.10.1' 'cryptography==44.0.2'
+          export PATH="$HOME/Library/Python/3.9/bin:$HOME/Library/Python/3.11/bin:$HOME/Library/Python/3.12/bin:$PATH"
+          python3 scripts/submit_ios_review.py
