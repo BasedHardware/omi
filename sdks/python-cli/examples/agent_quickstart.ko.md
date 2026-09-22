@@ -73,6 +73,70 @@ omi --json local task search "taxes" --include-completed
 
 작업을 완료하거나 삭제할 때는 사용자가 명시적으로 요청한 경우에만 실행하십시오:
 
+사용자가 명시적으로 요청한 경우에만 작업을 완료하거나 삭제하십시오:
+
 ```bash
-omi --json local task complete task_1
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
+
+`omi local screenshot SCREENSHOT_ID --output PATH` 명령은 스크린샷을 디스크에 저장하고 스크립트를 위해 stdout에 JSON을 출력합니다. 스크린샷 ID는 일반적으로 `local search-screen` 또는 `screenshots` 테이블의 SQL 쿼리에서 가져옵니다. Desktop 앱에서 `screenshot_pending`, `screenshot_file_missing` 또는 `screenshot_chunk_corrupted`와 같은 구조화된 오류를 반환하는 경우, JSON 모드는 stderr에 `reason`, `hint` 및 `screenshot_id` 필드를 유지하므로 에이전트가 이전 ID로 재시도하거나 정확한 문제를 보고할 수 있습니다. 비전 도구에 전달하기 전에 `file PATH`로 출력을 검증하십시오.
+
+## 실전 예제: Python 에이전트 루프
+
+```python
+import json
+import subprocess
+from typing import Any
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        # The CLI prints structured errors to stderr in JSON mode:
+        # {"error": "...", "detail": "..."}
+        try:
+            err = json.loads(result.stderr)
+        except json.JSONDecodeError:
+            err = {"error": result.stderr.strip()}
+        raise RuntimeError(f"omi exited {result.returncode}: {err}")
+    return json.loads(result.stdout) if result.stdout.strip() else None
+
+# Read all open action items and mark anything older than 30 days complete.
+from datetime import datetime, timedelta, timezone
+
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+items = omi("action-item", "list", "--open")
+for item in items or []:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## 속도 제한 처리 (Handling rate limits)
+
+기억: 120회/시간. 대화: 25회/시간. 일괄 생성: 15회/시간.
+
+```python
+result = subprocess.run(["omi", "--json", "memory", "create", text], capture_output=True, text=True)
+if result.returncode == 4:                             # rate limited
+    err = json.loads(result.stderr)
+    # err["detail"] looks like: "Retry in 12s. ..."
+    time.sleep(parse_retry_window(err["detail"]) or 60)
+```
+
+## 유용한 팁 (Tips)
+
+* 에이전트가 여러 Omi 계정을 다루는 경우 `--profile <이름>`을 사용하십시오. 각 프로필은 고유한 자격 증명과 API 기본 URL을 가집니다.
+* 로컬 백엔드 테스트에는 `--api-base http://localhost:8080`을 사용하십시오.
+* 단일 실행을 위해 프로필의 로컬 Desktop API 설정을 재정의하려면 `OMI_LOCAL_API_URL` 및 `OMI_LOCAL_TOKEN`을 사용하십시오.
+* 디버깅에는 `--verbose`를 사용하십시오. stdout에 영향을 주지 않고 stderr에 `METHOD path → status (Ns)`를 로깅하므로 JSON 모드가 유효하게 유지됩니다.
+* 파이프를 통해 대화에 콘텐츠를 전달하려면 `--text -`를 사용하십시오:
+  ```bash
+  cat meeting_notes.md | omi conversation create --text - --text-source other_text
+  ```
