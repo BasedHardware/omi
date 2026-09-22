@@ -40,8 +40,8 @@ def convert(source, destination):
             if not isinstance(act, dict):
                 continue
             aid = str(act.get("id", "task"))
-            summary = (act.get("description") or act.get("title") or "Action Item").replace("", " ").replace("
-", " ")
+            raw_summary = act.get("description") or act.get("title") or "Action Item"
+            summary = raw_summary.replace("\r", " ").replace("\n", " ")
             status = "COMPLETED" if act.get("completed") else "NEEDS-ACTION"
             due = format_ical_datetime(act.get("due_date") or act.get("due_at"))
 
@@ -55,11 +55,8 @@ def convert(source, destination):
 
         lines.append("END:VCALENDAR")
 
-        with open(tmp, "w", encoding="utf-8", newline="
-") as f:
-            f.write("
-".join(lines) + "
-")
+        with open(tmp, "w", encoding="utf-8", newline="\r\n") as f:
+            f.write("\r\n".join(lines) + "\r\n")
 
         os.replace(tmp, dest)
     finally:
