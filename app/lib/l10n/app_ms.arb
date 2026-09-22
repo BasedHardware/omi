@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Semua ingatan kini awam",
     "newMemory": "✨ Memori Baru",
     "editMemory": "✏️ Edit Memori",
-    "memoryContentHint": "Saya suka makan ais krim...",
+    "memoryContentHint": "Saya lebih suka mesyuarat pada waktu pagi.",
     "failedToSaveMemory": "Gagal menyimpan. Sila semak sambungan anda.",
     "saveMemory": "Simpan Ingatan",
     "retry": "Cuba Lagi",
@@ -3251,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Suara sedia untuk pengecaman} saved_sample_awaiting_embedding{Sampel disimpan; pemprosesan suara masih diperlukan} not_learned{Suara belum dipelajari} other{Status suara tidak diketahui}}",
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan kemudian daripada penceramah ini",
     "updateSummaryWithNewNames": "Kemas kini ringkasan dengan nama baharu",
-    "syncStatusUnsupportedAudio": "Audio tidak dapat dibaca — tidak boleh disegerakkan"
+    "syncStatusUnsupportedAudio": "Audio tidak dapat dibaca — tidak boleh disegerakkan",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Apa yang boleh kamu lakukan untuk saya?} goal{Bantu saya menetapkan matlamat} activity{Ringkaskan aktiviti terkini saya} improve{Bagaimana saya boleh menjadi lebih baik?} other{}}",
+    "nextWeek": "Minggu depan",
+    "clearSearch": "Kosongkan carian"
 }
