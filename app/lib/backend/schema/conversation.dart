@@ -675,10 +675,7 @@ class ServerConversation {
     // started_at is the streaming-session origin, not this conversation's start,
     // so finishedAt - startedAt over-counts; prefer the transcript span (#4056).
     if (transcriptSegments.isEmpty && finishedAt != null && startedAt != null) {
-      final duration = finishedAt!.difference(startedAt!);
-      // Keep a real but subsecond capture visible as 1s. This is especially
-      // useful for short sync fragments whose transcript ends before 1.0s.
-      return duration.inMicroseconds > 0 ? max(duration.inSeconds, 1) : 0;
+      return finishedAt!.difference(startedAt!).inSeconds;
     }
     return _getDurationInSecondsByTranscripts();
   }
@@ -695,10 +692,7 @@ class ServerConversation {
       }
     }
 
-    // `toInt()` made positive subsecond fragments look like zero-duration
-    // rows, hiding the fact that a capture exists. Preserve the established
-    // truncation for longer spans while surfacing any positive duration.
-    return lastEndTime > 0 ? max(lastEndTime.toInt(), 1) : 0;
+    return lastEndTime.toInt();
   }
 
   /// Check if this conversation has audio files available
