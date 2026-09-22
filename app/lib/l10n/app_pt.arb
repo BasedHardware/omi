@@ -138,6 +138,7 @@
     "offlineSync": "Sincronização Offline",
     "autoSync": "Sincronização automática",
     "autoSyncDescription": "Sincronizar automaticamente as gravações offline quando o seu dispositivo se conectar",
+    "omiButtonActions": "Ações do botão Omi",
     "deviceSettings": "Configurações do dispositivo",
     "integrations": "Integrações",
     "feedbackBug": "Feedback / Bug",
@@ -649,7 +650,7 @@
     "allMemoriesPublicResult": "Todas as memórias são agora públicas",
     "newMemory": "✨ Nova memória",
     "editMemory": "✏️ Editar memória",
-    "memoryContentHint": "Eu gosto de sorvete...",
+    "memoryContentHint": "Prefiro reuniões pela manhã.",
     "failedToSaveMemory": "Falha ao salvar.",
     "saveMemory": "Salvar memória",
     "retry": "Tentar Novamente",
@@ -3285,5 +3286,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Voz pronta para reconhecimento} saved_sample_awaiting_embedding{Amostra salva; processamento de voz ainda necessário} not_learned{Voz não aprendida} other{Estado da voz desconhecido}}",
     "tagSpeakerIncludingLaterSpeech": "Etiquetar também a fala posterior deste locutor",
     "updateSummaryWithNewNames": "Atualizar o resumo com os novos nomes",
-    "syncStatusUnsupportedAudio": "Não foi possível ler o áudio — não pode ser sincronizado"
+    "syncStatusUnsupportedAudio": "Não foi possível ler o áudio — não pode ser sincronizado",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{O que você pode fazer por mim?} goal{Ajude-me a definir uma meta} activity{Resuma minha atividade recente} improve{Como posso melhorar?} other{}}",
+    "nextWeek": "Na próxima semana",
+    "clearSearch": "Limpar pesquisa"
 }

@@ -557,6 +557,7 @@
     "offlineSync": "סינכרון במצב לא מחובר",
     "autoSync": "סנכרון אוטומטי",
     "autoSyncDescription": "סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר",
+    "omiButtonActions": "פעולות כפתור Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "אני אוהב לאכול גלידה...",
+    "memoryContentHint": "אני מעדיף פגישות בבוקר.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10837,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{הקול מוכן לזיהוי} saved_sample_awaiting_embedding{הדגימה נשמרה; עדיין נדרש עיבוד קול} not_learned{הקול לא נלמד} other{מצב הקול אינו ידוע}}",
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
-    "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן"
+    "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
+    "nextWeek": "בשבוע הבא",
+    "clearSearch": "ניקוי החיפוש"
 }
