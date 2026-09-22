@@ -91,6 +91,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 > Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
 > Looking for localized guides? See the [Diné bizaad (Navajo Quickstart)](examples/quickstart.nv.md).
+> Looking for localized guides? See the [🇵🇪 omi-cli Runa Simipi Utqaylla Qallariy (Quechua Quickstart)](examples/quickstart.qu.md).
 
 ## Auth
 
