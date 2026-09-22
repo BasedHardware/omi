@@ -13,3 +13,18 @@ Convert to Todoist:
 ```sh
 python action_items_to_todoist.py action_items.json todoist_tasks.json
 ```
+
+
+## Uploading to Todoist API
+To import the converted tasks into Todoist via the REST API:
+
+```sh
+export TODOIST_TOKEN="your_token_here"
+
+jq -c '.[]' todoist_tasks.json | while read -r task; do
+  curl -s -X POST "https://api.todoist.com/rest/v2/tasks" \
+    -H "Authorization: Bearer $TODOIST_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$task"
+done
+```
