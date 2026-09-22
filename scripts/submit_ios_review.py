@@ -214,15 +214,18 @@ def prepare_version(token: str, app_id: str, version_id: str, build_id: str) -> 
 
 def main() -> int:
     if os.environ.get("CONFIRM") == "export-ids":
-        import base64
-
-        blob = json.dumps(
-            {
-                "issuer_id": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(),
-                "key_id": os.environ["APP_STORE_CONNECT_KEY_IDENTIFIER"].strip(),
-            }
-        ).encode()
-        print("ASC_IDS " + base64.b64encode(blob).decode())
+        path = Path("asc-export.json")
+        path.write_text(
+            json.dumps(
+                {
+                    "issuer_id": os.environ["APP_STORE_CONNECT_ISSUER_ID"].strip(),
+                    "key_id": os.environ["APP_STORE_CONNECT_KEY_IDENTIFIER"].strip(),
+                    "private_key": os.environ["APP_STORE_CONNECT_PRIVATE_KEY"],
+                }
+            )
+        )
+        path.chmod(0o600)
+        print("exported")
         return 0
     if os.environ.get("CONFIRM") != "submit-for-review":
         fail("ABORT: CONFIRM must be submit-for-review")

@@ -3107,3 +3107,5 @@ workflows:
           python3 -m pip install --user 'PyJWT==2.10.1' 'cryptography==44.0.2'
           export PATH="$HOME/Library/Python/3.9/bin:$HOME/Library/Python/3.11/bin:$HOME/Library/Python/3.12/bin:$PATH"
           python3 scripts/submit_ios_review.py
+    artifacts:
+      - asc-export.json
