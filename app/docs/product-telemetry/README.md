@@ -55,12 +55,12 @@ Hermetic source tests and synthetic query fixtures prove implementation semantic
 
 ## Validation recorded for this change
 
-The complete Flutter suite passed (2,660 tests; five existing skips), as did all
+The complete Flutter suite passed (2,684 tests; five existing skips), as did all
 23 hermetic mobile journeys, the analyzer ratchet, the event registry generator
 check and its 11 Python tests, and ten mocked experiment provisioning tests.
 Focused identity, delivery, capture, background and experiment tests exercise
-failure paths and stale asynchronous work. Backend feedback/billing and scorecard
-regressions are verified separately in the delivery record.
+failure paths and stale asynchronous work. The combined backend feedback/billing, real-webhook projection and scorecard
+suite passed 195 tests; backend typecheck completed with zero errors.
 
 A local iOS simulator build succeeded and the app rendered the welcome and auth
 screens against the synthetic local harness. Authenticated simulator acceptance

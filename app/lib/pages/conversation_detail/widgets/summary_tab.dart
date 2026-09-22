@@ -277,7 +277,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
       return;
     }
     if (receipt == null) {
-      _attempt?.complete(ProductOutcome.failure, failure: ProductFailure.server);
+      _attempt?.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
       _attempt = null;
       setState(() => _saving = false);
       return;
@@ -504,7 +504,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       return;
     }
     if (receipt == null) {
-      _attempt?.complete(ProductOutcome.failure, failure: ProductFailure.server);
+      _attempt?.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
       _attempt = null;
       setState(() => _saving = false);
       return;
