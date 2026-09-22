@@ -133,8 +133,41 @@ def test_search_memories_tool_exception_sanitized():
         assert "vector_db_apiKey_secret_leak" not in res
 
 
+def test_get_memories_tool_invalid_temporal_args_sanitized():
+    config = {"configurable": {"user_id": "test_user_123"}}
+    with patch.object(memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")):
+        res = memory_tools.get_memories_tool(as_of="bad_as_of", config=config)
+        assert res == "Error: Invalid temporal read arguments."
+        assert "Invalid as_of timezone detail leaking" not in res
+
+
+def test_search_memories_tool_invalid_temporal_args_sanitized():
+    config = {"configurable": {"user_id": "test_user_123"}}
+    with patch.object(memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")):
+        res = memory_tools.search_memories_tool(query="q", as_of="bad_as_of", config=config)
+        assert res == "Error: Invalid temporal read arguments."
+        assert "Invalid as_of timezone detail leaking" not in res
+
+
+def test_search_memories_tool_invalid_chat_scope_dates_sanitized():
+    config = {"configurable": {"user_id": "test_user_123"}}
+    def _parse_mock(val):
+        if val == "bad_date":
+            raise ValueError("date parse error with secret payload")
+        return None
+
+    with patch.object(memory_tools, "chat_scope_from_config", return_value={"start_date": "bad_date"}), \
+         patch.object(memory_tools, "_parse_aware_iso", side_effect=_parse_mock):
+        res = memory_tools.search_memories_tool(query="q", config=config)
+        assert res == "Error: chat_scope dates invalid."
+        assert "date parse error with secret payload" not in res
+
+
 if __name__ == "__main__":
     test_get_memories_tool_invalid_date_sanitized()
     test_get_memories_tool_db_exception_sanitized()
     test_search_memories_tool_exception_sanitized()
+    test_get_memories_tool_invalid_temporal_args_sanitized()
+    test_search_memories_tool_invalid_temporal_args_sanitized()
+    test_search_memories_tool_invalid_chat_scope_dates_sanitized()
     print("All memory tools sanitization unit tests passed successfully!")
