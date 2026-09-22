@@ -64,7 +64,7 @@ void main() {
 }
 
 ConversationDetailProvider _providerWithConversation() {
-  final startedAt = DateTime(2026, 7, 18, 9).toUtc();
+  final startedAt = DateTime.utc(2026, 7, 18, 9);
   final conversation = ServerConversation(
     id: 'c1',
     createdAt: startedAt,
