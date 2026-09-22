@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Tüm anılar artık genel",
     "newMemory": "✨ Yeni hafıza",
     "editMemory": "✏️ Hafızayı düzenle",
-    "memoryContentHint": "Dondurma yemeyi severim...",
+    "memoryContentHint": "Sabah toplantılarını tercih ederim.",
     "failedToSaveMemory": "Kaydedilemedi. Lütfen bağlantınızı kontrol edin.",
     "saveMemory": "Anıyı Kaydet",
     "retry": "Tekrar Dene",
@@ -3288,5 +3288,8 @@
     "updateSummaryWithNewNames": "Özeti yeni adlarla güncelle",
     "syncStatusUnsupportedAudio": "Ses okunamadı — eşitlenemiyor",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Benim için neler yapabilirsin?} goal{Bir hedef belirlememe yardım et} activity{Son etkinliklerimi özetle} improve{Kendimi nasıl geliştirebilirim?} other{}}",
+    "nextWeek": "Gelecek hafta",
+    "clearSearch": "Aramayı temizle"
 }

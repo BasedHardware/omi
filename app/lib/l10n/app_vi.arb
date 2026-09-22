@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Tất cả ký ức hiện là công khai",
     "newMemory": "✨ Bộ nhớ mới",
     "editMemory": "✏️ Chỉnh sửa bộ nhớ",
-    "memoryContentHint": "Tôi thích ăn kem...",
+    "memoryContentHint": "Tôi thích họp vào buổi sáng.",
     "failedToSaveMemory": "Không thể lưu. Vui lòng kiểm tra kết nối của bạn.",
     "saveMemory": "Lưu ký ức",
     "retry": "Thử lại",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Cập nhật tóm tắt với tên mới",
     "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Bạn có thể giúp gì cho tôi?} goal{Giúp tôi đặt mục tiêu} activity{Tóm tắt hoạt động gần đây của tôi} improve{Tôi có thể cải thiện như thế nào?} other{}}",
+    "nextWeek": "Tuần tới",
+    "clearSearch": "Xóa tìm kiếm"
 }

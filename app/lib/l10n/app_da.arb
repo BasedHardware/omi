@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Alle hukommelser er nu offentlige",
     "newMemory": "✨ Ny hukommelse",
     "editMemory": "✏️ Rediger hukommelse",
-    "memoryContentHint": "Indtast hukommelsesindhold",
+    "memoryContentHint": "Jeg foretrækker møder om morgenen.",
     "failedToSaveMemory": "Kunne ikke gemme hukommelse",
     "saveMemory": "Gem hukommelse",
     "retry": "Prøv igen",
@@ -3295,5 +3295,8 @@
     "updateSummaryWithNewNames": "Opdater resuméet med de nye navne",
     "syncStatusUnsupportedAudio": "Lyden kunne ikke læses — kan ikke synkroniseres",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Hvad kan du gøre for mig?} goal{Hjælp mig med at sætte et mål} activity{Opsummer mine seneste aktiviteter} improve{Hvordan kan jeg blive bedre?} other{}}",
+    "nextWeek": "Næste uge",
+    "clearSearch": "Ryd søgning"
 }

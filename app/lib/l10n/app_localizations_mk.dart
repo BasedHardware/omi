@@ -2155,7 +2155,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get alwaysInContext => 'Секогаш во контекст';
 
   @override
-  String get memoryContentHint => 'Волам да јадам сладолед...';
+  String get memoryContentHint => 'Претпочитам утрински состаноци.';
 
   @override
   String get failedToSaveMemory => 'Не успеав да зачувам. Ве молиме проверете го вашиот врска.';
@@ -10178,4 +10178,25 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Што можеш да направиш за мене?',
+        'goal': 'Помогни ми да поставам цел',
+        'activity': 'Сумирај ги моите неодамнешни активности',
+        'improve': 'Како можам да се подобрам?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Следната недела';
+
+  @override
+  String get clearSearch => 'Исчисти го пребарувањето';
 }

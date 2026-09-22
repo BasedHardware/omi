@@ -34,6 +34,8 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/pages/chat/widgets/chat_starters.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -241,7 +243,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
         _observeMessagesForAutoScroll(provider);
-
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -282,17 +283,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               ],
                             )
                           : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 100.0),
-                                    child: Text(
-                                      connectivityProvider.isConnected
-                                          ? context.l10n.noMessagesYet
-                                          : context.l10n.noInternetConnection,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
+                              ? ChatStarters(
+                                  isConnected: connectivityProvider.isConnected,
+                                  hasExistingData: _chatScope != null ||
+                                      (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
+                                      (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false) ||
+                                      SharedPreferencesUtil().cachedMemories.isNotEmpty ||
+                                      SharedPreferencesUtil().pendingMemories.isNotEmpty,
+                                  onSelected: (prompt) {
+                                    textController.text = prompt;
+                                    textController.selection = TextSelection.collapsed(offset: prompt.length);
+                                    textFieldFocusNode.requestFocus();
+                                    HapticFeedback.selectionClick();
+                                  },
                                 )
                               : LayoutBuilder(
                                   builder: (context, constraints) {
@@ -996,15 +999,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
     if (provider.sendingMessage) return;
-
     String? currentContext = _selectedContext;
     setState(() {
       _selectedContext = null;
     });
-
     // Remove focus from text field
     FocusManager.instance.primaryFocus?.unfocus();
-
     if (currentContext != null) {
       text = 'Context: "$currentContext"\n\n$text';
     }

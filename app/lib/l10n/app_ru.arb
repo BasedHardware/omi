@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Все воспоминания теперь публичные",
     "newMemory": "✨ Новая память",
     "editMemory": "✏️ Редактировать память",
-    "memoryContentHint": "Я люблю есть мороженое...",
+    "memoryContentHint": "Я предпочитаю утренние встречи.",
     "failedToSaveMemory": "Не удалось сохранить. Пожалуйста, проверьте подключение.",
     "saveMemory": "Сохранить воспоминание",
     "retry": "Повторить",
@@ -3288,5 +3288,8 @@
     "updateSummaryWithNewNames": "Обновить сводку с новыми именами",
     "syncStatusUnsupportedAudio": "Не удалось прочитать аудио — синхронизация невозможна",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Что ты можешь для меня сделать?} goal{Помоги мне поставить цель} activity{Подведи итог моей недавней активности} improve{Как мне стать лучше?} other{}}",
+    "nextWeek": "На следующей неделе",
+    "clearSearch": "Очистить поиск"
 }

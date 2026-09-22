@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Tutti i ricordi sono ora pubblici",
     "newMemory": "✨ Nuova memoria",
     "editMemory": "✏️ Modifica memoria",
-    "memoryContentHint": "Mi piace mangiare il gelato...",
+    "memoryContentHint": "Preferisco le riunioni al mattino.",
     "failedToSaveMemory": "Impossibile salvare. Controlla la tua connessione.",
     "saveMemory": "Salva Ricordo",
     "retry": "Riprova",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Aggiorna il riepilogo con i nuovi nomi",
     "syncStatusUnsupportedAudio": "Audio illeggibile — impossibile sincronizzare",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Cosa puoi fare per me?} goal{Aiutami a fissare un obiettivo} activity{Riassumi le mie attività recenti} improve{Come posso migliorare?} other{}}",
+    "nextWeek": "La prossima settimana",
+    "clearSearch": "Cancella ricerca"
 }

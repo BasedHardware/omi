@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Alla minnen är nu offentliga",
     "newMemory": "✨ Nytt minne",
     "editMemory": "✏️ Redigera minne",
-    "memoryContentHint": "Jag gillar att äta glass...",
+    "memoryContentHint": "Jag föredrar möten på morgonen.",
     "failedToSaveMemory": "Det gick inte att spara. Kontrollera din anslutning.",
     "saveMemory": "Spara minne",
     "retry": "Försök igen",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Uppdatera sammanfattningen med de nya namnen",
     "syncStatusUnsupportedAudio": "Ljudet kunde inte läsas — kan inte synkroniseras",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
+    "nextWeek": "Nästa vecka",
+    "clearSearch": "Rensa sökning"
 }

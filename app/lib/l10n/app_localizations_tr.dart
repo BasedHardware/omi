@@ -2153,7 +2153,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get alwaysInContext => 'Her zaman bağlamda';
 
   @override
-  String get memoryContentHint => 'Dondurma yemeyi severim...';
+  String get memoryContentHint => 'Sabah toplantılarını tercih ederim.';
 
   @override
   String get failedToSaveMemory => 'Kaydedilemedi. Lütfen bağlantınızı kontrol edin.';
@@ -10137,4 +10137,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Benim için neler yapabilirsin?',
+        'goal': 'Bir hedef belirlememe yardım et',
+        'activity': 'Son etkinliklerimi özetle',
+        'improve': 'Kendimi nasıl geliştirebilirim?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Gelecek hafta';
+
+  @override
+  String get clearSearch => 'Aramayı temizle';
 }
