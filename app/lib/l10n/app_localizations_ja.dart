@@ -2108,7 +2108,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get alwaysInContext => '常にコンテキストに含む';
 
   @override
-  String get memoryContentHint => 'アイスクリームが好き...';
+  String get memoryContentHint => '会議は午前中がいいです。';
 
   @override
   String get failedToSaveMemory => '保存に失敗しました。接続を確認してください。';
@@ -9948,4 +9948,31 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => '音声を読み取れません — 同期できません';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'どんなことを手伝ってくれる？',
+        'goal': '目標を立てるのを手伝って',
+        'activity': '最近の活動をまとめて',
+        'improve': 'どうすればもっと成長できる？',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '来週';
+
+  @override
+  String get clearSearch => '検索をクリア';
 }
