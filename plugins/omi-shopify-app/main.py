@@ -131,8 +131,8 @@ def shopify_api_request(
             return {"error": error_msg}
         
         return response.json() if response.content else {"success": True}
-    except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+    except requests.RequestException:
+        return {"error": "Request failed"}
 
 
 def shopify_fetch_all_pages(
@@ -844,8 +844,8 @@ async def tool_get_analytics(request: Request):
         
         return ChatToolResponse(result=result)
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to get analytics: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to get analytics")
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -918,8 +918,8 @@ async def tool_get_orders(request: Request):
         
         return ChatToolResponse(result="\n".join(lines))
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to get orders")
 
 
 @app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1037,8 +1037,8 @@ async def tool_get_order_details(request: Request):
         
         return ChatToolResponse(result=result_text)
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to get order details")
 
 
 def match_products_by_title(all_products, title):
@@ -1209,9 +1209,7 @@ async def tool_create_order(request: Request):
             print(f"🔍 DEBUG: tokens={tokens is not None}")
         except Exception as e:
             print(f"❌ Exception getting tokens: {e}")
-            import traceback
-            traceback.print_exc()
-            return ChatToolResponse(error=f"Auth error: {str(e)}")
+            return ChatToolResponse(error="Authentication error")
         
         if not tokens:
             print(f"❌ No Shopify tokens found")
@@ -1793,8 +1791,8 @@ async def tool_create_order(request: Request):
         print(f"🛒 SUCCESS: Created order {order_name}")
         return ChatToolResponse(result=response_text)
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to create order: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to create order")
 
 
 @app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1852,8 +1850,8 @@ async def tool_get_customers(request: Request):
         
         return ChatToolResponse(result="\n".join(lines))
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to get customers: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to get customers")
 
 
 @app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1947,8 +1945,8 @@ async def tool_create_customer(request: Request):
         print(f"👤 SUCCESS: Created customer {customer_id}")
         return ChatToolResponse(result=response_text)
     
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to create customer: {str(e)}")
+    except Exception:
+        return ChatToolResponse(error="Failed to create customer")
 
 
 # ============================================
