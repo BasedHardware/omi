@@ -1807,6 +1807,100 @@
         "c8-type-extension"
       ],
       "correlation": null
+    },
+    {
+      "id": "appReviewOpportunity",
+      "wire_name": "App Review Opportunity",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        },
+        "decision": {
+          "type": "enum",
+          "wire_name": "decision",
+          "values": [
+            "eligible",
+            "not_ios_or_android",
+            "storage_error",
+            "not_familiar",
+            "migration_cooldown",
+            "cooldown",
+            "budget_exhausted",
+            "version_already_attempted",
+            "session_already_attempted",
+            "lifecycle_not_appropriate",
+            "lifecycle_changed",
+            "availability_error",
+            "unavailable",
+            "request_error"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appReviewRequestAttempted",
+      "wire_name": "App Review Request Attempted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appReviewRequestFinished",
+      "wire_name": "App Review Request Finished",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "returned",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
     }
   ]
 }
