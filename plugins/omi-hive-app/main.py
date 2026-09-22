@@ -107,10 +107,10 @@ def hive_graphql_request(
         return {"errors": [{"message": "Request timed out. Please try again."}]}
     except requests.RequestException as e:
         print(f"🐝 Hive Request Error: {e}")
-        return {"errors": [{"message": f"Request failed: {str(e)}"}]}
+        return {"errors": [{"message": "API request failed"}]}
     except Exception as e:
         print(f"🐝 Hive Unexpected Error: {e}")
-        return {"errors": [{"message": f"Unexpected error: {str(e)}"}]}
+        return {"errors": [{"message": "Unexpected error occurred"}]}
 
 
 def get_graphql_error(result: Dict) -> Optional[str]:
@@ -193,8 +193,8 @@ def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict]
             return {"errors": [{"message": f"HTTP {response.status_code}"}]}
 
     except Exception as e:
-        print(f"🐝 Hive REST Exception: {type(e).__name__}")
-        return {"errors": [{"message": type(e).__name__}]}
+        print(f"🐝 Hive REST Exception: {e}")
+        return {"errors": [{"message": "API request failed"}]}
 
 
 def hive_api_request(uid: str, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
