@@ -13,3 +13,7 @@ Convert to CSV:
 ```sh
 python screen_history_to_csv.py screen_history.json screen_history.csv
 ```
+
+
+## Privacy Considerations
+Screen history exports may contain sensitive on-screen information (passwords, private messages, personal data). Store exported CSV files in secure locations with appropriate access controls and avoid committing raw exports to public repositories.

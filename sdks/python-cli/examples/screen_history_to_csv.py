@@ -4,11 +4,10 @@ import os
 import sys
 from pathlib import Path
 
-FIELDS = ("id", "timestamp", "app_name", "window_title", "text", "summary")
+FIELDS = ("id", "timestamp", "app_name", "window_title", "text")
 
 
 def spreadsheet_text(value):
-    """Render one exported field as spreadsheet-safe text."""
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -38,12 +37,11 @@ def convert(source, destination):
                 if not isinstance(item, dict):
                     continue
                 row = [
-                    item.get("id", ""),
+                    item.get("screenshot_id") or item.get("id") or "",
                     item.get("timestamp") or item.get("created_at") or "",
                     spreadsheet_text(item.get("app_name") or item.get("app")),
                     spreadsheet_text(item.get("window_title") or item.get("title")),
-                    spreadsheet_text(item.get("text") or item.get("ocr_text") or item.get("content")),
-                    spreadsheet_text(item.get("summary") or item.get("overview")),
+                    spreadsheet_text(item.get("ocr_preview") or item.get("text") or item.get("ocr_text") or item.get("content")),
                 ]
                 writer.writerow(row)
 
