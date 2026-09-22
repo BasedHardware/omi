@@ -4,26 +4,25 @@ import os
 import sys
 from pathlib import Path
 
-FIELDS = ("id", "content", "category", "visibility", "tags", "created_at")
+FIELDS = ["id", "content", "category", "visibility", "tags", "created_at"]
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
-
-def spreadsheet_text(value):
-    """Render one exported field as spreadsheet-safe text."""
-    if value is None:
+def neutralize_formula(val):
+    if val is None:
         return ""
-    if not isinstance(value, str):
-        value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
-        return "'" + value
-    return value
-
+    if isinstance(val, (list, tuple)):
+        val = ",".join(str(v) for v in val)
+    s = str(val)
+    if s.startswith(FORMULA_PREFIXES):
+        return "'" + s
+    return s
 
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("memories", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected the JSON array from omi --json memory list")
+        raise ValueError("Expected JSON array from 'omi --json memory list'")
 
     dest = Path(destination)
     if dest.exists():
@@ -31,22 +30,21 @@ def convert(source, destination):
 
     tmp = dest.with_suffix(dest.suffix + ".partial")
     try:
-        with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f, lineterminator="\r\n")
+        with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
             writer.writerow(FIELDS)
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 row = [
-                    item.get("id", ""),
-                    spreadsheet_text(item.get("content") or item.get("text") or ""),
-                    spreadsheet_text(item.get("category") or ""),
-                    spreadsheet_text(item.get("visibility") or ""),
-                    spreadsheet_text(item.get("tags") or []),
-                    item.get("created_at") or "",
+                    neutralize_formula(item.get("id")),
+                    neutralize_formula(item.get("content") or item.get("text")),
+                    neutralize_formula(item.get("category") or "general"),
+                    neutralize_formula(item.get("visibility") or "private"),
+                    neutralize_formula(item.get("tags") or []),
+                    neutralize_formula(item.get("created_at")),
                 ]
                 writer.writerow(row)
-
         os.replace(tmp, dest)
     finally:
         if tmp.exists():
@@ -55,9 +53,12 @@ def convert(source, destination):
             except OSError:
                 pass
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python memories_to_csv.py <source.json> <destination.csv>", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    try:
+        convert(sys.argv[1], sys.argv[2])
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
