@@ -442,7 +442,7 @@ async def home(request: Request, uid: Optional[str] = None):
         "user_profile": user_profile,
         "teams": teams,
         "default_team": default_team,
-        "oauth_url": f"/auth/linear?uid={uid}"
+        "oauth_url": f"/auth/linear?uid={urllib.parse.quote(uid, safe='')}"
     })
 
 
@@ -516,7 +516,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
     )
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -537,7 +537,7 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 async def disconnect_linear(uid: str):
     """Disconnect Linear account."""
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================

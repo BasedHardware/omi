@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "আমি আইসক্রিম খেতে পছন্দ করি...",
+    "memoryContentHint": "আমি সকালে মিটিং করতে পছন্দ করি।",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10838,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{কণ্ঠ শনাক্তকরণের জন্য প্রস্তুত} saved_sample_awaiting_embedding{নমুনা সংরক্ষিত, কণ্ঠ প্রক্রিয়াকরণের অপেক্ষায়} not_learned{কণ্ঠ শেখা হয়নি} other{কণ্ঠের অবস্থা অজানা}}",
     "tagSpeakerIncludingLaterSpeech": "এই বক্তার পরবর্তী কথাও ট্যাগ করুন",
     "updateSummaryWithNewNames": "নতুন নাম দিয়ে সারাংশ আপডেট করুন",
-    "syncStatusUnsupportedAudio": "অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়"
+    "syncStatusUnsupportedAudio": "অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{তুমি আমার জন্য কী করতে পারো?} goal{আমাকে একটি লক্ষ্য নির্ধারণে সাহায্য করো} activity{আমার সাম্প্রতিক কাজের সারসংক্ষেপ দাও} improve{আমি কীভাবে উন্নতি করতে পারি?} other{}}",
+    "nextWeek": "পরের সপ্তাহে",
+    "clearSearch": "অনুসন্ধান মুছুন"
 }

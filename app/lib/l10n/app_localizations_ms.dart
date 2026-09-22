@@ -2155,7 +2155,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get alwaysInContext => 'Sentiasa dalam konteks';
 
   @override
-  String get memoryContentHint => 'Saya suka makan ais krim...';
+  String get memoryContentHint => 'Saya lebih suka mesyuarat pada waktu pagi.';
 
   @override
   String get failedToSaveMemory => 'Gagal menyimpan. Sila semak sambungan anda.';
@@ -10145,4 +10145,31 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Apa yang boleh kamu lakukan untuk saya?',
+        'goal': 'Bantu saya menetapkan matlamat',
+        'activity': 'Ringkaskan aktiviti terkini saya',
+        'improve': 'Bagaimana saya boleh menjadi lebih baik?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Minggu depan';
+
+  @override
+  String get clearSearch => 'Kosongkan carian';
 }
