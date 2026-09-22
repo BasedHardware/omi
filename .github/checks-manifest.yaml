@@ -114,6 +114,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
+  - id: linear-error-sanitization-tests
+    command: ["python3", "plugins/omi-linear-app/test_error_sanitization.py"]
+    triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "linear chat tool handlers and linear_graphql_request must sanitize error messages and prevent raw exception details from leaking"
   - id: ms365-calendar-pagination-tests
     command: ["python3", "plugins/omi-ms365-app/test_calendar_pagination.py"]
     triggers: ["plugins/omi-ms365-app/**"]
