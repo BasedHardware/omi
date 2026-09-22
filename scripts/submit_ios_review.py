@@ -63,13 +63,153 @@ def call(token: str, method: str, path: str, body: dict | None = None) -> tuple[
 def apple_error(payload: dict) -> str:
     errors = payload.get("errors") or []
     if not errors:
-        return json.dumps(payload)[:400]
+        return json.dumps(payload)[:800]
     parts = []
     for err in errors[:4]:
-        parts.append(
-            f"{err.get('status')} {err.get('code')} {err.get('title')}: {err.get('detail')}"
-        )
+        line = f"{err.get('status')} {err.get('code')} {err.get('title')}: {err.get('detail')}"
+        associated = (err.get("meta") or {}).get("associatedErrors") or {}
+        if associated:
+            line += " associated=" + json.dumps(associated)[:800]
+        parts.append(line)
     return " | ".join(parts)
+
+
+def ok(code: int) -> bool:
+    return code in (200, 201, 204)
+
+
+def previous_live_version(token: str, app_id: str, current_id: str) -> dict | None:
+    query = urllib.parse.urlencode({"filter[platform]": "IOS", "limit": "20"})
+    code, payload = call(token, "GET", f"/v1/apps/{app_id}/appStoreVersions?{query}")
+    if code != 200:
+        print(f"previous version lookup {code} {apple_error(payload)}")
+        return None
+    live = [
+        item
+        for item in payload.get("data") or []
+        if item.get("id") != current_id
+        and (item.get("attributes") or {}).get("appStoreState") == "READY_FOR_SALE"
+    ]
+    return live[0] if live else None
+
+
+def copy_localizations(token: str, source_id: str, dest_id: str) -> None:
+    code, source = call(token, "GET", f"/v1/appStoreVersions/{source_id}/appStoreVersionLocalizations?limit=20")
+    if not ok(code):
+        print(f"source localizations {code} {apple_error(source)}")
+        return
+    code, dest = call(token, "GET", f"/v1/appStoreVersions/{dest_id}/appStoreVersionLocalizations?limit=20")
+    if not ok(code):
+        print(f"dest localizations {code} {apple_error(dest)}")
+        return
+    existing = {
+        (item.get("attributes") or {}).get("locale"): item
+        for item in dest.get("data") or []
+    }
+    fields = ("description", "keywords", "marketingUrl", "promotionalText", "supportUrl", "whatsNew")
+    for item in source.get("data") or []:
+        attrs = item.get("attributes") or {}
+        locale = attrs.get("locale")
+        copied = {key: attrs.get(key) for key in fields if attrs.get(key)}
+        copied["whatsNew"] = copied.get("whatsNew") or "Bug fixes and improvements."
+        if locale in existing:
+            code, patched = call(
+                token,
+                "PATCH",
+                f"/v1/appStoreVersionLocalizations/{existing[locale]['id']}",
+                {"data": {"type": "appStoreVersionLocalizations", "id": existing[locale]["id"], "attributes": copied}},
+            )
+        else:
+            code, patched = call(
+                token,
+                "POST",
+                "/v1/appStoreVersionLocalizations",
+                {
+                    "data": {
+                        "type": "appStoreVersionLocalizations",
+                        "attributes": {"locale": locale, **copied},
+                        "relationships": {
+                            "appStoreVersion": {"data": {"type": "appStoreVersions", "id": dest_id}}
+                        },
+                    }
+                },
+            )
+        print(f"localization {locale} {code}")
+        if not ok(code):
+            print(apple_error(patched))
+
+
+def copy_review_detail(token: str, source_id: str, dest_id: str) -> None:
+    code, current = call(token, "GET", f"/v1/appStoreVersions/{dest_id}/appStoreReviewDetail")
+    if ok(code) and current.get("data"):
+        print("review detail already present")
+        return
+    code, source = call(token, "GET", f"/v1/appStoreVersions/{source_id}/appStoreReviewDetail")
+    if not ok(code) or not source.get("data"):
+        print(f"source review detail {code} {apple_error(source)}")
+        return
+    attrs = dict((source.get("data") or {}).get("attributes") or {})
+    attrs.pop("appStoreReviewAttachments", None)
+    code, created = call(
+        token,
+        "POST",
+        "/v1/appStoreReviewDetails",
+        {
+            "data": {
+                "type": "appStoreReviewDetails",
+                "attributes": attrs,
+                "relationships": {
+                    "appStoreVersion": {"data": {"type": "appStoreVersions", "id": dest_id}}
+                },
+            }
+        },
+    )
+    print(f"review detail copy {code}")
+    if not ok(code):
+        print(apple_error(created))
+
+
+def mark_encryption(token: str, build_id: str) -> None:
+    code, build = call(token, "GET", f"/v1/builds/{build_id}")
+    if not ok(code):
+        print(f"build read {code} {apple_error(build)}")
+        return
+    current = (build.get("data") or {}).get("attributes") or {}
+    if current.get("usesNonExemptEncryption") is not None:
+        print(f"encryption already set {current.get('usesNonExemptEncryption')}")
+        return
+    code, patched = call(
+        token,
+        "PATCH",
+        f"/v1/builds/{build_id}",
+        {
+            "data": {
+                "type": "builds",
+                "id": build_id,
+                "attributes": {"usesNonExemptEncryption": False},
+            }
+        },
+    )
+    print(f"encryption patch {code}")
+    if not ok(code):
+        print(apple_error(patched))
+
+
+def prepare_version(token: str, app_id: str, version_id: str, build_id: str) -> None:
+    code, version = call(token, "GET", f"/v1/appStoreVersions/{version_id}")
+    state = ((version.get("data") or {}).get("attributes") or {}).get("appStoreState")
+    print(f"version state before prepare {state}")
+    previous = previous_live_version(token, app_id, version_id)
+    if previous:
+        print(f"copying metadata from {(previous.get('attributes') or {}).get('versionString')}")
+        copy_localizations(token, previous["id"], version_id)
+        copy_review_detail(token, previous["id"], version_id)
+    else:
+        print("no live version to copy")
+    mark_encryption(token, build_id)
+    code, version = call(token, "GET", f"/v1/appStoreVersions/{version_id}")
+    state = ((version.get("data") or {}).get("attributes") or {}).get("appStoreState")
+    print(f"version state after prepare {state}")
 
 
 def main() -> int:
@@ -167,6 +307,8 @@ def main() -> int:
             fail(f"ABORT: create version {code} {apple_error(created)}")
         version_id = created["data"]["id"]
         print(f"created version {version} id {version_id} releaseType MANUAL")
+
+    prepare_version(token, app_id, version_id, build["id"])
 
     code, submission = call(
         token,
