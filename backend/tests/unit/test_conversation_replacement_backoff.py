@@ -286,6 +286,35 @@ def test_default_intent_still_treats_empty_over_existing_rows_as_a_retraction():
     assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
 
 
+def test_gate_free_retraction_over_existing_rows_commits_instead_of_asserting(monkeypatch):
+    """Sync-bridge donor retraction must retract live rows without the exclusive gate.
+
+    ``claim_destructive_gate=False`` is the production sync-bridge path. Before
+    the empty-replacement commit-id site accepted a missing token, this call
+    raised a bare AssertionError and the donor never converged.
+    """
+
+    db = _extraction_db()
+    items = _extracted_items()
+    replace_conversation_sourced_memories(UID, CONVERSATION_ID, items, db_client=db)
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    monkeypatch.setattr(canonical_adapter, "purge_canonical_memory_projections", lambda *a, **k: None)
+
+    result = replace_conversation_sourced_memories(
+        UID,
+        CONVERSATION_ID,
+        [],
+        db_client=db,
+        claim_destructive_gate=False,
+    )
+
+    assert result["retracted_memory_ids"] == [items[0]["id"]]
+    assert result["committed_memory_ids"] == []
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.tombstoned.value
+    assert db.docs[f"users/{UID}/memory_state/apply_control"]["source_generation"] == 3
+
+
 def test_unknown_empty_set_intent_is_rejected():
     with pytest.raises(ValueError, match="empty_set_intent"):
         replace_conversation_sourced_memories(

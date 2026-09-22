@@ -75,6 +75,8 @@ class TranscriptSegment(BaseModel):
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
+    # Cleared atomically on the first manual review; never authorizes teaching.
+    speaker_match_source: SkipJsonSchema[Optional[str]] = None
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # In-memory only: True when neither speaker nor speaker_id was in the
@@ -238,6 +240,8 @@ class TranscriptSegment(BaseModel):
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
                 return a, b
             if b.stt_provider != a.stt_provider:
+                return a, b
+            if b.speaker_match_source != a.speaker_match_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b

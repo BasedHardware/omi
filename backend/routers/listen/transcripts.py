@@ -27,7 +27,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
-from utils.speaker_identification import detect_speaker_from_text
+from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
@@ -517,11 +517,21 @@ class TranscriptProcessor:
                     )
                 except asyncio.QueueFull:
                     pass
-            name = detect_speaker_from_text(segment.text, language=self.host.language)
-            if not name:
+            detection = detect_speaker_introduction(segment.text, language=self.host.language)
+            if not detection:
+                continue
+            name = detection.name
+            # The owner is identified by voice, never by hearing their own name: minting
+            # a person for it produced a second "David" alongside "David (You)".
+            owner_name = await speaker.resolve_owner_name()
+            if owner_name and name.lower() == owner_name.lower():
                 continue
             person = await self.host.persistence.call(user_db.get_person_by_name, self.host.request.uid, name)
-            person_id = person['id'] if person else (str(uuid.uuid4()) if self.host.request.create_speakers else None)
+            # Only an explicit self-introduction may create a person. A bare copula
+            # ("I'm Chinese") still resolves one the user already has, so a real name
+            # keeps working, but it can no longer fill the picker with regex guesses.
+            may_create = self.host.request.create_speakers and detection.explicit
+            person_id = person['id'] if person else (str(uuid.uuid4()) if may_create else None)
             if person_id and not person:
                 await self.host.persistence.call(
                     user_db.create_person,

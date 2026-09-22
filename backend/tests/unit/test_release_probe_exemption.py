@@ -57,3 +57,9 @@ def test_desktop_gates_exempt_only_the_probe_uid() -> None:
     # deferral) sit behind the exemption guard.
     guarded = process_source.count('and not probe_uid')
     assert guarded == 3, f'expected 3 exempted desktop gates, found {guarded}'
+    # The discard verdict is a fourth desktop post-processing gate: the probe
+    # lane's terminal contract completes only through a kept conversation, so
+    # both of its verdicts (the LLM discard decision and the empty-title
+    # fallback) must skip for the probe uid (run 35583992730).
+    assert 'if is_release_probe_uid(uid):\n            discarded = False' in process_source
+    assert "structured.title == '' and not is_release_probe_uid(uid)" in process_source

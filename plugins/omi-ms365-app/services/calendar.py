@@ -1,10 +1,34 @@
 """Outlook Calendar operations via Microsoft Graph."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from services.graph_client import GraphClient
+
+
+def _normalize_attendees(attendees: Any) -> list[str]:
+    """Normalize attendee input (single string, comma/semicolon-separated string, or list) into a list of emails."""
+    if not attendees:
+        return []
+    if isinstance(attendees, str):
+        return [a.strip() for a in re.split(r"[,;]", attendees) if a.strip()]
+    if isinstance(attendees, (list, tuple, set)):
+        result: list[str] = []
+        for item in attendees:
+            if isinstance(item, str):
+                for p in re.split(r"[,;]", item):
+                    if p.strip():
+                        result.append(p.strip())
+            elif isinstance(item, dict):
+                addr = item.get("address")
+                if not addr and isinstance(item.get("emailAddress"), dict):
+                    addr = item["emailAddress"].get("address")
+                if addr and str(addr).strip():
+                    result.append(str(addr).strip())
+        return result
+    return []
 
 
 def _slim_event(e: dict[str, Any]) -> dict[str, Any]:
@@ -39,8 +63,12 @@ MAX_EVENTS = 500
 
 
 async def list_upcoming(user_id: str, days: int = 1, limit: int = MAX_EVENTS) -> list[dict[str, Any]]:
+    try:
+        safe_days = max(1, min(int(days), 365))
+    except (ValueError, TypeError):
+        safe_days = 1
     start = datetime.now(timezone.utc)
-    end = start + timedelta(days=days)
+    end = start + timedelta(days=safe_days)
     try:
         limit = max(1, min(int(limit), MAX_EVENTS))
     except (ValueError, TypeError):
@@ -65,22 +93,24 @@ async def create_event(
     start_iso: str,
     end_iso: str,
     *,
-    attendees: list[str] | None = None,
+    attendees: list[str] | str | None = None,
     body: str = "",
     online: bool = True,
     timezone_str: str = "UTC",
 ) -> dict[str, Any]:
+    is_online = online is True or str(online).lower() in ("true", "1", "yes")
     payload: dict[str, Any] = {
         "subject": subject,
         "body": {"contentType": "HTML", "content": body},
         "start": {"dateTime": start_iso, "timeZone": timezone_str},
         "end": {"dateTime": end_iso, "timeZone": timezone_str},
-        "isOnlineMeeting": online,
-        "onlineMeetingProvider": "teamsForBusiness" if online else None,
+        "isOnlineMeeting": is_online,
+        "onlineMeetingProvider": "teamsForBusiness" if is_online else None,
     }
-    if attendees:
+    norm_attendees = _normalize_attendees(attendees)
+    if norm_attendees:
         payload["attendees"] = [
-            {"emailAddress": {"address": a}, "type": "required"} for a in attendees
+            {"emailAddress": {"address": a}, "type": "required"} for a in norm_attendees
         ]
 
     async with GraphClient(user_id) as g:
@@ -90,16 +120,25 @@ async def create_event(
 
 async def find_free_slots(
     user_id: str,
-    duration_minutes: int,
-    attendees: list[str],
+    duration_minutes: int = 30,
+    attendees: list[str] | str | None = None,
     *,
     within_days: int = 5,
 ) -> list[dict[str, Any]]:
+    try:
+        safe_within_days = max(1, min(int(within_days), 60))
+    except (ValueError, TypeError):
+        safe_within_days = 5
+    try:
+        safe_duration = max(1, min(int(duration_minutes), 1440))
+    except (ValueError, TypeError):
+        safe_duration = 30
     start = datetime.now(timezone.utc)
-    end = start + timedelta(days=within_days)
+    end = start + timedelta(days=safe_within_days)
+    norm_attendees = _normalize_attendees(attendees)
     payload = {
         "attendees": [
-            {"emailAddress": {"address": a}, "type": "required"} for a in attendees
+            {"emailAddress": {"address": a}, "type": "required"} for a in norm_attendees
         ],
         "timeConstraint": {
             "timeslots": [
@@ -109,7 +148,7 @@ async def find_free_slots(
                 }
             ]
         },
-        "meetingDuration": f"PT{duration_minutes}M",
+        "meetingDuration": f"PT{safe_duration}M",
         "maxCandidates": 10,
     }
     async with GraphClient(user_id) as g:

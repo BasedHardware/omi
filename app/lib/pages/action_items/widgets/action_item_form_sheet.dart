@@ -34,6 +34,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   late TextEditingController _textController;
   late bool _isCompleted;
   DateTime? _selectedDueDate;
+  bool _isSaving = false;
+  bool _saveFailed = false;
 
   @override
   void initState() {
@@ -56,121 +58,74 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     super.dispose();
   }
 
-  void _saveActionItem() async {
-    if (_textController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.actionItemDescriptionEmpty), backgroundColor: Colors.red));
-      return;
-    }
-
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-
-    Navigator.pop(context);
-
-    if (widget.isEditing) {
-      // Editing existing item
-      String newDescription = _textController.text.trim();
-      bool descriptionChanged = newDescription != widget.actionItem!.description;
-      // Compare due dates - handle null cases explicitly
-      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
-          (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
-          (_selectedDueDate != null &&
-              widget.actionItem!.dueAt != null &&
-              _selectedDueDate!.millisecondsSinceEpoch != widget.actionItem!.dueAt!.millisecondsSinceEpoch);
-      bool completionChanged = _isCompleted != widget.actionItem!.completed;
-
-      if (!descriptionChanged && !dueDateChanged && !completionChanged) {
-        return;
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.actionItemUpdated),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-
-      try {
+  Future<void> _saveActionItem() async {
+    if (_isSaving || _textController.text.trim().isEmpty) return;
+    final provider = context.read<ActionItemsProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    setState(() {
+      _isSaving = true;
+      _saveFailed = false;
+    });
+    var saved = false;
+    try {
+      if (widget.isEditing) {
+        final item = widget.actionItem!;
+        final descriptionChanged = _textController.text.trim() != item.description;
+        final dateChanged = _selectedDueDate != item.dueAt;
+        final completionChanged = _isCompleted != item.completed;
+        saved = true;
         if (descriptionChanged) {
-          await provider.updateActionItemDescription(widget.actionItem!, newDescription);
+          saved = await provider.updateActionItemDescription(item, _textController.text.trim()) && saved;
         }
-
-        if (dueDateChanged) {
-          await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate);
+        if (dateChanged) {
+          saved = await provider.updateActionItemDueDate(item, _selectedDueDate) && saved;
         }
-
         if (completionChanged) {
-          await provider.updateActionItemState(widget.actionItem!, _isCompleted);
+          saved = await provider.updateActionItemState(item, _isCompleted) && saved;
         }
-
-        // Track action item edit
-        if (descriptionChanged || dueDateChanged) {
+        if (saved && (descriptionChanged || dateChanged)) {
           PlatformManager.instance.analytics.actionItemEdited(
-            actionItemId: widget.actionItem!.id,
+            actionItemId: item.id,
             titleChanged: descriptionChanged,
-            dateChanged: dueDateChanged,
+            dateChanged: dateChanged,
           );
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToUpdateActionItem),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.actionItemCreated),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-
-      try {
-        final createdItem = await provider.createActionItem(
+      } else {
+        final item = await provider.createActionItem(
           description: _textController.text.trim(),
           dueAt: _selectedDueDate,
           completed: _isCompleted,
         );
-
-        if (createdItem != null) {
-          // Track manually added action item
-          PlatformManager.instance.analytics.actionItemManuallyAdded(
-            actionItemId: createdItem.id,
-            timestamp: DateTime.now(),
-          );
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToCreateActionItem),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToCreateActionItem),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+        saved = item != null;
+        if (item != null) {
+          PlatformManager.instance.analytics.actionItemManuallyAdded(actionItemId: item.id, timestamp: DateTime.now());
         }
       }
+    } catch (_) {
+      saved = false;
     }
+    if (!mounted) return;
+    setState(() {
+      _isSaving = false;
+      _saveFailed = !saved;
+    });
+    if (saved) {
+      HapticFeedback.lightImpact();
+      Navigator.pop(context);
+      widget.onRefresh?.call();
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        content: Text(widget.isEditing ? l10n.actionItemUpdated : l10n.actionItemCreated),
+      ));
+    }
+  }
+
+  void _selectQuickDate(int days) {
+    final now = DateTime.now();
+    final date = DateTime(now.year, now.month, now.day + days, 18);
+    HapticFeedback.selectionClick();
+    setState(() => _selectedDueDate = date.isBefore(now) ? DateTime(now.year, now.month, now.day, 23, 59, 59) : date);
   }
 
   void _deleteActionItem() async {
@@ -229,7 +184,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       setState(() {
         _selectedDueDate = result;
       });
@@ -277,47 +232,55 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        child: Column(
+        child: SingleChildScrollView(
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Completed status toggle
-                Row(
-                  children: [
-                    SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: Checkbox(
-                        value: _isCompleted,
-                        activeColor: Colors.deepPurpleAccent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                        onChanged: (bool? value) async {
-                          if (value == null) return;
+                if (!widget.isEditing)
+                  Expanded(
+                      child: Text(context.l10n.newTask,
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)))
+                else
+                  // Stage completion along with the other edits.
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: _isCompleted,
+                          activeColor: Colors.white,
+                          checkColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                          onChanged: _isSaving
+                              ? null
+                              : (bool? value) {
+                                  if (value == null) return;
 
-                          HapticFeedback.lightImpact();
+                                  HapticFeedback.lightImpact();
 
-                          setState(() {
-                            _isCompleted = value;
-                          });
-
-                          // Only update immediately if editing
-                          if (widget.isEditing) {
-                            final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-                            await provider.updateActionItemState(widget.actionItem!, value);
-                          }
-                        },
+                                  setState(() {
+                                    _isCompleted = value;
+                                  });
+                                },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isCompleted ? context.l10n.completed : context.l10n.markComplete,
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isCompleted ? context.l10n.completed : context.l10n.markComplete,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                if (!widget.isEditing)
+                  IconButton(
+                      tooltip: context.l10n.close,
+                      onPressed: _isSaving ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white70)),
                 // Share + Delete buttons (only for edit mode)
                 if (widget.isEditing)
                   Row(
@@ -325,40 +288,44 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     children: [
                       IconButton(
                         icon: FaIcon(FontAwesomeIcons.share, color: Colors.grey.shade400, size: 16),
-                        onPressed: _shareActionItem,
+                        onPressed: _isSaving ? null : _shareActionItem,
+                        tooltip: context.l10n.share,
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () {
-                          // Show delete confirmation dialog
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              backgroundColor: ResponsiveHelper.backgroundSecondary,
-                              title: Text(
-                                context.l10n.deleteActionItemConfirmTitle,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              content: Text(
-                                context.l10n.deleteActionItemConfirmMessage,
-                                style: TextStyle(color: Colors.grey.shade300),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context, true); // Close dialog
-                                    _deleteActionItem();
-                                  },
-                                  child: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                        tooltip: context.l10n.delete,
+                        onPressed: _isSaving
+                            ? null
+                            : () {
+                                // Show delete confirmation dialog
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    backgroundColor: ResponsiveHelper.backgroundSecondary,
+                                    title: Text(
+                                      context.l10n.deleteActionItemConfirmTitle,
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                    content: Text(
+                                      context.l10n.deleteActionItemConfirmMessage,
+                                      style: TextStyle(color: Colors.grey.shade300),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context, true); // Close dialog
+                                          _deleteActionItem();
+                                        },
+                                        child: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                       ),
                     ],
                   ),
@@ -367,12 +334,18 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
             const SizedBox(height: 12),
             // Text field for editing/creating the action item
             TextField(
+              key: const Key('task_description'),
               controller: _textController,
+              enabled: !_isSaving,
+              onChanged: (_) => setState(() {}),
               autofocus: true,
-              maxLines: null,
+              maxLines: 5,
+              minLines: 2,
+              maxLength: 4096,
               textInputAction: TextInputAction.done,
               style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
               decoration: InputDecoration(
+                counterText: '',
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
@@ -387,8 +360,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
               },
             ),
             const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _openDateTimePicker,
+            InkWell(
+              onTap: _isSaving ? null : _openDateTimePicker,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
@@ -406,46 +379,69 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                       ),
                     ),
                     if (_selectedDueDate != null)
-                      GestureDetector(
-                        onTap: () {
-                          _clearDueDate();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(Icons.close, size: 18, color: Colors.grey.shade500),
-                        ),
+                      IconButton(
+                        tooltip: context.l10n.clearDueDate,
+                        onPressed: _isSaving ? null : _clearDueDate,
+                        icon: const Icon(Icons.close, size: 18, color: Colors.white70),
                       ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.keyboard_return, size: 13, color: Colors.grey.shade400),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.isEditing ? context.l10n.pressDoneToSave : context.l10n.pressDoneToCreate,
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                      ),
-                    ],
-                  ),
+            Wrap(spacing: 8, children: [
+              for (final days in [0, 1, 7])
+                ActionChip(
+                  key: ValueKey('task_quick_date_$days'),
+                  label: Text(days == 0
+                      ? context.l10n.today
+                      : days == 1
+                          ? context.l10n.tomorrow
+                          : context.l10n.nextWeek),
+                  onPressed: _isSaving ? null : () => _selectQuickDate(days),
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  labelStyle: const TextStyle(color: Colors.white),
+                  side: const BorderSide(color: Colors.white24),
                 ),
-                Text('${_textController.text.length}/200', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
-              ],
-            ),
+            ]),
+            Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${_textController.text.characters.length}/4096',
+                  key: const Key('task_character_count'),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                )),
+            const SizedBox(height: 12),
+            if (_saveFailed) ...[
+              Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    widget.isEditing ? context.l10n.failedToUpdateActionItem : context.l10n.failedToCreateActionItem,
+                    style: const TextStyle(color: Colors.redAccent),
+                  )),
+              const SizedBox(height: 12),
+            ],
+            SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const Key('task_save_button'),
+                  onPressed: _isSaving || _textController.text.trim().isEmpty ? null : _saveActionItem,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : Text(_saveFailed
+                          ? context.l10n.retry
+                          : widget.isEditing
+                              ? context.l10n.saveChanges
+                              : context.l10n.addTask),
+                )),
+            SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
-        ),
+        )),
       ),
     );
   }

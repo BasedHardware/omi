@@ -47,12 +47,13 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
             segment.get('is_user') == is_user
             and segment.get('person_id') == person_id
             and segment.get('speaker_identity_status') == status
+            and segment.get('speaker_match_source') is None
         ):
             continue
         if result is None:
             result = list(segments)
         copied = dict(segment)
-        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status)
+        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status, speaker_match_source=None)
         result[index] = copied
     return result if result is not None else segments
 

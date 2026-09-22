@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
@@ -13,6 +13,23 @@ from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.socket import STTSocket
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
+
+if TYPE_CHECKING:
+    from utils.stt.parakeet_window import SessionPcmGain
+
+# Windowed TDT admits speech-only audio with a short hangover. The billed Deepgram
+# gate keeps VAD_GATE_SPEECH_THRESHOLD (0.65) and a 4s tail; this leg keeps the same
+# start threshold but a much shorter tail, because a growing window re-posts its own
+# prefix and does not need 4s of trailing silence to avoid clipping a word.
+#
+# The threshold was briefly lowered to 0.5/0.35 to admit quiet far-field speech. That
+# is no longer what admits it: the gate now scores a level-corrected copy (see
+# SessionPcmGain), which lifts far-field admission from 73.7s to 91.7s on its own. The
+# extra hysteresis bought only 5.6s more on that clip while costing words on dense
+# speech, so the start threshold stays at the Deepgram value and gain does the work.
+WINDOW_VAD_HANGOVER_MS = 300
+WINDOW_VAD_SPEECH_THRESHOLD = 0.65
+WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 
 
 class LiveChainSession:
@@ -80,10 +97,16 @@ class LiveChainSession:
 
         def build_gate(is_window: bool) -> VADStreamingGate | None:
             if is_window:
-                gate = VADStreamingGate(sample_rate=sample_rate, channels=1, mode='active')
                 # No four-second silence tail: each early-flushed window must
                 # contain speech, with only a short boundary hangover.
-                gate._hangover_ms = 300  # type: ignore[reportPrivateUsage]  # TDT has a speech-only admission contract
+                gate = VADStreamingGate(
+                    sample_rate=sample_rate,
+                    channels=1,
+                    mode='active',
+                    speech_threshold=WINDOW_VAD_SPEECH_THRESHOLD,
+                    continue_threshold=WINDOW_VAD_CONTINUE_THRESHOLD,
+                    hangover_ms=WINDOW_VAD_HANGOVER_MS,
+                )
                 self.vad_mode = 'active'
                 return gate
             override = getattr(getattr(host, 'request', None), 'vad_gate_override', None)
@@ -223,6 +246,12 @@ class LiveLegSocket(STTSocket):
         self._dead = False
         self._seconds = 0.0
         self._pending_selection: PendingLiveFailover | None = None
+        self._ingest_gain: SessionPcmGain | None = None
+        if window:
+            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
+
+            if WINDOW_INGEST_AGC:
+                self._ingest_gain = SessionPcmGain()
 
     @property
     def is_connection_dead(self) -> bool:
@@ -259,12 +288,22 @@ class LiveLegSocket(STTSocket):
     def send(self, data: bytes) -> bool:
         if self.is_connection_dead:
             return False
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        score_pcm: bytes | None = None
+        if self._ingest_gain is not None:
+            # Gain a copy for Silero only. Stored / posted bytes stay original
+            # so the posted stage is the only scale the decoder sees.
+            score_pcm = self._ingest_gain.apply(data)
+            if isinstance(self.raw, WindowedParakeetSocket):
+                self.raw.observe_session_peak(self._ingest_gain.peak)
         output = None
         if self.gate is not None:
             try:
                 # Synthetic wall clock follows received audio. Positive epoch
-                # avoids VAD's zero sentinel.
-                output = self.gate.process_audio(data, 1.0 + self._seconds)
+                # avoids VAD's zero sentinel. Silero scores the level-corrected
+                # copy; pre-roll and audio_to_send stay original-level.
+                output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm)
             except Exception:
                 if self.window:
                     self._dead = True
@@ -285,8 +324,6 @@ class LiveLegSocket(STTSocket):
                 self.session.vad_mode = 'off'
         audio = data if output is None or self.passthrough else output.audio_to_send
         if self.window and output is not None and output.is_speech:
-            from utils.stt.parakeet_window import WindowedParakeetSocket
-
             if isinstance(self.raw, WindowedParakeetSocket):
                 self.raw.mark_speech()
         try:

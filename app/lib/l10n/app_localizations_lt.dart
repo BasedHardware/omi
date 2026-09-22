@@ -439,6 +439,9 @@ class AppLocalizationsLt extends AppLocalizations {
       'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
 
   @override
+  String get omiButtonActions => 'Omi mygtuko veiksmai';
+
+  @override
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override
@@ -2143,7 +2146,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get alwaysInContext => 'Visada kontekste';
 
   @override
-  String get memoryContentHint => 'Mėgstu valgyti ledus...';
+  String get memoryContentHint => 'Pirmenybę teikiu rytiniams susitikimams.';
 
   @override
   String get failedToSaveMemory => 'Nepavyko išsaugoti. Patikrinkite ryšį.';
@@ -10132,4 +10135,34 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Atnaujinti santrauką su naujais vardais';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Nepavyko nuskaityti garso — sinchronizuoti negalima';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ką gali dėl manęs padaryti?',
+        'goal': 'Padėk man išsikelti tikslą',
+        'activity': 'Apibendrink mano naujausią veiklą',
+        'improve': 'Kaip galiu tobulėti?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Kitą savaitę';
+
+  @override
+  String get clearSearch => 'Išvalyti paiešką';
 }

@@ -148,6 +148,7 @@ def test_teach_once_new_sessions_and_offline_sync_recognize_same_person(world, m
     assert not other.person_embeddings and not suggestions
     cache = pipeline.build_person_embeddings_cache('account-a')
     assert not pipeline.build_person_embeddings_cache('account-b')
+    monkeypatch.setattr(pipeline, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(pipeline, 'extract_embedding_from_bytes', lambda *a: world.vector)
     segment = TranscriptSegment(
         id='offline-1', text='Synthetic speech about a trip', speaker='SPEAKER_07', is_user=False, start=0, end=10

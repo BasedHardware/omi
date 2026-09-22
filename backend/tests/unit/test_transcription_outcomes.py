@@ -15,6 +15,7 @@ from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
     failure_from_exception,
+    sync_failure_from_exception,
 )
 
 
@@ -43,6 +44,29 @@ def test_wrapped_configuration_error_preserves_provider_without_env_leak():
     assert failure.retryable is False
     assert 'SECRET_PARAKAET_URL' not in str(failure.as_detail())
     assert 'raw wrapper' not in str(failure.as_detail())
+
+
+def test_sync_failure_from_exception_maps_destructive_op_fence():
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    failure = sync_failure_from_exception(DestructiveOperationInProgress('gate'), provider='parakeet')
+    assert failure.outcome == TranscriptionOutcome.UPSTREAM_ERROR
+    assert failure.retryable is True
+    assert failure.error_code == 'destructive_operation_in_progress'
+
+
+def test_sync_failure_from_exception_delegates_timeout_and_config():
+    timeout = sync_failure_from_exception(TimeoutError('x'), provider='deepgram')
+    assert timeout.outcome == TranscriptionOutcome.TIMEOUT
+    assert timeout.retryable is True
+    assert timeout.error_code == 'stt_timeout'
+
+    configuration_error = PrerecordedSTTConfigurationError('parakeet', 'SECRET_PARAKAET_URL')
+    failure = sync_failure_from_exception(configuration_error, provider='deepgram')
+    assert failure.outcome == TranscriptionOutcome.CONFIG_ERROR
+    assert failure.retryable is False
+    assert failure.error_code == 'stt_provider_configuration_error'
 
 
 def test_wrapped_timeout_is_safe_and_retryable():

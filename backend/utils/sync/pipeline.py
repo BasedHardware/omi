@@ -118,9 +118,16 @@ from utils.stt.outcomes import (
     TranscriptionOutcome,
     bounded_provider,
     failure_from_exception,
+    is_destructive_operation_in_progress,
 )
-from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
-from utils.stt.speaker_match import select_speaker_match
+from utils.stt.speaker_embedding import (
+    compare_embeddings,
+    extract_embedding_from_bytes,
+    speaker_embedding_configured,
+)
+from utils.stt.speaker_match import mean_embedding, select_speaker_match
+from utils.stt.sync_speaker_evidence import collect_speaker_audio
+from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
@@ -148,6 +155,7 @@ _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
+    'destructive_operation_in_progress',
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
@@ -781,7 +789,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    # Visible transcript-only review: never discard uncertain real speech.
+    # Recoverable filler-only review skips enrichment; meaningful speech stays kept.
     # Re-evaluate the entire current transcript so later content promotes it.
     if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
         conversation_data.get('transcript_segments', [])
@@ -815,7 +823,6 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
 
 USER_SELF_PERSON_ID = 'user'
-SPEAKER_ID_MIN_AUDIO = 1.0  # Minimum seconds of audio per speaker for embedding extraction
 
 
 def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
@@ -858,52 +865,6 @@ def _download_audio_bytes(url: str) -> Optional[bytes]:
         return None
 
 
-def _extract_speaker_clip_wav(audio_bytes: bytes, start_sec: float, end_sec: float) -> Optional[bytes]:
-    """Extract a clip from WAV audio bytes between start_sec and end_sec.
-
-    Returns WAV bytes for the clip, or None if extraction fails or clip is too short.
-    """
-    try:
-        with wave.open(io.BytesIO(audio_bytes), 'rb') as wf:
-            framerate = wf.getframerate()
-            n_channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            n_frames = wf.getnframes()
-            total_duration = n_frames / framerate
-
-            # Clamp to audio bounds
-            start_sec = max(0.0, start_sec)
-            end_sec = min(total_duration, end_sec)
-            if end_sec - start_sec < SPEAKER_ID_MIN_AUDIO:
-                return None
-
-            # Cap extraction at 10 seconds
-            if end_sec - start_sec > 10.0:
-                center = (start_sec + end_sec) / 2
-                start_sec = center - 5.0
-                end_sec = center + 5.0
-                start_sec = max(0.0, start_sec)
-                end_sec = min(total_duration, end_sec)
-
-            start_frame = int(start_sec * framerate)
-            end_frame = int(end_sec * framerate)
-
-            wf.setpos(start_frame)
-            frames = wf.readframes(end_frame - start_frame)
-
-        # Write clip as WAV
-        clip_buf = io.BytesIO()
-        with wave.open(clip_buf, 'wb') as out_wf:
-            out_wf.setnchannels(n_channels)
-            out_wf.setsampwidth(sampwidth)
-            out_wf.setframerate(framerate)
-            out_wf.writeframes(frames)
-        return clip_buf.getvalue()
-    except Exception as e:
-        logger.warning(f'Speaker ID: failed to extract clip: {e}')
-        return None
-
-
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
@@ -916,16 +877,18 @@ def identify_speakers_for_segments(
     Modifies segments in-place by assigning person_id and is_user fields.
 
     Steps:
-    1. Voice embedding matching (requires audio_bytes and non-empty cache):
-       For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
-       get embedding, match against person_embeddings_cache.
+    1. Voice embedding matching (requires audio_bytes, a non-empty cache, and
+       HOSTED_SPEAKER_EMBEDDING_API_URL):
+       For each speaker, pool distinct audio into bounded clips, average their
+       embeddings, and match against person_embeddings_cache.
     2. Text-based detection ("I am X") runs independently for all unmatched speakers.
     3. Apply assignments via process_speaker_assigned_segments.
     """
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
+    voice_assignments: list[tuple[TranscriptSegment, str]] = []
 
-    # Group segments by speaker_id, find best (longest) segment per speaker for embedding
+    # Group all available evidence by diarized speaker.
     speaker_segments: Dict[int, List[TranscriptSegment]] = {}
     for seg in transcript_segments:
         sid = seg.speaker_id if seg.speaker_id is not None else 0
@@ -936,9 +899,9 @@ def identify_speakers_for_segments(
     # (diarization tells us speakers are distinct — no person can be two speakers).
     matched_person_ids: set = set()
 
-    if audio_bytes and person_embeddings_cache:
-        # Sort speakers by best single segment duration (longest first) — this is the clip
-        # actually used for embedding, so it determines match quality.
+    if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
+        # Preserve existing longest-segment priority for one-person/one-speaker dedup.
+        # Pooling changes evidence, not the order in which identities are reserved.
         # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
         # If diarization fragments one person across speaker IDs, only the best match wins.
         sorted_speakers = sorted(
@@ -951,18 +914,44 @@ def identify_speakers_for_segments(
             best_seg = max(segments, key=lambda s: s.end - s.start)
             seg_duration = best_seg.end - best_seg.start
 
-            if seg_duration < SPEAKER_ID_MIN_AUDIO:
-                continue
-
-            clip_wav = _extract_speaker_clip_wav(audio_bytes, best_seg.start, best_seg.end)
-            if not clip_wav:
-                continue
-
             try:
-                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
-            except (ValueError, Exception) as e:
-                logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
+                evidence = collect_speaker_audio(audio_bytes, [(seg.start, seg.end) for seg in segments])
+            except (ValueError, EOFError, wave.Error):
+                evidence = None
+            embeddings = []
+            evidence_seconds = 0.0
+            failed_clips = 0
+            for clip_wav, seconds in evidence.clips if evidence is not None else []:
+                try:
+                    embeddings.append(extract_embedding_from_bytes(clip_wav, "sync_speaker.wav"))
+                    evidence_seconds += seconds
+                except Exception as error:
+                    failed_clips += 1
+                    logger.info(
+                        'Speaker ID: embedding failed speaker=%s type=%s uid=%s', speaker_id, type(error).__name__, uid
+                    )
+            if not embeddings:
+                outcome = (
+                    'audio_error'
+                    if evidence is None
+                    else 'embedding_error' if failed_clips else 'insufficient_evidence'
+                )
+                SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
+                logger.info(
+                    'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                    'best=None best_distance=inf runner_up_distance=inf accepted=False '
+                    'segments=%d clips=0 evidence_seconds=0 available_seconds=%.3f '
+                    'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
+                    uid,
+                    speaker_id,
+                    seg_duration,
+                    len(segments),
+                    evidence.available_seconds if evidence is not None else 0.0,
+                    failed_clips,
+                    outcome,
+                )
                 continue
+            query_embedding = mean_embedding(embeddings) if len(embeddings) > 1 else embeddings[0]
 
             # Keep assigned candidates in the ambiguity comparison. Removing the
             # owner after a first match must not make a similar household voice
@@ -973,9 +962,13 @@ def identify_speakers_for_segments(
             }
             decision = select_speaker_match(distances)
             accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
+            outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
+            SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
             logger.info(
                 'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s '
+                'segments=%d clips=%d evidence_seconds=%.3f available_seconds=%.3f '
+                'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
                 uid,
                 speaker_id,
                 seg_duration,
@@ -983,12 +976,21 @@ def identify_speakers_for_segments(
                 decision.best_distance,
                 decision.runner_up_distance,
                 accepted,
+                len(segments),
+                len(embeddings),
+                evidence_seconds,
+                evidence.available_seconds if evidence is not None else 0.0,
+                failed_clips,
+                outcome,
             )
             if accepted and decision.person_id is not None:
                 person_id = decision.person_id
                 speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
+                voice_assignments.extend(
+                    (segment, person_id) for segment in segments if not segment.is_user and not segment.person_id
+                )
 
     # Text-based detection runs independently for all unmatched speakers.
     # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
@@ -1021,6 +1023,12 @@ def identify_speakers_for_segments(
             segment_person_assignment_map,
             speaker_to_person_map,
         )
+
+    # The assignment helper preserves pre-existing labels. Only mark labels this
+    # voice decision actually supplied, never an existing manual/provider label.
+    for segment, person_id in voice_assignments:
+        if (person_id == USER_SELF_PERSON_ID and segment.is_user) or segment.person_id == person_id:
+            segment.speaker_match_source = 'sync_embedding'
 
 
 ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
@@ -1264,6 +1272,8 @@ def process_segment(
     except SyncConversationPersistenceFenced:
         raise
     except Exception as e:
+        if is_destructive_operation_in_progress(e):
+            raise
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1308,6 +1318,8 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
+            if is_destructive_operation_in_progress(e):
+                raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
     # ingest must not publish an empty success: re-raise so the Cloud Tasks

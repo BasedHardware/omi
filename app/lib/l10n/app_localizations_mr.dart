@@ -438,6 +438,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get autoSyncDescription => 'तुमचे डिव्हाइस कनेक्ट झाल्यावर ऑफलाइन रेकॉर्डिंग आपोआप सिंक करा';
 
   @override
+  String get omiButtonActions => 'Omi बटण क्रिया';
+
+  @override
   String get deviceSettings => 'डिव्हाइस सेटिंग्ज';
 
   @override
@@ -2145,7 +2148,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get alwaysInContext => 'नेहमी संदर्भात';
 
   @override
-  String get memoryContentHint => 'मला आयस्क्रीम खाण्यास आवडते...';
+  String get memoryContentHint => 'मला सकाळच्या बैठका आवडतात.';
 
   @override
   String get failedToSaveMemory => 'सेव करण्यात अयशस्वी. कृपया आपल्या कनेक्शन तपासा.';
@@ -10121,4 +10124,34 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'नवीन नावांसह सारांश अद्यतनित करा';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ऑडिओ वाचता आला नाही — सिंक करता येत नाही';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'तू माझ्यासाठी काय करू शकतोस?',
+        'goal': 'मला ध्येय ठरवायला मदत कर',
+        'activity': 'माझ्या अलीकडील कामांचा सारांश दे',
+        'improve': 'मी कशी सुधारणा करू शकतो?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'पुढील आठवड्यात';
+
+  @override
+  String get clearSearch => 'शोध साफ करा';
 }
