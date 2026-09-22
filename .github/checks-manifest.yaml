@@ -99,6 +99,11 @@ checks:
     triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14181: arXiv paper search and detail endpoints require typed request validation, defensive Atom XML parsing, and hermetic CI coverage"
+  - id: arxiv-error-handling-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_error_handling.py"]
+    triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "arXiv chat tool endpoints must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: public-holidays-app-tests
     command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
