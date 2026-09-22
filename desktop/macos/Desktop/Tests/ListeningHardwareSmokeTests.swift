@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -37,13 +38,18 @@ final class ListeningHardwareSmokeTests: XCTestCase {
       await provider.connect(to: paired)
     }
     if provider.activeConnection == nil {
-      provider.startDiscovery(timeout: 8)
-      for _ in 0..<80 where provider.activeConnection == nil {
-        if let device = provider.discoveredDevices.first {
-          await provider.connect(to: device)
-          break
+      let discoveryTimeout: TimeInterval = 8
+      provider.startDiscovery(timeout: discoveryTimeout)
+      let devices = await awaitWithTimeout(.seconds(discoveryTimeout)) { @MainActor () -> [BtDevice] in
+        for await devices in provider.$discoveredDevices.values {
+          if !devices.isEmpty {
+            return devices
+          }
         }
-        try await Task.sleep(for: .milliseconds(100))
+        return []
+      }
+      if let device = devices?.first {
+        await provider.connect(to: device)
       }
     }
     guard let connection = provider.activeConnection else {
