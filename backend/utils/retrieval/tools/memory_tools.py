@@ -199,8 +199,8 @@ def get_memories_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
 
     if end_date:
         try:
@@ -209,8 +209,8 @@ def get_memories_tool(
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     memories: List[MemoryDB] = []
     scan_truncated = False
@@ -284,7 +284,8 @@ def get_memories_tool(
                     break
         memories = visible[max(offset, 0) : target_end]
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Error retrieving memories: {e}", exc_info=True)
+        return "Error retrieving memories."
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
     # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
@@ -519,9 +520,5 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        logger.error(f"❌ search_memories_tool - Error performing memory search: {e}", exc_info=True)
+        return "Error searching memories."
