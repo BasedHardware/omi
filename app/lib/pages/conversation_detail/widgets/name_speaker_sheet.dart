@@ -15,9 +15,12 @@ import 'package:omi/widgets/person_chip.dart';
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
-  final Function(int speakerId, String personId, String personName, List<String> segmentIds) onSpeakerAssigned;
+  final Future<bool> Function(
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
+  final bool defaultApplyToSpeaker;
 
   const NameSpeakerBottomSheet({
     super.key,
@@ -26,6 +29,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.onSpeakerAssigned,
     required this.segments,
     this.suggestion,
+    this.defaultApplyToSpeaker = false,
   });
 
   @override
@@ -38,8 +42,10 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   String selectedPersonName = '';
   List<String> _selectedSegmentIds = [];
   bool _isSegmentsExpanded = false;
+  bool _applyToSpeaker = false;
   bool allowSave = false;
   bool loading = false;
+  bool _saveFailed = false;
   String? speakerTextSample;
   bool _isCreatingNewPerson = false;
   String? _duplicateNameError;
@@ -78,8 +84,15 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedSegmentIds.add(widget.segmentId);
+    _applyToSpeaker = widget.defaultApplyToSpeaker;
+    final sameSpeaker = widget.segments.where((s) => s.speakerId == widget.speakerId);
+    _selectedSegmentIds = _applyToSpeaker ? sameSpeaker.map((s) => s.id).toList() : [widget.segmentId];
+    if (!_selectedSegmentIds.contains(widget.segmentId)) {
+      _selectedSegmentIds.add(widget.segmentId);
+    }
+    _isSegmentsExpanded = _applyToSpeaker && sameSpeaker.any((s) => s.id != widget.segmentId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final peopleProvider = context.read<PeopleProvider>();
       final people = peopleProvider.people;
       final userName = SharedPreferencesUtil().givenName;
@@ -98,6 +111,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           _controller.text = suggestion.personName;
           setAllowSave(true);
         });
+        return;
       }
 
       // Predict selected person
@@ -175,6 +189,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         const SizedBox(height: 16),
                         _buildUntaggedSegments(),
                         const SizedBox(height: 8),
+                        if (_saveFailed)
+                          Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
                         _buildSaveButton(),
                         const SizedBox(height: 28),
                       ],
@@ -338,34 +354,32 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.personId == null && !s.isUser && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments =
+        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(
       children: [
         CheckboxListTile(
           title: Text(
-            _isSegmentsExpanded
+            _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
-                : context.l10n.tagOtherSegments,
-            style: TextStyle(fontSize: 14, color: untaggedSegments.isNotEmpty ? Colors.white : Colors.grey),
+                : context.l10n.tagSpeakerIncludingLaterSpeech,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
           ),
-          value: _isSegmentsExpanded,
-          onChanged: untaggedSegments.isNotEmpty
-              ? (value) {
-                  setState(() {
-                    _isSegmentsExpanded = value ?? false;
-                    if (_isSegmentsExpanded) {
-                      _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
-                    } else {
-                      final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
-                      _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
-                    }
-                  });
-                }
-              : null,
+          value: _applyToSpeaker,
+          onChanged: (value) {
+            setState(() {
+              _applyToSpeaker = value ?? false;
+              _isSegmentsExpanded = _applyToSpeaker && untaggedSegments.isNotEmpty;
+              if (_applyToSpeaker) {
+                _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
+              } else {
+                final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
+                _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
+              }
+            });
+          },
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           activeColor: Theme.of(context).colorScheme.secondary,
@@ -418,6 +432,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _selectedSegmentIds.add(segment.id);
                       } else {
                         _selectedSegmentIds.remove(segment.id);
+                        _applyToSpeaker = false;
                       }
                     });
                   },
@@ -455,16 +470,26 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   personIdToAssign = ''; // Indicates a new person
                 }
 
-                await widget.onSpeakerAssigned(
-                  widget.speakerId,
-                  personIdToAssign,
-                  personNameToAssign,
-                  _selectedSegmentIds,
-                );
+                bool saved = false;
+                try {
+                  saved = await widget.onSpeakerAssigned(
+                    widget.speakerId,
+                    personIdToAssign,
+                    personNameToAssign,
+                    List<String>.of(_selectedSegmentIds),
+                    _applyToSpeaker,
+                  );
+                } catch (_) {
+                  saved = false;
+                }
 
                 setLoading(false);
                 if (mounted) {
-                  Navigator.pop(context);
+                  if (saved) {
+                    Navigator.pop(context);
+                  } else {
+                    setState(() => _saveFailed = true);
+                  }
                 }
               },
         child: Center(child: Text(context.l10n.save)),

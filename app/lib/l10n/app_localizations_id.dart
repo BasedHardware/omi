@@ -438,6 +438,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
 
   @override
+  String get omiButtonActions => 'Tindakan Tombol Omi';
+
+  @override
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override
@@ -2149,7 +2152,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get alwaysInContext => 'Selalu dalam konteks';
 
   @override
-  String get memoryContentHint => 'Saya suka makan es krim...';
+  String get memoryContentHint => 'Aku lebih suka rapat di pagi hari.';
 
   @override
   String get failedToSaveMemory => 'Gagal menyimpan. Silakan periksa koneksi Anda.';
@@ -10102,4 +10105,54 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Suara siap dikenali',
+        'saved_sample_awaiting_embedding': 'Sampel tersimpan; pemrosesan suara masih diperlukan',
+        'not_learned': 'Suara belum dipelajari',
+        'other': 'Status suara tidak diketahui',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Tandai juga ucapan berikutnya dari pembicara ini';
+
+  @override
+  String get updateSummaryWithNewNames => 'Perbarui ringkasan dengan nama baru';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio tidak terbaca — tidak bisa disinkronkan';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Apa yang bisa kamu lakukan untukku?',
+        'goal': 'Bantu aku menetapkan tujuan',
+        'activity': 'Ringkas aktivitas terbaruku',
+        'improve': 'Bagaimana aku bisa menjadi lebih baik?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Minggu depan';
+
+  @override
+  String get clearSearch => 'Hapus pencarian';
 }

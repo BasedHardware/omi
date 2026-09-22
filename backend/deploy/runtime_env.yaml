@@ -14,6 +14,17 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+            value: 'true'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+            config_map:
+              name: dev-omi-backend-config
+              key: FREE_TIER_LOCAL_PROCESSING_COHORT
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
+            value: 'false'
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -60,8 +71,41 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          STT_CONNECT_ORDER_FROM_CONFIG:
+            value: 'true'
+            category: rollout
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
+          PARAKEET_WINDOW_MAX_SESSIONS:
+            value: '1'
+            category: rollout
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          PARAKEET_WINDOW_DIARIZATION:
+            value: 'false'
+            category: rollout
+          PARAKEET_WINDOW_PACE_SECONDS:
+            value: '6'
+            category: rollout
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
+            value: '24'
+            category: rollout
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
+            value: '1800'
+            category: rollout
+          STT_CIRCUIT_HALF_OPEN_PROBES:
+            value: '1'
+            category: rollout
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
+            value: '3'
+            category: rollout
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
+            value: '30'
+            category: rollout
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,soniox
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -94,6 +138,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omiapi.com:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -222,6 +269,17 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+            value: 'true'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+            config_map:
+              name: dev-omi-backend-config
+              key: FREE_TIER_LOCAL_PROCESSING_COHORT
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
+            value: 'false'
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
@@ -242,6 +300,9 @@ environments:
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omiapi.com:80
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -408,9 +469,22 @@ environments:
             source: environment
           X_OAUTH_REDIRECT_URI:
             source: environment
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            source: environment
+            default: ''
     region: us-central1
     desktop_backend:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          category: rollout
+          value: 'true'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          category: rollout
+          env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+          default: ''
+        FREE_TIER_EMERGENCY_STOP:
+          category: rollout
+          value: 'false'
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'true'
@@ -489,6 +563,16 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'true'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+              default: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -554,6 +638,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -658,6 +745,16 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'true'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+              default: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -693,6 +790,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -816,6 +916,16 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'true'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+              default: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -854,6 +964,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -966,6 +1079,16 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'true'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+              default: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -996,6 +1119,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omiapi.com:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1394,6 +1520,15 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
+            value: 'false'
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -1440,6 +1575,39 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          STT_CONNECT_ORDER_FROM_CONFIG:
+            value: 'false'
+            category: rollout
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            value: '0'
+            category: rollout
+          PARAKEET_WINDOW_MAX_SESSIONS:
+            value: '1'
+            category: rollout
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          PARAKEET_WINDOW_DIARIZATION:
+            value: 'false'
+            category: rollout
+          PARAKEET_WINDOW_PACE_SECONDS:
+            value: '6'
+            category: rollout
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
+            value: '24'
+            category: rollout
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
+            value: '1800'
+            category: rollout
+          STT_CIRCUIT_HALF_OPEN_PROBES:
+            value: '1'
+            category: rollout
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
+            value: '3'
+            category: rollout
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
+            value: '30'
+            category: rollout
           STT_SERVICE_MODELS:
             value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
@@ -1474,6 +1642,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omi.me:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1632,6 +1803,15 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
+            value: 'false'
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
@@ -1652,6 +1832,9 @@ environments:
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
+            value: http://diarizer.omi.me:80
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -1708,6 +1891,15 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          category: rollout
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          category: rollout
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          category: rollout
+          value: 'false'
         MEMORY_BELIEF_MODEL_ENABLED:
           category: rollout
           value: 'false'
@@ -1791,6 +1983,15 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'false'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              value: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -1856,6 +2057,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1895,6 +2099,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+              value: '1'
+              category: rollout
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1977,6 +2184,15 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'false'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              value: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -2012,6 +2228,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -2137,6 +2356,15 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'false'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              value: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'
@@ -2175,6 +2403,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -2289,6 +2520,15 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            FREE_TIER_LOCAL_PROCESSING:
+              category: rollout
+              value: 'false'
+            FREE_TIER_LOCAL_PROCESSING_COHORT:
+              category: rollout
+              value: ''
+            FREE_TIER_EMERGENCY_STOP:
+              category: rollout
+              value: 'false'
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -2319,6 +2559,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://diarizer.omi.me:80
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability

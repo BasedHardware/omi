@@ -439,6 +439,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get autoSyncDescription => 'Автоматично синхронизиране на офлайн записите при свързване на устройството ви';
 
   @override
+  String get omiButtonActions => 'Действия на бутона Omi';
+
+  @override
   String get deviceSettings => 'Настройки на устройството';
 
   @override
@@ -2148,7 +2151,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get alwaysInContext => 'Винаги в контекста';
 
   @override
-  String get memoryContentHint => 'Обичам да ям сладолед...';
+  String get memoryContentHint => 'Предпочитам срещи сутрин.';
 
   @override
   String get failedToSaveMemory => 'Неуспешно запазване. Моля, проверете връзката си.';
@@ -10129,4 +10132,54 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Гласът е готов за разпознаване',
+        'saved_sample_awaiting_embedding': 'Запазена проба, изчаква обработка на гласа',
+        'not_learned': 'Гласът не е научен',
+        'other': 'Състоянието на гласа е неизвестно',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Маркирай и по-късната реч на този говорител';
+
+  @override
+  String get updateSummaryWithNewNames => 'Актуализирай резюмето с новите имена';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Звукът не може да се прочете — синхронизирането е невъзможно';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Какво можеш да направиш за мен?',
+        'goal': 'Помогни ми да си поставя цел',
+        'activity': 'Обобщи последните ми дейности',
+        'improve': 'Как мога да се подобря?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Следващата седмица';
+
+  @override
+  String get clearSearch => 'Изчистване на търсенето';
 }

@@ -33,9 +33,11 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
 from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
+from utils.conversation_shape import observe_completed_conversation_shape
 from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
@@ -118,19 +120,29 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     """Create a fully processed conversation without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     if idempotent:
-        return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
-    return True
+        created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    else:
+        conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
+        created = True
+    if created:
+        observe_completed_conversation_shape(uid, conversation_data)
+    return created
 
 
 def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
-    """Admit a visible deterministic sync row and atomically append later chunks.
+    """Admit a retained deterministic sync row and atomically append later chunks.
 
-    Enrichment follows persistence; uncertain filler remains visible for review.
+    Enrichment follows persistence; filler remains recoverable under Show discarded.
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
-    return conversations_db.assign_sync_conversation(uid, incoming, candidate_id=candidate_id, target_id=target_id)
+    assigned, created, survivors = conversations_db.assign_sync_conversation(
+        uid, incoming, candidate_id=candidate_id, target_id=target_id
+    )
+    record_sync_intake_outcome(created=created)
+    if created:
+        observe_completed_conversation_shape(uid, assigned)
+    return assigned, created, survivors
 
 
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
@@ -145,7 +157,13 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         ConversationStatus.completed,
         ConversationStatus.failed,
     )
-    return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
+
+    def _observe_first_completion() -> None:
+        observe_completed_conversation_shape(uid, conversation_data)
+
+    return conversations_db.persist_processing_result_with_lifecycle(
+        uid, conversation_data, on_first_completion=_observe_first_completion
+    )
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
@@ -158,7 +176,10 @@ def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -
     # Stamp imported so selective delete can distinguish ZIP imports from source=limitless
     # pendant/sync uploads that share the same ConversationSource.
     conversation_data['imported'] = True
-    return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    if created:
+        observe_completed_conversation_shape(uid, conversation_data)
+    return created
 
 
 def transition(
@@ -412,9 +433,9 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def restore_discarded(uid: str, conversation_id: str) -> None:
+def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
-    conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
 
 
 def open_recording_session(

@@ -17,6 +17,7 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from utils.executors import postprocess_executor, submit_with_context
+from utils.notifications import sync_action_item_reminder
 from utils.observability.fallback import record_fallback
 from utils.task_sync import auto_sync_action_item
 from utils.task_intelligence import task_links
@@ -163,6 +164,24 @@ def drain_candidate_integrations(uid: str, *, account_generation: int, limit: in
     return sum(1 for result in results if result.outcome.kind == OutcomeKind.ACK)
 
 
+def _sync_task_reminder(uid: str, task_id: str) -> None:
+    """Reconcile the client-scheduled reminder for a task an accepted Candidate wrote (#5085).
+
+    Accepting a suggestion creates tasks with a due date and can reschedule or complete an
+    existing one, so it owes the same reconciliation as the action-item routes.
+    """
+    task = action_items_db.get_action_item(uid, task_id)
+    if task is None:
+        return
+    sync_action_item_reminder(
+        user_id=uid,
+        action_item_id=task_id,
+        description=task.get('description', ''),
+        completed=bool(task.get('completed')),
+        due_at=task.get('due_at'),
+    )
+
+
 def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) -> CandidateResolutionReceipt:
     candidate = candidates_db.get_candidate(uid, candidate_id)
     if candidate is None:
@@ -189,6 +208,7 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
                 receipt.task_id,
                 account_generation=account_generation,
             )
+            _sync_task_reminder(uid, receipt.task_id)
         return receipt
 
     expected_task_links = None
@@ -220,6 +240,8 @@ def accept_candidate(uid: str, candidate_id: str, *, account_generation: int) ->
             receipt.task_id,
             account_generation=account_generation,
         )
+    if receipt.task_id:
+        _sync_task_reminder(uid, receipt.task_id)
     return receipt
 
 

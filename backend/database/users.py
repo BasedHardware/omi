@@ -18,6 +18,7 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
@@ -1399,6 +1400,7 @@ def set_chat_message_rating_score(
     reason: str = None,
     platform: str = None,
     app_version: str = None,
+    app_build: str = None,
     notification_kind: str = None,
     app_id: str = None,
 ):
@@ -1430,6 +1432,8 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
+    if app_build:
+        data['app_build'] = app_build
     if notification_kind:
         data['notification_kind'] = notification_kind
     if app_id:
@@ -1508,7 +1512,11 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store.pop('limits', None)
 
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'subscription': subscription_data_to_store})
+    invalidate_subscription(uid)
+    try:
+        user_ref.update({'subscription': subscription_data_to_store})
+    finally:
+        invalidate_subscription(uid)
 
 
 # **************************************
@@ -1745,6 +1753,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
             if legacy_free_plan:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
+            observe_subscription(uid, subscription)
             return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
@@ -1759,6 +1768,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
+    observe_subscription(uid, default_subscription)
     return default_subscription
 
 
@@ -1767,10 +1777,12 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
     user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if not user_doc.exists:
+        observe_subscription(uid, None)
         return None
 
     user_data = user_doc.to_dict()
     if 'subscription' not in user_data:
+        observe_subscription(uid, None)
         return None
 
     sub_data = user_data['subscription']
@@ -1783,7 +1795,9 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
             payload['plan'] = PlanType.basic.value
         return payload
 
-    return parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+    subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+    observe_subscription(uid, subscription)
+    return subscription
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:

@@ -230,6 +230,20 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         guard_block = handler_block[max(0, set_customer_idx - 400) : set_customer_idx]
         assert "not adopted_active_paid" in guard_block, "customer id write must be gated on not adopted_active_paid"
 
+    def test_billing_projection_follows_reconciliation_and_durable_subscription_write(self):
+        source = self._read_source()
+        handler_start = source.index("'customer.subscription.updated'")
+        handler_end = source.index("subscription_schedule.completed", handler_start)
+        handler = source[handler_start:handler_end]
+        projection = handler.find("emit_billing_product_event(")
+        guard = handler.find("adopted_active_paid = False")
+        durable_write = handler.find("users_db.update_user_subscription")
+        assert projection != -1
+        assert guard != -1
+        assert durable_write != -1
+        assert guard < projection, "billing events must follow stale-subscription reconciliation"
+        assert durable_write < projection, "billing events must follow durable entitlement persistence"
+
 
 class TestStripeSubscriptionEventPrecedence:
     PAYMENT_SOURCE_FILE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"

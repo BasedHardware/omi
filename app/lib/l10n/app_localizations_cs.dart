@@ -438,6 +438,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
 
   @override
+  String get omiButtonActions => 'Akce tlačítka Omi';
+
+  @override
   String get deviceSettings => 'Nastavení zařízení';
 
   @override
@@ -2145,7 +2148,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get alwaysInContext => 'Vždy v kontextu';
 
   @override
-  String get memoryContentHint => 'Rád/a jím zmrzlinu...';
+  String get memoryContentHint => 'Dávám přednost ranním schůzkám.';
 
   @override
   String get failedToSaveMemory => 'Uložení se nezdařilo. Zkontrolujte prosím připojení.';
@@ -10092,4 +10095,54 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hlas je připraven k rozpoznání',
+        'saved_sample_awaiting_embedding': 'Vzorek uložen, čeká na zpracování hlasu',
+        'not_learned': 'Hlas nebyl naučen',
+        'other': 'Stav hlasu není znám',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označit i pozdější řeč tohoto mluvčího';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aktualizovat souhrn s novými jmény';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk nelze přečíst — synchronizace není možná';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Co pro mě můžeš udělat?',
+        'goal': 'Pomoz mi stanovit cíl',
+        'activity': 'Shrň mé nedávné aktivity',
+        'improve': 'Jak se mohu zlepšit?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Příští týden';
+
+  @override
+  String get clearSearch => 'Vymazat hledání';
 }

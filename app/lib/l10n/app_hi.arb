@@ -138,6 +138,7 @@
     "offlineSync": "ऑफलाइन सिंक",
     "autoSync": "स्वतः सिंक",
     "autoSyncDescription": "जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें",
+    "omiButtonActions": "Omi बटन क्रियाएँ",
     "deviceSettings": "डिवाइस सेटिंग्स",
     "integrations": "एकीकरण",
     "feedbackBug": "प्रतिक्रिया / बग",
@@ -649,7 +650,7 @@
     "allMemoriesPublicResult": "सभी यादें अब सार्वजनिक हैं",
     "newMemory": "✨ नई स्मृति",
     "editMemory": "✏️ स्मृति संपादित करें",
-    "memoryContentHint": "मुझे आइसक्रीम पसंद है...",
+    "memoryContentHint": "मुझे सुबह की बैठकें पसंद हैं।",
     "failedToSaveMemory": "सहेजने में विफल।",
     "saveMemory": "याद सहेजें",
     "retry": "पुनः प्रयास करें",
@@ -3246,5 +3247,14 @@
     "moreOptions": "और विकल्प",
     "filterByDate": "तारीख के अनुसार फ़िल्टर करें",
     "memoryGraph": "स्मृति ग्राफ़",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceRecognitionStatus": "{status, select, ready{आवाज़ पहचान के लिए तैयार है} saved_sample_awaiting_embedding{नमूना सहेजा गया; आवाज़ संसाधन अभी बाकी है} not_learned{आवाज़ सीखी नहीं गई} other{आवाज़ की स्थिति अज्ञात है}}",
+    "tagSpeakerIncludingLaterSpeech": "इस वक्ता की बाद की बात भी टैग करें",
+    "updateSummaryWithNewNames": "नए नामों के साथ सारांश अपडेट करें",
+    "syncStatusUnsupportedAudio": "ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{तुम मेरे लिए क्या कर सकते हो?} goal{मुझे एक लक्ष्य तय करने में मदद करो} activity{मेरी हाल की गतिविधियों का सारांश दो} improve{मैं कैसे सुधार कर सकता हूँ?} other{}}",
+    "nextWeek": "अगले सप्ताह",
+    "clearSearch": "खोज साफ़ करें"
 }

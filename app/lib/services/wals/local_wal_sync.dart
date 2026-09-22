@@ -762,8 +762,14 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   Future<void> deleteAllCorruptedWals() async {
     final generation = _sessionGeneration;
-    final corruptedWals =
-        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    final corruptedWals = _wals
+        .where(
+          (w) =>
+              w.status == WalStatus.corrupted ||
+              w.status == WalStatus.outsideRecoveryWindow ||
+              w.status == WalStatus.unsupportedAudio,
+        )
+        .toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -1371,22 +1377,27 @@ class LocalWalSyncImpl implements LocalWalSync {
                   reason: RateLimitReason.backendBusy,
                 );
               }
-              // A verdict the audio itself caused cannot change on the next
-              // pass, so spend the whole auto budget now instead of one attempt
-              // per reconcile. The recording stays `miss` and on disk: the row
-              // presents as failed and keeps its manual Retry and Delete.
+              // A verdict the audio itself caused cannot change on the next pass,
+              // and it cannot change for a manual retry either — the bytes are the
+              // same. Spending the auto budget only made the row read "Failed — tap
+              // Retry" forever: every tap re-uploaded, re-earned the same verdict,
+              // and re-spent the budget, with the needs-attention banner never
+              // clearing. Retire it to a terminal state instead, the way an
+              // out-of-window rejection already does. The file stays on disk.
               final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
               for (final w in members) {
                 changed = true;
                 final hadJob = w.jobId;
-                w.status = WalStatus.miss;
-                w.jobId = null;
                 if (permanentInput) {
-                  w.retryCount = max(w.retryCount, walMaxAutoRetries);
+                  w.markUnsupportedAudio();
                   w.lastRetryAt = nowSecs;
-                } else if (!capacityLimited) {
-                  w.retryCount += 1;
-                  w.lastRetryAt = nowSecs;
+                } else {
+                  w.status = WalStatus.miss;
+                  w.jobId = null;
+                  if (!capacityLimited) {
+                    w.retryCount += 1;
+                    w.lastRetryAt = nowSecs;
+                  }
                 }
                 DebugLogManager.logEvent('reconcile_revert', {
                   'walId': w.id,

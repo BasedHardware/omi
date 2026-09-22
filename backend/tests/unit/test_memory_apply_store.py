@@ -1420,6 +1420,105 @@ def test_firestore_empty_conversation_replacement_is_journaled_and_idempotent(st
     )
 
 
+def test_firestore_empty_replacement_without_gate_token_retracts_when_gate_not_required(store):
+    """Sync-bridge donor retraction admits empty replacement without the exclusive gate.
+
+    Prod 2026-09-21: finish_sync_bridges logged ``exception_type=AssertionError``
+    with an empty message on every retry. ``claim_destructive_gate=False`` sets
+    ``require_deletion_gate=False`` and ``deletion_gate_token=None``; the empty-writes
+    commit-id path still asserted the token, so donors with live canonical rows
+    never converged.
+    """
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, _ = _replacement_operation_and_write(
+        store, control, include_new=False
+    )
+
+    first = store.replace_conversation_source_firestore(
+        uid="u1",
+        conversation_id="conv1",
+        replacement_id=replacement_id,
+        replacement_digest=replacement_digest,
+        replacement_operation=replacement_operation,
+        observed_control=control,
+        expected_source_items=[old],
+        expected_reactivation_items=[],
+        writes=[],
+        deletion_gate_token=None,
+        require_deletion_gate=False,
+        db_client=db,
+    )
+    docs_after_first = copy.deepcopy(db.docs)
+    replay = store.replace_conversation_source_firestore(
+        uid="u1",
+        conversation_id="conv1",
+        replacement_id=replacement_id,
+        replacement_digest=replacement_digest,
+        replacement_operation=replacement_operation,
+        observed_control=control,
+        expected_source_items=[old],
+        expected_reactivation_items=[],
+        writes=[],
+        deletion_gate_token=None,
+        require_deletion_gate=False,
+        db_client=db,
+    )
+
+    assert first.retracted_memory_ids == ["mem1"]
+    assert first.committed_memory_ids == []
+    assert first.control_state.source_generation == 3
+    assert first.control_state.commit_sequence == 1
+    assert first.control_state.projection_watermark_commit_id is None
+    assert first.control_state.vector_watermark_commit_id is None
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.tombstoned.value
+    assert replay == first
+    assert db.docs == docs_after_first
+
+
+def test_firestore_empty_replacement_without_token_stays_typed_when_gate_required(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, _ = _replacement_operation_and_write(
+        store, control, include_new=False
+    )
+    original_docs = copy.deepcopy(db.docs)
+
+    with pytest.raises(
+        store.ConversationSourceReplacementConflict,
+        match="empty replacement requires privacy gate authority uid=u1 conversation_id=conv1",
+    ):
+        store.replace_conversation_source_firestore(
+            uid="u1",
+            conversation_id="conv1",
+            replacement_id=replacement_id,
+            replacement_digest=replacement_digest,
+            replacement_operation=replacement_operation,
+            observed_control=control,
+            expected_source_items=[old],
+            expected_reactivation_items=[],
+            writes=[],
+            deletion_gate_token=None,
+            require_deletion_gate=True,
+            db_client=db,
+        )
+
+    assert db.docs == original_docs
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.active.value
+
+
 def test_firestore_conversation_replacement_does_not_replay_stale_a_b_a_receipt(store):
     control = MemoryControlState(
         uid="u1",

@@ -210,6 +210,19 @@ jobs:
             --region="${{ env.REGION }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      # See desktop_backend_prod.yml: the expectation is rendered from the
+      # manifest so it cannot drift from the values actually deployed.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        env:
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/render_backend_runtime_env.py \
+            --env dev \
+            --manifest backend/deploy/runtime_env.yaml \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -245,6 +258,9 @@ jobs:
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=true
             BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
+            FREE_TIER_LOCAL_PROCESSING=true
+            FREE_TIER_EMERGENCY_STOP=false
+            FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}
             BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
@@ -265,17 +281,6 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
             POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
-
-      # See desktop_backend_prod.yml: the expectation is rendered from the
-      # manifest so it cannot drift from the values actually deployed.
-      - name: Render desktop backend expected env state
-        id: desktop-expected-env
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/render_backend_runtime_env.py \
-            --env dev \
-            --manifest backend/deploy/runtime_env.yaml \
-            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
 
       - name: Attach Managed Prometheus sidecar to development candidate
         id: attach-gmp-sidecar

@@ -8,6 +8,12 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+
 import asyncio
 import json
 import os
@@ -1315,6 +1321,12 @@ class TestAsyncCoordinatorBehavioral:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1350,6 +1362,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',
@@ -1460,6 +1473,14 @@ class TestAsyncCoordinatorBehavioral:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -1694,6 +1715,33 @@ class TestAsyncCoordinatorBehavioral:
         pipeline.conversations_db.update_conversation.assert_called_once_with(
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
+
+    def test_merged_reprocess_destructive_op_fence_is_not_swallowed(self, fenced_worker_module):
+        '''A transient destructive-op fence must fail the batch, not log-and-continue.'''
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class DestructiveOperationInProgress(RuntimeError):
+            pass
+
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=DestructiveOperationInProgress('legal_hold_deletion_gates')
+        )
+        response = {
+            '_merged': {'conv-a': 'en', 'conv-b': 'fr'},
+            'updated_memories': {'conv-a', 'conv-b'},
+            'new_memories': set(),
+        }
+
+        with pytest.raises(DestructiveOperationInProgress):
+            pipeline._reprocess_merged_conversations('uid', response)
+
+        pipeline.logger.error.assert_not_called()
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'conv-a', 'en'),
+        ]
+        assert response['updated_memories'] == {'conv-a', 'conv-b'}
 
     def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
         """A pendant conversation becomes webhook-visible when merged speech revives it."""
@@ -2345,11 +2393,12 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_completes_as_silence(self):
-        """A provider that returns no words for VAD-admitted audio is reporting
-        silence, not failing. The job completes, the content ledger is marked
-        done rather than left retryable, and no usage is billed — the client
-        stops re-uploading the same noise as a failed recording."""
+    @pytest.mark.parametrize('intake_outcome', ['silence', 'deleted', 'lineage', 'protected'])
+    @pytest.mark.parametrize('task_mode', [False, True])
+    async def test_empty_or_superseded_intake_completes_without_retry(self, intake_outcome, task_mode):
+        """Silence and user-superseded intake finish the ledger without errors or
+        usage in both inline and Cloud Tasks modes; #14337 must not recur as
+        endless client re-upload of an intentionally empty result."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2366,6 +2415,25 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
+
+            if intake_outcome != 'silence':
+
+                def payload(**values):
+                    return types.SimpleNamespace(**values, model_dump=lambda: values)
+
+                stubs['pipeline'].CreateConversation = payload
+                stubs['pipeline'].Conversation = payload
+                stubs['pipeline'].ConversationSource = lambda value: value
+                stubs['pipeline'].get_timestamp_from_path = lambda path: 1700000001.0
+                stubs['pipeline'].prerecorded.return_value = ([{'text': 'Speech'}], 'en')
+                stubs['pipeline'].postprocess_words = lambda *a: [types.SimpleNamespace(start=0, end=3)]
+                stubs['pipeline'].identify_speakers_for_segments = lambda *a: None
+
+                def superseded(*a, **kw):
+                    raise stubs['pipeline'].SyncAssignmentSuperseded(intake_outcome)
+
+                sys.modules['utils.conversations.lifecycle'].ingest_sync_conversation = superseded
+
             terminal_events = []
             stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
                 terminal_events.append('content_completed') or True
@@ -2382,6 +2450,7 @@ class TestAsyncCoordinatorBehavioral:
                 False,
                 '/tmp/job-empty',
                 content_id='content-empty',
+                task_mode=task_mode,
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
@@ -3130,6 +3199,12 @@ class TestV2EndpointExecution:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3165,6 +3240,7 @@ class TestV2EndpointExecution:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',
@@ -3273,6 +3349,14 @@ class TestV2EndpointExecution:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.

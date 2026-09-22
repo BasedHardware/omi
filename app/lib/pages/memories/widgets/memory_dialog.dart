@@ -1,7 +1,9 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -80,11 +82,13 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 ),
                 if (isEditing)
                   IconButton(
+                    tooltip: context.l10n.delete,
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () => _showDeleteConfirmation(context),
                   )
                 else
                   IconButton(
+                    tooltip: context.l10n.close,
                     icon: Icon(Icons.close, color: Colors.grey.shade400),
                     onPressed: () => Navigator.pop(context),
                   ),
@@ -97,6 +101,8 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 child: TextField(
                   key: const ValueKey('memory_content_field'),
                   controller: contentController,
+                  enabled: !_isSaving,
+                  onChanged: (_) => setState(() {}),
                   autofocus: true,
                   maxLines: null,
                   minLines: 3,
@@ -126,14 +132,14 @@ class _MemoryDialogState extends State<MemoryDialog> {
               width: double.infinity,
               child: ElevatedButton(
                 key: const ValueKey('memory_save_button'),
-                onPressed: _isSaving ? null : _handleSave,
+                onPressed: _isSaving || contentController.text.trim().isEmpty ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
-                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
+                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
+                  disabledForegroundColor: Colors.white38,
                 ),
                 child: _isSaving
                     ? const SizedBox(
@@ -141,7 +147,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                         ),
                       )
                     : Text(
@@ -157,7 +163,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
   }
 
   Future<void> _handleSave() async {
-    if (contentController.text.trim().isEmpty) return;
+    if (_isSaving || contentController.text.trim().isEmpty) return;
     final existingMemory = widget.memory;
     if (existingMemory != null &&
         existingMemory.isKnowledgeLedger &&
@@ -175,17 +181,18 @@ class _MemoryDialogState extends State<MemoryDialog> {
     });
 
     final isEditing = widget.memory != null;
+    final previousIds = widget.provider.memories.map((memory) => memory.id).toSet();
     bool success;
 
     try {
       if (isEditing) {
-        success = await widget.provider.editMemory(widget.memory!, contentController.text);
+        success = await widget.provider.editMemory(widget.memory!, contentController.text.trim());
         if (success) {
           PlatformManager.instance.analytics.memoriesPageEditedMemory();
         }
       } else {
         success = await widget.provider.createMemory(
-          contentController.text,
+          contentController.text.trim(),
           MemoryVisibility.private,
           MemoryCategory.manual,
         );
@@ -206,7 +213,15 @@ class _MemoryDialogState extends State<MemoryDialog> {
     });
 
     if (success) {
-      Navigator.pop(context);
+      HapticFeedback.lightImpact();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            !isEditing && SharedPreferencesUtil().pendingMemories.any((memory) => !previousIds.contains(memory.id))
+                ? '${context.l10n.saved} · ${context.l10n.syncStatusWaiting}'
+                : context.l10n.saved),
+        duration: const Duration(seconds: 2),
+      ));
+      Navigator.pop(context, true);
     }
   }
 
@@ -224,8 +239,8 @@ class _MemoryDialogState extends State<MemoryDialog> {
 }
 
 // Helper function to show the memory dialog
-Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? memory}) async {
-  return showModalBottomSheet(
+Future<bool?> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? memory}) async {
+  return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,

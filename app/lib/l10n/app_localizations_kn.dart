@@ -439,6 +439,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get autoSyncDescription => 'ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ';
 
   @override
+  String get omiButtonActions => 'Omi ಬಟನ್ ಕ್ರಿಯೆಗಳು';
+
+  @override
   String get deviceSettings => 'ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
@@ -2149,7 +2152,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ';
 
   @override
-  String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
+  String get memoryContentHint => 'ನಾನು ಬೆಳಗಿನ ಸಭೆಗಳಿಗೆ ಆದ್ಯತೆ ನೀಡುತ್ತೇನೆ.';
 
   @override
   String get failedToSaveMemory => 'ಸಂಭಾಳಿಸಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ.';
@@ -10124,4 +10127,54 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಗೆ ಸಿದ್ಧವಾಗಿದೆ',
+        'saved_sample_awaiting_embedding': 'ಮಾದರಿ ಉಳಿಸಲಾಗಿದೆ; ಧ್ವನಿ ಸಂಸ್ಕರಣೆ ಇನ್ನೂ ಅಗತ್ಯವಿದೆ',
+        'not_learned': 'ಧ್ವನಿಯನ್ನು ಕಲಿತಿಲ್ಲ',
+        'other': 'ಧ್ವನಿಯ ಸ್ಥಿತಿ ತಿಳಿದಿಲ್ಲ',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'ಈ ಮಾತುಗಾರನ ನಂತರದ ಮಾತನ್ನು ಕೂಡ ಟ್ಯಾಗ್ ಮಾಡಿ';
+
+  @override
+  String get updateSummaryWithNewNames => 'ಹೊಸ ಹೆಸರುಗಳೊಂದಿಗೆ ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸಿ';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'ನೀನು ನನಗಾಗಿ ಏನು ಮಾಡಬಲ್ಲೆ?',
+        'goal': 'ಗುರಿಯನ್ನು ಹೊಂದಿಸಲು ನನಗೆ ಸಹಾಯ ಮಾಡು',
+        'activity': 'ನನ್ನ ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳನ್ನು ಸಂಕ್ಷಿಪ್ತಗೊಳಿಸು',
+        'improve': 'ನಾನು ಹೇಗೆ ಸುಧಾರಿಸಬಹುದು?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'ಮುಂದಿನ ವಾರ';
+
+  @override
+  String get clearSearch => 'ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ';
 }

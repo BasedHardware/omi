@@ -431,6 +431,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSyncDescription => '设备连接时自动同步离线录音';
 
   @override
+  String get omiButtonActions => 'Omi 按钮操作';
+
+  @override
   String get deviceSettings => '设备设置';
 
   @override
@@ -2101,7 +2104,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alwaysInContext => '始终包含在上下文中';
 
   @override
-  String get memoryContentHint => '我喜欢冰淇淋...';
+  String get memoryContentHint => '我更喜欢在上午开会。';
 
   @override
   String get failedToSaveMemory => '保存失败。';
@@ -9903,4 +9906,54 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '声音已就绪，可用于识别',
+        'saved_sample_awaiting_embedding': '样本已保存，仍需处理声音',
+        'not_learned': '尚未学习声音',
+        'other': '声音状态未知',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => '同时标记该说话人之后的发言';
+
+  @override
+  String get updateSummaryWithNewNames => '用新名字更新摘要';
+
+  @override
+  String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '你能为我做些什么？',
+        'goal': '帮我设定一个目标',
+        'activity': '总结我最近的活动',
+        'improve': '我该如何改进？',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '下周';
+
+  @override
+  String get clearSearch => '清除搜索';
 }

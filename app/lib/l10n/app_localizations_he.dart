@@ -435,6 +435,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
+  String get omiButtonActions => 'פעולות כפתור Omi';
+
+  @override
   String get deviceSettings => 'הגדרות המכשיר';
 
   @override
@@ -2126,7 +2129,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get alwaysInContext => 'תמיד בהקשר';
 
   @override
-  String get memoryContentHint => 'אני אוהב לאכול גלידה...';
+  String get memoryContentHint => 'אני מעדיף פגישות בבוקר.';
 
   @override
   String get failedToSaveMemory => 'שמירה נכשלה. בבקשה בדוק את החיבור שלך.';
@@ -10012,4 +10015,54 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'הקול מוכן לזיהוי',
+        'saved_sample_awaiting_embedding': 'הדגימה נשמרה; עדיין נדרש עיבוד קול',
+        'not_learned': 'הקול לא נלמד',
+        'other': 'מצב הקול אינו ידוע',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'תייג גם דיבור מאוחר יותר של הדובר הזה';
+
+  @override
+  String get updateSummaryWithNewNames => 'עדכן את הסיכום עם השמות החדשים';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'מה אפשר לעשות בשבילי?',
+        'goal': 'עזור לי להגדיר מטרה',
+        'activity': 'סכם את הפעילות האחרונה שלי',
+        'improve': 'איך אוכל להשתפר?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'בשבוע הבא';
+
+  @override
+  String get clearSearch => 'ניקוי החיפוש';
 }

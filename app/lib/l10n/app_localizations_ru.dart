@@ -439,6 +439,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get autoSyncDescription => 'Автоматически синхронизировать офлайн-записи при подключении устройства';
 
   @override
+  String get omiButtonActions => 'Действия кнопки Omi';
+
+  @override
   String get deviceSettings => 'Настройки устройства';
 
   @override
@@ -2151,7 +2154,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get alwaysInContext => 'Всегда в контексте';
 
   @override
-  String get memoryContentHint => 'Я люблю есть мороженое...';
+  String get memoryContentHint => 'Я предпочитаю утренние встречи.';
 
   @override
   String get failedToSaveMemory => 'Не удалось сохранить. Пожалуйста, проверьте подключение.';
@@ -10129,4 +10132,54 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Голос готов к распознаванию',
+        'saved_sample_awaiting_embedding': 'Образец сохранён; требуется обработка голоса',
+        'not_learned': 'Голос не изучен',
+        'other': 'Состояние голоса неизвестно',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Также отметить последующую речь этого говорящего';
+
+  @override
+  String get updateSummaryWithNewNames => 'Обновить сводку с новыми именами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не удалось прочитать аудио — синхронизация невозможна';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Что ты можешь для меня сделать?',
+        'goal': 'Помоги мне поставить цель',
+        'activity': 'Подведи итог моей недавней активности',
+        'improve': 'Как мне стать лучше?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'На следующей неделе';
+
+  @override
+  String get clearSearch => 'Очистить поиск';
 }

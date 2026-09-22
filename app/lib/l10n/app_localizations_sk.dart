@@ -439,6 +439,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovať offline nahrávky pri pripojení zariadenia';
 
   @override
+  String get omiButtonActions => 'Akcie tlačidla Omi';
+
+  @override
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override
@@ -2148,7 +2151,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get alwaysInContext => 'Vždy v kontexte';
 
   @override
-  String get memoryContentHint => 'Rád jem zmrzlinu...';
+  String get memoryContentHint => 'Uprednostňujem ranné stretnutia.';
 
   @override
   String get failedToSaveMemory => 'Nepodarilo sa uložiť. Skontrolujte prosím svoje pripojenie.';
@@ -10084,4 +10087,54 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hlas je pripravený na rozpoznanie',
+        'saved_sample_awaiting_embedding': 'Vzorka uložená, hlas ešte treba spracovať',
+        'not_learned': 'Hlas nie je naučený',
+        'other': 'Stav hlasu nie je známy',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označiť aj neskoršiu reč tohto hovoriaceho';
+
+  @override
+  String get updateSummaryWithNewNames => 'Aktualizovať súhrn s novými menami';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk sa nedá prečítať — synchronizácia nie je možná';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Čo pre mňa môžeš urobiť?',
+        'goal': 'Pomôž mi stanoviť cieľ',
+        'activity': 'Zhrň moje nedávne aktivity',
+        'improve': 'Ako sa môžem zlepšiť?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Budúci týždeň';
+
+  @override
+  String get clearSearch => 'Vymazať vyhľadávanie';
 }

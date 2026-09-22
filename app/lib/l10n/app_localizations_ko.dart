@@ -431,6 +431,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get autoSyncDescription => '기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다';
 
   @override
+  String get omiButtonActions => 'Omi 버튼 동작';
+
+  @override
   String get deviceSettings => '기기 설정';
 
   @override
@@ -2105,7 +2108,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
-  String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
+  String get memoryContentHint => '오전 회의를 선호해요.';
 
   @override
   String get failedToSaveMemory => '저장에 실패했습니다. 연결을 확인하세요.';
@@ -9925,4 +9928,54 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': '음성 인식 준비 완료',
+        'saved_sample_awaiting_embedding': '샘플 저장됨; 음성 처리가 더 필요합니다',
+        'not_learned': '음성 학습 안 됨',
+        'other': '음성 상태 알 수 없음',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => '이 화자의 이후 발화도 태그하기';
+
+  @override
+  String get updateSummaryWithNewNames => '새 이름으로 요약 업데이트';
+
+  @override
+  String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '나를 위해 무엇을 해줄 수 있어?',
+        'goal': '목표를 세우는 걸 도와줘',
+        'activity': '최근 활동을 요약해 줘',
+        'improve': '어떻게 하면 더 나아질 수 있을까?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '다음 주';
+
+  @override
+  String get clearSearch => '검색 지우기';
 }

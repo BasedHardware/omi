@@ -44,10 +44,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   Future<void> _loadSummaries() async {
     if (!mounted) return;
     setState(() => _loadingSummaries = true);
-    final summaries = await getDailySummaries(limit: 3, offset: 0);
+    final result = await getDailySummaries(limit: 3, offset: 0);
     if (mounted) {
       setState(() {
-        _recentSummaries = summaries;
+        // Keep the row that is already there when the read fails.
+        if (result.ok) _recentSummaries = result.items;
         _loadingSummaries = false;
       });
     }

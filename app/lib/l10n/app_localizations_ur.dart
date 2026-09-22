@@ -437,6 +437,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
 
   @override
+  String get omiButtonActions => 'Omi بٹن کے اعمال';
+
+  @override
   String get deviceSettings => 'ڈیوائس کی ترتیبات';
 
   @override
@@ -2143,7 +2146,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get alwaysInContext => 'ہمیشہ سیاق میں';
 
   @override
-  String get memoryContentHint => 'مجھے آئس کریم کھانا پسند ہے...';
+  String get memoryContentHint => 'مجھے صبح کی میٹنگز پسند ہیں۔';
 
   @override
   String get failedToSaveMemory => 'محفوظ کرنا ناکام۔ براہ کرم اپنی کنکشن چیک کریں۔';
@@ -10104,4 +10107,54 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'آواز شناخت کے لیے تیار ہے',
+        'saved_sample_awaiting_embedding': 'نمونہ محفوظ ہے؛ آواز کی پروسیسنگ ابھی درکار ہے',
+        'not_learned': 'آواز سیکھی نہیں گئی',
+        'other': 'آواز کی حالت نامعلوم ہے',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں';
+
+  @override
+  String get updateSummaryWithNewNames => 'نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'تم میرے لیے کیا کر سکتے ہو؟',
+        'goal': 'مجھے ایک مقصد طے کرنے میں مدد کرو',
+        'activity': 'میری حالیہ سرگرمیوں کا خلاصہ دو',
+        'improve': 'میں کیسے بہتر ہو سکتا ہوں؟',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'اگلے ہفتے';
+
+  @override
+  String get clearSearch => 'تلاش صاف کریں';
 }

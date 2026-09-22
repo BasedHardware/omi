@@ -439,6 +439,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
 
   @override
+  String get omiButtonActions => 'Omi nupu toimingud';
+
+  @override
   String get deviceSettings => 'Seadme seaded';
 
   @override
@@ -2143,7 +2146,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get alwaysInContext => 'Alati kontekstis';
 
   @override
-  String get memoryContentHint => 'Mulle meeldib süüa jäätist...';
+  String get memoryContentHint => 'Eelistan hommikusi koosolekuid.';
 
   @override
   String get failedToSaveMemory => 'Salvestamine ebaõnnestus. Palun kontrollige oma ühendust.';
@@ -10086,4 +10089,54 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Hääl on tuvastamiseks valmis',
+        'saved_sample_awaiting_embedding': 'Näidis salvestatud, hääle töötlemine on ootel',
+        'not_learned': 'Hääl pole õpitud',
+        'other': 'Hääle olek teadmata',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Märgi ka selle kõneleja hilisem kõne';
+
+  @override
+  String get updateSummaryWithNewNames => 'Uuenda kokkuvõtet uute nimedega';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Mida sa minu heaks teha saad?',
+        'goal': 'Aita mul eesmärk seada',
+        'activity': 'Tee kokkuvõte minu hiljutisest tegevusest',
+        'improve': 'Kuidas saan end parandada?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Järgmisel nädalal';
+
+  @override
+  String get clearSearch => 'Tühjenda otsing';
 }
