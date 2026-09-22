@@ -2,143 +2,135 @@
 """
 screen_history_to_csv.py
 
-Converts a screen history JSON file (containing OCR text and metadata) into a
-CSV file that is safe to import into spreadsheet applications.
+A utility to convert a screen history file (JSON) into a CSV that is safe for
+spreadsheet ingestion.  The input file is expected to contain a JSON array of
+objects, each with at least the following keys:
 
-The script is intentionally lightweight and does not depend on any external
-packages beyond the Python standard library. It performs robust error handling
-and writes the output atomically to avoid corrupting existing files.
+    - timestamp: ISO‑8601 string or any string that can be written as-is
+    - text:      the raw screen text
+    - ocr_text:  optional OCR extracted text
 
-Usage:
-    python screen_history_to_csv.py <input.json> [--output <output.csv>]
+The script writes a CSV with columns ``timestamp``, ``text`` and ``ocr_text``.
+If ``ocr_text`` is missing for an entry it will be written as an empty string.
 
-If --output is omitted, the CSV will be written to the same directory as the
-input file with the same base name and a .csv extension.
+The conversion is performed atomically: a temporary file is written first and
+then renamed to the target output path.  This guarantees that the output file
+is never left in a partially written state.
+
+Usage
+-----
+    python screen_history_to_csv.py --input screen_history.json [--output screen_history.csv]
+
+If ``--output`` is omitted the input file will be overwritten atomically.
 """
 
 import argparse
 import csv
 import json
 import os
-import pathlib
-import shutil
 import sys
 import tempfile
-from typing import Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Iterable, Mapping, Any
 
 
-def _collect_headers(records: Sequence[Mapping[str, object]]) -> Sequence[str]:
-    """
-    Return a sorted list of all unique keys found in the sequence of records.
-    """
-    header_set = set()
-    for record in records:
-        header_set.update(record.keys())
-    return sorted(header_set)
-
-
-def _write_csv_atomic(
-    records: Sequence[Mapping[str, object]],
-    output_path: pathlib.Path,
-) -> pathlib.Path:
-    """
-    Write the records to a CSV file atomically.
-
-    The function writes to a temporary file in the same directory and then
-    replaces the target file in a single atomic operation.
-
-    Parameters
-    ----------
-    records
-        Sequence of mapping objects representing rows.
-    output_path
-        Destination path for the CSV file.
-
-    Returns
-    -------
-    pathlib.Path
-        The path to the written CSV file.
-    """
-    headers = _collect_headers(records)
-    temp_path = output_path.with_suffix(".tmp")
-
+def _load_json(path: Path) -> Iterable[Mapping[str, Any]]:
+    """Load a JSON array from *path* and return an iterable of dicts."""
     try:
-        with temp_path.open("w", newline="", encoding="utf-8") as fp:
-            writer = csv.DictWriter(fp, fieldnames=headers)
-            writer.writeheader()
-            for record in records:
-                writer.writerow(record)
-        # Atomic replace
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(temp_path, output_path)
-    except Exception:
-        # Ensure the temp file is removed on failure
-        if temp_path.exists():
-            temp_path.unlink()
-        raise
-    return output_path
-
-
-def convert_to_csv(
-    input_path: pathlib.Path,
-    output_path: pathlib.Path | None = None,
-) -> pathlib.Path:
-    """
-    Convert a screen history JSON file to a CSV file.
-
-    Parameters
-    ----------
-    input_path
-        Path to the input JSON file.
-    output_path
-        Optional path for the output CSV. If omitted, the CSV will be written
-        to the same directory as the input file with a .csv extension.
-
-    Returns
-    -------
-    pathlib.Path
-        The path to the created CSV file.
-    """
-    if not input_path.is_file():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    with input_path.open("r", encoding="utf-8") as fp:
-        try:
-            data = json.load(fp)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Failed to parse JSON: {exc}") from exc
+        with path.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Input file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Failed to parse JSON from {path}: {exc}") from exc
 
     if not isinstance(data, list):
-        raise ValueError("Expected a JSON array of records")
+        raise ValueError(f"Expected a JSON array in {path}, got {type(data).__name__}")
 
+    for idx, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"Item {idx} in {path} is not a JSON object")
+        yield item
+
+
+def _write_csv_atomic(rows: Iterable[Mapping[str, Any]], output_path: Path) -> None:
+    """Write *rows* to *output_path* atomically."""
+    temp_dir = output_path.parent
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+        dir=str(temp_dir),
+        suffix=".tmp",
+    ) as tmp_fh:
+        writer = csv.DictWriter(
+            tmp_fh,
+            fieldnames=["timestamp", "text", "ocr_text"],
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "timestamp": row.get("timestamp", ""),
+                    "text": row.get("text", ""),
+                    "ocr_text": row.get("ocr_text", ""),
+                }
+            )
+        temp_path = Path(tmp_fh.name)
+
+    # Replace the target file atomically
+    try:
+        temp_path.replace(output_path)
+    except Exception as exc:
+        # Clean up temp file on failure
+        temp_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Failed to replace {output_path} with temporary file: {exc}") from exc
+
+
+def convert_screen_history_to_csv(input_path: Path, output_path: Path | None = None) -> None:
+    """
+    Convert a screen history JSON file to CSV.
+
+    Parameters
+    ----------
+    input_path : Path
+        Path to the input JSON file.
+    output_path : Path | None
+        Path to the output CSV file.  If None, *input_path* is overwritten
+        atomically.
+    """
     if output_path is None:
-        output_path = input_path.with_suffix(".csv")
+        output_path = input_path
 
-    return _write_csv_atomic(data, output_path)
+    rows = _load_json(input_path)
+    _write_csv_atomic(rows, output_path)
 
 
-def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert screen history JSON to CSV."
+        description="Convert screen history JSON to CSV for spreadsheet use."
     )
     parser.add_argument(
-        "input",
-        type=pathlib.Path,
+        "--input",
+        "-i",
+        required=True,
+        type=Path,
         help="Path to the input screen history JSON file.",
     )
     parser.add_argument(
         "--output",
-        type=pathlib.Path,
-        help="Optional path for the output CSV file.",
+        "-o",
+        type=Path,
+        help="Path to the output CSV file. If omitted, the input file is overwritten.",
     )
-    return parser.parse_args(argv)
+    return parser.parse_args()
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    args = _parse_args(argv)
+def main() -> None:
+    args = _parse_args()
     try:
-        output = convert_to_csv(args.input, args.output)
-        print(f"CSV written to: {output}")
+        convert_screen_history_to_csv(args.input, args.output)
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)

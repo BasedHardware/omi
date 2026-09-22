@@ -1,8 +1,8 @@
-# Python CLI Recipes
+# Python CLI Examples
 
-This directory contains a collection of small, self‑contained Python scripts
-that demonstrate how to perform common tasks with the OMI SDK. Each recipe
-includes a brief description and a link to its documentation.
+These examples demonstrate how to use the OMI Python SDK to perform common
+tasks.  Each example is a standalone script that can be executed directly.
 
-- `screen_history_to_csv.py` – Convert screen history JSON to CSV
-- `...` – other recipes
+- `screen_history_to_csv.py` – Convert a screen history JSON file to a CSV
+  suitable for spreadsheet import.
+- ... (other examples)
