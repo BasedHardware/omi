@@ -25,6 +25,7 @@ class CaptureProvider extends CaptureController {
     super.bleListeners,
     super.openSocket,
     super.sessionOwner,
+    super.processInProgressConversation,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);

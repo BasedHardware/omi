@@ -18,7 +18,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -35,6 +34,7 @@ import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -93,6 +93,7 @@ class CaptureController extends ChangeNotifier
   final SharedPreferencesUtil _preferences;
   final IMicRecorderService? _phoneMicBatchRecorder;
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
+  final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
   bool _sessionGeolocationPublishedToWal = false;
@@ -225,6 +226,7 @@ class CaptureController extends ChangeNotifier
     CaptureBleListeners? bleListeners,
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
+    Future<CreateConversationResponse?> Function()? processInProgressConversation,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -243,6 +245,7 @@ class CaptureController extends ChangeNotifier
         _bleListeners = bleListeners,
         _openSocketOverride = openSocket,
         _sessionOwner = sessionOwner,
+        _processInProgressConversationOverride = processInProgressConversation,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
@@ -2650,6 +2653,9 @@ class CaptureController extends ChangeNotifier
   @override
   void onMessageEventReceived(MessageEvent event) {
     if (event is ConversationProcessingStartedEvent) {
+      // Replace the optimistic Process Now placeholder once the server confirms
+      // a real processing row, so timeout/retry apply to the confirmed id.
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
       _pendingAutoSyncSessionStart = _sessionStartSeconds;
       _pendingAutoSyncConversationId = event.memory.id;
@@ -2676,6 +2682,7 @@ class CaptureController extends ChangeNotifier
 
     if (event is ConversationEvent) {
       event.memory.isNew = true;
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
@@ -2766,37 +2773,28 @@ class CaptureController extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
 
-    // Force-drain tail buffer before clearing state
     final phoneSync = _wal.getSyncs().phone;
+    // Show the Conversations-tab skeleton before the WAL drain. Awaiting
+    // finalizeCurrentSession first is the 30–60s dead window users hit today.
+    // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+
     await phoneSync.finalizeCurrentSession();
     _clearSessionLocation();
 
     _resetStateVariables();
-    externalActions.addProcessingConversation(
-      ServerConversation(
-        id: '0',
-        createdAt: DateTime.now(),
-        structured: Structured('', ''),
-        status: ConversationStatus.processing,
-      ),
-    );
-    processInProgressConversation().then((result) async {
-      if (result == null || result.conversation == null) {
-        externalActions.removeProcessingConversation('0');
-        return;
-      }
-      externalActions.removeProcessingConversation('0');
-      result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
-
-      // Stamp WALs with conversation ID and auto-sync
-      if (sessionStart > 0 && result.conversation != null) {
-        await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
+    final process = _processInProgressConversationOverride ?? processInProgressConversation;
+    process().then((result) async {
+      final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
+        result: result,
+        actions: externalActions,
+        onCreated: _processConversationCreated,
+      );
+      if (sessionStart > 0 && conversationId != null) {
+        await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
     });
-
-    return;
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
