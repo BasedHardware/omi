@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import Depends, FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import html
 import os
@@ -14,6 +14,7 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
 from slack_client import SlackClient
+from slack_webhook_auth import require_slack_webhook_auth, require_slack_tool_auth
 from message_detector import MessageDetector
 
 load_dotenv()
@@ -694,7 +695,7 @@ async def logout(uid: str = Query(...)):
 @app.post("/webhook")
 async def webhook(
     request: Request,
-    uid: str = Query(..., description="User ID from OMI"),
+    uid: str = Depends(require_slack_webhook_auth),
     session_id: str = Query(None, description="Session ID from OMI (optional)")
 ):
     """
@@ -1216,7 +1217,7 @@ async def health_check():
 # ============================================================================
 
 @app.post("/api/send_message")
-async def chat_tool_send_message(request: Request):
+async def chat_tool_send_message(request: Request, _auth: None = Depends(require_slack_tool_auth)):
     """
     Chat Tool: Send a message to a Slack channel
     
@@ -1317,7 +1318,7 @@ async def chat_tool_send_message(request: Request):
 
 
 @app.post("/api/search_messages")
-async def chat_tool_search_messages(request: Request):
+async def chat_tool_search_messages(request: Request, _auth: None = Depends(require_slack_tool_auth)):
     """
     Chat Tool: Search for messages in Slack
     
@@ -1438,7 +1439,7 @@ async def chat_tool_search_messages(request: Request):
 
 
 @app.post("/api/search_channels")
-async def chat_tool_search_channels(request: Request):
+async def chat_tool_search_channels(request: Request, _auth: None = Depends(require_slack_tool_auth)):
     """
     Chat Tool: Search for Slack channels
     

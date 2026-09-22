@@ -48,6 +48,7 @@ _fastapi = types.ModuleType("fastapi")
 _fastapi.FastAPI = _Framework
 _fastapi.Request = _Framework
 _fastapi.Query = _Framework
+_fastapi.Depends = _Framework
 _fastapi.HTTPException = Exception
 _fastapi_resp = types.ModuleType("fastapi.responses")
 _fastapi_resp.HTMLResponse = _fastapi_resp.RedirectResponse = _fastapi_resp.JSONResponse = lambda *a, **kw: None
