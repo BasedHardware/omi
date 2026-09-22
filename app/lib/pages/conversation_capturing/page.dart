@@ -222,7 +222,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         ? "📸"
                         : effectivelyMuted
                             ? "🔇"
-                            : "🎙︝",
+                            : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
