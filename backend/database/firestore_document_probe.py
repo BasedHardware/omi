@@ -13,10 +13,9 @@ structural rather than remembered: a new call site is counted the day it is
 written, without touching it. Lookups wrap ``DocumentReference.get`` and
 ``Client.get_all``; queries wrap ``Query.stream`` (the funnel for ``Query.get``
 and ``CollectionReference.get`` / ``.stream``) and ``AggregationQuery.stream``.
-It records only the collection *pattern* (document ids elided) and whether the
-document existed, which is exactly the pair needed to find waste -- a read that
-is billed but returns nothing. Query streams also count one RunQuery operation
-per completed stream, so an empty query -- which still bills one read -- is
+It records the collection *pattern* (document ids elided), bounded request-owner
+tier, and whether the document existed, making billed reads that return nothing
+visible. Query streams also count one RunQuery operation per completed stream, so an empty query -- which still bills one read -- is
 visible, and documents per query operation is derivable by collection.
 
 Cardinality is bounded by construction: ids are stripped, and any pattern outside
@@ -30,6 +29,8 @@ from typing import Any
 
 from prometheus_client import Counter
 
+from database.firestore_tier_context import current_tier
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -42,18 +43,18 @@ __all__ = [
 
 FIRESTORE_DOCUMENT_READS = Counter(
     'omi_firestore_document_reads_total',
-    'Firestore document reads by collection pattern and whether the document existed. '
+    'Firestore document reads by collection pattern, request-owner tier and whether the document existed. '
     'Includes lookups and query streams. outcome="miss" is a billed read that returned nothing. '
     'Pair with omi_firestore_query_operations_total for documents per query operation.',
-    ['collection', 'outcome'],
+    ['collection', 'outcome', 'tier'],
 )
 
 
 FIRESTORE_QUERY_OPERATIONS = Counter(
     'omi_firestore_query_operations_total',
-    'Firestore RunQuery operations by collection pattern. An operation bills at least one '
+    'Firestore RunQuery operations by collection pattern and request-owner tier. An operation bills at least one '
     'document read even when it matches nothing, which per-document counting cannot show.',
-    ['collection'],
+    ['collection', 'tier'],
 )
 
 
@@ -128,6 +129,7 @@ def _record(path_parts: Any, exists: bool, amount: float = 1) -> None:
         FIRESTORE_DOCUMENT_READS.labels(
             collection=collection_pattern(path_parts),
             outcome='hit' if exists else 'miss',
+            tier=current_tier(),
         ).inc(amount)
     except Exception:
         logger.warning('firestore document read probe failed to record', exc_info=True)
@@ -141,7 +143,7 @@ def _record_operation(path_parts: Any) -> None:
     see. Never raises: telemetry must not break a read.
     """
     try:
-        FIRESTORE_QUERY_OPERATIONS.labels(collection=collection_pattern(path_parts)).inc()
+        FIRESTORE_QUERY_OPERATIONS.labels(collection=collection_pattern(path_parts), tier=current_tier()).inc()
     except Exception:
         logger.warning('firestore query operation probe failed to record', exc_info=True)
 

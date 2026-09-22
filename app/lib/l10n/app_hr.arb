@@ -557,6 +557,7 @@
     "offlineSync": "Offline sinkronizacija",
     "autoSync": "Automatska sinkronizacija",
     "autoSyncDescription": "Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže",
+    "omiButtonActions": "Radnje gumba Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Volim jesti sladoled...",
+    "memoryContentHint": "Više volim jutarnje sastanke.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10837,5 +10838,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Glas je spreman za prepoznavanje} saved_sample_awaiting_embedding{Uzorak je spremljen, čeka obradu glasa} not_learned{Glas nije naučen} other{Status glasa nije poznat}}",
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
-    "syncStatusUnsupportedAudio": "Zvuk se ne može pročitati — sinkronizacija nije moguća"
+    "syncStatusUnsupportedAudio": "Zvuk se ne može pročitati — sinkronizacija nije moguća",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Što možeš učiniti za mene?} goal{Pomozi mi postaviti cilj} activity{Sažmi moje nedavne aktivnosti} improve{Kako mogu napredovati?} other{}}",
+    "nextWeek": "Sljedeći tjedan",
+    "clearSearch": "Očisti pretragu"
 }

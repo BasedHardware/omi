@@ -109,6 +109,7 @@ from routers import (
     csat,
     jit_rollout,
     email_preferences,
+    mobile_feedback,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -229,6 +230,7 @@ app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
+app.include_router(mobile_feedback.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
@@ -317,6 +319,10 @@ app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_tim
 from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
+
+from database.firestore_tier_context import FirestoreTierMiddleware
+
+app.add_middleware(FirestoreTierMiddleware)
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

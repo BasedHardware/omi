@@ -206,6 +206,9 @@ overlay:
             value: 'false'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             value: 'false'
+          ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+            value: '1'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:

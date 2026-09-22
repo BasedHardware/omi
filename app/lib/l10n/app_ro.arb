@@ -138,6 +138,7 @@
     "offlineSync": "Sincronizare offline",
     "autoSync": "Sincronizare automată",
     "autoSyncDescription": "Sincronizează automat înregistrările offline când dispozitivul tău se conectează",
+    "omiButtonActions": "Acțiuni buton Omi",
     "deviceSettings": "Setări dispozitiv",
     "integrations": "Integrări",
     "feedbackBug": "Feedback / Eroare",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Toate amintirile sunt acum publice",
     "newMemory": "✨ Amintire nouă",
     "editMemory": "✏️ Editează amintirea",
-    "memoryContentHint": "Îmi place să mănânc înghețată...",
+    "memoryContentHint": "Prefer întâlnirile de dimineață.",
     "failedToSaveMemory": "Salvarea a eșuat. Te rugăm să verifici conexiunea.",
     "saveMemory": "Salvează amintirea",
     "retry": "Reîncearcă",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Voce pregătită pentru recunoaștere} saved_sample_awaiting_embedding{Probă salvată; mai este necesară procesarea vocii} not_learned{Vocea nu a fost învățată} other{Starea vocii este necunoscută}}",
     "tagSpeakerIncludingLaterSpeech": "Etichetează și vorbirea ulterioară a acestui vorbitor",
     "updateSummaryWithNewNames": "Actualizează rezumatul cu numele noi",
-    "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat"
+    "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ce poți face pentru mine?} goal{Ajută-mă să stabilesc un obiectiv} activity{Rezumă activitatea mea recentă} improve{Cum mă pot îmbunătăți?} other{}}",
+    "nextWeek": "Săptămâna viitoare",
+    "clearSearch": "Șterge căutarea"
 }
