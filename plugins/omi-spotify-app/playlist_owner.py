@@ -2,13 +2,12 @@
 
 Spotify's playlist payload allows `owner.display_name` to be null. The
 setup route used to assign that value to a required string field, so
-Pydantic raised and `/` returned HTTP 500 — the default-playlist dropdown
-looked empty.
+validation raised and `/` returned HTTP 500 — the default-playlist
+dropdown looked empty.
 
-Production traffic is served from BasedHardware/omi-spotify-integration.
-This module is the in-repo contract for that parse, not a deployable app.
-Apply the same `playlist_owner_label` call at the playlist-construction
-site there when cutting a release.
+`main.get_user_playlists` is the in-repo call site. Production traffic is
+still served from BasedHardware/omi-spotify-integration; apply the same
+`playlist_owner_label` call at its playlist-construction site.
 """
 
 from typing import Any, Dict, List, Mapping
