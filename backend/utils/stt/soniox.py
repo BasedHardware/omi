@@ -207,10 +207,27 @@ class SafeSonioxSocket(STTSocket):
             if self._closed:
                 return
             self._closed = True
+
+        def finish_on_loop() -> None:
+            try:
+                self._flush_pending()
+            finally:
+                try:
+                    self._send_queue.put_nowait(b'')
+                except asyncio.QueueFull:
+                    self._mark_dead('send queue full')
+
         try:
-            self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
-        except (RuntimeError, Exception):
-            pass
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if current_loop is self._loop:
+            finish_on_loop()
+        else:
+            try:
+                self._loop.call_soon_threadsafe(finish_on_loop)
+            except RuntimeError:
+                self._mark_dead('finish called after provider event loop closed')
 
     async def drain_and_close(self) -> None:
         try:

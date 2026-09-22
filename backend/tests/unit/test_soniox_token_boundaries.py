@@ -176,3 +176,32 @@ def test_finalize_from_worker_thread_uses_provider_loop():
         assert ws.sent == ['{"type": "finalize"}', '']
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('worker_thread', [False, True])
+def test_finish_delivers_pending_word_exactly_once(worker_thread):
+    class HangingSocket(Socket):
+        def __aiter__(self):
+            async def receive():
+                yield json.dumps({'tokens': [token('tail.')]})
+                await asyncio.Event().wait()
+
+            return receive()
+
+    async def run():
+        captured = []
+        sock = SafeSonioxSocket(HangingSocket([]), captured.extend, asyncio.get_running_loop())
+        await asyncio.sleep(0)
+        assert captured == []
+        if worker_thread:
+            await asyncio.to_thread(sock.finish)
+        else:
+            sock.finish()
+        assert [s['text'] for s in captured] == ['tail.']
+        sock.finish()
+        sock._recv_task.cancel()
+        sock._send_task.cancel()
+        await asyncio.gather(sock._recv_task, sock._send_task, return_exceptions=True)
+        assert [s['text'] for s in captured] == ['tail.']
+
+    asyncio.run(run())
