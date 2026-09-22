@@ -12,8 +12,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
+from unittest.mock import MagicMock, patch
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -55,7 +54,9 @@ _lc_tools = _mod("langchain_core.tools")
 class BaseTool:
     pass
 class StructuredTool:
-    pass
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 _lc_tools.BaseTool = BaseTool
 _lc_tools.StructuredTool = StructuredTool
 
@@ -131,6 +132,37 @@ class TestAppToolsSanitization(unittest.TestCase):
                 )
                 self.assertEqual("Error calling test_tool: An unexpected error occurred.", result)
                 self.assertNotIn("internal app tool secret leak", result)
+                self.assertNotIn("RuntimeError", result)
+
+        asyncio.run(_run())
+
+    def test_mcp_tool_unexpected_exception_sanitized(self):
+        async def _run():
+            app_tool = MagicMock()
+            app_tool.name = "mcp_test_tool"
+            app_tool.action = "test_action"
+            app_tool.description = "Test MCP Tool"
+            app_tool.is_mcp = True
+            app_tool.transport = "sse"
+            app_tool.parameters = None
+            app_tool.status_message = None
+
+            with patch.object(at, "is_app_webhook_disabled", return_value=False), \
+                 patch.object(at, "get_webhook_circuit_breaker") as mock_cb, \
+                 patch.object(at, "call_mcp_tool", side_effect=RuntimeError("internal mcp client crash with secret")):
+                cb_instance = MagicMock()
+                cb_instance.allow_request.return_value = True
+                mock_cb.return_value = cb_instance
+
+                tool = at.create_app_tool(
+                    app_tool,
+                    "app_mcp_123",
+                    "mcp_app",
+                    mcp_server_url="https://mcp.example.com",
+                )
+                result = await tool.coroutine(arg="val")
+                self.assertEqual("Error calling mcp_test_tool: An unexpected error occurred.", result)
+                self.assertNotIn("internal mcp client crash with secret", result)
                 self.assertNotIn("RuntimeError", result)
 
         asyncio.run(_run())
