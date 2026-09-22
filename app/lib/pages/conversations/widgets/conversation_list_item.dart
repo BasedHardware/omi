@@ -21,6 +21,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -208,6 +209,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   SchedulerBinding.instance.scheduleTask<void>(() {
                     if (!mounted) return;
                     if (searchQuery.isNotEmpty) {
+                      ProductTelemetry.instance.value(
+                        ProductValue.searchResultOpened,
+                        surface: ProductSurface.conversations,
+                        objectId: RecordReference.fromId(widget.conversation.id),
+                      );
                       PlatformManager.instance.analytics.conversationOpenedFromSearch(
                         conversation: widget.conversation,
                         searchQuery: searchQuery,

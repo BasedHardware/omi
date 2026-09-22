@@ -28,6 +28,7 @@ import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
@@ -65,9 +66,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   Future<void>? _knowledgeGraphPrebuildFuture;
+  ProductAttempt? _onboardingAttempt;
 
   @override
   void initState() {
+    super.initState();
+    if (!widget.forceAuthPage && !SharedPreferencesUtil().onboardingCompleted) {
+      _onboardingAttempt = ProductTelemetry.instance.start(
+        ProductJourney.onboarding,
+        surface: ProductSurface.onboarding,
+      );
+    }
     _controller = TabController(
       length: 12,
       vsync: this,
@@ -121,14 +130,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       }
       // If not signed in, it stays at the Auth page (index 0)
     });
-    super.initState();
   }
 
   @override
   void dispose() {
+    _onboardingAttempt?.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
     _controller?.dispose();
     _backgroundAnimationController.dispose();
     super.dispose();
+  }
+
+  void _completeOnboardingTelemetry() {
+    _onboardingAttempt?.complete(ProductOutcome.success);
+    _onboardingAttempt = null;
   }
 
   Future<void> _routeWithPermissionsCheck(BuildContext context) async {
@@ -365,6 +379,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
+          _completeOnboardingTelemetry();
           updateUserOnboardingState(completed: true);
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
