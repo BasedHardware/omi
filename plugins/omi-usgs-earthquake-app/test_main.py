@@ -63,7 +63,25 @@ def install_dependency_stubs():
     sys.modules.setdefault("pydantic", pydantic)
 
     httpx = types.ModuleType("httpx")
-    httpx.HTTPError = Exception
+    class HTTPError(Exception):
+        pass
+
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message=None, *, request=None, response=None):
+            super().__init__(message)
+            self.request = request
+            self.response = response
+
+    class RequestError(HTTPError):
+        pass
+
+    class TimeoutException(RequestError):
+        pass
+
+    httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
+    httpx.RequestError = RequestError
+    httpx.TimeoutException = TimeoutException
 
     class DummyAsyncClient:
         def __init__(self, *args, **kwargs):
