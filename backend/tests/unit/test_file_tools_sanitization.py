@@ -51,14 +51,20 @@ def _load(module_name, rel_path):
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
+
+
 def _tool_decorator(fn=None, **kwargs):
     if fn is not None and callable(fn):
         fn.func = fn
         return fn
+
     def dec(func):
         func.func = func
         return func
+
     return dec
+
+
 _lc_tools.tool = _tool_decorator
 
 _lc_runnables = _mod("langchain_core.runnables")
@@ -109,7 +115,9 @@ class TestFileToolsSanitization(unittest.TestCase):
         config = {"configurable": {"user_id": "u1", "chat_session_id": "s1"}}
         with patch.object(ft.chat_db, "get_chat_session_by_id", side_effect=RuntimeError("redis pool exhausted")):
             result = ft.search_files_tool.func(question="test", config=config)
-            self.assertEqual("I encountered an error while searching the files. Please try again or rephrase your question.", result)
+            self.assertEqual(
+                "I encountered an error while searching the files. Please try again or rephrase your question.", result
+            )
             self.assertNotIn("redis pool exhausted", result)
 
 
