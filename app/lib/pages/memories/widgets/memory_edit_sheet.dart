@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -141,6 +142,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                       tooltip: _isBaseline ? context.l10n.unpinAsBaseline : context.l10n.pinAsBaseline,
                     ),
                     IconButton(
+                      tooltip: context.l10n.delete,
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => _showDeleteConfirmation(context),
                     ),
@@ -154,6 +156,8 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
               child: SingleChildScrollView(
                 child: TextField(
                   controller: contentController,
+                  enabled: !_isSaving,
+                  onChanged: (_) => setState(() {}),
                   autofocus: true,
                   maxLines: null,
                   minLines: 3,
@@ -170,9 +174,9 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
             ),
             const SizedBox(height: 24),
             if (_saveFailed) ...[
-              const Text(
-                'Failed to save. Please check your connection.',
-                style: TextStyle(color: Colors.redAccent, fontSize: 13),
+              Text(
+                context.l10n.failedToSaveMemory,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -180,14 +184,14 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isSaving ? null : _handleSave,
+                onPressed: _isSaving || contentController.text.trim().isEmpty ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
-                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
+                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.1),
+                  disabledForegroundColor: Colors.white38,
                 ),
                 child: _isSaving
                     ? const SizedBox(
@@ -195,11 +199,11 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                         ),
                       )
                     : Text(
-                        _saveFailed ? 'Retry' : 'Save Memory',
+                        _saveFailed ? context.l10n.retry : context.l10n.saveMemory,
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
               ),
@@ -211,7 +215,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   }
 
   Future<void> _handleSave() async {
-    if (contentController.text.trim().isEmpty) return;
+    if (_isSaving || contentController.text.trim().isEmpty) return;
     if (widget.memory.isKnowledgeLedger &&
         (widget.memory.deleted ||
             widget.memory.invalidAt != null ||
@@ -229,7 +233,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     bool success;
 
     try {
-      success = await widget.provider.editMemory(widget.memory, contentController.text, widget.memory.category);
+      success = await widget.provider.editMemory(widget.memory, contentController.text.trim(), widget.memory.category);
     } catch (e) {
       success = false;
       Logger.debug('Error saving memory: $e');
@@ -243,7 +247,12 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     });
 
     if (success) {
-      Navigator.pop(context);
+      HapticFeedback.lightImpact();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.l10n.saved),
+        duration: const Duration(seconds: 2),
+      ));
+      Navigator.pop(context, true);
     }
   }
 
