@@ -52,7 +52,11 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
     """Parse one or more exported JSON pages and return rows ready for INSERT."""
     rows: List[Tuple] = []
     for path in pages:
-        raw = Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
+        try:
+            raw = Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
+        except OSError:
+            raise ValueError(f"Cannot read existing file {path!r}")
+        
         items = json.loads(raw)
         # Support both bare array and wrapped {"conversations": [...]} shape
         if isinstance(items, dict):
@@ -125,11 +129,11 @@ if __name__ == "__main__":
     else:
         sys.exit(
             "Usage: python conversations_to_sqlite.py conversations.json [more.json ...] -o conversations.db\n"
-            "   or: python conversations_to_sqlite.py conversations.json conversations.db"
+            "    or: python conversations_to_sqlite.py conversations.json conversations.db"
         )
 
     try:
         loaded, added, total = load(db_path, json_paths)
         print(f"Loaded {loaded} rows | New/updated: {added} | Total in DB: {total}")
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        sys.exit(f"SQLite export failed: {exc}")
+    except (OSError, ValueError, json.JSONDecodeError):
+        sys.exit("SQLite export failed")
