@@ -163,4 +163,4 @@
 * [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
-* [`weekly_digest.md`](weekly_digest.md) — weekly conversation digest export and speaker metrics.
+* [`weekly_digest.md`](weekly_digest.md) — generate weekly conversation digests with speaker metrics.
