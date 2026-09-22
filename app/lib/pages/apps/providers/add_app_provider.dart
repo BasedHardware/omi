@@ -23,6 +23,14 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 class AddAppProvider extends ChangeNotifier {
+  final Future<bool> Function(String appId, String keyId) _deleteApiKeyServer;
+  final Future<List<AppApiKey>> Function(String appId) _listApiKeysServer;
+
+  AddAppProvider({
+    Future<bool> Function(String appId, String keyId)? deleteApiKeyServerFn,
+    Future<List<AppApiKey>> Function(String appId)? listApiKeysServerFn,
+  })  : _deleteApiKeyServer = deleteApiKeyServerFn ?? deleteApiKeyServer,
+        _listApiKeysServer = listApiKeysServerFn ?? listApiKeysServer;
   AppProvider? appProvider;
 
   GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -1058,7 +1066,7 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      apiKeys = await listApiKeysServer(appId);
+      apiKeys = await _listApiKeysServer(appId);
     } catch (e) {
       print('Error loading provider API keys: $e');
     } finally {
@@ -1074,7 +1082,10 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteApiKey(String appId, String keyId) async {
-    await deleteApiKeyServer(appId, keyId);
+    final deleted = await _deleteApiKeyServer(appId, keyId);
+    if (!deleted) {
+      throw Exception('API key revocation was rejected by the server');
+    }
     await loadApiKeys(appId);
   }
 }

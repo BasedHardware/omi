@@ -436,6 +436,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get autoSyncDescription => 'जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें';
 
   @override
+  String get omiButtonActions => 'Omi बटन क्रियाएँ';
+
+  @override
   String get deviceSettings => 'डिवाइस सेटिंग्स';
 
   @override
@@ -2119,7 +2122,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get alwaysInContext => 'हमेशा संदर्भ में';
 
   @override
-  String get memoryContentHint => 'मुझे आइसक्रीम पसंद है...';
+  String get memoryContentHint => 'मुझे सुबह की बैठकें पसंद हैं।';
 
   @override
   String get failedToSaveMemory => 'सहेजने में विफल।';
@@ -10071,4 +10074,54 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'आवाज़ पहचान के लिए तैयार है',
+        'saved_sample_awaiting_embedding': 'नमूना सहेजा गया; आवाज़ संसाधन अभी बाकी है',
+        'not_learned': 'आवाज़ सीखी नहीं गई',
+        'other': 'आवाज़ की स्थिति अज्ञात है',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'इस वक्ता की बाद की बात भी टैग करें';
+
+  @override
+  String get updateSummaryWithNewNames => 'नए नामों के साथ सारांश अपडेट करें';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'तुम मेरे लिए क्या कर सकते हो?',
+        'goal': 'मुझे एक लक्ष्य तय करने में मदद करो',
+        'activity': 'मेरी हाल की गतिविधियों का सारांश दो',
+        'improve': 'मैं कैसे सुधार कर सकता हूँ?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'अगले सप्ताह';
+
+  @override
+  String get clearSearch => 'खोज साफ़ करें';
 }

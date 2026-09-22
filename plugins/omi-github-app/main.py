@@ -9,7 +9,9 @@ import os
 import re
 import time
 import secrets
-from urllib.parse import urlparse
+import html
+import json
+from urllib.parse import quote, urlparse
 from fastapi import FastAPI, Request, HTTPException, Query
 try:
     from fastapi import Depends
@@ -557,7 +559,7 @@ async def tool_create_issue(request: Request):
         import traceback
         log(f"EXCEPTION: {e}")
         log(traceback.format_exc())
-        return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
+        return ChatToolResponse(error="Failed to create issue due to an internal error.")
 
 
 @app.post(
@@ -606,7 +608,7 @@ async def tool_list_repos(request: Request):
 
     except Exception as e:
         log(f"Error listing repos: {e}")
-        return ChatToolResponse(error=f"Failed to list repositories: {str(e)}")
+        return ChatToolResponse(error="Failed to list repositories due to an internal error.")
 
 
 @app.post(
@@ -670,7 +672,7 @@ async def tool_list_issues(request: Request):
 
     except Exception as e:
         log(f"Error listing issues: {e}")
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        return ChatToolResponse(error="Failed to list issues due to an internal error.")
 
 
 @app.post(
@@ -746,7 +748,7 @@ async def tool_get_issue(request: Request):
 
     except Exception as e:
         log(f"Error getting issue: {e}")
-        return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
+        return ChatToolResponse(error="Failed to get issue due to an internal error.")
 
 
 @app.post(
@@ -794,7 +796,7 @@ async def tool_list_labels(request: Request):
 
     except Exception as e:
         log(f"Error listing labels: {e}")
-        return ChatToolResponse(error=f"Failed to list labels: {str(e)}")
+        return ChatToolResponse(error="Failed to list labels due to an internal error.")
 
 
 @app.post(
@@ -857,7 +859,7 @@ async def tool_add_comment(request: Request):
 
     except Exception as e:
         log(f"Error adding comment: {e}")
-        return ChatToolResponse(error=f"Failed to add comment: {str(e)}")
+        return ChatToolResponse(error="Failed to add comment due to an internal error.")
 
 
 # ============================================
@@ -884,7 +886,8 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
+        auth_url = f"/auth?uid={safe_uid}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -954,9 +957,10 @@ async def root(uid: str = Query(None)):
         """)
 
     # Authenticated - show repo selection page
+    safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
     repos = user.get("available_repos", [])
     selected_repo = user.get("selected_repo", "")
-    github_username = user.get("github_username", "Unknown")
+    github_username = html.escape(str(user.get("github_username", "Unknown")), quote=True)
     agent_provider = user.get("agent_provider") or os.getenv("DEFAULT_AGENT_PROVIDER", "cursor")
     if agent_provider not in PROVIDERS:
         agent_provider = "cursor"
@@ -1125,7 +1129,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/update-repo?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
 
@@ -1145,7 +1149,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Refresh your repository list from GitHub?')) return;
 
                     try {{
-                        const response = await fetch('/refresh-repos?uid={uid}', {{
+                        const response = await fetch('/refresh-repos?uid={safe_uid}', {{
                             method: 'POST'
                         }});
 
@@ -1172,7 +1176,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/check-repo-access?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -1206,7 +1210,7 @@ async def root(uid: str = Query(None)):
                 async function saveAgentProvider() {{
                     const provider = getSelectedProvider();
                     try {{
-                        const response = await fetch('/save-agent-provider?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -1232,7 +1236,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
+                        await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
                             method: 'POST'
                         }});
 
@@ -1247,7 +1251,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
 
@@ -1279,7 +1283,7 @@ async def root(uid: str = Query(None)):
                                 'Content-Type': 'application/json'
                             }},
                             body: JSON.stringify({{
-                                uid: '{uid}',
+                                uid: '{safe_uid}',
                                 prompt,
                                 provider,
                                 repo,
@@ -1339,7 +1343,7 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/callback")
@@ -1418,6 +1422,9 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
 
+        safe_username = html.escape(str(github_username), quote=True)
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
+
         return HTMLResponse(
             content=f"""
             <html>
@@ -1434,14 +1441,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your GitHub account <strong>@{github_username}</strong> is now linked
+                                Your GitHub account <strong>@{safe_username}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(repos)}</strong> {('repository' if len(repos) == 1 else 'repositories')}
                             </p>
                         </div>
 
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={safe_uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings
                         </a>
 
@@ -1464,6 +1471,7 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
         return HTMLResponse(
             content=f"""
             <html>
@@ -1475,8 +1483,8 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication. Please try again.</p>
+                            <a href="/auth?uid={safe_uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -1519,7 +1527,8 @@ async def update_repo(
         else:
             return {"success": False, "error": "Failed to update repository selection"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error updating repository: {e}")
+        return {"success": False, "error": "Failed to update repository"}
 
 
 @app.post("/refresh-repos")
@@ -1544,7 +1553,8 @@ async def refresh_repos(uid: str = Query(...)):
 
         return {"success": True, "repos_count": len(repos)}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error refreshing repositories: {e}")
+        return {"success": False, "error": "Failed to refresh repositories"}
 
 
 @app.post("/check-repo-access")
@@ -1587,7 +1597,8 @@ async def check_repo_access(
             "message": f"{level} access"
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error checking repo access: {e}")
+        return {"success": False, "error": "Failed to check repository access"}
 
 
 @app.post("/save-agent-provider")
@@ -1610,7 +1621,8 @@ async def save_agent_provider(
             return {"success": True, "message": "Agent provider saved"}
         return {"success": False, "error": "Failed to save"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error saving agent provider: {e}")
+        return {"success": False, "error": "Failed to save agent provider"}
 
 
 @app.post("/save-agent-key")
@@ -1634,7 +1646,8 @@ async def save_agent_key(
             return {"success": True, "message": "Agent API key saved"}
         return {"success": False, "error": "Failed to save"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error saving agent key: {e}")
+        return {"success": False, "error": "Failed to save agent key"}
 
 
 @app.post("/delete-agent-key")
@@ -1653,7 +1666,8 @@ async def delete_agent_key(
             return {"success": True, "message": "Agent API key deleted"}
         return {"success": False, "error": "Key not found"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error deleting agent key: {e}")
+        return {"success": False, "error": "Failed to delete agent key"}
 
 
 @app.post("/test-agent")
@@ -1767,7 +1781,8 @@ async def test_agent(request: Request):
         return {"success": True, "logs": logs}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error testing agent: {e}")
+        return {"success": False, "error": "Failed to execute agent test"}
 
 
 @app.post(
@@ -1967,7 +1982,7 @@ async def tool_code_feature(request: Request):
         import traceback
         log(f"Error in code_feature tool: {e}")
         log(traceback.format_exc())
-        return ChatToolResponse(error=f"Failed to implement feature: {str(e)}")
+        return ChatToolResponse(error="Failed to implement feature due to an internal error.")
 
 
 @app.get("/health")

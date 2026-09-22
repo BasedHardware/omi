@@ -148,6 +148,7 @@ def test_teach_once_new_sessions_and_offline_sync_recognize_same_person(world, m
     assert not other.person_embeddings and not suggestions
     cache = pipeline.build_person_embeddings_cache('account-a')
     assert not pipeline.build_person_embeddings_cache('account-b')
+    monkeypatch.setattr(pipeline, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(pipeline, 'extract_embedding_from_bytes', lambda *a: world.vector)
     segment = TranscriptSegment(
         id='offline-1', text='Synthetic speech about a trip', speaker='SPEAKER_07', is_user=False, start=0, end=10
@@ -269,25 +270,19 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
 
     now = datetime(2026, 9, 19, tzinfo=timezone.utc)
 
-    def load(uid, cid):
-        raw = deepcopy(world.store.rows[('users', uid, 'conversations', cid)])
-        # The audio manifest is consumed by extraction, not needed in the
-        # endpoint's response-model fixture.
-        raw.pop('audio_files')
+    def deserialize(raw):
+        raw = deepcopy(raw)
+        raw.pop('audio_files', None)
         for segment in raw['transcript_segments']:
             segment.setdefault('is_user', False)
-        return Conversation(id=cid, created_at=now, finished_at=now, structured={}, **raw)
+        return Conversation(created_at=now, finished_at=now, structured={}, **raw)
 
-    monkeypatch.setattr(conversations, '_get_valid_conversation_by_id', load)
-    monkeypatch.setattr(conversations, 'deserialize_conversation', lambda value: value)
+    monkeypatch.setattr(conversations.conversations_db, 'get_firestore_client', lambda: world.store)
+    # The fixture intentionally keeps its synthetic manifest minimal; exercise
+    # the real command/transaction while leaving storage encryption out of scope.
+    monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
+    monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
-    monkeypatch.setattr(
-        conversations.conversations_db,
-        'update_conversation_segments',
-        lambda uid, cid, segments: world.store.rows[('users', uid, 'conversations', cid)].update(
-            transcript_segments=segments
-        ),
-    )
     monkeypatch.setattr(conversations, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()
     app.include_router(conversations.router)
@@ -309,3 +304,26 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         matcher, suggestions = asyncio.run(fresh_live_match(monkeypatch, 'account-a', world.vector))
         assert matcher.speaker_to_person[7] == ('person-2', 'Synthetic Sam')
         assert set(pipeline.build_person_embeddings_cache('account-a')) == {'person-2'}
+
+
+def test_next_conversation_refreshes_profiles_but_same_conversation_keeps_locked_matches(world, monkeypatch):
+    async def exercise():
+        matcher, _ = await fresh_live_match(monkeypatch, 'account-a', world.vector)
+        await matcher.refresh_for_conversation('first')
+        assert not matcher.person_embeddings
+        await teaching.extract_speaker_samples('account-a', 'person-1', 'teach-1', ['s1', 's2'])
+        matcher.speaker_to_person[7] = ('locked', 'Locked')
+        await matcher.refresh_for_conversation('first')
+        assert matcher.speaker_to_person[7][0] == 'locked'
+        assert not matcher.person_embeddings
+        await matcher.refresh_for_conversation('second')
+        assert 'person-1' in matcher.person_embeddings
+        assert not matcher.speaker_to_person
+        await matcher.match(7, {'id': 'old', 'conversation_id': 'first', 'duration': 10, 'abs_start': 0, 'abs_end': 10})
+        assert not matcher.speaker_to_person
+        await matcher.match(
+            7, {'id': 'new', 'conversation_id': 'second', 'duration': 10, 'abs_start': 0, 'abs_end': 10}
+        )
+        assert matcher.speaker_to_person[7][0] == 'person-1'
+
+    asyncio.run(exercise())

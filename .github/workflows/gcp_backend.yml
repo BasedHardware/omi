@@ -397,6 +397,8 @@ jobs:
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: manual
+          # Read only for a development dispatch, so a production run never carries it.
+          dev_free_tier_local_processing_cohort: ${{ github.event.inputs.environment == 'development' && vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT || '' }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -12,30 +11,31 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
@@ -47,9 +47,9 @@ import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/edit_segment_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/summary_tab.dart';
 import 'widgets/share_to_contacts_sheet.dart';
-
-import 'package:omi/backend/preferences.dart';
+import 'widgets/speaker_summary_action.dart';
 
 // import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
@@ -63,11 +63,30 @@ import 'package:omi/backend/preferences.dart';
 /// so the bar never sits lower than the inset the window reports.
 double detailFloatingBarBottom(double bottomSystemInset) => math.max(32, bottomSystemInset);
 
+/// Chooses the first useful detail tab for a conversation.
+///
+/// A caller-supplied tab is authoritative: search deep links and adjacent
+/// conversation navigation use it to preserve the user's context. When no
+/// tab was requested, a completed conversation with transcript text but no
+/// generated summary opens on the transcript so retained fragment data is
+/// immediately visible.
+int conversationDetailInitialTabIndex(ServerConversation conversation, {int? requestedTabIndex}) {
+  if (requestedTabIndex != null) return requestedTabIndex;
+  if (conversation.status != ConversationStatus.completed) return 1;
+
+  final hasTranscript = conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty);
+  final hasSummary = ConversationSummarySelection.select(conversation).kind != ConversationSummaryKind.empty;
+  return hasTranscript && !hasSummary ? 0 : 1;
+}
+
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
   final bool openShareToContactsOnLoad;
-  final int initialTabIndex;
+
+  /// Null lets the page choose the first useful tab after detail hydration.
+  /// A non-null value preserves an explicit deep link or navigation context.
+  final int? initialTabIndex;
 
   /// When set (e.g. from search match snippet), open transcript and play this moment.
   final double? initialSeekStart;
@@ -78,7 +97,7 @@ class ConversationDetailPage extends StatefulWidget {
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
-    this.initialTabIndex = 1, // Default to summary tab
+    this.initialTabIndex,
     this.initialSeekStart,
     this.initialSeekEnd,
   });
@@ -93,16 +112,18 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   final focusOverviewField = FocusNode();
   final GlobalKey _shareButtonKey = GlobalKey();
   TabController? _controller;
-  final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
   // Callback to seek audio to transcript segment (start, end) in wall seconds
   Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
+  bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
   bool _didInitialSeek = false;
+  bool _hasExplicitTabSelection = false;
+  bool _resultViewedRecorded = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -181,8 +202,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
-    selectedTab = switch (widget.initialTabIndex) {
+    // The supplied conversation can be a list projection whose app results
+    // are hydrated after the first frame. Start on Summary, then select the
+    // transcript only once the final summary state is known.
+    final initialTabIndex = widget.initialTabIndex ?? 1;
+    _controller = TabController(length: 3, vsync: this, initialIndex: initialTabIndex);
+    selectedTab = switch (initialTabIndex) {
       0 => ConversationTab.transcript,
       2 => ConversationTab.actionItems,
       _ => ConversationTab.summary,
@@ -221,6 +246,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
       final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final identityEpoch = AnalyticsManager.identityEpoch;
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
@@ -237,6 +263,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       }
 
       await provider.initConversation();
+      _recordResultViewed(provider, identityEpoch);
       if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
@@ -245,22 +272,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           // holding the destination's startup sequence on this request. The
           // provider re-locates the conversation by ID after the await because
           // refreshes can reorder or replace the grouped list meanwhile.
-          unawaited(
-            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
-              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
-              provider.updateConversation(conversationId, provider.selectedDate);
-            }),
-          );
+          unawaited(_refreshDetailsAndSelectInitialTab(conversationProvider, provider, conversationId, identityEpoch));
         } else {
           provider.updateConversation(provider.conversation.id, provider.selectedDate);
+          _selectInitialTabIfNeeded(provider.conversation);
         }
-      }
-
-      // Check if this is the first conversation and show app review prompt
-      if (await _appReviewService.isFirstConversation()) {
-        if (mounted) {
-          await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
-        }
+      } else {
+        _selectInitialTabIfNeeded(provider.conversation);
       }
 
       // Auto-open share to contacts sheet if requested (from important conversation notification)
@@ -278,6 +296,72 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
+  }
+
+  void _recordResultViewed(ConversationDetailProvider provider, int identityEpoch) {
+    if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_resultViewedRecorded || !mounted || identityEpoch != AnalyticsManager.identityEpoch) return;
+      final route = ModalRoute.of(context);
+      if (route != null && !route.isCurrent) return;
+      final conversation = provider.conversationOrNull;
+      if (conversation == null ||
+          conversation.id.isEmpty ||
+          conversation.id != widget.conversation.id ||
+          !_hasRenderedDetailContent(provider)) {
+        return;
+      }
+      _resultViewedRecorded = true;
+      ProductTelemetry.instance.value(
+        ProductValue.resultViewed,
+        surface: ProductSurface.conversationDetail,
+        objectId: RecordReference.fromId(conversation.id),
+      );
+    });
+  }
+
+  bool _hasRenderedDetailContent(ConversationDetailProvider provider) {
+    final conversation = provider.conversationOrNull;
+    if (conversation == null) return false;
+    return switch (selectedTab) {
+      ConversationTab.transcript => conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty),
+      ConversationTab.summary => provider.getSummarySelection().content.trim().isNotEmpty,
+      ConversationTab.actionItems =>
+        conversation.structured.actionItems.any((item) => !item.deleted && item.description.trim().isNotEmpty),
+    };
+  }
+
+  Future<void> _refreshDetailsAndSelectInitialTab(
+    ConversationProvider conversationProvider,
+    ConversationDetailProvider provider,
+    String conversationId,
+    int identityEpoch,
+  ) async {
+    if (identityEpoch != AnalyticsManager.identityEpoch) return;
+    try {
+      await conversationProvider.updateSearchedConvoDetails(conversationId);
+    } catch (_) {
+      // The list projection is still valid enough to render. Apply the same
+      // fallback selection below if the detail refresh is unavailable.
+    }
+    if (!mounted ||
+        identityEpoch != AnalyticsManager.identityEpoch ||
+        provider.conversationOrNull?.id != conversationId) {
+      return;
+    }
+    provider.updateConversation(conversationId, provider.selectedDate);
+    _selectInitialTabIfNeeded(provider.conversation);
+    _recordResultViewed(provider, identityEpoch);
+  }
+
+  void _selectInitialTabIfNeeded(ServerConversation conversation) {
+    if (!mounted || widget.initialTabIndex != null || _hasExplicitTabSelection || _controller?.index != 1) return;
+    final index = conversationDetailInitialTabIndex(conversation);
+    if (index == 1) return;
+    setState(() {
+      selectedTab = ConversationTab.transcript;
+    });
+    _controller?.animateTo(index);
   }
 
   @override
@@ -748,13 +832,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                       children: [
                         // Ask about this conversation (#4515)
                         Container(
-                          width: 36,
-                          height: 36,
+                          height: 44,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: context.l10n.askAboutThisConversation,
+                          child: TextButton.icon(
+                            key: const Key('conversation_ask_omi'),
+                            style: TextButton.styleFrom(
+                                shape: const StadiumBorder(),
+                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12)),
+                            label: Text(context.l10n.askOmi),
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               final convo = provider.conversation;
@@ -776,9 +863,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         ),
                         // Star button (first) - toggle starred status
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(
                             color: provider.conversation.starred
                                 ? Colors.amber.withValues(alpha: 0.3)
@@ -850,9 +937,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         // Share button (second) - directly share summary link
                         Container(
                           key: _shareButtonKey,
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
@@ -912,47 +999,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                 : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
-                        // Search button (second) - only show on transcript and summary tabs
-                        if (_controller?.index != 2)
-                          Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: _isSearching
-                                  ? Colors.deepPurple.withValues(alpha: 0.8)
-                                  : Colors.grey.withValues(alpha: 0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              tooltip: context.l10n.search,
-                              onPressed: () {
-                                setState(() {
-                                  _isSearching = !_isSearching;
-                                  if (!_isSearching) {
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                    _searchFocusNode.unfocus();
-                                  } else {
-                                    _searchFocusNode.requestFocus();
-                                    PlatformManager.instance.analytics.conversationDetailSearchClicked(
-                                      conversationId: provider.conversation.id,
-                                    );
-                                  }
-                                });
-                                HapticFeedback.mediumImpact();
-                              },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                            ),
-                          ),
                         // Developer Tools button (third) - iOS style pull-down menu
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           child: PullDownButton(
                             itemBuilder: (context) => [
+                              if (_controller?.index != 2)
+                                PullDownMenuItem(
+                                  title: context.l10n.search,
+                                  iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
+                                  onTap: () {
+                                    setState(() {
+                                      _isSearching = !_isSearching;
+                                      if (!_isSearching) {
+                                        _searchQuery = '';
+                                        _searchController.clear();
+                                        _searchFocusNode.unfocus();
+                                      } else {
+                                        _searchFocusNode.requestFocus();
+                                        PlatformManager.instance.analytics.conversationDetailSearchClicked(
+                                          conversationId: provider.conversation.id,
+                                        );
+                                      }
+                                    });
+                                    HapticFeedback.mediumImpact();
+                                  },
+                                ),
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
                                 iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
@@ -1126,6 +1200,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                   },
                                 ),
                                 SummaryTab(
+                                  reviewEnabled: !widget.isFromOnboarding &&
+                                      widget.initialSeekStart == null &&
+                                      selectedTab == ConversationTab.summary &&
+                                      !_controller!.indexIsChanging &&
+                                      !_isSearching &&
+                                      !_isSharing &&
+                                      !_isDownloadingAudio &&
+                                      !_reviewInterrupted,
                                   searchQuery: _searchQuery,
                                   currentResultIndex: getCurrentResultIndexForHighlighting(),
                                   onTapWhenSearchEmpty: () {
@@ -1167,6 +1249,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                       final hasActionItems =
                           conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                       return ConversationBottomBar(
+                        onAudioInteraction: () {
+                          if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+                        },
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
@@ -1185,6 +1270,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                           });
                         },
                         onTabSelected: (tab) {
+                          _hasExplicitTabSelection = true;
                           int index;
                           switch (tab) {
                             case ConversationTab.transcript:
@@ -1354,78 +1440,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class SummaryTab extends StatefulWidget {
-  final String searchQuery;
-  final int currentResultIndex;
-  final VoidCallback? onTapWhenSearchEmpty;
-
-  const SummaryTab({super.key, this.searchQuery = '', this.currentResultIndex = -1, this.onTapWhenSearchEmpty});
-
-  @override
-  State<SummaryTab> createState() => _SummaryTabState();
-}
-
-class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return GestureDetector(
-      excludeFromSemantics: true,
-      behavior: HitTestBehavior.translucent,
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        // If search is empty, call the callback to close search
-        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-          widget.onTapWhenSearchEmpty!();
-        }
-      },
-      child: Selector<ConversationDetailProvider, bool>(
-        selector: (context, provider) => provider.conversation.discarded,
-        builder: (context, discarded, child) {
-          return Stack(
-            children: [
-              CustomScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                slivers: [
-                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
-                  discarded
-                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                      : GetAppsWidgets(
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                          canStartEditing: () {
-                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                            if (!connectivityProvider.isConnected) {
-                              ConnectivityProvider.showNoInternetDialog(context);
-                              return false;
-                            }
-                            return true;
-                          },
-                          onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
-                          onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
-                          onSaveSummarySelection: (selection, newContent) {
-                            PlatformManager.instance.analytics.editSummarySaved();
-                            context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                  selection,
-                                  newContent,
-                                );
-                          },
-                        ),
-                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
-                ],
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -1789,108 +1803,93 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               );
             }
 
-            return getTranscriptWidget(
-              false,
-              segments,
-              photos,
-              null,
-              conversationId: conversation.id,
-              horizontalMargin: false,
-              topMargin: false,
-              canDisplaySeconds: provider.canDisplaySeconds,
-              isConversationDetail: true,
-              bottomMargin: 150,
-              searchQuery: widget.searchQuery,
-              currentResultIndex: widget.currentResultIndex,
-              onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-              onSegmentTap: widget.onSegmentTap,
-              onEditSegmentText: (segmentIndex) {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (!connectivityProvider.isConnected) {
-                  ConnectivityProvider.showNoInternetDialog(context);
-                  return;
-                }
-                final segments = provider.conversation.transcriptSegments;
-                final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
-                    context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
-                PlatformManager.instance.analytics.editSegmentTextStarted();
-                bool saved = false;
-                showEditSegmentBottomSheet(
-                  context,
-                  segment: segment,
-                  speakerName: speakerName,
-                  onSave: (newText) {
-                    saved = true;
-                    PlatformManager.instance.analytics.editSegmentTextSaved();
-                    provider.saveEditingSegmentText(segmentIndex, newText);
-                  },
-                  onDismissed: () {
-                    if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
-                  },
-                );
-              },
-              editSegment: (segmentId, speakerId) {
-                final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                if (!connectivityProvider.isConnected) {
-                  ConnectivityProvider.showNoInternetDialog(context);
-                  return;
-                }
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.black,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-                  builder: (context) {
-                    return Consumer<PeopleProvider>(
-                      builder: (context, peopleProvider, child) {
-                        return NameSpeakerBottomSheet(
-                          speakerId: speakerId,
-                          segmentId: segmentId,
-                          segments: provider.conversation.transcriptSegments,
-                          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                            provider.toggleEditSegmentLoading(true);
-                            String finalPersonId = personId;
-                            if (personId.isEmpty) {
-                              Person? newPerson = await peopleProvider.createPersonProvider(personName);
-                              if (newPerson != null) {
-                                finalPersonId = newPerson.id;
-                              } else {
-                                provider.toggleEditSegmentLoading(false);
-                                return; // Failed to create person
+            return Column(children: [
+              SpeakerSummaryAction(provider: provider),
+              Expanded(
+                  child: getTranscriptWidget(
+                false,
+                segments,
+                photos,
+                null,
+                conversationId: conversation.id,
+                horizontalMargin: false,
+                topMargin: false,
+                canDisplaySeconds: provider.canDisplaySeconds,
+                isConversationDetail: true,
+                bottomMargin: 150,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+                onSegmentTap: widget.onSegmentTap,
+                onEditSegmentText: (segmentIndex) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  final segments = provider.conversation.transcriptSegments;
+                  final segment = segments[segmentIndex];
+                  final person =
+                      segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                  final speakerName = person?.name ??
+                      context.l10n
+                          .speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+                  PlatformManager.instance.analytics.editSegmentTextStarted();
+                  bool saved = false;
+                  showEditSegmentBottomSheet(
+                    context,
+                    segment: segment,
+                    speakerName: speakerName,
+                    onSave: (newText) {
+                      saved = true;
+                      PlatformManager.instance.analytics.editSegmentTextSaved();
+                      provider.saveEditingSegmentText(segmentIndex, newText);
+                    },
+                    onDismissed: () {
+                      if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
+                    },
+                  );
+                },
+                editSegment: (segmentId, speakerId) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.black,
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                    builder: (context) {
+                      return Consumer<PeopleProvider>(
+                        builder: (context, peopleProvider, child) {
+                          return NameSpeakerBottomSheet(
+                            speakerId: speakerId,
+                            segmentId: segmentId,
+                            segments: provider.conversation.transcriptSegments,
+                            onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+                              final targetId = provider.conversation.id;
+                              final finalPersonId = personId.isEmpty
+                                  ? (await peopleProvider.createPersonProvider(personName))?.id
+                                  : personId;
+                              if (finalPersonId == null || finalPersonId.isEmpty) return false;
+                              final saved = await provider.assignSpeaker(segmentIds, finalPersonId,
+                                  speakerId: applyToSpeaker ? speakerId : null, expectedConversationId: targetId);
+                              if (saved) {
+                                PlatformManager.instance.analytics
+                                    .taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
                               }
-                            }
-
-                            PlatformManager.instance.analytics.taggedSegment(
-                              finalPersonId == 'user' ? 'User' : 'User Person',
-                            );
-
-                            for (final segmentId in segmentIds) {
-                              final segmentIndex = provider.conversation.transcriptSegments.indexWhere(
-                                (s) => s.id == segmentId,
-                              );
-                              if (segmentIndex == -1) continue;
-                              provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
-                            }
-                            await assignBulkConversationTranscriptSegments(
-                              provider.conversation.id,
-                              segmentIds,
-                              isUser: finalPersonId == 'user',
-                              personId: finalPersonId == 'user' ? null : finalPersonId,
-                            );
-                            provider.toggleEditSegmentLoading(false);
-                          },
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            );
+                              return saved;
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              )),
+            ]);
           },
         ),
       ),
@@ -1910,7 +1909,6 @@ class ActionItemDetailWidget extends StatefulWidget {
 
 class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
   static final Map<String, bool> _pendingStates = {}; // Track pending states by description
-  final AppReviewService _appReviewService = AppReviewService();
   Timer? _pendingClearTimer;
 
   @override
@@ -2043,13 +2041,6 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       if (currentIndex != -1) {
         if (newValue) {
           PlatformManager.instance.analytics.checkedActionItem(provider.conversation, currentIndex);
-
-          if (!await _appReviewService.hasCompletedFirstActionItem()) {
-            await _appReviewService.markFirstActionItemCompleted();
-            if (mounted) {
-              _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
-            }
-          }
         } else {
           PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);
         }

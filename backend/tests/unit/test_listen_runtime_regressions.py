@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from models.transcript_segment import CombineSegmentsResult
 from routers.listen.contracts import ListenRequest
 from routers.listen.conversations import resolve_onboarding_provenance_marker
 from routers.listen.runtime import ListenSessionRuntime
@@ -799,7 +800,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
 
         @staticmethod
         def combine_segments(_existing, new_segments):
-            return new_segments, [], []
+            return CombineSegmentsResult(segments=new_segments, joined=[], removed_ids=[], absorbed_into={})
 
     state = SimpleNamespace(
         active=True,
@@ -838,7 +839,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
         pusher_enabled=True,
         onboarding_handler=None,
         send_event=lambda _event: None,
-        speakers=SimpleNamespace(drain=no_op),
+        speakers=SimpleNamespace(drain=no_op, tasks=set()),
         complete_live_transcription=lambda: delivered.append(True),
     )
     processor = object.__new__(TranscriptProcessor)
@@ -852,11 +853,35 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor._translate = no_op
     processor._speaker_detection = no_op
     processor.flush_speaker_assignments = flush_speaker_assignments
+    processor._flush_failures = 0
+    processor._flush_backoff_until = 0.0
 
     monkeypatch.setattr(transcripts_module, 'TranscriptSegment', Segment)
     monkeypatch.setattr(transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace())
 
     return processor, delivered, flushed
+
+
+@pytest.mark.anyio
+async def test_teardown_with_empty_profiles_and_no_tasks_does_not_wait_on_speaker_id_done():
+    host = SimpleNamespace(
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language=None,
+        state=SimpleNamespace(
+            active=False,
+            speaker_id_done=asyncio.Event(),
+            current_conversation_id='c',
+            speaker_map_dirty=False,
+        ),
+        speakers=SimpleNamespace(tasks=set(), drain=AsyncMock(), person_embeddings={}),
+        request=SimpleNamespace(uid='u'),
+    )
+    processor = TranscriptProcessor(host)
+    processor.flush_speaker_assignments = AsyncMock()
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+    host.speakers.drain.assert_awaited()
+    processor.flush_speaker_assignments.assert_awaited()
+    assert not host.state.speaker_id_done.is_set()
 
 
 class _ProductTelemetryClient:

@@ -572,6 +572,10 @@
     "@autoSyncDescription": {
         "description": "Subtitle explaining the Auto-Sync toggle in device settings"
     },
+    "omiButtonActions": "Omi Button Actions",
+    "@omiButtonActions": {
+        "description": "Toggle in device settings that controls whether the mobile app responds to Omi button actions"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -2202,9 +2206,9 @@
     "@alwaysInContext": {
         "description": "Description for baseline memory being always in context"
     },
-    "memoryContentHint": "I like to eat ice cream...",
+    "memoryContentHint": "I prefer morning meetings.",
     "@memoryContentHint": {
-        "description": "Input hint"
+        "description": "Example of a useful personal preference to remember."
     },
     "failedToSaveMemory": "Failed to save. Please check your connection.",
     "@failedToSaveMemory": {
@@ -11914,5 +11918,45 @@
                 "type": "String"
             }
         }
+    },
+    "voiceRecognitionStatus": "{status, select, ready{Voice ready for recognition} saved_sample_awaiting_embedding{Sample saved; voice processing still needed} not_learned{Voice not learned} other{Voice status unknown}}",
+    "@voiceRecognitionStatus": {
+        "description": "Stored voice readiness only; no guarantee of a queued learning job.",
+        "placeholders": {
+            "status": {
+                "type": "String"
+            }
+        }
+    },
+    "tagSpeakerIncludingLaterSpeech": "Also tag later speech from this speaker",
+    "updateSummaryWithNewNames": "Update summary with new names",
+    "syncStatusUnsupportedAudio": "Audio couldn't be read — can't be synced",
+    "@syncStatusUnsupportedAudio": {
+        "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
+    },
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "@conversationTitleDidntGenerate": {
+        "description": "Inline conversation-row hint when processing finished but the title pass produced nothing"
+    },
+    "conversationReprocess": "Reprocess",
+    "@conversationReprocess": {
+        "description": "Inline conversation-row action to rerun title and summary generation"
+    },
+    "chatStarterPrompt": "{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}",
+    "@chatStarterPrompt": {
+        "description": "Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.",
+        "placeholders": {
+            "kind": {
+                "type": "String"
+            }
+        }
+    },
+    "nextWeek": "Next week",
+    "@nextWeek": {
+        "description": "Task due-date shortcut: seven days from today."
+    },
+    "clearSearch": "Clear search",
+    "@clearSearch": {
+        "description": "Clear the current search query."
     }
 }

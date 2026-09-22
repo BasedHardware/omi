@@ -16,7 +16,8 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
-from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
+from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
+from utils.retrieval.tools.result_bounds import cap_items_for_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -312,15 +313,30 @@ def get_memories_tool(
         logger.info(f"⚠️ get_memories_tool - {msg}")
         return msg
 
-    # Format memories using the Memory model's string formatter. Label the count as "shown" rather
-    # than "total": it is the displayed page, which may be a subset of all the user's memories.
     title = "User Memories"
     if effective_view != 'released':
         title += f" ({effective_view} view; dates are evidence time)"
-    result = f"{title} ({len(memories)} shown):\n\n"
-    result += MemoryDB.get_memories_as_str(memories)
-
-    return bounded_result(result.strip(), results_truncated, noun="memories")
+    records = []
+    for memory in memories:
+        # Preserve the existing list formatter's preference for the evidence clock.
+        stamp = _memory_read_date(memory, temporal=True)
+        if stamp and stamp.tzinfo is not None:
+            stamp = stamp.astimezone(timezone.utc)
+        date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
+        records.append(
+            format_memory_evidence(
+                memory.content,
+                suffix=f'date: {date_str}',
+                subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
+            )
+        )
+    return render_memory_evidence(
+        records,
+        title=title,
+        max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+        more_available=results_truncated,
+        offset=None if scan_truncated else max(offset, 0),
+    )
 
 
 @tool
@@ -468,7 +484,7 @@ def search_memories_tool(
             logger.info(f"⚠️ search_memories_tool - {msg}")
             return msg
 
-        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        records = []
         for match in matches:
             memory = match.memory
             score = match.score
@@ -486,7 +502,17 @@ def search_memories_tool(
                 suffix += f", as_of: {evidence_date_str}"
                 if effective_view == 'history':
                     suffix += ", historical: true"
-            result += f"- {memory.content} ({suffix})\n"
+            records.append(
+                format_memory_evidence(
+                    memory.content,
+                    suffix=suffix,
+                    subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
+                )
+            )
+
+        result = render_memory_evidence(
+            records, title=f"Memories matching '{query}'", max_chars=MAX_MEMORY_EVIDENCE_CHARS
+        )
 
         logger.info(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
 

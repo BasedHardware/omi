@@ -98,7 +98,7 @@ struct ConversationChunkSummarizer: Sendable {
     for (index, group) in groups.enumerated() {
       let generation: LocalInferenceGeneration<LocalSummaryDraft> = await runtime.generateStructuredFailClosed(
         prompt: Self.mapPrompt(Self.plainTranscript(group), index: index + 1, total: groups.count),
-        schema: LocalSummaryDraft.jsonSchema,
+        schema: LocalSummaryDraft.mapJSONSchema,
         minimumInput: minimumInput
       )
       switch generation {
@@ -110,7 +110,7 @@ struct ConversationChunkSummarizer: Sendable {
     }
 
     return await runtime.generateStructuredFailClosed(
-      prompt: Self.reducePrompt(partials),
+      prompt: Self.reducePrompt(partials, windowTokens: window),
       schema: LocalSummaryDraft.jsonSchema,
       minimumInput: minimumInput
     )
@@ -183,7 +183,26 @@ struct ConversationChunkSummarizer: Sendable {
   /// tokens. The failure showed up as `"The session's transcript exceeded the
   /// model's context size."` on prompts that had room, which is why it looked
   /// unrelated to prompt size and therefore non-deterministic.
-  static let completionReserveTokens = 2048
+  ///
+  /// 2048 was too small as well, and in a way that hid. Measured 2026-09-21 on live
+  /// AFM once the schema generated in authored order: the *same* map prompt
+  /// (18.3 KB) produced completions of 3.0 KB, 5.2 KB, 7.0 KB and 10.1 KB. The
+  /// large draws threw `"The session's transcript exceeded the model's context
+  /// size."` — at nominal thermal state, so not load — and the identical call
+  /// succeeded on retry with a small draw, which is why it read as intermittent.
+  /// On the real app path one of two long conversations reached the user as a
+  /// first-sentence title and nothing else. 3584 covers the largest draft
+  /// observed under the full caps at this estimator's bytes/3; the map pass is
+  /// additionally held to `LocalSummaryDraft.mapJSONSchema`'s tighter caps,
+  /// because a reserve alone cannot bound a completion that has no length limit.
+  static let completionReserveTokens = 3584
+
+  /// The reserve actually applied for a window. 3584 is 7/16 of AFM's 8192; on a
+  /// window half that size the same absolute reserve would leave ~400 tokens of
+  /// transcript per chunk, so smaller windows keep the previous 2048 floor.
+  static func completionReserve(windowTokens: Int) -> Int {
+    min(completionReserveTokens, max(2048, windowTokens * 7 / 16))
+  }
 
   /// UTF-8 bytes / 3. Deliberately pessimistic; see the caveat below.
   ///
@@ -232,7 +251,7 @@ struct ConversationChunkSummarizer: Sendable {
     // the first map chunk failing meant 19 of 20 conversations produced nothing.
     // A full LocalSummaryDraft -- title, overview, sections, action items --
     // runs to several hundred tokens, so the reserve has to be of that order.
-    let budget = max(windowTokens - wrapper - completionReserveTokens, 64)
+    let budget = max(windowTokens - wrapper - completionReserve(windowTokens: windowTokens), 64)
     var groups: [[TranscriptHash.Segment]] = []
     var current: [TranscriptHash.Segment] = []
     var currentTokens = 0
@@ -345,22 +364,58 @@ struct ConversationChunkSummarizer: Sendable {
   /// a small model titles the conversation "Chapter 2 of 2"; given an
   /// instruction sentence, it echoes that sentence as the title. Both were
   /// observed as user-visible titles.
-  static func reducePrompt(_ partials: [LocalSummaryDraft]) -> String {
-    let body = partials.map { draft in
+  /// `windowTokens` bounds the prompt. The reduce input is the concatenation of
+  /// every partial, so it grows with the number of chunks and had no bound at
+  /// all: it fit only because long conversations happened to make two or three
+  /// chunks. When it does not fit, each partial is cut to an equal share rather
+  /// than the tail being dropped, because a meeting's last slice is where the
+  /// decisions usually are. Within a partial the order is overview, commitments,
+  /// then section detail, so a cut costs detail before it costs a commitment.
+  static func reducePrompt(_ partials: [LocalSummaryDraft], windowTokens: Int? = nil) -> String {
+    var notes: [[String]] = partials.map { draft in
       var lines: [String] = []
       if !draft.overview.isEmpty { lines.append(draft.overview) }
-      for section in draft.sections where !section.heading.isEmpty || !section.bodyMarkdown.isEmpty {
-        lines.append("\(section.heading): \(section.bodyMarkdown)")
-      }
       for action in draft.actionItems where !action.description.isEmpty {
         lines.append("Action: \(action.description)")
       }
-      return lines.joined(separator: "\n")
-    }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+      for section in draft.sections where !section.heading.isEmpty || !section.bodyMarkdown.isEmpty {
+        lines.append("\(section.heading): \(section.bodyMarkdown)")
+      }
+      return lines
+    }.filter { !$0.isEmpty }
+
+    if let windowTokens, !notes.isEmpty {
+      let wrapper = estimatedTokens(reduceInstruction)
+      let budget = max(windowTokens - wrapper - completionReserve(windowTokens: windowTokens), 64)
+      let share = max(budget / notes.count, 32)
+      notes = notes.map { lines in
+        var kept: [String] = []
+        var used = 0
+        for line in lines {
+          let cost = estimatedTokens(line) + 1
+          if used + cost > share {
+            // Keep a truncated head of the first line that does not fit, so a
+            // partial never vanishes entirely, then stop.
+            if kept.isEmpty {
+              kept.append(String(decoding: line.utf8.prefix(max(share * 3 - 3, 64)), as: UTF8.self))
+            }
+            break
+          }
+          kept.append(line)
+          used += cost
+        }
+        return kept
+      }
+    }
+
+    let body = notes.map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
     return """
-      Write one summary of the conversation described in these notes. Title it after what the conversation was about, never after this instruction. Do not invent facts.
+      \(reduceInstruction)
 
       \(body)
       """
   }
+
+  private static let reduceInstruction =
+    "Write one summary of the conversation described in these notes. Title it after what the conversation was about, never after this instruction. Do not invent facts."
 }

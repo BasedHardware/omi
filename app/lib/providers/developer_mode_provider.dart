@@ -81,17 +81,13 @@ class DeveloperModeProvider extends BaseProvider {
 
   Future getWebhooksStatus() async {
     var res = await webhooksStatus();
-    if (res == null) {
-      conversationEventsToggled = false;
-      transcriptsToggled = false;
-      audioBytesToggled = false;
-      daySummaryToggled = false;
-    } else {
-      conversationEventsToggled = res['memory_created'];
-      transcriptsToggled = res['realtime_transcript'];
-      audioBytesToggled = res['audio_bytes'];
-      daySummaryToggled = res['day_summary'];
-    }
+    // A failed read is not "all four are off": keep the last known values instead of
+    // reporting the webhooks as disabled and caching that over the good ones.
+    if (res == null) return;
+    conversationEventsToggled = res['memory_created'];
+    transcriptsToggled = res['realtime_transcript'];
+    audioBytesToggled = res['audio_bytes'];
+    daySummaryToggled = res['day_summary'];
     SharedPreferencesUtil().conversationEventsToggled = conversationEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;

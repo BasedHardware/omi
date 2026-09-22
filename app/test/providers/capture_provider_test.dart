@@ -34,6 +34,17 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   int setPeopleCallCount = 0;
   int fetchSubscriptionCallCount = 0;
   Completer<void>? _setPeopleCompleter;
+  bool assignmentResult = false;
+  Completer<bool>? assignmentCompleter;
+  int assignmentCalls = 0;
+  int? assignedSpeaker;
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId, {int? speakerId}) async {
+    assignmentCalls++;
+    assignedSpeaker = speakerId;
+    return assignmentCompleter == null ? assignmentResult : await assignmentCompleter!.future;
+  }
+
   bool? outOfCreditsOverride;
   String? topConversationIdOverride;
 
@@ -331,6 +342,105 @@ void main() {
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
 
+  test('manual save requires acknowledgment and respects selected scope', () async {
+    final actions = MockCaptureExternalActions();
+    final conversation = ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isFalse);
+    expect(provider.segments.every((s) => s.personId == null), isTrue);
+    expect(await provider.assignSpeakerToConversation(0, '', 'Creation failed', ['a']), isFalse);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentResult = true;
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isTrue);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
+    expect(actions.assignedSpeaker, isNull);
+    expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(actions.assignedSpeaker, 0);
+    expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
+    provider.onSegmentReceived([_segment('c', 'later')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.personId, isNull);
+    provider.dispose();
+  });
+
+  test('manual acknowledgment after rollover cannot paint the next conversation', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final conversation = ServerConversation.fromJson({
+      'id': 'old',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final pending = provider.assignSpeakerToConversation(0, 'new', 'New', ['a']);
+    provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation));
+    provider.segments = [_segment('next', 'next')];
+    actions.assignmentCompleter!.complete(true);
+    expect(await pending, isTrue);
+    expect(provider.segments.single.personId, isNull);
+    provider.dispose();
+  });
+
+  test('name-only suggestions stay local and malformed or stale suggestions cannot rewrite manual labels', () {
+    final actions = MockCaptureExternalActions();
+    final provider = CaptureProvider(externalActions: actions);
+    provider.segments = [_segment('candidate', 'hello'), _segment('manual', 'hello')..personId = 'saved'];
+    Map<String, dynamic> payload = {
+      'type': 'speaker_label_suggestion',
+      'speaker_id': 0,
+      'person_id': '',
+      'person_name': 'Alex',
+      'segment_id': 'candidate'
+    };
+    provider.onMessageEventReceived(MessageEvent.fromJson(payload));
+    expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
+    expect(provider.segments.first.personId, isNull);
+    expect(actions.assignmentCalls, 0);
+    for (final invalid in [
+      {...payload, 'speaker_id': '0'},
+      {...payload, 'speaker_id': null},
+      {...payload, 'person_id': 42},
+      {...payload, 'person_name': false},
+      {...payload, 'segment_id': []},
+      {...payload, 'segment_id': 'old-conversation'},
+      {...payload, 'speaker_id': 9}
+    ]) {
+      provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
+    }
+    expect(provider.segments.first.personId, isNull);
+    provider.onMessageEventReceived(MessageEvent.fromJson({...payload, 'person_id': 'inferred'}));
+    expect(provider.segments.first.personId, 'inferred');
+    expect(actions.setPeopleCallCount, 1);
+    expect(provider.segments.last.personId, 'saved');
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['candidate']));
+    expect(provider.suggestionsBySegmentId, isEmpty);
+    provider.dispose();
+  });
+
   test('removes segments and related state on deletion event', () {
     final provider = CaptureProvider();
     final first = _segment('a', 'one');
@@ -613,17 +723,16 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('ignores event when personId is empty', () {
+    test('retains a name-only suggestion without assigning a person', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
-      // Empty personId: backend didn't assign, nothing happens
+      // Wire contract: person_id_for_client can withhold assignment while supplying a name.
       final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 
-      // Nothing stored, nothing applied
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
       expect(provider.segments.first.personId, isNull);
     });
 
@@ -1713,7 +1822,7 @@ void main() {
     // ever reaching the cap.
     test('a reconnect mid-cycle does not reset the attempt counter', () {
       fakeAsync((async) {
-        final provider = CaptureProvider(inProgressConversationLoader: () async {});
+        final provider = CaptureProvider(inProgressConversationLoader: () async => []);
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 
@@ -1740,7 +1849,9 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(inProgressConversationLoader: () async => loadCalls++);
+        final provider = CaptureProvider(inProgressConversationLoader: () async {
+          loadCalls++;
+        });
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

@@ -51,7 +51,7 @@ def _make_assigned_conversation():
     }
 
 
-def _detect_speaker_from_text(text: str):
+def _detect_speaker_from_text(text: str, language=None):
     match = re.search(r'\b(?:my name is|i am)\s+([a-z][a-z-]*)', text, re.IGNORECASE)
     return match.group(1).capitalize() if match else None
 
@@ -176,6 +176,7 @@ def _build_fakes() -> dict:
     speaker_embedding = ModuleType('utils.stt.speaker_embedding')
     speaker_embedding.extract_embedding_from_bytes = MagicMock()
     speaker_embedding.compare_embeddings = _compare_embeddings
+    speaker_embedding.speaker_embedding_configured = lambda: True
     speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
     fakes['utils.stt.speaker_embedding'] = speaker_embedding
 
@@ -185,6 +186,7 @@ def _build_fakes() -> dict:
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_audio_merge_cloud_tasks_oidc = MagicMock(return_value=0)
     cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
     fakes['utils.cloud_tasks'] = cloud_tasks
 
@@ -203,9 +205,10 @@ def _build_fakes() -> dict:
 def _build_intake_fakes() -> dict:
     """Lifecycle stub the refactored pipeline imports at its intake seam.
 
-    ``utils.sync.assignment``, ``utils.sync.merge_dedupe``, and
-    ``utils.conversations.deterministic_minimum`` are dependency-free, so the
-    real implementations are exec'd into ``fakes`` by the fixture instead.
+    ``utils.sync.assignment``, ``utils.sync.merge_dedupe``,
+    ``utils.conversations.deterministic_minimum``, ``utils.manual_speaker_assignments``,
+    and ``utils.stt.speaker_identity`` are dependency-free, so the real
+    implementations are exec'd into ``fakes`` by the fixture instead.
     ``utils.conversations.lifecycle`` carries heavyweight database imports, so
     it is AutoMocked here and tests patch ``ingest_sync_conversation`` at this
     local-import site.
@@ -243,9 +246,13 @@ def sync_module():
 
     # The new seam's pure imports (merge_dedupe, deterministic_minimum, assignment)
     # are dependency-free production code: exec the real modules so they bind the
-    # real models.* (pydantic-only, importable here) instead of mocks.
+    # real models.* (pydantic-only, importable here) instead of mocks. Assignment
+    # also imports the receipt-policy and allocator modules at scope; load those
+    # for real first so a stubbed utils tree cannot substitute MagicMocks.
     _load_real('utils.sync.merge_dedupe', 'utils/sync/merge_dedupe.py')
     _load_real('utils.conversations.deterministic_minimum', 'utils/conversations/deterministic_minimum.py')
+    _load_real('utils.manual_speaker_assignments', 'utils/manual_speaker_assignments.py')
+    _load_real('utils.stt.speaker_identity', 'utils/stt/speaker_identity.py')
     _load_real('utils.sync.assignment', 'utils/sync/assignment.py')
 
     try:
@@ -962,13 +969,14 @@ class TestBuildPersonEmbeddingsCache:
 
 
 class TestExtractSpeakerClipWav:
-    """Verify _extract_speaker_clip_wav clips audio correctly."""
+    """Verify pooled WAV extraction preserves bounds and the total evidence floor."""
 
     def test_extracts_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 3.0)
+        evidence = collect_speaker_audio(audio, [(1.0, 3.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         # Verify it's valid WAV
         with wave.open(io.BytesIO(clip), 'rb') as wf:
@@ -976,27 +984,30 @@ class TestExtractSpeakerClipWav:
             assert 1.8 < clip_duration < 2.2  # ~2 seconds
 
     def test_returns_none_for_short_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.5)  # only 0.5s < 1.0s threshold
+        evidence = collect_speaker_audio(audio, [(1.0, 1.5)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # only 0.5s < 1.0s threshold
         assert clip is None
 
     def test_caps_at_10_seconds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=20.0)
-        clip = _extract_speaker_clip_wav(audio, 0.0, 15.0)
+        evidence = collect_speaker_audio(audio, [(0.0, 15.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
             assert clip_duration <= 10.1  # should be capped at ~10s
 
     def test_clamps_to_audio_bounds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=3.0)
-        clip = _extract_speaker_clip_wav(audio, -1.0, 5.0)
+        evidence = collect_speaker_audio(audio, [(-1.0, 5.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
@@ -1133,6 +1144,27 @@ class TestIdentifySpeakersForSegments:
         identify_speakers_for_segments(segments, None, {}, 'uid1')
 
         assert segments[0].person_id == 'p1'
+
+    def test_unset_embedding_url_skips_voice_match(self, monkeypatch):
+        import utils.sync.pipeline as sync_module
+
+        mock_extract = MagicMock()
+        mock_users_db = MagicMock()
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        monkeypatch.setattr(sync_module, 'extract_embedding_from_bytes', mock_extract)
+        monkeypatch.setattr(sync_module, 'speaker_embedding_configured', lambda: False)
+        monkeypatch.setattr(sync_module, 'users_db', mock_users_db)
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),
+        ]
+        audio = _make_wav_bytes(duration_sec=5.0)
+
+        sync_module.identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        mock_extract.assert_not_called()
+        assert segments[0].person_id == 'p2'
+        assert not segments[0].is_user
 
     @patch('utils.sync.pipeline.users_db')
     def test_no_audio_still_runs_text_detection(self, mock_users_db):
@@ -1551,11 +1583,12 @@ class TestSpeakerIdBoundaries:
     """Verify boundary conditions for speaker identification."""
 
     def test_exact_threshold_clip_duration(self):
-        """Clip exactly at SPEAKER_ID_MIN_AUDIO (1.0s) should be extracted."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        """Clip exactly at the total evidence floor (1.0s) should be extracted."""
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 2.0)  # exactly 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 2.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # exactly 1.0s
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             duration = wf.getnframes() / wf.getframerate()
@@ -1563,10 +1596,11 @@ class TestSpeakerIdBoundaries:
 
     def test_just_below_threshold_clip_duration(self):
         """Clip just below 1.0s threshold should return None."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.99)  # 0.99s < 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 1.99)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # 0.99s < 1.0s
         assert clip is None
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')

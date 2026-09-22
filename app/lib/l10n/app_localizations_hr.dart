@@ -438,6 +438,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get autoSyncDescription => 'Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže';
 
   @override
+  String get omiButtonActions => 'Radnje gumba Omi';
+
+  @override
   String get deviceSettings => 'Postavke uređaja';
 
   @override
@@ -2145,7 +2148,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get alwaysInContext => 'Uvijek u kontekstu';
 
   @override
-  String get memoryContentHint => 'Volim jesti sladoled...';
+  String get memoryContentHint => 'Više volim jutarnje sastanke.';
 
   @override
   String get failedToSaveMemory => 'Spremanje nije uspjelo. Molimo provjeri svoju vezu.';
@@ -10127,4 +10130,54 @@ class AppLocalizationsHr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Glas je spreman za prepoznavanje',
+        'saved_sample_awaiting_embedding': 'Uzorak je spremljen, čeka obradu glasa',
+        'not_learned': 'Glas nije naučen',
+        'other': 'Status glasa nije poznat',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Označi i kasniji govor ovog govornika';
+
+  @override
+  String get updateSummaryWithNewNames => 'Ažuriraj sažetak s novim imenima';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Zvuk se ne može pročitati — sinkronizacija nije moguća';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Što možeš učiniti za mene?',
+        'goal': 'Pomozi mi postaviti cilj',
+        'activity': 'Sažmi moje nedavne aktivnosti',
+        'improve': 'Kako mogu napredovati?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Sljedeći tjedan';
+
+  @override
+  String get clearSearch => 'Očisti pretragu';
 }

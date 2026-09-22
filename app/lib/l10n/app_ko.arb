@@ -138,6 +138,7 @@
     "offlineSync": "오프라인 동기화",
     "autoSync": "자동 동기화",
     "autoSyncDescription": "기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다",
+    "omiButtonActions": "Omi 버튼 동작",
     "deviceSettings": "기기 설정",
     "integrations": "연동",
     "feedbackBug": "피드백 / 버그",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "모든 기억이 이제 공개입니다",
     "newMemory": "✨ 새 메모리",
     "editMemory": "✏️ 메모리 편집",
-    "memoryContentHint": "아이스크림 먹는 걸 좋아해요...",
+    "memoryContentHint": "오전 회의를 선호해요.",
     "failedToSaveMemory": "저장에 실패했습니다. 연결을 확인하세요.",
     "saveMemory": "기억 저장",
     "retry": "재시도",
@@ -3246,5 +3247,14 @@
     "moreOptions": "추가 옵션",
     "filterByDate": "날짜별 필터",
     "memoryGraph": "기억 그래프",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceRecognitionStatus": "{status, select, ready{음성 인식 준비 완료} saved_sample_awaiting_embedding{샘플 저장됨; 음성 처리가 더 필요합니다} not_learned{음성 학습 안 됨} other{음성 상태 알 수 없음}}",
+    "tagSpeakerIncludingLaterSpeech": "이 화자의 이후 발화도 태그하기",
+    "updateSummaryWithNewNames": "새 이름으로 요약 업데이트",
+    "syncStatusUnsupportedAudio": "오디오를 읽을 수 없어 동기화할 수 없습니다",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
+    "nextWeek": "다음 주",
+    "clearSearch": "검색 지우기"
 }

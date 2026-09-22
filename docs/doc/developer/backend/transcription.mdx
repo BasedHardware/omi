@@ -781,3 +781,15 @@ close and must retain unconfirmed local audio until a later successful sync.
     Environment setup and configuration
   </Card>
 </CardGroup>
+
+
+## Ramped windowed TDT live transcription
+
+Managed single-channel listen sessions can opt into `parakeet-window,soniox` with
+`STT_CONNECT_ORDER_FROM_CONFIG=true` and a stable UID allocation configured by
+`PARAKEET_WINDOW_ALLOCATION_PERCENT` (default zero). The TDT leg uses speech-gated,
+six-second batch POSTs, a process session cap, bounded buffering and per-leg health.
+PTT, multi-channel, custom STT and BYOK stay outside this rollout. Provider changes
+retain session-relative audio timestamps and separate speaker epochs. Detailed
+controls, capacity arithmetic and rollback are in
+[`backend/docs/operational/windowed-live-stt.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/operational/windowed-live-stt.md).

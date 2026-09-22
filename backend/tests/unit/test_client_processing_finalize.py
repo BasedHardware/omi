@@ -54,6 +54,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 import pytest
+from utils.manual_speaker_assignments import manual_assignment
 from google.cloud import firestore as google_firestore
 from pydantic import ValidationError
 
@@ -1189,6 +1190,17 @@ def _capture_segment_write(monkeypatch: pytest.MonkeyPatch, conv: Any) -> dict[s
         return True
 
     monkeypatch.setattr(conv.conversations_db, 'update_conversation_segments', fake_update)
+
+    def assign(uid, cid, **kwargs):
+        conversation = conv.deserialize_conversation({})
+        raw = conversation.model_dump()
+        before = raw['transcript_segments']
+        updated, receipt, ids, _ = manual_assignment(raw, **kwargs)
+        conversation.transcript_segments = [TranscriptSegment(**s) for s in updated]
+        captured['kwargs'] = {'invalidate_client_processing': True}
+        return raw, ids, [], [s for i, s in enumerate(before) if updated[i]['id'] in ids]
+
+    monkeypatch.setattr(conv.conversations_db, 'assign_conversation_speaker', assign)
     monkeypatch.setattr(conv, 'emit_product_event', lambda **_kwargs: None)
     return captured
 
@@ -1372,7 +1384,7 @@ def test_assign_speaker_route_invalidates_projection(monkeypatch, stack) -> None
     monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
 
-    result = conv.set_assignee_conversation_segment(_CONV_ID, 0, 'person_id', value='person-9', uid=_UID)
+    result = conv.set_assignee_conversation_speaker(_CONV_ID, 0, 'person_id', value='person-9', uid=_UID)
 
     assert captured['kwargs'].get('invalidate_client_processing', True) is True
     assert result.client_processing is None

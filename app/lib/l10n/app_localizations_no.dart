@@ -438,6 +438,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
 
   @override
+  String get omiButtonActions => 'Omi-knapphandlinger';
+
+  @override
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
@@ -2142,7 +2145,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get alwaysInContext => 'Alltid i kontekst';
 
   @override
-  String get memoryContentHint => 'Jeg liker å spise iskrem...';
+  String get memoryContentHint => 'Jeg foretrekker møter om morgenen.';
 
   @override
   String get failedToSaveMemory => 'Kunne ikke lagre. Sjekk forbindelsen din.';
@@ -10091,4 +10094,54 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Stemmen er klar for gjenkjenning',
+        'saved_sample_awaiting_embedding': 'Prøve lagret, stemmebehandling gjenstår',
+        'not_learned': 'Stemmen er ikke lært',
+        'other': 'Stemmestatus ukjent',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Merk også senere tale fra denne taleren';
+
+  @override
+  String get updateSummaryWithNewNames => 'Oppdater sammendraget med de nye navnene';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Lyden kunne ikke leses — kan ikke synkroniseres';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Hva kan du gjøre for meg?',
+        'goal': 'Hjelp meg med å sette et mål',
+        'activity': 'Oppsummer mine siste aktiviteter',
+        'improve': 'Hvordan kan jeg bli bedre?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Neste uke';
+
+  @override
+  String get clearSearch => 'Tøm søk';
 }

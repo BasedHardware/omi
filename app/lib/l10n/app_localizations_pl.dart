@@ -437,6 +437,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get autoSyncDescription => 'Automatycznie synchronizuj nagrania offline po połączeniu urządzenia';
 
   @override
+  String get omiButtonActions => 'Akcje przycisku Omi';
+
+  @override
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override
@@ -2147,7 +2150,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get alwaysInContext => 'Zawsze w kontekście';
 
   @override
-  String get memoryContentHint => 'Lubię jeść lody...';
+  String get memoryContentHint => 'Wolę spotkania rano.';
 
   @override
   String get failedToSaveMemory => 'Nie udało się zapisać. Sprawdź połączenie.';
@@ -10122,4 +10125,54 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Głos jest gotowy do rozpoznawania',
+        'saved_sample_awaiting_embedding': 'Próbka zapisana; przetwarzanie głosu nadal potrzebne',
+        'not_learned': 'Głos nie został nauczony',
+        'other': 'Stan głosu nieznany',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'Oznacz też późniejszą mowę tego mówcy';
+
+  @override
+  String get updateSummaryWithNewNames => 'Zaktualizuj podsumowanie o nowe imiona';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Nie można odczytać dźwięku — synchronizacja niemożliwa';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Co możesz dla mnie zrobić?',
+        'goal': 'Pomóż mi wyznaczyć cel',
+        'activity': 'Podsumuj moje ostatnie aktywności',
+        'improve': 'Jak mogę się poprawić?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'W przyszłym tygodniu';
+
+  @override
+  String get clearSearch => 'Wyczyść wyszukiwanie';
 }

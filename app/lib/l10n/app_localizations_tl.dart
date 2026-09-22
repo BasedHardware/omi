@@ -440,6 +440,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
   @override
+  String get omiButtonActions => 'Mga aksyon ng button ng Omi';
+
+  @override
   String get deviceSettings => 'Mga Device Setting';
 
   @override
@@ -2157,7 +2160,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get alwaysInContext => 'Palaging nasa konteksto';
 
   @override
-  String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
+  String get memoryContentHint => 'Mas gusto ko ang mga pulong sa umaga.';
 
   @override
   String get failedToSaveMemory => 'Nabigo ang pagsave. Mangyaring suriin ang iyong koneksyon.';
@@ -10183,4 +10186,54 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'Handa na ang boses para makilala',
+        'saved_sample_awaiting_embedding': 'Na-save ang sample; kailangan pa ng pagproseso ng boses',
+        'not_learned': 'Hindi pa natutunan ang boses',
+        'other': 'Hindi alam ang katayuan ng boses',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'I-tag din ang susunod na pananalita ng speaker na ito';
+
+  @override
+  String get updateSummaryWithNewNames => 'I-update ang buod gamit ang mga bagong pangalan';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ano ang magagawa mo para sa akin?',
+        'goal': 'Tulungan mo akong magtakda ng layunin',
+        'activity': 'Ibuod ang mga kamakailan kong aktibidad',
+        'improve': 'Paano pa ako mapapabuti?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Sa susunod na linggo';
+
+  @override
+  String get clearSearch => 'I-clear ang paghahanap';
 }

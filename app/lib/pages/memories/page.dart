@@ -40,11 +40,27 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   Timer? _deleteNotificationTimer;
 
   bool _isInitialLoad = true;
+  String? _highlightedMemoryId;
+  Timer? _highlightTimer;
+
+  Future<void> _createMemory(MemoriesProvider provider) async {
+    final existingIds = provider.memories.map((m) => m.id).toSet();
+    final saved = await showMemoryDialog(context, provider);
+    if (!mounted || saved != true) return;
+    final added = provider.memories.where((m) => !existingIds.contains(m.id));
+    if (added.isEmpty) return;
+    _highlightTimer?.cancel();
+    setState(() => _highlightedMemoryId = added.last.id);
+    _highlightTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _highlightedMemoryId = null);
+    });
+  }
 
   @override
   void dispose() {
     _deleteNotificationTimer?.cancel();
     _deleteNotificationTimer = null;
+    _highlightTimer?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     _removeDeleteNotification();
@@ -391,23 +407,35 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                                         const SizedBox(height: 16),
                                         Text(
-                                          provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                              ? context.l10n.noMemoriesYet
-                                              : provider.selectedCategories.isNotEmpty
-                                                  ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                          provider.selectedCategories.length == 1
-                                                      ? context.l10n.noManualMemories
-                                                      : context.l10n.noMemoriesInCategories
-                                                  : context.l10n.noMemoriesFound,
+                                          provider.searchQuery.isNotEmpty
+                                              ? context.l10n.noMemoriesFound
+                                              : provider.memories.isEmpty && !provider.filterThisDeviceOnly
+                                                  ? context.l10n.noMemoriesYet
+                                                  : context.l10n.noMemoriesInCategories,
                                           style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                         ),
-                                        if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          TextButton(
-                                            onPressed: () => showMemoryDialog(context, provider),
-                                            child: Text(context.l10n.addFirstMemory),
-                                          ),
-                                        ],
+                                        const SizedBox(height: 8),
+                                        TextButton(
+                                          key: const Key('memories_empty_action'),
+                                          style: TextButton.styleFrom(foregroundColor: Colors.white),
+                                          onPressed: () {
+                                            if (provider.searchQuery.isNotEmpty) {
+                                              _searchController.clear();
+                                              provider.setSearchQuery('');
+                                            } else if (provider.memories.isNotEmpty || provider.filterThisDeviceOnly) {
+                                              provider.clearCategoryFilter();
+                                              provider.setFilterThisDeviceOnly(false);
+                                              provider.setCollectionView(MemoryCollectionView.all);
+                                            } else {
+                                              _createMemory(provider);
+                                            }
+                                          },
+                                          child: Text(provider.searchQuery.isNotEmpty
+                                              ? context.l10n.clearSearch
+                                              : provider.memories.isNotEmpty || provider.filterThisDeviceOnly
+                                                  ? context.l10n.resetFilters
+                                                  : context.l10n.addFirstMemory),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -421,6 +449,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     final memory = provider.filteredMemories[index];
                                     return MemoryItem(
                                       memory: memory,
+                                      highlighted: memory.id == _highlightedMemoryId,
                                       provider: provider,
                                       onTap:
                                           (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
@@ -443,13 +472,13 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                     label: context.l10n.createMemoryTooltip,
                     excludeSemantics: true,
                     onTap: () {
-                      showMemoryDialog(context, provider);
+                      _createMemory(provider);
                       PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
                     },
                     child: FloatingActionButton(
                       heroTag: 'memories_fab',
                       onPressed: () {
-                        showMemoryDialog(context, provider);
+                        _createMemory(provider);
                         PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
                       },
                       backgroundColor: Colors.deepPurple,

@@ -230,24 +230,29 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
 }
 
 /// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations), or an empty list on error.
-Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({required DateTime start, required DateTime end}) async {
+/// Returns capture-gap rows (never conversations) and whether the read
+/// answered, so a failed read is not read as "nothing to show".
+Future<({List<CalendarCaptureGap> items, bool ok})> getCalendarCaptureGaps({
+  required DateTime start,
+  required DateTime end,
+}) async {
   final url =
       '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: const <CalendarCaptureGap>[], ok: false);
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
+    final gaps = (jsonDecode(body) as List<dynamic>)
         .map(
           (row) =>
               CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
         )
         .toList();
+    return (items: gaps, ok: true);
   }
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
   debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
-  return [];
+  // 400 means no connected calendar — nothing was captured, so nothing to show.
+  return (items: const <CalendarCaptureGap>[], ok: response.statusCode == 400);
 }
 
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
@@ -483,6 +488,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   List<String> segmentIds, {
   bool? isUser,
   String? personId,
+  int? speakerId,
 }) async {
   String assignType;
   String? value;
@@ -495,13 +501,17 @@ Future<bool> assignBulkConversationTranscriptSegments(
   }
 
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
+    url: speakerId == null
+        ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
   );
   if (response == null) return false;
-  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -838,7 +848,36 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
 /// Convert to UTC first, matching the conversation-list date filter.
 String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
 
-Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+enum ConversationSearchResultOutcome { success, failure }
+
+/// A search response keeps transport/parse failures distinct from an empty,
+/// successful result. An empty list is valid data only when [outcome] is
+/// [ConversationSearchResultOutcome.success].
+class ConversationSearchResult {
+  final List<ServerConversation> items;
+  final int currentPage;
+  final int totalPages;
+  final ConversationSearchResultOutcome outcome;
+  final int? statusCode;
+
+  const ConversationSearchResult({
+    required this.items,
+    required this.currentPage,
+    required this.totalPages,
+    required this.outcome,
+    this.statusCode,
+  });
+
+  const ConversationSearchResult.failure({this.statusCode})
+      : items = const [],
+        currentPage = 0,
+        totalPages = 0,
+        outcome = ConversationSearchResultOutcome.failure;
+
+  bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
+}
+
+Future<ConversationSearchResult> searchConversationsServerResult(
   String query, {
   int? page,
   int? limit,
@@ -862,15 +901,51 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
-  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
-    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-    return (convos, data.currentPage, data.totalPages);
+    try {
+      final data = wire.GeneratedSearchConversationsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
+      return ConversationSearchResult(
+        items: convos,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+        outcome: ConversationSearchResultOutcome.success,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      Logger.debug('searchConversationsServer parse error: $e');
+      return ConversationSearchResult.failure(statusCode: response.statusCode);
+    }
   }
-  return (<ServerConversation>[], 0, 0);
+  return ConversationSearchResult.failure(statusCode: response.statusCode);
+}
+
+/// Compatibility tuple for callers that do not yet consume typed outcomes.
+/// New product journeys should use [searchConversationsServerResult].
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+  String query, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+}) async {
+  final result = await searchConversationsServerResult(
+    query,
+    page: page,
+    limit: limit,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    speakerId: speakerId,
+  );
+  return (result.items, result.currentPage, result.totalPages);
 }
 
 Future<String> testConversationPrompt(String prompt, String conversationId) async {

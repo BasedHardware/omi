@@ -983,6 +983,20 @@ ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
     ),
 )
 
+SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_keyword_timestamp_range',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('timestamp', '>=', 'start'),
+        FirestoreQueryFilter('timestamp', '<=', 'end'),
+    ),
+    index_fields=(
+        _desc('timestamp'),
+        _desc('__name__'),
+    ),
+)
+
 ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     identifier='action_items_completion_id_scan',
     collection_group='action_items',
@@ -1279,15 +1293,21 @@ MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
 # range on a different field is a compound serving query, so automatic
 # single-field indexes do not cover it however the directions line up.
 DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
-    identifier='users_signup_platform_signup_at_range',
+    identifier='users_signup_platform_signup_os_signup_at_range',
     collection_group='users',
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('signup_platform', '==', 'signup_platform'),
+        FirestoreQueryFilter('signup_os', 'in', 'signup_os_values'),
         FirestoreQueryFilter('signup_platform_at', '>=', 'start'),
         FirestoreQueryFilter('signup_platform_at', '<', 'end'),
     ),
-    index_fields=(_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
+    index_fields=(
+        _asc('signup_platform'),
+        _asc('signup_os'),
+        _asc('signup_platform_at'),
+        _asc('__name__'),
+    ),
 )
 
 # EXP-001's day-0 output count: real conversations created inside the 24h after
@@ -1408,6 +1428,7 @@ QUERY_SPECS = (
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     ENTITY_TIMELINE_MEETINGS_QUERY,
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
+    SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,
