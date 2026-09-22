@@ -1082,7 +1082,12 @@ async def delete_calendar_event_tool(
                             await delete_google_calendar_event(new_token, event_id)
                             return f"✅ Successfully deleted calendar event (ID: {event_id})"
                         except Exception as retry_error:
-                            return f"Error deleting calendar event: {retry_error}"
+                            logger.error(
+                                "❌ Unexpected error deleting event by ID after retry: %s",
+                                type(retry_error).__name__,
+                                exc_info=True,
+                            )
+                            return "Error deleting calendar event: An error occurred during deletion."
                     else:
                         return "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                 elif e.is_permission_error:
@@ -1093,8 +1098,12 @@ async def delete_calendar_event_tool(
                 logger.error(f"❌ Network error deleting event by ID: {e}")
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
             except Exception as e:
-                logger.error(f"❌ Unexpected error deleting event by ID: {e}")
-                return f"Error deleting calendar event: {e}"
+                logger.error(
+                    "❌ Unexpected error deleting event by ID: %s",
+                    type(e).__name__,
+                    exc_info=True,
+                )
+                return "Error deleting calendar event: An unexpected error occurred."
 
         # Otherwise, search for events matching criteria
         if not event_title and not start_date:

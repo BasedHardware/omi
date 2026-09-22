@@ -115,6 +115,16 @@ for _name, _attrs in {
         if not hasattr(_m, _a):
             setattr(_m, _a, MagicMock())
 
+class GoogleAPIError(Exception):
+    def __init__(self, message="Google API Error", status_code=500, is_auth_error=False, is_permission_error=False):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.is_auth_error = is_auth_error
+        self.is_permission_error = is_permission_error
+
+sys.modules["utils.retrieval.tools.google_utils"].GoogleAPIError = GoogleAPIError
+
 _telemetry = sys.modules["utils.integration_telemetry"]
 _telemetry.emit_sync_failed = MagicMock()
 _telemetry.emit_sync_succeeded = MagicMock()
@@ -214,6 +224,18 @@ class TestCalendarToolsSanitization(unittest.TestCase):
                 result = await cal.update_calendar_event_tool.func(event_title="Meeting", config=config)
                 self.assertEqual("Unexpected error updating calendar event. Please try again later.", result)
                 self.assertNotIn("internal calendar update leak", result)
+                self.assertNotIn("RuntimeError", result)
+
+        asyncio.run(_run())
+
+    def test_delete_calendar_event_by_id_unexpected_exception(self):
+        async def _run():
+            config = {"configurable": {"user_id": "u1"}}
+            with patch.object(cal, "prepare_access", return_value=("u1", "integration_123", "tok_123", None)), \
+                 patch.object(cal, "delete_google_calendar_event", side_effect=RuntimeError("sentinel_leak_marker_internal_id_delete")):
+                result = await cal.delete_calendar_event_tool.func(event_id="evt_123", config=config)
+                self.assertEqual("Error deleting calendar event: An unexpected error occurred.", result)
+                self.assertNotIn("sentinel_leak_marker_internal_id_delete", result)
                 self.assertNotIn("RuntimeError", result)
 
         asyncio.run(_run())
