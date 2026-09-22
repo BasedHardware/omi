@@ -1,4 +1,0 @@
-module CContextCore {
-    header "context_core.h"
-    export *
-}
