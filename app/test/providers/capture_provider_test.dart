@@ -1882,6 +1882,39 @@ void main() {
       expect(provider.isConversationMarkedForStarring, isTrue);
     });
 
+    test('a tap does nothing on an Omi while Omi button actions are turned off', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = false;
+      addTearDown(() => SharedPreferencesUtil().omiButtonActionsEnabled = true);
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      provider.handleButtonTapsForTesting('device', [2, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+
+    test('a tap still runs on an Omi while Omi button actions are turned on', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = true;
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('the Omi button actions switch does not silence a non-Omi device', () {
+      SharedPreferencesUtil().omiButtonActionsEnabled = false;
+      addTearDown(() => SharedPreferencesUtil().omiButtonActionsEnabled = true);
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.openglass));
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
     test('a mapped tap waits for the sequence end while a longer tap is mapped', () {
       SharedPreferencesUtil().doubleTapAction = 2;
       final provider = CaptureProvider();

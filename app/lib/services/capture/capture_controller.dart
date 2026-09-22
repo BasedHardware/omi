@@ -1310,6 +1310,7 @@ class CaptureController extends ChangeNotifier
       _ => null,
     };
     if (action == null) return;
+    if (_omiButtonActionsDisabled) return;
     if (action == ButtonAction.askQuestion) {
       _toggleVoiceQuestion(deviceId);
       return;
