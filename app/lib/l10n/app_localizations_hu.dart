@@ -440,6 +440,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
+  String get omiButtonActions => 'Omi gombműveletek';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
@@ -2158,7 +2161,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get alwaysInContext => 'Mindig a kontextusban';
 
   @override
-  String get memoryContentHint => 'Szeretek fagyit enni...';
+  String get memoryContentHint => 'A délelőtti megbeszéléseket részesítem előnyben.';
 
   @override
   String get failedToSaveMemory => 'Mentés sikertelen. Kérlek, ellenőrizd a kapcsolatot.';
@@ -10156,4 +10159,31 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Mit tudsz tenni értem?',
+        'goal': 'Segíts kitűzni egy célt',
+        'activity': 'Foglald össze a legutóbbi tevékenységeimet',
+        'improve': 'Hogyan fejlődhetek?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Jövő héten';
+
+  @override
+  String get clearSearch => 'Keresés törlése';
 }

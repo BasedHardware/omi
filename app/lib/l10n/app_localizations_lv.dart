@@ -439,6 +439,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
+  String get omiButtonActions => 'Omi pogas darbības';
+
+  @override
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override
@@ -2148,7 +2151,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
-  String get memoryContentHint => 'Man patīk ēst saldējumu...';
+  String get memoryContentHint => 'Es dodu priekšroku rīta sanāksmēm.';
 
   @override
   String get failedToSaveMemory => 'Neizdevās saglabāt. Lūdzu, pārbaudiet savienojumu.';
@@ -10139,4 +10142,31 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ko tu vari manā labā darīt?',
+        'goal': 'Palīdzi man izvirzīt mērķi',
+        'activity': 'Apkopo manas nesenās aktivitātes',
+        'improve': 'Kā es varu pilnveidoties?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Nākamnedēļ';
+
+  @override
+  String get clearSearch => 'Notīrīt meklēšanu';
 }

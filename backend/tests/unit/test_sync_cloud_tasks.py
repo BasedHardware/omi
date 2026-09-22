@@ -10,6 +10,8 @@ handler in routers/sync.py.
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 
 import asyncio
 import hashlib
@@ -2224,6 +2226,45 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_destructive_operation_fence_retries_with_typed_error_code():
+    '''A transient destructive-op fence must stay retryable and not look like STT failure.'''
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=DestructiveOperationInProgress('legal_hold_deletion_gates kind=retention_cleanup'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 1, 'destructive_operation_in_progress'
+        )
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
