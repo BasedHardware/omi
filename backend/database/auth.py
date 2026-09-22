@@ -1,8 +1,9 @@
+import re
 from typing import Any, Dict, Optional, cast
 
 from firebase_admin import auth
 
-from database._client import db
+from database._client import get_firestore_client
 from database.redis_db import cache_user_name
 import logging
 
@@ -41,50 +42,55 @@ def get_user_from_uid(uid: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _get_firestore_user_name(uid: str) -> Optional[str]:
-    """Fallback: get user name from Firestore user profile."""
+# Only the first profile line may declare identity. Requiring a complete name
+# bullet or an explicit "is" clause avoids treating arbitrary biography prose as
+# a name. The optional parenthesized spelling supports bilingual identities.
+_PROFILE_IDENTITY = re.compile(
+    r"- (?P<name>[A-Z\u3400-\u9fff\u3040-\u30ff\uac00-\ud7a3][\w'-]+(?: [A-Z\u3400-\u9fff\u3040-\u30ff\uac00-\ud7a3][\w'-]+){0,2}?)"
+    r"(?: [（(][\w '\-]+[）)])?(?: is .+)?"
+)
+
+
+def _profile_first_name(profile_text: object) -> Optional[str]:
+    if not isinstance(profile_text, str) or not profile_text:
+        return None
+    first_line = profile_text.splitlines()[0].strip()
+    match = _PROFILE_IDENTITY.fullmatch(first_line)
+    return match.group('name').split(' ')[0] if match else None
+
+
+def _get_firestore_user_name(uid: str, *, firestore_client: Any = None) -> Optional[str]:
+    """Resolve the explicit profile name before its first-line AI identity bullet."""
     try:
-        user_doc = db.collection('users').document(uid).get()
+        client = firestore_client if firestore_client is not None else get_firestore_client()
+        user_doc = client.collection('users').document(uid).get()
         if getattr(user_doc, "exists", False):
             raw: object = user_doc.to_dict()
             data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
             name = data.get('name')
             if name and isinstance(name, str):
                 return name.split(' ')[0]
+            ai_profile = data.get('ai_user_profile')
+            if isinstance(ai_profile, dict):
+                profile = cast(Dict[str, Any], ai_profile)
+                return _profile_first_name(profile.get('profile_text'))
     except Exception as e:
         logger.error(f"Firestore user name lookup failed: {e}")
     return None
 
 
 def get_user_name(uid: str, use_default: bool = True) -> Optional[str]:
-    default_name: Optional[str] = 'The User' if use_default else None
+    """Owner first name: Firebase, explicit Firestore name, then AI identity line.
+
+    Callers share this precedence and the existing one-hour name cache. Unknown
+    identities preserve the historical ``use_default`` contract.
+    """
     user = get_user_from_uid(uid)
-    if not user:
-        # Fallback to Firestore profile
-        firestore_name = _get_firestore_user_name(uid)
-        if firestore_name:
-            cache_user_name(uid, firestore_name, ttl=60 * 60)
-            return firestore_name
-        return default_name
-
-    display_name_raw = user.get('display_name')
-    if not display_name_raw:
-        # Fallback to Firestore profile
-        firestore_name = _get_firestore_user_name(uid)
-        if firestore_name:
-            cache_user_name(uid, firestore_name, ttl=60 * 60)
-            return firestore_name
-        return default_name
-
-    display_name: str = display_name_raw.split(' ')[0]
-    if display_name == 'AnonymousUser':
-        firestore_name = _get_firestore_user_name(uid)
-        if firestore_name:
-            display_name = firestore_name
-        elif use_default:
-            display_name = 'The User'
-        else:
-            return None
-
-    cache_user_name(uid, display_name, ttl=60 * 60)
-    return display_name
+    display_name_raw = user.get('display_name') if user else None
+    name = display_name_raw.split(' ')[0] if display_name_raw else None
+    if not name or name == 'AnonymousUser':
+        name = _get_firestore_user_name(uid)
+    if name:
+        cache_user_name(uid, name, ttl=60 * 60)
+        return name
+    return 'The User' if use_default else None
