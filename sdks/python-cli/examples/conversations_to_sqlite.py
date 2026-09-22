@@ -106,7 +106,7 @@ def validate_db_path(db_path: str) -> None:
             with p.open("rb") as fh:
                 header = fh.read(len(_SQLITE_MAGIC))
         except OSError as exc:
-            raise ValueError(f"Cannot read existing file {db_path!r}: {exc}") from exc
+            raise ValueError(f"Cannot read existing file {db_path!r}") from exc
         if header != _SQLITE_MAGIC:
             raise ValueError(
                 f"{db_path!r} already exists but is not a SQLite database; "
@@ -163,5 +163,5 @@ if __name__ == "__main__":
     try:
         loaded, added, total = load(db_path, json_paths)
         print(f"Loaded {loaded} rows | New/updated: {added} | Total in DB: {total}")
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        sys.exit(f"SQLite export failed: {exc}")
+    except (OSError, ValueError, json.JSONDecodeError):
+        sys.exit("SQLite export failed")
