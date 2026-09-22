@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "Fixed the companion bar auto-retracting to fully invisible ~3 seconds after every summon on native Wayland (Linux), regardless of an ongoing hover."
-  ]
-}
