@@ -118,13 +118,12 @@ def main() -> int:
 
     query = urllib.parse.urlencode(
         {
-            "filter[app]": app_id,
             "filter[platform]": "IOS",
             "filter[versionString]": version,
             "limit": "5",
         }
     )
-    code, versions = call(token, "GET", "/v1/appStoreVersions?" + query)
+    code, versions = call(token, "GET", f"/v1/apps/{app_id}/appStoreVersions?{query}")
     if code != 200:
         fail(f"ABORT: version lookup {code} {apple_error(versions)}")
     existing = versions.get("data") or []
