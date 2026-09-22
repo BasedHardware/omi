@@ -147,7 +147,5 @@ class TwitterClient:
                 
         except Exception as e:
             print(f"❌ Token refresh error: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            raise Exception(f"Failed to refresh token: {e}")
+            raise Exception("Failed to refresh token")
 
