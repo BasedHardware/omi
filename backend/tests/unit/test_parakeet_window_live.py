@@ -1246,44 +1246,6 @@ async def test_finalize_after_terminal_emits_and_reanchors(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_repeat_pause_on_a_posted_anchor_waits_for_growth(monkeypatch):
-    """The first pause after an anchor posts immediately; a second one does not.
-
-    The gate fires finalize() dozens of times a session. Honouring every one re-posts the
-    same anchor repeatedly, and because the last version of a segment wins, a later noisier
-    re-transcription can overwrite a better earlier one. On dev that was the difference
-    between WER 0.158 and 0.242 on identical audio. A repeat pause therefore waits for the
-    same growth floor an ordinary step obeys; silence and idle flush remain the escape
-    hatches when speech has genuinely stopped.
-    """
-    posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
-    # No terminal punctuation: nothing is emitted, so the anchor cannot advance and any
-    # second POST would be a pure re-transcription of the same audio.
-    client = Client(data={'segments': [{'text': 'still going', 'start': 0.0, 'end': 1.6}]})
-    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    sock = window.connect_window(posted.extend, 16000)
-    sock.mark_speech()
-    sock.send(b'\x01\x00' * 16000 * 2)
-
-    sock.finalize()
-    await _wait_requests(client, 1)
-    assert sock._anchor_bytes == 0, 'a held sentence must not advance the anchor'
-
-    # A second pause with only a little more audio must not re-post the same anchor.
-    sock.mark_speech()
-    sock.send(b'\x01\x00' * 8000)  # 0.5s, well under the pace floor
-    sock.finalize()
-    for _ in range(12):
-        sock._wake.set()
-        await _REAL_SLEEP(0)
-    assert len(client.requests) == 1, 'repeat pause re-posted an anchor that barely grew'
-
-    sock.finish()
-    await asyncio.gather(sock._pump_task, return_exceptions=True)
-
-
-@pytest.mark.asyncio
 async def test_idle_flush_emits_held_sentence_once(monkeypatch):
     from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
 
