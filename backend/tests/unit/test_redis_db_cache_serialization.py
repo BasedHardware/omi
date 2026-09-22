@@ -28,6 +28,10 @@ class _FakeRedis:
     def mget(self, keys: List[str]) -> List[Optional[Any]]:
         return [self._store.get(key) for key in keys]
 
+    def eval(self, script: str, numkeys: int, *args: Any) -> int:
+        """No Lua here, so report the value as unmergeable and let the caller fall back."""
+        return 0
+
 
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:

@@ -280,12 +280,40 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+_APP_REVIEW_MERGE_LUA = """
+local raw = redis.call('GET', KEYS[1])
+local reviews
+if raw then
+  local ok, decoded = pcall(cjson.decode, raw)
+  if ok and type(decoded) == 'table' then
+    reviews = decoded
+  else
+    return 0
+  end
+else
+  reviews = {}
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+"""
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
+    """Merge one user's review into the per-app cache without losing a concurrent one.
+
+    The whole app's reviews live under a single key that every reviewer writes, and the
+    listing reads it, so a read-modify-write here dropped a review that landed between the
+    read and the write. The merge runs inside Redis instead. A legacy non-JSON value cannot
+    be merged in Lua, so that case falls back to the old path and heals to JSON on write.
+    """
+    key = f'plugins:{app_id}:reviews'
+    if r.eval(_APP_REVIEW_MERGE_LUA, 1, key, uid, _serialize_cache_value(data)):
+        return
+    loaded = _deserialize_cache_value(r.get(key))
     reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
     reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    r.set(key, _serialize_cache_value(reviews))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
