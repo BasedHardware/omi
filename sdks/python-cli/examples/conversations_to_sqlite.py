@@ -6,7 +6,8 @@ Usage:
     python conversations_to_sqlite.py conversations.json [conversations2.json ...] -o conversations.db
 
 Each run is idempotent: re-importing the same page updates existing rows
-(INSERT OR REPLACE keyed on id) and never duplicates them.
+(INSERT OR REPLACE keyed on id) and never duplicates them. The output path
+must not contain '..', and an existing non-SQLite file is never overwritten.
 """
 
 import json
@@ -83,6 +84,36 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
     return rows
 
 
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def validate_db_path(db_path: str) -> None:
+    """Raise ValueError if *db_path* is unsafe or points at a non-SQLite file.
+
+    Rules enforced:
+    - The path must not contain '..' components (prevents directory traversal).
+    - If the file already exists it must be a valid SQLite database (magic-byte
+      check), so we never silently corrupt an unrelated file.
+    """
+    p = Path(db_path)
+    if ".." in p.parts:
+        raise ValueError(
+            f"Output path {db_path!r} contains '..'; refusing to write outside "
+            "the intended directory."
+        )
+    if p.exists():
+        try:
+            with p.open("rb") as fh:
+                header = fh.read(len(_SQLITE_MAGIC))
+        except OSError as exc:
+            raise ValueError(f"Cannot read existing file {db_path!r}: {exc}") from exc
+        if header != _SQLITE_MAGIC:
+            raise ValueError(
+                f"{db_path!r} already exists but is not a SQLite database; "
+                "refusing to overwrite it."
+            )
+
+
 def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
     """Load conversation pages into *db_path*; return (loaded, added, total).
 
@@ -90,6 +121,7 @@ def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
     *added*:  rows that were new or updated (INSERT OR REPLACE changed count).
     *total*:  rows in the table after the run.
     """
+    validate_db_path(db_path)
     # Parse all input before touching the DB so a malformed file leaves it clean.
     rows = rows_from(json_paths)
     loaded = len(rows)
