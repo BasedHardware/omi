@@ -16,7 +16,8 @@
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
-* [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
+* [`conversations_csv.md`](conversations_csv.md)
+* [`tasks_csv.md`](tasks_csv.md) — export action items and tasks to CSV format for spreadsheets. — convert a conversation-list
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.

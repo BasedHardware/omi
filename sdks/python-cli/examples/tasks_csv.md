@@ -5,7 +5,7 @@ Use this recipe to export action tasks to CSV for import into Todoist, Notion, o
 Export action tasks:
 
 ```sh
-omi --json task list --limit 200 > tasks.json
+omi --json action-item list --limit 200 > tasks.json
 ```
 
 Convert to CSV:
