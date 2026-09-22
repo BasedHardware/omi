@@ -41,5 +41,16 @@ void main() {
       MobileFeedbackReceipt.fromJson({...base, 'feedback_id': 'other'}, expectedFeedbackId: 'feedback-1'),
       isNull,
     );
+    expect(
+      MobileFeedbackReceipt.fromJson(
+        {
+          'feedback_id': 'feedback-1',
+          'event_id': 'event-1',
+          'created': true,
+        },
+        expectedFeedbackId: 'feedback-1',
+      ),
+      isNull,
+    );
   });
 }

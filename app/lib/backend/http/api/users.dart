@@ -82,6 +82,12 @@ class MobileFeedbackReceipt {
     required String expectedFeedbackId,
   }) {
     try {
+      // The generated model applies OpenAPI defaults for these fields. Keep
+      // the receipt gate strict: both markers must be present on the wire so
+      // a bare 201-shaped body cannot masquerade as a durable ledger write.
+      if (!payload.containsKey('persisted') || !payload.containsKey('schema_version')) {
+        return null;
+      }
       final generated = wire.GeneratedMobileFeedbackReceipt.fromJson(payload);
       return fromGenerated(generated, expectedFeedbackId: expectedFeedbackId);
     } catch (_) {
