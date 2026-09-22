@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.376",
+      "date": "2026-09-22",
+      "changes": [
+        "Fixed interrupted recordings showing inflated durations after restarting Omi"
+      ]
+    },
+    {
       "version": "0.12.375",
       "date": "2026-09-21",
       "changes": [
