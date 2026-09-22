@@ -202,7 +202,7 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
 
     except Exception as e:
         log(f"Calendar API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "API request failed"}
 
 
 def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
@@ -594,9 +594,7 @@ async def tool_list_events(request: Request):
 
     except Exception as e:
         log(f"Error listing events: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to list events: {str(e)}")
+        return ChatToolResponse(error="Failed to list events")
 
 
 @app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -706,9 +704,7 @@ async def tool_create_event(request: Request):
 
     except Exception as e:
         log(f"Error creating event: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to create event: {str(e)}")
+        return ChatToolResponse(error="Failed to create event")
 
 
 @app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -783,7 +779,7 @@ async def tool_get_event(request: Request):
 
     except Exception as e:
         log(f"Error getting event: {e}")
-        return ChatToolResponse(error=f"Failed to get event: {str(e)}")
+        return ChatToolResponse(error="Failed to get event")
 
 
 @app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -885,7 +881,7 @@ async def tool_update_event(request: Request):
 
     except Exception as e:
         log(f"Error updating event: {e}")
-        return ChatToolResponse(error=f"Failed to update event: {str(e)}")
+        return ChatToolResponse(error="Failed to update event")
 
 
 @app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -924,7 +920,7 @@ async def tool_delete_event(request: Request):
 
     except Exception as e:
         log(f"Error deleting event: {e}")
-        return ChatToolResponse(error=f"Failed to delete event: {str(e)}")
+        return ChatToolResponse(error="Failed to delete event")
 
 
 @app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -974,7 +970,7 @@ async def tool_list_calendars(request: Request):
 
     except Exception as e:
         log(f"Error listing calendars: {e}")
-        return ChatToolResponse(error=f"Failed to list calendars: {str(e)}")
+        return ChatToolResponse(error="Failed to list calendars")
 
 
 # ============================================
@@ -1238,9 +1234,7 @@ async def google_callback(
 
     except Exception as e:
         log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content="Authentication error: Failed to complete authentication", status_code=500)
 
 
 @app.get("/setup/google")
