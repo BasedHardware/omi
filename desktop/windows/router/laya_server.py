@@ -120,6 +120,84 @@ def predict_route(text: str, model: str = DEFAULT_MODEL, device: str = DEFAULT_D
     return decide_route(result)
 
 
+# --- Mock mode: run the HTTP + routing contract with ZERO deps (no torch/laya).
+# A small keyword heuristic stands in for the Laya decision head so the sidecar
+# contract and the app's "Local brain" wiring can be exercised end-to-end today.
+import re as _re  # noqa: E402  (mock-only)
+
+_MOCK_RULES = [
+    ("sensitive", ("password", "secret", "delete", "transfer money", "wire", "otp", "credit card", "private key")),
+    ("screen_search", ("screen", "screenshot", "what am i looking at", "on my screen", "window")),
+    ("task_command", ("remind", "reminder", "add task", "create task", "schedule", "email", "send message", "text ", "call ")),
+    ("memory_search", ("remember", "i said", "we discussed", "last time", "my notes", "what did i", "did i")),
+]
+
+
+def mock_decide(text: str) -> Dict[str, Any]:
+    low = f" {text.lower()} "
+    intent = "general_answer"
+    for name, needles in _MOCK_RULES:
+        if any(n in low for n in needles):
+            intent = name
+            break
+    needs_tools = intent in ("memory_search", "screen_search", "task_command")
+    # fake difficulty: short/simple -> easy, long/complex -> hard
+    words = len(text.split())
+    difficulty = 0.2 if words <= 6 else 0.7
+    return decide_route(
+        {
+            "answers": {
+                "intent": {"choice": intent},
+                "needs_tools": {"choice": "yes" if needs_tools else "no"},
+                "difficulty": {"score": difficulty},
+            }
+        }
+    )
+
+
+def run_mock_server(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> None:
+    import json as _json
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code: int, obj: Dict[str, Any]) -> None:
+            body = _json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):  # noqa: N802
+            if self.path == "/health":
+                self._send(200, {"ok": True, "mode": "mock"})
+            else:
+                self._send(404, {"error": "not found"})
+
+        def do_POST(self):  # noqa: N802
+            if self.path != "/route":
+                self._send(404, {"error": "not found"})
+                return
+            n = int(self.headers.get("Content-Length", 0) or 0)
+            try:
+                payload = _json.loads(self.rfile.read(n) or b"{}")
+            except Exception:
+                self._send(400, {"error": "bad json"})
+                return
+            self._send(200, mock_decide(str(payload.get("request", ""))))
+
+        def log_message(self, *_a):  # keep it quiet
+            return
+
+    srv = HTTPServer((host, port), Handler)
+    print(f"[laya-router] MOCK mode (no torch/laya) on http://{host}:{port}  "
+          f"(POST /route {{'request': text}}, GET /health). Ctrl-C to stop.")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        srv.shutdown()
+
+
 def create_app():
     from fastapi import FastAPI  # lazy
     from pydantic import BaseModel  # lazy
@@ -147,14 +225,26 @@ def main() -> None:
     ap.add_argument("--device", default=DEFAULT_DEVICE, choices=["cpu", "cuda", "mps"])
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--mock", action="store_true",
+                    help="run the HTTP + routing contract with a keyword stub; no torch/laya needed")
     args = ap.parse_args()
 
     DEFAULT_DEVICE, DEFAULT_MODEL = args.device, args.model
 
-    # Warm the model so the first /route isn't slow.
-    get_agent(model=args.model, device=args.device)
+    if args.mock:
+        run_mock_server(args.host, args.port)
+        return
 
-    import uvicorn  # lazy
+    try:
+        import uvicorn  # lazy
+
+        get_agent(model=args.model, device=args.device)  # warm the model
+    except ImportError as e:
+        raise SystemExit(
+            f"\n[laya-router] real mode needs `{e.name}` (and torch + a laya checkpoint).\n"
+            f"  Install deps:  uv venv && uv pip install -r requirements.txt\n"
+            f"  Or test now with no install:  python3 laya_server.py --mock\n"
+        )
 
     uvicorn.run(create_app(), host=args.host, port=args.port)
 
