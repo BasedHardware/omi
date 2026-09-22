@@ -1154,13 +1154,6 @@ checks:
     lanes: ["local", "ci"]
     reason: "manifest schema parameter types, project retrieval, and task creation flows"
 
-
-  - id: desktop-chat-sanitization-tests
-    path: backend/routers/tests/test_desktop_chat_sanitization.py
-    lanes: ["local", "ci"]
-    reason: >
-      Verifies that exception handlers in desktop_chat.py do not expose
-      internal Redis connection strings, JIT credentials, or quota schema in HTTP responses.
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
