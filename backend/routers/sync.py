@@ -95,7 +95,7 @@ from utils.metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
-from utils.subscription import has_transcription_credits
+from utils.subscription import should_lock_synced_conversation_for_missing_credits
 from utils.sync import playback as sync_playback
 from utils.sync.files import (
     decode_files_to_wav,
@@ -584,7 +584,7 @@ async def sync_local_files(
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
-    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = await run_blocking(critical_executor, should_lock_synced_conversation_for_missing_credits, uid)
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -974,7 +974,7 @@ async def sync_local_files_v2(
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
 
-    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = await run_blocking(critical_executor, should_lock_synced_conversation_for_missing_credits, uid)
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])

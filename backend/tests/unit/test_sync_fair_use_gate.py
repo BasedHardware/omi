@@ -597,7 +597,7 @@ class TestLockDecisionBehavior:
     """Behavioral tests: verify lock decision logic matches intended design.
 
     Simulates the sync endpoint lock decision flow:
-        should_lock = not has_transcription_credits(uid)
+        should_lock = should_lock_synced_conversation_for_missing_credits(uid)
         ... fair-use soft cap check (should NOT change should_lock) ...
         is_locked = should_lock
     """
