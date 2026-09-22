@@ -108,3 +108,18 @@
 * [`quickstart.ty.md`](quickstart.ty.md) — te mau taahiraa matamua ma omi-cli (Tahitian Quickstart).
 * [`quickstart.fur.md`](quickstart.fur.md) — Vuide svelte di omi-cli par furlan (Friulian Quickstart).
 * [`quickstart.bs.md`](quickstart.bs.md) — vodič za brzi početak rada s omi-cli (Bosnian Quickstart).
+* [`quickstart.fo.md`](quickstart.fo.md) — føroysk byrjanarvegleiðing fyri omi-cli (Faroese Quickstart).
+* [`quickstart.lb.md`](quickstart.lb.md) — lëtzebuergesch Ufanksguide fir omi-cli (Luxembourgish Quickstart).
+* [`quickstart.fy.md`](quickstart.fy.md) — Fryske flugge startgids foar omi-cli (Frisian Quickstart).
+* [`quickstart.gd.md`](quickstart.gd.md) — stiùireadh tòiseachaidh Gàidhlig airson omi-cli (Scottish Gaelic Quickstart).
+* [`quickstart.br.md`](quickstart.br.md) — huanadenn deraouiñ e brezhoneg evit omi-cli (Breton Quickstart).
+* [`quickstart.scn.md`](quickstart.scn.md) — guida rapida n sicilianu pi omi-cli (Sicilian Quickstart).
+* [`quickstart.oc.md`](quickstart.oc.md) — guida de començament rapid en occitan per omi-cli (Occitan Quickstart).
+* [`quickstart.mi.md`](quickstart.mi.md) — he aratohu tere mō omi-cli i te reo Māori (Māori Quickstart).
+* [`quickstart.gn.md`](quickstart.gn.md) — guía ñepyrũ pya'e omi-cli avañe'ẽme (Guarani Quickstart).
+* [`quickstart.ug.md`](quickstart.ug.md) — omi-cli ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart).
+* [`quickstart.tw.md`](quickstart.tw.md) — omi-cli ho Twi kasa mu (Twi Quickstart).
+* [`quickstart.ban.md`](quickstart.ban.md) — pituduh kapertama basa Bali (Balinese Quickstart).
+* [`quickstart.st.md`](quickstart.st.md) — mehato ea pele ka Sesotho (Southern Sotho Quickstart).
+* [`quickstart.sc.md`](quickstart.sc.md) — is primos passos in sardu (Sardinian Quickstart).
+* [`quickstart.yi.md`](quickstart.yi.md) — ערשטע טריט מיט omi-cli אויף ייִדיש (Yiddish Quickstart).
