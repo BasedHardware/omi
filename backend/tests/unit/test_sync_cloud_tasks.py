@@ -997,6 +997,7 @@ def _load_sync_router_for_fast_path():
         'database',
         'database.redis_db',
         'database._client',
+        'database.auth',
         'database.conversations',
         'database.users',
         'database.user_usage',
