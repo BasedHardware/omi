@@ -89,6 +89,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: usgs-earthquake-error-handling-tests
+    command: ["python3", "plugins/omi-usgs-earthquake-app/test_error_handling.py"]
+    triggers: ["plugins/omi-usgs-earthquake-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "USGS earthquake chat tool endpoints must sanitize internal exception strings and return safe generic messages without reflecting sensitive internal details"
   - id: semantic-scholar-tests
     command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]

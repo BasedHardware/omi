@@ -263,8 +263,10 @@ async def _usgs_get(params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(data, dict):
             return {"error": "USGS returned an invalid non-dict payload"}
         return data
-    except httpx.HTTPError as exc:
-        return {"error": f"USGS request failed: {exc}"}
+    except httpx.HTTPError:
+        return {"error": "USGS request failed"}
+    except Exception:
+        return {"error": "USGS request failed"}
     except ValueError:
         return {"error": "USGS returned a non-JSON response"}
     finally:
