@@ -128,7 +128,7 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
             return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
-        log(f"Notion API request error: {type(e).__name__}: {e}")
+        log(f"Notion API request error: {type(e).__name__}")
         return {"error": "Notion API request failed"}
 
 
