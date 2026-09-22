@@ -149,6 +149,32 @@ def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_URL_BARCODE_PATTERN = re.compile(
+    r"(?:openfoodfacts\.org/(?:product|produit)/|/product/)(\d{4,18})(?:[/?#]|$)",
+    re.IGNORECASE,
+)
+
+
+def sanitize_barcode(value: Any) -> Optional[str]:
+    """Sanitize and validate a barcode, supporting URL/slug extraction and 4-18 digit length cap."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # Check for Open Food Facts product URL/slug extraction
+    url_match = _URL_BARCODE_PATTERN.search(raw)
+    if url_match:
+        return url_match.group(1)
+
+    # Extract digits and enforce 4-18 length cap
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if 4 <= len(digits) <= 18:
+        return digits
+    return None
+
+
 def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     try:
         response = requests.get(
@@ -157,6 +183,8 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
             headers=_headers(),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
+        if response.status_code == 404:
+            return {"status": 0, "product": None, "not_found": True}
         response.raise_for_status()
         return response.json()
     except requests.RequestException as exc:
@@ -171,10 +199,13 @@ async def _openfoodfacts_get_async(
     return await run_in_threadpool(_openfoodfacts_get, path, params)
 
 
-async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
-    cleaned = "".join(char for char in str(barcode or "") if char.isdigit())
-    if not cleaned:
+async def _lookup_barcode(barcode: Any) -> Dict[str, Any]:
+    raw = str(barcode or "").strip()
+    if not raw:
         return {"error": "barcode is required"}
+    cleaned = sanitize_barcode(barcode)
+    if not cleaned:
+        return {"error": "barcode is required and must be 4 to 18 digits"}
 
     payload = await _openfoodfacts_get_async(
         f"/api/v2/product/{cleaned}.json",
@@ -182,7 +213,7 @@ async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
     )
     if "error" in payload:
         return payload
-    if payload.get("status") == 0 or not payload.get("product"):
+    if payload.get("not_found") or payload.get("status") == 0 or not payload.get("product"):
         return {"error": f"no product found for barcode {cleaned}"}
     return {"product": _summarize_product(payload["product"])}
 
