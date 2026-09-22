@@ -438,6 +438,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
+  String get omiButtonActions => 'عملکردهای دکمه Omi';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override
@@ -2142,7 +2145,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get alwaysInContext => 'همیشه در زمینه';
 
   @override
-  String get memoryContentHint => 'من دوست دارم بستنی بخورم...';
+  String get memoryContentHint => 'جلسه‌های صبح را ترجیح می‌دهم.';
 
   @override
   String get failedToSaveMemory => 'خطا در ذخیره. لطفاً اتصال خود را بررسی کنید.';
@@ -10116,4 +10119,31 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'چه کاری می‌توانی برایم انجام دهی؟',
+        'goal': 'کمکم کن هدفی تعیین کنم',
+        'activity': 'فعالیت‌های اخیرم را خلاصه کن',
+        'improve': 'چطور می‌توانم بهتر شوم؟',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'هفتهٔ آینده';
+
+  @override
+  String get clearSearch => 'پاک کردن جستجو';
 }

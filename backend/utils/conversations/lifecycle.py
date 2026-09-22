@@ -130,9 +130,9 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
 
 
 def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
-    """Admit a visible deterministic sync row and atomically append later chunks.
+    """Admit a retained deterministic sync row and atomically append later chunks.
 
-    Enrichment follows persistence; uncertain filler remains visible for review.
+    Enrichment follows persistence; filler remains recoverable under Show discarded.
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
@@ -433,9 +433,9 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def restore_discarded(uid: str, conversation_id: str) -> None:
+def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
-    conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
 
 
 def open_recording_session(

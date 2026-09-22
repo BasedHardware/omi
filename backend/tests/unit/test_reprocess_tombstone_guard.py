@@ -75,3 +75,20 @@ class TestReprocessTombstoneGuard:
             result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
         process.assert_called_once()
         assert result is fake_conv
+
+
+@pytest.mark.parametrize('discarded,restored', [(False, True), (False, False), (True, False)])
+def test_explicit_reprocess_promotes_review_only_after_success(discarded, restored):
+    row = {'id': 'c1', 'discarded': True, 'status': 'completed', 'sync_relevance': 'review'}
+    model = SimpleNamespace(language='en', discarded=discarded, sync_relevance='review')
+    with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row), patch.object(
+        conv_router, 'deserialize_conversation', return_value=model
+    ), patch.object(conv_router, 'process_conversation', return_value=model), patch.object(
+        conv_router.lifecycle_service, 'restore_discarded', return_value=restored
+    ) as restore:
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+    if discarded:
+        restore.assert_not_called()
+    else:
+        restore.assert_called_once_with('u1', 'c1')
+    assert result.sync_relevance == ('keep' if restored else 'review')

@@ -138,6 +138,7 @@
     "offlineSync": "Offline synchronisatie",
     "autoSync": "Automatisch synchroniseren",
     "autoSyncDescription": "Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt",
+    "omiButtonActions": "Omi-knopacties",
     "deviceSettings": "Apparaatinstellingen",
     "integrations": "Integraties",
     "feedbackBug": "Feedback / Fout",
@@ -654,7 +655,7 @@
     "allMemoriesPublicResult": "Alle herinneringen zijn nu openbaar",
     "newMemory": "✨ Nieuw geheugen",
     "editMemory": "✏️ Geheugen bewerken",
-    "memoryContentHint": "Ik hou van ijs eten...",
+    "memoryContentHint": "Ik heb liever vergaderingen in de ochtend.",
     "failedToSaveMemory": "Opslaan mislukt. Controleer je verbinding.",
     "saveMemory": "Herinnering opslaan",
     "retry": "Opnieuw proberen",
@@ -3250,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Stem klaar voor herkenning} saved_sample_awaiting_embedding{Fragment opgeslagen; stemverwerking nog nodig} not_learned{Stem niet geleerd} other{Stemstatus onbekend}}",
     "tagSpeakerIncludingLaterSpeech": "Ook latere spraak van deze spreker taggen",
     "updateSummaryWithNewNames": "Samenvatting bijwerken met nieuwe namen",
-    "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd"
+    "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Wat kun je voor me doen?} goal{Help me een doel te stellen} activity{Vat mijn recente activiteiten samen} improve{Hoe kan ik me verbeteren?} other{}}",
+    "nextWeek": "Volgende week",
+    "clearSearch": "Zoekopdracht wissen"
 }
