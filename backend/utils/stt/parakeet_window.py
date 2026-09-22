@@ -59,6 +59,11 @@ WINDOW_INGEST_AGC = True
 # above survived. Admission is deliberately NOT deadbanded — the copy Silero
 # scores is still always gained, which is what admits quiet far-field.
 WINDOW_AGC_DEADBAND_PEAK = 0.4
+# How much of the end of a posted window decides its gain. A growing window
+# re-posts audio that has already been transcribed; the newest seconds are what
+# this POST is actually for, so they choose the level. Long enough to be a stable
+# estimate, short enough not to be dominated by an earlier louder speaker.
+WINDOW_AGC_TAIL_SECONDS = 10.0
 _INT16_ABS_MAX = 32767.0
 
 
@@ -106,6 +111,24 @@ def window_needs_gain(peak: float) -> bool:
     quiet far-field.
     """
     return peak <= WINDOW_AGC_DEADBAND_PEAK * _INT16_ABS_MAX
+
+
+def posted_window_gain(pcm: bytes, tail_bytes: int) -> float:
+    """One uniform gain for a posted window: chosen by its tail, bounded by its whole.
+
+    The tail is the newest audio, which is what this POST exists to transcribe, so it
+    decides whether the window is quiet and how much boost it wants. The whole window
+    then caps that boost at the point where it would clip, so rescuing a quiet passage
+    never distorts a louder prefix. Returns 1.0 to mean "post untouched".
+    """
+    tail = pcm[-tail_bytes:] if tail_bytes and len(pcm) > tail_bytes else pcm
+    tail_peak = pcm16_peak(tail)
+    if tail_peak <= 0.0 or not window_needs_gain(tail_peak):
+        return 1.0
+    desired = (_INT16_ABS_MAX * WINDOW_AGC_TARGET_PEAK) / tail_peak
+    whole_peak = pcm16_peak(pcm)
+    headroom = (_INT16_ABS_MAX / whole_peak) if whole_peak > 0.0 else WINDOW_AGC_MAX_GAIN
+    return max(1.0, min(WINDOW_AGC_MAX_GAIN, desired, headroom))
 
 
 class SessionPcmGain:
@@ -304,13 +327,25 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         # Each POST remains internally uniform, which is the property that
         # matters — the failure mode fixed in #15566 was several gain levels
         # inside one posted window, not different gains between windows.
-        window_peak = pcm16_peak(pcm)
-        if not window_needs_gain(window_peak):
+        #
+        # The window's *whole* peak is still the wrong reference, for the same
+        # reason one step down. A growing window that spans a level change reads
+        # its loudest content, applies no gain, and loses the quiet part: on dev
+        # the identical clip scored WER 0.155 or 0.262 depending only on where
+        # the anchor fell (anchored at 53s the window peaks at 0.377 and is
+        # gained; at 34s it peaks at 0.431 and is not). So the TAIL — the newest
+        # audio, which is what this POST is for — chooses the gain, and the whole
+        # window caps it at the clipping point. On the measured case the tail
+        # wants 2.16x and the window allows 2.30x, so the quiet passage is
+        # rescued with no distortion of the loud prefix.
+        gain = posted_window_gain(pcm, self._to_bytes(WINDOW_AGC_TAIL_SECONDS))
+        if gain <= 1.0:
             self._agc_last_gain = 1.0
             return pcm
-        out, gain = bounded_agc_pcm16(pcm, peak=window_peak)
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        out = np.clip(samples * gain, -32768, 32767).astype(np.int16)
         self._agc_last_gain = gain
-        return out
+        return out.tobytes()
 
     def finalize(self) -> None:
         self._pause_requested = True
