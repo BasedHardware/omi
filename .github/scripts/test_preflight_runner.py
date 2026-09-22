@@ -637,7 +637,6 @@ class LaunchContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
             unicode_branch = "分支-🚀"
-            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             root.mkdir()
             # Preflight selects from the invoking repository. Keep this fixture
             # self-contained instead of depending on the source checkout's manifest.
