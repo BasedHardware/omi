@@ -26,6 +26,7 @@ spec.loader.exec_module(ea)
 
 FAKE_OMI_DRIVER = r"""
 import json, os, sys
+sys.stdout.reconfigure(encoding="utf-8")
 fixture = os.environ["OMI_TEST_FIXTURE"]
 mode = os.environ.get("OMI_TEST_MODE", "ok")
 offset = int(sys.argv[sys.argv.index("--offset") + 1])
