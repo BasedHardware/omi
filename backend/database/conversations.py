@@ -1716,7 +1716,8 @@ def _get_conversations_by_id(
             if not is_visible_conversation(data, include_discarded=include_discarded):
                 continue
             data.setdefault('id', doc.id)
-            conversations_by_id[str(data['id'])] = _project_effective_discarded(data) or data
+            data = _project_effective_discarded(data) or data
+            conversations_by_id[str(data['id'])] = data
         else:
             misses += 1
 

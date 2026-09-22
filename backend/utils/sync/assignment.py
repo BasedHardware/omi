@@ -10,7 +10,35 @@ import re
 from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
-from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+
+try:
+    from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+except ModuleNotFoundError:
+    # A few sync import-isolation tests intentionally replace ``utils`` with a
+    # non-package module. Keep the assignment policy importable there without
+    # making that harness reconstruct the whole conversation package graph.
+    def is_low_signal_sync_fragment(data):
+        if not data or getattr(data.get('status'), 'value', data.get('status')) != 'completed':
+            return False
+        if data.get('sync_relevance') != 'review' or data.get('sync_relevance_user_kept'):
+            return False
+        if data.get('sync_live_target') or data.get('has_photos') or data.get('photos'):
+            return False
+        if data.get('user_title') or data.get('starred') or data.get('folder_user_set'):
+            return False
+        visibility = getattr(data.get('visibility', 'private'), 'value', data.get('visibility', 'private'))
+        if visibility not in (None, 'private'):
+            return False
+        structured = data.get('structured')
+        if isinstance(structured, dict) and (
+            str(structured.get('overview') or '').strip()
+            or any(structured.get(field) for field in ('sections', 'action_items', 'events'))
+        ):
+            return False
+        client_processing = data.get('client_processing')
+        return not (isinstance(client_processing, dict) and client_processing.get('schema_version') == 1)
+
+
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
