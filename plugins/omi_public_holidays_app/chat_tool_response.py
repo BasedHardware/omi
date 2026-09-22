@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
-
 @dataclass
 class ChatToolResponse:
     """
-    Simple container for tool responses used by the public‑holidays plugin.
+    Simple response wrapper for chat tool handlers.
     """
     result: Optional[Any] = None
     error: Optional[str] = None
