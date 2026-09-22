@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Alle Erinnerungen sind jetzt öffentlich",
     "newMemory": "✨ Neue Erinnerung",
     "editMemory": "✏️ Erinnerung bearbeiten",
-    "memoryContentHint": "Ich esse gerne Eis...",
+    "memoryContentHint": "Ich bevorzuge Besprechungen am Vormittag.",
     "failedToSaveMemory": "Speichern fehlgeschlagen. Bitte überprüfen Sie Ihre Verbindung.",
     "saveMemory": "Erinnerung speichern",
     "retry": "Erneut versuchen",
@@ -3251,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Stimme zur Erkennung bereit} saved_sample_awaiting_embedding{Aufnahme gespeichert, Sprachverarbeitung ausstehend} not_learned{Stimme nicht gelernt} other{Stimmstatus unbekannt}}",
     "tagSpeakerIncludingLaterSpeech": "Spätere Sprache dieses Sprechers ebenfalls markieren",
     "updateSummaryWithNewNames": "Zusammenfassung mit neuen Namen aktualisieren",
-    "syncStatusUnsupportedAudio": "Audio nicht lesbar — Synchronisierung nicht möglich"
+    "syncStatusUnsupportedAudio": "Audio nicht lesbar — Synchronisierung nicht möglich",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Was kannst du für mich tun?} goal{Hilf mir, ein Ziel zu setzen} activity{Fasse meine letzten Aktivitäten zusammen} improve{Wie kann ich mich verbessern?} other{}}",
+    "nextWeek": "Nächste Woche",
+    "clearSearch": "Suche löschen"
 }

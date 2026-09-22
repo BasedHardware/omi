@@ -6,6 +6,7 @@ and chat tools for managing projects, tasks, actions, and searching.
 """
 import os
 from typing import Optional, Dict, Any, List, Tuple
+from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
@@ -107,10 +108,10 @@ def hive_graphql_request(
         return {"errors": [{"message": "Request timed out. Please try again."}]}
     except requests.RequestException as e:
         print(f"🐝 Hive Request Error: {e}")
-        return {"errors": [{"message": f"Request failed: {str(e)}"}]}
+        return {"errors": [{"message": "Hive request failed. Please try again."}]}
     except Exception as e:
         print(f"🐝 Hive Unexpected Error: {e}")
-        return {"errors": [{"message": f"Unexpected error: {str(e)}"}]}
+        return {"errors": [{"message": "Unexpected error talking to Hive. Please try again."}]}
 
 
 def get_graphql_error(result: Dict) -> Optional[str]:
@@ -611,7 +612,7 @@ async def connect_api_key(
     if not user_info:
         # Return to setup page with error
         return RedirectResponse(
-            url=f"/?uid={uid}&error=Invalid+API+key.+Please+check+and+try+again.",
+            url=f"/?uid={quote(uid, safe='')}&error=Invalid+API+key.+Please+check+and+try+again.",
             status_code=303
         )
 
@@ -624,7 +625,7 @@ async def connect_api_key(
         workspace_id=user_info.get("workspace_id"),
     )
 
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 @app.get("/setup/hive", tags=["setup"])
@@ -645,7 +646,7 @@ async def set_default_project(uid: str, project_id: str, project_name: str):
 async def disconnect_hive(uid: str):
     """Disconnect Hive account."""
     delete_hive_credentials(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 # ============================================

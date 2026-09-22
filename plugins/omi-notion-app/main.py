@@ -10,6 +10,7 @@ import re
 import sys
 import secrets
 from datetime import datetime, timedelta
+import html
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlencode, urlsplit, parse_qs
 
@@ -1182,7 +1183,7 @@ async def notion_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error, quote=True)}</p>
                     </div>
                 </div>
             </body>

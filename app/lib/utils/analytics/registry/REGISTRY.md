@@ -3,17 +3,19 @@
 JSON in `contracts/analytics/events.json` owns ids, exact wire names, property
 shapes, lifecycle and consumer references. Run
 `python3 scripts/check_event_registry.py --write`; commit generated Dart and
-TRACKING_PLAN.md together. Four real, privacy-safe events are examples, not a
-240-event migration. Product infra owns implementation. Nothing calls the new
-throwing TypedEvents seam yet. No PlatformManager, adapter, consent, queue,
-retry, identify or delivery changes belong here.
+TRACKING_PLAN.md together. Product infra owns implementation. TypedEvents routes registered events through
+AnalyticsManager for consent, queueing, identity fencing and SDK handoff. This
+registry does not imply that unadopted legacy events meet its privacy contract.
 
 Generated sealed event classes accept only declared fields. Property keys are
 Dart parameter names; each explicit wire_name preserves legacy spelling, including
 underscores. SDK provenance keys cannot be event fields. The schema admits booleans, unbounded
 ints whose *name* is not identity or content, and per-property closed enums
 (generated Dart enums that emit the declared wire strings). Rejection tests refuse
-free String, double, Map, Object, and one-value "enums". Never accept arbitrary
+free String, double, Map, Object, and one-value "enums". The sole
+record-reference field is optional `object_id`, accepted through RecordReference
+for existing opaque object keys. Correlation IDs use EventCorrelation.mint(),
+never user-derived data. Never accept arbitrary
 String, Map, Object, payload, uid, hashed device address, transcript, memory text,
 email or exception text. This is an allowlist, not a PII regex filter pretending
 to sanitize values.
@@ -58,15 +60,19 @@ emissions. Do not dual-emit implicitly. This contract does not authorize deletin
 historical names on a time cutoff; a consumer migration review must first account
 for historical queries and C10's support window.
 
-F1 owns intent vocabulary and success semantics. EventPhase and EventCorrelation
-reserve point/attempt/outcome and an opaque, randomly minted attempt id (never
-identity-derived). Schema phase/intent/correlation fields are reserved; C7 admits only legacy
-point events and adds no correlation properties. F1's reviewed schema extension
-must require one shared correlation per attempt/outcome and test terminal counts
-before those phases become emit-capable. The reserved correlation descriptor is
-`{type: random_attempt_id, field: correlation_id}`; point rows keep it null. C3's shared recordFallback remains the
-single fallback helper; register fallback_triggered with its existing closed
-fields later, without inventing mobile_reason or a second helper.
+Product journey rows use phase `attempt`, `progress` or `outcome`, intent
+`product_journey`, and correlation descriptor
+`{type: random_attempt_id, field: correlation_id}`. Point rows keep intent and
+correlation null. Validation requires paired start/terminal vocabulary. The
+ProductTelemetry attempt owner mints one correlation, emits first-render once,
+and closes at most once; tests cover identity cutover and terminal counts.
+A missing terminal event is unobserved, never an inferred technical failure.
+`RecordReference` accepts only bounded existing opaque record keys, not text.
+
+C3's recordFallback remains the single fallback helper. Its protected legacy
+wire shape buckets partial decode/stale data to `other`; this PR does not
+reinterpret that historical field. Product journey error/empty outcomes and
+scorecard completeness carry the new decision signals.
 
 Migrate one feature batch, roughly 5–15 safe events per PR. Before editing a
 legacy method, pin adapter emission goldens from the pre-migration commit and
