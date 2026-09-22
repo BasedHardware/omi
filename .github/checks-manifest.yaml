@@ -94,6 +94,11 @@ checks:
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13925: null or non-dict data/papers payloads, mixed-type year/citationCount sort keys, null authors, and unnormalized DOI/arXiv identifiers must produce clean chat-tool responses, not TypeErrors or 500s"
+  - id: semantic-scholar-error-sanitization-tests
+    command: ["python3", "plugins/omi-semantic-scholar-app/test_error_sanitization.py"]
+    triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Semantic Scholar app must sanitize httpx.HTTPError and unexpected exception messages to prevent leaking transport, proxy, or internal details"
   - id: arxiv-app-tests
     command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
     triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
