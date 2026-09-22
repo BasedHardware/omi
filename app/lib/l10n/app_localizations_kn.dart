@@ -2152,7 +2152,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ';
 
   @override
-  String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
+  String get memoryContentHint => 'ನಾನು ಬೆಳಗಿನ ಸಭೆಗಳಿಗೆ ಆದ್ಯತೆ ನೀಡುತ್ತೇನೆ.';
 
   @override
   String get failedToSaveMemory => 'ಸಂಭಾಳಿಸಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ.';
@@ -10150,4 +10150,31 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'ನೀನು ನನಗಾಗಿ ಏನು ಮಾಡಬಲ್ಲೆ?',
+        'goal': 'ಗುರಿಯನ್ನು ಹೊಂದಿಸಲು ನನಗೆ ಸಹಾಯ ಮಾಡು',
+        'activity': 'ನನ್ನ ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳನ್ನು ಸಂಕ್ಷಿಪ್ತಗೊಳಿಸು',
+        'improve': 'ನಾನು ಹೇಗೆ ಸುಧಾರಿಸಬಹುದು?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'ಮುಂದಿನ ವಾರ';
+
+  @override
+  String get clearSearch => 'ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ';
 }

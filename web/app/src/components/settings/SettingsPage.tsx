@@ -408,7 +408,7 @@ function ProfileSection({
   onLanguageChange: (lang: string) => void;
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
-  dailySummary: DailySummarySettings;
+  dailySummary: DailySummarySettings | null;
   onDailySummaryToggle: (enabled: boolean) => void;
   onDailySummaryHourChange: (hour: number) => void;
 }) {
@@ -593,12 +593,20 @@ function ProfileSection({
         <Card>
           <SettingRow
             label="Daily Summary"
-            description="Receive a daily digest of your action items"
+            description={
+              dailySummary === null
+                ? 'Could not load your daily summary settings'
+                : 'Receive a daily digest of your action items'
+            }
           >
-            <Toggle enabled={dailySummary.enabled} onChange={onDailySummaryToggle} />
+            <Toggle
+              enabled={dailySummary?.enabled ?? false}
+              onChange={onDailySummaryToggle}
+              disabled={dailySummary === null}
+            />
           </SettingRow>
 
-          {dailySummary.enabled && (
+          {dailySummary?.enabled && (
             <SettingRow
               label="Delivery Time"
               description="When to receive your daily summary"
@@ -3062,10 +3070,9 @@ export function SettingsPage() {
   // null until the list is known: saving replaces the whole vocabulary, so a
   // failed load must not be sent back as an empty one.
   const [vocabulary, setVocabulary] = useState<string[] | null>(null);
-  const [dailySummary, setDailySummary] = useState<DailySummarySettings>({
-    enabled: true,
-    hour: 22,
-  });
+  // null until the settings are known: the save sends the whole object, so a
+  // default must not be written over the user's delivery time.
+  const [dailySummary, setDailySummary] = useState<DailySummarySettings | null>(null);
   const [recordingPermission, setRecordingPermissionState] = useState(false);
   const [trainingDataOptIn, setTrainingDataOptInState] = useState(false);
   const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
@@ -3103,7 +3110,7 @@ export function SettingsPage() {
             const [lang, vocab, summary, usageData, sub, plansData] = await Promise.all([
               getUserLanguage().catch(() => 'en'),
               getCustomVocabulary().catch(() => null),
-              getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
+              getDailySummarySettings().catch(() => null),
               getAllUsageData().catch(() => null),
               getUserSubscription().catch(() => null),
               getAvailablePlans().catch(() => null),
@@ -3211,6 +3218,7 @@ export function SettingsPage() {
   };
 
   const handleDailySummaryToggle = async (enabled: boolean) => {
+    if (dailySummary === null) return;
     const oldSettings = dailySummary;
     setDailySummary({ ...dailySummary, enabled });
     try {
@@ -3221,6 +3229,7 @@ export function SettingsPage() {
   };
 
   const handleDailySummaryHourChange = async (hour: number) => {
+    if (dailySummary === null) return;
     const oldSettings = dailySummary;
     setDailySummary({ ...dailySummary, hour });
     try {

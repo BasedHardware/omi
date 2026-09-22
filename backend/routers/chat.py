@@ -2121,6 +2121,8 @@ def rate_message(
     message_id: str,
     data: RateMessageRequest,
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
+    x_app_build: str | None = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
@@ -2131,6 +2133,8 @@ def rate_message(
     platform = (x_app_platform or '').strip().lower()
     if platform not in ('desktop', 'mobile'):
         platform = 'desktop'
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = extract_app_build({'x-app-version': x_app_version or '', 'x-app-build': x_app_build or ''})
     triage = extract_rating_triage_fields(snapshot)
     reason = data.reason.value if data.reason else None
     set_chat_message_rating_score(
@@ -2139,6 +2143,8 @@ def rate_message(
         value,
         reason=reason,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
@@ -2151,6 +2157,8 @@ def rate_message(
         reason=reason,
         comment=data.comment,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
     )
 
     # Try to submit feedback to LangSmith

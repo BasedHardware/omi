@@ -340,8 +340,8 @@ class Conversation(BaseModel):
 
 class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
-    latitude: float
-    longitude: float
+    latitude: float = Field(..., ge=-90.0, le=90.0, description="Latitude in degrees (-90 to 90)")
+    longitude: float = Field(..., ge=-180.0, le=180.0, description="Longitude in degrees (-180 to 180)")
     address: Optional[str] = None
     location_type: Optional[str] = None
 
