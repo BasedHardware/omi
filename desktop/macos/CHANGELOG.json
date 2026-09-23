@@ -2,6 +2,55 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.379",
+      "date": "2026-09-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.378",
+      "date": "2026-09-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.377",
+      "date": "2026-09-22",
+      "changes": [
+        "Fixed first-run untitled conversations showing a retry label while also claiming memories were being added"
+      ]
+    },
+    {
+      "version": "0.12.376",
+      "date": "2026-09-22",
+      "changes": [
+        "Fixed interrupted recordings showing inflated durations after restarting Omi"
+      ]
+    },
+    {
+      "version": "0.12.375",
+      "date": "2026-09-21",
+      "changes": [
+        "The rating prompt’s close button now has a real click target, so dismissing it works on the first try"
+      ]
+    },
+    {
+      "version": "0.12.374",
+      "date": "2026-09-21",
+      "changes": [
+        "Added on-device hybrid search over screen history, transcripts, and memories so results stay faster, offline, and private"
+      ]
+    },
+    {
+      "version": "0.12.373",
+      "date": "2026-09-21",
+      "changes": [
+        "Fixed long conversations sometimes getting no on-device summary"
+      ]
+    },
+    {
       "version": "0.12.372",
       "date": "2026-09-21",
       "changes": [

@@ -29,7 +29,7 @@ Bridge writes increment survivor and donor `sync_content_revision`. Processors r
 
 ## Relevance and remaining differences
 
-Short filler-only speech gets `sync_relevance=review`, remain visible with a deterministic title, and skip enrichment. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
+Speech the deterministic relevance rules (`utils/conversations/relevance_rules.py`) discard outright gets `sync_relevance=review` and skips enrichment; everything else is assessed by the relevance step as a `SYNC_UPDATE` when the pipeline processes it. Uncurated completed review fragments are stored `discarded=True`: hidden from default lists/search, retained with their transcript/audio, and recoverable through Show discarded. Readers trust that stored flag alone; `scripts/conversation_relevance_backfill.py` rewrites rows stored before intake did so. Explicit restoration of any row sets `sync_relevance_user_kept` so later intake and reassessment honor that choice. Curated, shared, photo-bearing, and live-target records are protected; a generated summary is not curation and protects nothing. Duration alone never discards meaningful speech. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
 
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. A lineage migration remains separate.
 
@@ -37,7 +37,11 @@ The shared arithmetic does not unify the observed clocks: live finished_at is cu
 
 ## Assignment outcomes
 
-Deleted anchors, deleted redirect lineage and user-managed retry anchors raise
+Labeled non-target donors are excluded before extending the capture interval. A labeled
+row may remain the survivor for temporal appends, but never donate its receipt into
+another speaker namespace. Retargeting a labeled retry anchor is permanent supersession.
+
+Deleted anchors, deleted redirect lineage and user-managed or labeled retargeted retry anchors raise
 `SyncAssignmentSuperseded`. `process_segment` consumes them quietly with no error,
 content usage or response IDs. It returns false, letting sibling segments proceed;
 a zero-error job commits the content-completion ledger before publishing completed

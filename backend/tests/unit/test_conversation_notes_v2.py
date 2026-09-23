@@ -12,6 +12,7 @@ import google.auth.credentials  # noqa: F401
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.structured import ActionItem, Structured
 from testing.import_isolation import stub_modules
+from utils.llm.model_config import LUNA_MODEL
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -24,6 +25,17 @@ def isolated_imports():
         import utils.llm.working_observations  # noqa: F401
 
         yield
+
+
+def _joined_message_text(messages) -> str:
+    parts: list[str] = []
+    for message in messages:
+        content = message.content if hasattr(message, 'content') else message['content']
+        if isinstance(content, list):
+            parts.extend(part.get('text', '') for part in content if isinstance(part, dict))
+        else:
+            parts.append(str(content))
+    return '\n'.join(parts)
 
 
 def _meeting_context() -> CalendarMeetingContext:
@@ -129,9 +141,9 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert result.sections[0].source_segment_ids == (['s1'] if marked_source else [])
     assert result.action_items[0].owner_name == 'David'
     assert result.action_items[0].due_certainty == 'tentative'
-    assert captured['kwargs']['cache_key'] == 'omi-conv-conv-123'
-    assert captured['messages'][1]['content'][0]['prompt_cache_breakpoint'] == {'mode': 'explicit'}
-    instructions = captured['messages'][-1].content
+    assert captured['kwargs']['cache_key'] == conversation_processing.CONVERSATION_NOTES_CACHE_KEY
+    assert captured['messages'][0].content[0]['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+    instructions = _joined_message_text(captured['messages'])
     assert 'Never normalize or "correct" an uncertain name from general knowledge' in instructions
     assert 'participant email domain corroborates' in instructions
     assert 'fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra"' in instructions
@@ -152,7 +164,7 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'terse fragments, not sentences' not in instructions
 
 
-def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
+def test_memory_places_conversation_context_after_the_instruction_prefix(monkeypatch):
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
@@ -199,7 +211,8 @@ def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
     )
 
     assert result == []
-    assert model.messages[:2] == expected
+    assert model.messages[0]['content'][0]['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+    assert model.messages[1:3] == prefix.messages(cache_enabled=False)
 
 
 def test_screen_activity_context_is_bounded_to_conferencing_rows_and_names():
@@ -413,9 +426,9 @@ def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatc
         routes = load_gateway_config(prod_mode=True).route_artifacts
         notes = routes['route.conv_structure.model_config.001']
         memory = routes['route.memory_l1.model_config.001']
-        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.primary.model == memory.primary.model == LUNA_MODEL
         assert notes.provider_options['reasoning_effort'] == 'low'
-        assert memory.primary.model == 'gpt-5.6-luna'
+        assert memory.primary.model == LUNA_MODEL
         assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
     else:
         assert get_model_config('conv_structure') == get_model_config('memory_l1')

@@ -6,10 +6,13 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
-import re
 from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
+
+from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+from utils.conversations.relevance import sync_intake_decision
+from utils.conversations.relevance_rules import deterministic_relevance
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
@@ -22,20 +25,24 @@ if TYPE_CHECKING:
 
 
 def needs_fragment_review(segments: list[dict]) -> bool:
-    """Defer only short, filler-only content. Unknown language/content stays kept.
+    """Whether the deterministic relevance rules discard this transcript outright.
 
     Speaker IDs, profiles, and is_user are intentionally not consulted. Even a
-    false positive keeps a visible transcript, and subsequent content is assessed
-    over the entire merged recording, allowing automatic promotion.
+    false positive keeps a recoverable transcript, and subsequent content is assessed
+    over the entire merged recording, allowing automatic promotion. Everything
+    the rules cannot settle stays ``keep`` here and is assessed by the
+    relevance step when the sync pipeline processes it.
     """
-    words = re.findall(r"[^\W_]+", ' '.join(s.get('text', '') for s in segments).casefold())
-    duration = sum(max(0, s['end'] - s['start']) for s in segments)
-    return (
-        bool(words)
-        and len(words) <= 12
-        and duration <= 15
-        and set(words)
-        <= {'mm', 'hmm', 'hm', 'mhm', 'huh', 'uh', 'um', 'hmmh', 'mmh', 'hmmmh', 'hmmmmm', 'ha', 'haha', 'hahaha'}
+    verdict, rule = fragment_rule(segments)
+    # Segments with no recognized words are unknown content here, not filler:
+    # intake keeps them, and the relevance step settles them when processed.
+    return verdict == 'discard' and rule != 'empty_transcript'
+
+
+def fragment_rule(segments: list[dict]) -> tuple[Optional[str], str]:
+    return deterministic_relevance(
+        [s.get('text', '') for s in segments],
+        sum(max(0, s['end'] - s['start']) for s in segments),
     )
 
 
@@ -67,6 +74,7 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('user_title')
         or row.get('starred')
         or row.get('folder_user_set')
+        or row.get('sync_relevance_user_kept')
         or row.get('visibility', 'private') not in (None, 'private')
     )
 
@@ -134,6 +142,10 @@ def assign_in_transaction(
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
         raise SyncAssignmentSuperseded('sync anchor is user managed')
 
+    if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
+        raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
+
+    receipt_owner = target_id or (own_id if own_anchor and own_anchor.get('manual_speaker_assignments') else None)
     matched = {}
     extent = deepcopy(incoming)
     if target_id and target:
@@ -144,28 +156,33 @@ def assign_in_transaction(
         ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
         ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
         before = len(matched)
+        candidates = []
         for cid in sorted(ids - matched.keys()):
             raw = load(cid)
             if raw and not raw.get('deleted') and interval_matches(raw, extent):
-                # Live conversations are explicit targets only. Their lifecycle,
-                # photos and recording bindings are not owned by sync intake.
+                # Live and user-managed rows can only be explicit targets.
                 if not auto_mergeable(raw) and cid != target_id:
                     continue
-                matched[cid] = raw
-                extent['started_at'] = min(extent['started_at'], raw['started_at'])
-                extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
+                candidates.append((cid, raw))
+        if receipt_owner is None:
+            labeled = [(cid, raw) for cid, raw in candidates if raw.get('manual_speaker_assignments')]
+            if labeled:
+                receipt_owner = min(labeled, key=lambda item: (item[1]['started_at'], item[0]))[0]
+        for cid, raw in candidates:
+            # Excluded receipts must not extend the search or survivor's timestamps.
+            if raw.get('manual_speaker_assignments') and cid != receipt_owner:
+                continue
+            matched[cid] = raw
+            extent['started_at'] = min(extent['started_at'], raw['started_at'])
+            extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
         if len(matched) == before:
             break
 
-    labeled = [cid for cid, row in matched.items() if row.get('manual_speaker_assignments')]
-    if labeled and not target_id:
-        canonical = min(labeled, key=lambda cid: (matched[cid]['started_at'], cid))
-        for cid in [cid for cid in matched if cid != canonical and matched[cid].get('manual_speaker_assignments')]:
-            del matched[cid]
-    else:
-        canonical = target_id or (
-            min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id']
-        )
+    canonical = (
+        target_id
+        or (receipt_owner if receipt_owner in matched else None)
+        or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
+    )
     current = matched.get(canonical)
     created = current is None
     records = [decode(raw) for _, raw in sorted(matched.items())]
@@ -214,9 +231,17 @@ def assign_in_transaction(
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
     result['has_content'] = bool(segments)
-    result['discarded'] = False  # sync relevance demotes visibly; it never discards capture
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
-    result['sync_relevance'] = 'review' if not segments or needs_fragment_review(segments) else 'keep'
+    result['sync_relevance'] = (
+        'review'
+        if not result.get('sync_relevance_user_kept') and (not segments or needs_fragment_review(segments))
+        else 'keep'
+    )
+    # Discard is a recoverable list filter, never a deletion of captured speech.
+    # Meaningful later intake automatically promotes the complete recording.
+    result['discarded'] = is_low_signal_sync_fragment(result)
+    if result['discarded']:
+        result['relevance_decision'] = sync_intake_decision(fragment_rule(segments)[1])
     result['is_locked'] = bool(incoming.get('is_locked'))
     result['private_cloud_sync_enabled'] = any(row.get('private_cloud_sync_enabled') for row in [incoming, *records])
     # A codec must never be downgraded when bridge donors have mixed protection.
@@ -252,6 +277,10 @@ def assign_in_transaction(
                 collection.document(cid),
                 {
                     'deleted': True,
+                    # Hide the redirect from discarded==False list indexes. Distinct
+                    # from user discard: include_discarded=True readers still drop
+                    # these rows via is_soft_deleted, and restore must not revive them.
+                    'discarded': True,
                     'sync_merged_into': canonical,
                     'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
                 },

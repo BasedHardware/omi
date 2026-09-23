@@ -1548,7 +1548,7 @@ async def generate_sample_prompts_endpoint(
     import json
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
 1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
@@ -1603,7 +1603,7 @@ async def generate_app_endpoint(
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -1650,7 +1650,7 @@ async def generate_app_icon_endpoint(
     import base64
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     app_name = data.name.strip()
     app_description = data.description.strip()

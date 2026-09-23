@@ -312,6 +312,7 @@ class TestDeepgramRetryBehavioral:
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
+        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
 
         # Force re-import so it picks up stubs
         sys.modules.pop('utils.stt.pre_recorded', None)
@@ -852,6 +853,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
@@ -878,6 +880,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
+        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
@@ -1241,8 +1244,6 @@ class TestProcessSegmentReal:
         ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
             'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
-        ) as mock_update, patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(
                 {
@@ -1266,8 +1267,8 @@ class TestProcessSegmentReal:
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        # Dedup should have skipped the merge — update_conversation_segments NOT called
-        mock_update.assert_not_called()
+        # Dedup should have skipped the merge. Sync intake owns no transcript writer of its
+        # own; test_sync_intake_holds_no_transcript_writer keeps that structural.
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
 
@@ -1310,8 +1311,6 @@ class TestProcessSegmentReal:
         ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts), patch(
             'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
-        ) as mock_update, patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(
                 {
@@ -1335,7 +1334,6 @@ class TestProcessSegmentReal:
 
             process_segment(f'/tmp/{int(wal_ts)}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        mock_update.assert_not_called()
         assert len(errors) == 0
         assert 'conv-live' in response['updated_memories']
 
@@ -1406,8 +1404,6 @@ class TestProcessSegmentReal:
             'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
         ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
             'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
-        ), patch(
-            'utils.sync.pipeline.update_conversation_segments'
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(assigned_conv, False, survivors),
@@ -1710,3 +1706,18 @@ class TestVoiceMessageRuntimeErrorTeardown:
 
         submit_override = getattr(storage_executor, '__dict__', {}).get('submit')
         assert not isinstance(submit_override, Mock)
+
+
+def test_sync_intake_holds_no_transcript_writer():
+    """Sync intake writes segments only through its own transaction.
+
+    The dedup tests above used to patch ``pipeline.update_conversation_segments`` and assert it
+    was never called. The import was dead even then, so the guard is structural rather than
+    behavioural: keep the name out of this module so a future edit cannot quietly reintroduce a
+    second transcript writer that bypasses the manual-assignment receipt. Read the source rather
+    than importing it — importing the real module here costs seconds against the duration guard,
+    and a text check also catches a reintroduced import that was never loaded.
+    """
+    pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+
+    assert 'update_conversation_segments' not in _read_text(pipeline_path)

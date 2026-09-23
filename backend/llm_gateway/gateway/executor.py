@@ -56,6 +56,7 @@ from llm_gateway.gateway.schemas import (
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.executors import db_executor, run_blocking
+from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -755,7 +756,7 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    if not provider_ref.model.startswith('gpt-5.6'):
+    if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
@@ -767,16 +768,17 @@ def _sanitize_openai_chat_completions_request(
     provider_request: dict[str, Any],
     provider_ref: ProviderRef,
 ) -> None:
-    """Normalize OpenAI chat-completions params OpenAI rejects for GPT-5.6 models.
+    """Normalize OpenAI chat-completions params rejected for GPT-5.6 and gpt-x-luna.
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Temperature must also stay at the model default (1).
+    Temperature must also stay at the model default (1). gpt-x-luna keeps this
+    sanitizer; whether that model still rejects the same params is unverified.
     """
     if provider_ref.provider != 'openai':
         return
     model = provider_ref.model
-    if not model.startswith('gpt-5.6'):
+    if not uses_explicit_cache_and_chat_sanitizer(model):
         return
 
     tools = provider_request.get('tools')

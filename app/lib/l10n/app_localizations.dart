@@ -1017,6 +1017,12 @@ abstract class AppLocalizations {
   /// **'Automatically sync offline recordings when your device connects'**
   String get autoSyncDescription;
 
+  /// Toggle in device settings that controls whether the mobile app responds to Omi button actions
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Button Actions'**
+  String get omiButtonActions;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:
@@ -4161,10 +4167,10 @@ abstract class AppLocalizations {
   /// **'Always in context'**
   String get alwaysInContext;
 
-  /// Input hint
+  /// Example of a useful personal preference to remember.
   ///
   /// In en, this message translates to:
-  /// **'I like to eat ice cream...'**
+  /// **'I prefer morning meetings.'**
   String get memoryContentHint;
 
   /// Error message
@@ -18692,6 +18698,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update summary with new names'**
   String get updateSummaryWithNewNames;
+
+  /// Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio couldn\'t be read — can\'t be synced'**
+  String get syncStatusUnsupportedAudio;
+
+  /// Inline conversation-row hint when processing finished but the title pass produced nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Title didn\'t generate'**
+  String get conversationTitleDidntGenerate;
+
+  /// Inline conversation-row action to rerun title and summary generation
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocess'**
+  String get conversationReprocess;
+
+  /// Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}'**
+  String chatStarterPrompt(String kind);
+
+  /// Task due-date shortcut: seven days from today.
+  ///
+  /// In en, this message translates to:
+  /// **'Next week'**
+  String get nextWeek;
+
+  /// Clear the current search query.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get clearSearch;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

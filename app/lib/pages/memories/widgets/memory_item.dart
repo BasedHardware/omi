@@ -28,6 +28,7 @@ class MemoryItem extends StatelessWidget {
   final MemoriesProvider provider;
   final Function(BuildContext, Memory, MemoriesProvider) onTap;
   final bool showDismissible;
+  final bool highlighted;
 
   /// Invoked after a swipe-to-delete so the host page can show an undo
   /// notification. Optional — hosts without one (e.g. category page) omit it.
@@ -39,6 +40,7 @@ class MemoryItem extends StatelessWidget {
     required this.provider,
     required this.onTap,
     this.showDismissible = true,
+    this.highlighted = false,
     this.onDeleteNotification,
   });
 
@@ -51,11 +53,12 @@ class MemoryItem extends StatelessWidget {
     final temporalLabel = _temporalLabel(context, memory);
     final Widget memoryWidget = GestureDetector(
       onTap: _canEditMemory(memory) ? () => onTap(context, memory, provider) : null,
-      child: Container(
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 250),
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
         decoration: BoxDecoration(
-          color: AppStyles.backgroundSecondary,
+          color: highlighted ? const Color(0xFF34343C) : AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -95,6 +98,12 @@ class MemoryItem extends StatelessWidget {
                               style: AppStyles.body,
                             ),
                           ),
+                          if (_canEditMemory(memory))
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(start: 12),
+                              child: Icon(Icons.edit_outlined,
+                                  size: 16, color: Colors.white54, semanticLabel: context.l10n.editMemory),
+                            ),
                         ],
                       ),
                       if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)

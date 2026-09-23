@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, List, Tuple, cast
+from typing import Any, Dict, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field, PrivateAttr
@@ -75,6 +75,8 @@ class TranscriptSegment(BaseModel):
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
+    # Cleared atomically on the first manual review; never authorizes teaching.
+    speaker_match_source: SkipJsonSchema[Optional[str]] = None
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # In-memory only: True when neither speaker nor speaker_id was in the
@@ -143,7 +145,11 @@ class TranscriptSegment(BaseModel):
 
     @staticmethod
     def combine_segments(
-        segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment'], delta_seconds: int = 0
+        segments: List['TranscriptSegment'],
+        new_segments: List['TranscriptSegment'],
+        delta_seconds: int = 0,
+        *,
+        protected_segment_ids: Optional[set[str]] = None,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -220,7 +226,8 @@ class TranscriptSegment(BaseModel):
         def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
             if child is None or not child.id:
                 return
-            removed_ids.append(child.id)
+            if child.id not in absorbed_into:
+                removed_ids.append(child.id)
             if parent is not None and parent.id:
                 absorbed_into[child.id] = parent.id
 
@@ -230,7 +237,11 @@ class TranscriptSegment(BaseModel):
         ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
             if not a or not b:
                 return a, b
+            if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
+                return a, b
             if b.stt_provider != a.stt_provider:
+                return a, b
+            if b.speaker_match_source != a.speaker_match_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
@@ -254,6 +265,7 @@ class TranscriptSegment(BaseModel):
                         a.end = min(a.end, b.start)
                         return a, b
                     a.text = ""
+                    _absorb(a, b)
                     return None, b
             if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
@@ -282,7 +294,6 @@ class TranscriptSegment(BaseModel):
                 joined_similar_segments[-1] = a
             elif joined_similar_segments and joined_similar_segments[-1].text == "":
                 if segments and joined_similar_segments[-1].id == segments[-1].id:
-                    removed_ids.append(cast(str, segments[-1].id))
                     dropped_existing_tail = True
                 joined_similar_segments.pop()
             if b:

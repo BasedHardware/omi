@@ -10,8 +10,9 @@ import re
 import sys
 import secrets
 from datetime import datetime, timedelta
+import html
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, parse_qs
 
 import requests
 from dotenv import load_dotenv
@@ -298,6 +299,80 @@ def format_database_info(db: dict) -> str:
         parts.append(f"  URL: {url}")
 
     return "\n".join(parts)
+
+
+def sanitize_notion_id(raw: Any) -> Optional[str]:
+    """
+    Sanitize and normalize a Notion identifier (page, database, or block ID).
+
+    Supports:
+    - Hyphenated 36-character UUIDs: '8a99478f-6b21-4f1b-857c-2b28cf9c9a29'
+    - Unhyphenated 32-hex strings: '8a99478f6b214f1b857c2b28cf9c9a29'
+    - Notion URLs: 'https://www.notion.so/workspace/Page-8a99478f6b214f1b857c2b28cf9c9a29?pvs=4'
+    - Notion modal peek URLs: 'https://www.notion.so/workspace/board?p=8a99478f6b214f1b857c2b28cf9c9a29'
+    - Conversational/markdown wrappers: 'page:8a99478f...', '#8a99478f...', '`8a99478f...`'
+
+    Returns a lowercase 36-character hyphenated UUID if a valid 32/36-hex ID is present,
+    or None if the input cannot be parsed or represents an arbitrary title.
+    """
+    if raw is None or isinstance(raw, bool) or not isinstance(raw, (str, int)):
+        return None
+
+    val = str(raw).strip()
+    if not val:
+        return None
+
+    # Strip surrounding quotes, brackets, or markdown delimiters
+    val = val.strip("`'\"<>[]()")
+
+    # Strip common conversational/command prefixes
+    lower_val = val.lower()
+    for prefix in ("page:", "page/", "p:", "database:", "db:", "block:", "#"):
+        if lower_val.startswith(prefix):
+            val = val[len(prefix):].strip()
+            break
+
+    # If Notion URL or HTTP(S) URL, check for modal/peek query param 'p' first
+    if "notion.so" in val or "notion.site" in val or val.startswith(("http://", "https://")):
+        try:
+            parsed = urlsplit(val)
+            if parsed.query:
+                q_dict = parse_qs(parsed.query)
+                p_vals = q_dict.get("p", [])
+                for pv in p_vals:
+                    pv_match = re.search(r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', pv)
+                    if pv_match:
+                        return pv_match.group(1).lower()
+                    pv_hex = re.findall(r'[0-9a-fA-F]{32}', pv)
+                    if pv_hex:
+                        h = pv_hex[-1].lower()
+                        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+            path_part = parsed.path.rstrip("/")
+            if path_part:
+                val = path_part.split("/")[-1]
+        except Exception:
+            pass
+
+    # Discard query parameters and fragments if still present
+    if "?" in val:
+        val = val.split("?")[0]
+    if "#" in val:
+        val = val.split("#")[0]
+
+    val = val.strip()
+
+    # 1. Standard hyphenated 36-character UUID (8-4-4-4-12)
+    uuid_match = re.search(r'([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', val)
+    if uuid_match:
+        return uuid_match.group(1).lower()
+
+    # 2. 32 continuous hex characters (e.g. at the end of a slug)
+    hex_matches = re.findall(r'[0-9a-fA-F]{32}', val)
+    if hex_matches:
+        h = hex_matches[-1].lower()
+        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
+    return None
 
 
 # ============================================
@@ -602,7 +677,8 @@ async def tool_get_page(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id")
+        page_id = sanitize_notion_id(raw_page_id) or (str(raw_page_id).strip() if raw_page_id is not None and not isinstance(raw_page_id, bool) else "")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -678,8 +754,10 @@ async def tool_create_page(request: Request):
         uid = body.get("uid")
         title = body.get("title")
         content = body.get("content", "")
-        parent_page_id = body.get("parent_page_id")
-        database_id = body.get("database_id")
+        raw_parent_page_id = body.get("parent_page_id")
+        parent_page_id = sanitize_notion_id(raw_parent_page_id) or (str(raw_parent_page_id).strip() if raw_parent_page_id is not None and not isinstance(raw_parent_page_id, bool) else "")
+        raw_database_id = body.get("database_id")
+        database_id = sanitize_notion_id(raw_database_id) or (str(raw_database_id).strip() if raw_database_id is not None and not isinstance(raw_database_id, bool) else "")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -766,7 +844,8 @@ async def tool_update_page(request: Request):
         log(f"=== UPDATE_PAGE ===")
 
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id")
+        page_id = sanitize_notion_id(raw_page_id) or (str(raw_page_id).strip() if raw_page_id is not None and not isinstance(raw_page_id, bool) else "")
         title = body.get("title")
         archived = body.get("archived")
 
@@ -825,7 +904,8 @@ async def tool_append_content(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        page_id = body.get("page_id")
+        raw_page_id = body.get("page_id")
+        page_id = sanitize_notion_id(raw_page_id) or (str(raw_page_id).strip() if raw_page_id is not None and not isinstance(raw_page_id, bool) else "")
         content = body.get("content")
 
         if not uid:
@@ -901,7 +981,8 @@ async def tool_query_database(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        database_id = body.get("database_id")
+        raw_database_id = body.get("database_id")
+        database_id = sanitize_notion_id(raw_database_id) or (str(raw_database_id).strip() if raw_database_id is not None and not isinstance(raw_database_id, bool) else "")
         max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
@@ -1102,7 +1183,7 @@ async def notion_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error, quote=True)}</p>
                     </div>
                 </div>
             </body>

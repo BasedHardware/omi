@@ -295,6 +295,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_PACE_SECONDS
+    value: "6"
+  - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
+    value: "24"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
@@ -442,7 +446,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.6-luna"
+    value: "gpt-6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS

@@ -11,6 +11,8 @@ v1 remains completely unchanged.
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 
 import asyncio
 import json
@@ -1483,6 +1485,9 @@ class TestAsyncCoordinatorBehavioral:
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
         sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -1713,6 +1718,33 @@ class TestAsyncCoordinatorBehavioral:
         pipeline.conversations_db.update_conversation.assert_called_once_with(
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
+
+    def test_merged_reprocess_destructive_op_fence_is_not_swallowed(self, fenced_worker_module):
+        '''A transient destructive-op fence must fail the batch, not log-and-continue.'''
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class DestructiveOperationInProgress(RuntimeError):
+            pass
+
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=DestructiveOperationInProgress('legal_hold_deletion_gates')
+        )
+        response = {
+            '_merged': {'conv-a': 'en', 'conv-b': 'fr'},
+            'updated_memories': {'conv-a', 'conv-b'},
+            'new_memories': set(),
+        }
+
+        with pytest.raises(DestructiveOperationInProgress):
+            pipeline._reprocess_merged_conversations('uid', response)
+
+        pipeline.logger.error.assert_not_called()
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'conv-a', 'en'),
+        ]
+        assert response['updated_memories'] == {'conv-a', 'conv-b'}
 
     def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
         """A pendant conversation becomes webhook-visible when merged speech revives it."""
@@ -3332,6 +3364,9 @@ class TestV2EndpointExecution:
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
         sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

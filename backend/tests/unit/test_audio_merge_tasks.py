@@ -80,6 +80,21 @@ AUDIO_ENV = {
     'SYNC_TASKS_INVOKER_SA': 'invoker@proj.iam.gserviceaccount.com',
 }
 
+# Production clone of backend-sync onto backend-sync-backfill overlays these to the
+# backfill worker's own sync-jobs URL while leaving AUDIO_MERGE_HANDLER_URL pointing
+# at backend-sync. That pair is the live 403: token audience != handler URL.
+BACKFILL_CLONE_ENV = {
+    **AUDIO_ENV,
+    'SYNC_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+    'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+}
+
+
+def _request_with(headers: dict):
+    request = MagicMock()
+    request.headers = headers
+    return request
+
 
 class TestEnqueueAudioMergeJob:
     def test_task_named_by_conversation_and_file(self):
@@ -124,6 +139,43 @@ class TestEnqueueAudioMergeJob:
         with patch.dict(os.environ, {'AUDIO_MERGE_DISPATCH_MODE': 'cloud_tasks'}):
             assert ct.is_audio_merge_dispatch_enabled() is True
 
+    def test_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
+        """Regression: backfill clones overlay SYNC_TASKS_* to the backfill worker
+        while AUDIO_MERGE_HANDLER_URL still names backend-sync. The minted OIDC
+        audience must be the merge handler URL, not the sync-jobs audience.
+        """
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+            ct.enqueue_audio_merge_job(
+                {'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'u', 'timestamps': [1.0]}
+            )
+        enqueue.assert_called_once()
+        assert enqueue.call_args.args[1] == merge_url
+        assert enqueue.call_args.kwargs['audience'] == merge_url
+        assert enqueue.call_args.kwargs['audience'] != BACKFILL_CLONE_ENV['SYNC_TASKS_OIDC_AUDIENCE']
+
+    def test_schema_v2_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+            ct.enqueue_audio_merge_job(
+                {'schema_version': 2, 'conversation_id': 'conv1', 'fingerprint': 'abc123def456', 'uid': 'u'}
+            )
+        assert enqueue.call_args.kwargs['audience'] == merge_url
+        assert enqueue.call_args.args[1] == merge_url
+
+    def test_audio_merge_oidc_verification_uses_handler_url_not_sync_audience(self):
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        claims = {'email': BACKFILL_CLONE_ENV['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(
+            ct.id_token, 'verify_oauth2_token', return_value=claims
+        ) as verify:
+            assert ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer t'})) == 0
+        assert verify.call_args.kwargs['audience'] == merge_url
+        assert verify.call_args.kwargs['audience'] != BACKFILL_CLONE_ENV['SYNC_TASKS_OIDC_AUDIENCE']
+
 
 class TestPlaybackReadPathsStructure:
     """Request paths must never merge when artifact dispatch is enabled."""
@@ -132,7 +184,8 @@ class TestPlaybackReadPathsStructure:
         src = _read_source(os.path.join('routers', 'sync.py'))
         assert '"/v2/audio-merge-jobs/run"' in src
         handler = src[src.index('async def run_audio_merge_job') :]
-        assert 'Depends(verify_cloud_tasks_oidc)' in handler[:200]
+        assert 'Depends(verify_audio_merge_cloud_tasks_oidc)' in handler[:200]
+        assert 'Depends(verify_cloud_tasks_oidc)' not in handler[:200]
         assert 'try_acquire_job_run_lock' in handler
         assert 'status_code=409' in handler
         assert "reason': 'chunks_missing'" in handler

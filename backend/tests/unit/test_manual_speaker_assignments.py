@@ -380,66 +380,6 @@ def test_enhanced_receipt_has_no_plaintext_person_id(world):
     assert acknowledged_teaching(decoded, 'new', ['s0', 's1'])
 
 
-def test_absorbed_labeled_segment_moves_receipt_and_is_not_resurrected(world):
-    from models.transcript_segment import TranscriptSegment
-
-    store, path, _ = world
-    keep = dict(
-        id='keep', speaker='SPEAKER_00', speaker_id=4, text='Hello', start=0, end=1, is_user=False, person_id=None
-    )
-    continuation = dict(
-        id='cont', speaker='SPEAKER_00', speaker_id=4, text='world.', start=1.1, end=2, is_user=False, person_id=None
-    )
-    store.rows[path]['transcript_segments'] = [keep, continuation]
-    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['cont'])
-    result = TranscriptSegment.combine_segments([TranscriptSegment(**keep)], [TranscriptSegment(**continuation)])
-    combined, _, removed = result
-    assert 'cont' in removed
-    db.update_conversation_segments(
-        'u',
-        'c',
-        [segment.model_dump() for segment in combined],
-        preserve_unseen=True,
-        removed_segment_ids=removed,
-        absorbed_into=result.absorbed_into,
-    )
-    saved = read(world)
-    assert [segment['id'] for segment in saved['transcript_segments']] == ['keep']
-    assert saved['transcript_segments'][0]['person_id'] == 'new'
-    assert 'cont' not in (saved['manual_speaker_assignments'].get('segments') or {})
-    assert saved['manual_speaker_assignments']['segments']['keep']['person_id'] == 'new'
-
-
-def test_absorbed_remap_survives_list_copy_of_removed_ids(world):
-    from models.transcript_segment import TranscriptSegment
-
-    store, path, _ = world
-    keep = dict(
-        id='keep', speaker='SPEAKER_00', speaker_id=4, text='Hello', start=0, end=1, is_user=False, person_id=None
-    )
-    continuation = dict(
-        id='cont', speaker='SPEAKER_00', speaker_id=4, text='world.', start=1.1, end=2, is_user=False, person_id=None
-    )
-    store.rows[path]['transcript_segments'] = [keep, continuation]
-    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['cont'])
-    result = TranscriptSegment.combine_segments([TranscriptSegment(**keep)], [TranscriptSegment(**continuation)])
-    copied_ids = list(result.removed_ids)
-    assert not hasattr(copied_ids, 'into')
-    db.update_conversation_segments(
-        'u',
-        'c',
-        [segment.model_dump() for segment in result.segments],
-        preserve_unseen=True,
-        removed_segment_ids=copied_ids,
-        absorbed_into=result.absorbed_into,
-    )
-    saved = read(world)
-    assert [segment['id'] for segment in saved['transcript_segments']] == ['keep']
-    assert saved['transcript_segments'][0]['person_id'] == 'new'
-    assert 'cont' not in (saved['manual_speaker_assignments'].get('segments') or {})
-    assert saved['manual_speaker_assignments']['segments']['keep']['person_id'] == 'new'
-
-
 def test_speaker_wide_teaching_candidates_are_longest_first_and_bounded():
     durations = [1.0, 9.0, 3.0, 7.0, 2.0, 4.0]
     segments = [

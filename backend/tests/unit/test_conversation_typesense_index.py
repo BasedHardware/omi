@@ -365,6 +365,18 @@ class TestSync:
 
         assert docs_store == {}
 
+    def test_deleted_tombstone_converges_to_delete(self, index_env, mock_typesense):
+        _, docs_store = mock_typesense
+        docs_store[CONVERSATION_ID] = {"id": CONVERSATION_ID, "userId": UID}
+        payload = _conversation_data()
+        payload["deleted"] = True
+        payload["sync_merged_into"] = "survivor"
+        firestore = _firestore_with_doc(payload)
+
+        assert sync_conversation_index_after_write(UID, CONVERSATION_ID, firestore_client=firestore) is True
+
+        assert docs_store == {}
+
     def test_typesense_down_does_not_raise(self, index_env, mock_typesense):
         typesense_client, _ = mock_typesense
         typesense_client.collections.__getitem__.return_value.documents.upsert.side_effect = Exception(

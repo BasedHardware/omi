@@ -15,7 +15,7 @@ def test_search_foods_uses_cgi_fulltext_endpoint(monkeypatch):
 
     monkeypatch.setattr(main, "_openfoodfacts_get_async", fake_get_async)
 
-    result = asyncio.get_event_loop().run_until_complete(main._search_foods("oat milk", 5))
+    result = asyncio.run(main._search_foods("oat milk", 5))
     assert captured["path"] == "/cgi/search.pl"
     assert captured["params"]["search_terms"] == "oat milk"
     assert captured["params"]["json"] == 1

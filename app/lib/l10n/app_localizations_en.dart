@@ -437,6 +437,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
 
   @override
+  String get omiButtonActions => 'Omi Button Actions';
+
+  @override
   String get deviceSettings => 'Device Settings';
 
   @override
@@ -2140,7 +2143,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get alwaysInContext => 'Always in context';
 
   @override
-  String get memoryContentHint => 'I like to eat ice cream...';
+  String get memoryContentHint => 'I prefer morning meetings.';
 
   @override
   String get failedToSaveMemory => 'Failed to save. Please check your connection.';
@@ -10103,4 +10106,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Update summary with new names';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Audio couldn\'t be read — can\'t be synced';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'What can you do for me?',
+        'goal': 'Help me set a goal',
+        'activity': 'Summarize my recent activity',
+        'improve': 'How can I improve?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Next week';
+
+  @override
+  String get clearSearch => 'Clear search';
 }

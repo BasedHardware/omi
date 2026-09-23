@@ -62,6 +62,11 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
     monkeypatch.setattr(speaker_identification_mod, "verify_and_transcribe_sample", fake_verify)
 
 
+async def _no_owner_name():
+    """The listen coordinator's owner-name veto, resolved to "no owner name known"."""
+    return None
+
+
 def test_falls_back_to_user_language_preference_when_conversation_language_is_empty(monkeypatch):
     captured: dict = {}
     _wire_common_stubs(monkeypatch, _conversation(language=None), captured)
@@ -122,9 +127,13 @@ def test_live_name_detection_receives_session_language(monkeypatch):
     processor.host = SimpleNamespace(
         language='ja',
         state=SimpleNamespace(speaker_id_enabled=False),
-        speakers=SimpleNamespace(speaker_to_person={}, person_embeddings={}),
+        speakers=SimpleNamespace(
+            speaker_to_person={},
+            person_embeddings={},
+            resolve_owner_name=_no_owner_name,
+        ),
     )
-    monkeypatch.setattr(transcripts, 'detect_speaker_from_text', lambda text, language=None: seen.append(language))
+    monkeypatch.setattr(transcripts, 'detect_speaker_introduction', lambda text, language=None: seen.append(language))
     asyncio.run(
         processor._speaker_detection([TranscriptSegment(id='s', text='合成テキスト', is_user=False, start=0, end=5)], 0)
     )

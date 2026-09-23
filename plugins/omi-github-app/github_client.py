@@ -217,7 +217,7 @@ class GitHubClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Failed to create issue"
             }
 
     @staticmethod
@@ -411,7 +411,7 @@ class GitHubClient:
             print(f"[ERROR] Error adding comment: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Failed to add comment"
             }
 
     def get_repo_labels_with_details(

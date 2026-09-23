@@ -39,6 +39,23 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
+  test('transport exception preserves identity and permits an acknowledged retry', () async {
+    var fail = true;
+    final provider = ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
+      if (fail) throw StateError('synthetic transport failure');
+      return true;
+    });
+    select(provider, conversation());
+    expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
+    expect(provider.conversation.transcriptSegments.single.personId, isNull);
+    expect(provider.offerSpeakerSummaryRefresh, isFalse);
+    fail = false;
+    expect(await provider.assignSpeaker(['s'], 'new'), isTrue);
+    expect(provider.conversation.transcriptSegments.single.personId, 'new');
+    expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    provider.dispose();
+  });
+
   test('only changed acknowledged assignments on summarized completed content offer reprocessing', () async {
     for (final status in [ConversationStatus.completed, ConversationStatus.in_progress]) {
       for (final overview in ['Summary', '']) {

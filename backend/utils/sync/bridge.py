@@ -24,7 +24,7 @@ from utils.conversations.merge_conversations import copy_sync_bridge_audio, retr
 from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
-from utils.sync.telemetry import bounded_exception_type
+from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +95,9 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                     if reason is None:
                         _record_bridge_retraction('failed', 'other')
                         logger.error(
-                            'event=sync_bridge outcome=failed exception_type=%s uid=%s source_id=%s',
+                            'event=sync_bridge outcome=failed exception_type=%s reason=%s uid=%s source_id=%s',
                             bounded_exception_type(error),
+                            bounded_exception_reason(error),
                             uid,
                             source_id,
                         )

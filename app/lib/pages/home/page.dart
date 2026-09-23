@@ -64,6 +64,8 @@ import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/analytics/background_resource_telemetry.dart';
+import 'package:omi/utils/analytics/background_checkpoint_store.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -162,6 +164,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
   late final BackgroundResourceTelemetry _backgroundResourceTelemetry = BackgroundResourceTelemetry(
+    checkpointStore: PreferencesBackgroundCheckpointStore(),
+    ownerKey: () => AnalyticsManager.currentIdentity ?? '',
+    identityEpoch: () => AnalyticsManager.identityEpoch,
+    enabled: () => AnalyticsManager.identityKnown && AnalyticsManager.trackingEnabled,
     emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
   );
 
@@ -444,6 +450,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
+    unawaited(_backgroundResourceTelemetry.recoverInterrupted());
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
@@ -509,7 +516,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<CaptureProvider>(
           context,
           listen: false,
-        ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).capabilityNormalizedDevice);
       }
 
       // Navigate

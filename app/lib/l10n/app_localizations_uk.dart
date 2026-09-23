@@ -439,6 +439,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматично синхронізувати офлайн-записи під час підключення пристрою';
 
   @override
+  String get omiButtonActions => 'Дії кнопки Omi';
+
+  @override
   String get deviceSettings => 'Налаштування пристрою';
 
   @override
@@ -2147,7 +2150,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get alwaysInContext => 'Завжди в контексті';
 
   @override
-  String get memoryContentHint => 'Мені подобається їсти морозиво...';
+  String get memoryContentHint => 'Я віддаю перевагу ранковим зустрічам.';
 
   @override
   String get failedToSaveMemory => 'Не вдалося зберегти. Будь ласка, перевірте підключення.';
@@ -10132,4 +10135,34 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get updateSummaryWithNewNames => 'Оновити підсумок з новими іменами';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'Не вдалося прочитати аудіо — синхронізація неможлива';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Що ти можеш для мене зробити?',
+        'goal': 'Допоможи мені поставити мету',
+        'activity': 'Підсумуй мою нещодавню діяльність',
+        'improve': 'Як я можу покращитися?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Наступного тижня';
+
+  @override
+  String get clearSearch => 'Очистити пошук';
 }
