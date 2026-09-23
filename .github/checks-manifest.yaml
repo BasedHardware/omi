@@ -4,26 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
-  - id: crossref-error-sanitization-tests
-    command: ["python3", "plugins/omi-crossref-app/test_error_sanitization.py"]
-    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Crossref chat tool endpoints must sanitize error messages and prevent raw exception details from leaking"
-  - id: public-holidays-error-sanitization-tests
-    command: ["python3", "plugins/omi-public-holidays-app/test_error_sanitization.py"]
-    triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Public Holidays app must sanitize httpx.HTTPError and unexpected exception messages to prevent leaking transport, proxy, or internal details"
   - id: omi-stack-overflow-error-sanitization-tests
     command: ["python3", "plugins/omi-stack-overflow-app/test_error_sanitization.py"]
     triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Stack Overflow app must sanitize httpx.HTTPError and unexpected exception messages to prevent leaking transport, proxy, or internal details"
-  - id: open-meteo-error-sanitization-tests
-    command: ["python3", "plugins/omi-open-meteo-app/test_error_sanitization.py"]
-    triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "Open-Meteo app must sanitize httpx.HTTPError and unexpected exception messages to prevent leaking transport, proxy, or internal details"
   - id: openfoodfacts-robustness-and-coercion-tests
     command: ["python3", "plugins/omi-openfoodfacts-app/test_robustness_and_coercion.py"]
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]

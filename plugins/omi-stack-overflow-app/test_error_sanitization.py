@@ -167,5 +167,37 @@ class TestStackOverflowErrorSanitization(unittest.TestCase):
         asyncio.run(_run())
 
 
+
+    def test_search_questions_value_error_sanitized(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=ValueError("internal parse secret 10.9.8.7")):
+                res = await main.search_questions({"query": "python async"})
+                self.assertNotIn("10.9.8.7", res.error)
+                self.assertNotIn("internal parse secret", res.error)
+                self.assertIn("Stack Exchange search failed", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_question_value_error_sanitized(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=ValueError("bad payload hostname evil.internal")):
+                res = await main.get_question({"question_id": 12345})
+                self.assertNotIn("evil.internal", res.error)
+                self.assertNotIn("bad payload", res.error)
+                self.assertIn("Stack Exchange question request failed", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_top_answers_value_error_sanitized(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=ValueError("decode failure secret_token_xyz")):
+                res = await main.get_top_answers({"question_id": 12345})
+                self.assertNotIn("secret_token_xyz", res.error)
+                self.assertNotIn("decode failure", res.error)
+                self.assertIn("Stack Exchange answers request failed", res.error)
+
+        asyncio.run(_run())
+
+
 if __name__ == "__main__":
     unittest.main()
