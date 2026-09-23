@@ -741,8 +741,14 @@ def is_permit_payment_plan_get(uid: str):
     return True
 
 
-def paid_app(app_id: str, uid: str):
+_PAID_APP_RENEWAL_GRACE_SECONDS = 60 * 60 * 24
+
+
+def paid_app(app_id: str, uid: str, current_period_end: Optional[int] = None):
     expired_seconds = 60 * 60 * 24 * 30  # 30 days
+    if current_period_end:
+        period_remaining = current_period_end - int(datetime.now(timezone.utc).timestamp())
+        expired_seconds = max(period_remaining, 0) + _PAID_APP_RENEWAL_GRACE_SECONDS
     set_user_paid_app(app_id, uid, expired_seconds)
 
 
