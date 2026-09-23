@@ -1,12 +1,12 @@
 """Unit tests for google_calendar router exception sanitization.
 
 Verifies that internal exceptions, Google Calendar API provider errors, and raw
-connection details in get_google_calendar_events_endpoint and get_calendar_capture_gaps
+connection details in list_google_calendar_events and get_calendar_capture_gaps
 are masked and not leaked in HTTP 500 response bodies.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from fastapi import HTTPException
 import pytest
 
@@ -15,7 +15,7 @@ from routers import google_calendar as gc_routes
 
 @pytest.mark.asyncio
 async def test_get_events_masks_provider_error_detail(monkeypatch):
-    """Ensure get_google_calendar_events_endpoint raises generic 500 without internal socket details."""
+    """Ensure list_google_calendar_events raises generic 500 without internal socket details."""
     monkeypatch.setattr(gc_routes, "run_blocking", AsyncMock(return_value=("fake-token", {})))
     monkeypatch.setattr(
         gc_routes,
@@ -28,7 +28,7 @@ async def test_get_events_masks_provider_error_detail(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await gc_routes.get_google_calendar_events_endpoint(
+        await gc_routes.list_google_calendar_events(
             time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
             time_max=datetime(2026, 1, 2, tzinfo=timezone.utc),
             uid="test-user-123",
@@ -58,7 +58,7 @@ async def test_get_events_masks_retry_error_detail(monkeypatch):
     monkeypatch.setattr(gc_routes, "get_google_calendar_events", mock_get_events)
 
     with pytest.raises(HTTPException) as exc_info:
-        await gc_routes.get_google_calendar_events_endpoint(
+        await gc_routes.list_google_calendar_events(
             time_min=datetime(2026, 1, 1, tzinfo=timezone.utc),
             time_max=datetime(2026, 1, 2, tzinfo=timezone.utc),
             uid="test-user-123",
@@ -104,7 +104,7 @@ async def test_capture_gaps_masks_retry_error_detail(monkeypatch):
         nonlocal first_call
         if first_call:
             first_call = False
-            raise RuntimeError("401 Unauthorized: token expired")
+            raise RuntimeError("Authentication failed: error 401 token expired")
         raise RuntimeError("Google API Rate limit exceeded: quota project 918239123 exhausted")
 
     monkeypatch.setattr(gc_routes, "get_google_calendar_events", mock_get_events)
