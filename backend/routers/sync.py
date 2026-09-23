@@ -629,8 +629,8 @@ async def sync_local_files(
 
     try:
         try:
-            paths = retrieve_file_paths(files, uid)
-            wav_paths = decode_files_to_wav(paths)
+            paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
+            wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
@@ -642,7 +642,7 @@ async def sync_local_files(
         await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
-        _cleanup_files(wav_paths)
+        await run_blocking(sync_executor, _cleanup_files, wav_paths)
         wav_paths = []  # Clear to avoid double cleanup in finally
 
         # Check for VAD errors - if any failed, abort to prevent data loss
@@ -718,7 +718,7 @@ async def sync_local_files(
 
         if dg_budget_blocked:
             logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
-            _cleanup_files(list(segmented_paths))
+            await run_blocking(sync_executor, _cleanup_files, list(segmented_paths))
             return await _fair_use_restriction_response(
                 uid=uid,
                 retry_after=_retry_after_until_next_utc_day(),
@@ -847,9 +847,9 @@ async def sync_local_files(
         return result
     finally:
         # Clean up any remaining temporary files
-        _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
-        _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
-        _cleanup_files(segmented_paths)  # Segmented wav files after processing
+        await run_blocking(sync_executor, _cleanup_files, paths)  # .bin files (in case decode_files_to_wav didn't finish)
+        await run_blocking(sync_executor, _cleanup_files, wav_paths)  # Original wav files (if VAD didn't complete)
+        await run_blocking(sync_executor, _cleanup_files, segmented_paths)  # Segmented wav files after processing
         if backfill_slot_token:
             try:
                 await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
@@ -1424,7 +1424,7 @@ async def sync_local_files_v2(
             detail='Sync upload could not be accepted; local audio remains available.',
         )
     finally:
-        _cleanup_files(paths)
+        await run_blocking(sync_executor, _cleanup_files, paths)
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
