@@ -349,12 +349,14 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ) -> ProviderResponse:
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         parsed = await self._generate_content(
             payload,
             anchor=provider_ref.model,
             credentials=credentials,
             timeout_ms=timeout_ms,
+            origin_model=origin_model,
         )
         accounting = vertex_usage_from_response(parsed)
         normalized = _vertex_to_openai_response(
@@ -374,9 +376,10 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ):
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(provider_ref.model)
+        attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
         decoder = SSEEventDecoder()
         while attempts:
             model, capacity = attempts.pop(0)
@@ -397,7 +400,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if response.status_code >= 400:
                         error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                         self._observe_attempt(model, capacity, response.status_code, error_preview)
-                        recovery = self._recovery_attempts(model, response.status_code, error_preview)
+                        recovery = self._recovery_attempts(
+                            model, response.status_code, error_preview, origin_model=origin_model
+                        )
                         if recovery:
                             attempts = recovery
                             continue
@@ -477,10 +482,11 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         anchor: str,
         credentials: CredentialContext,
         timeout_ms: int,
+        origin_model: str = '',
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(anchor)
+        attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
         parsed: Mapping[str, Any] | None = None
         while attempts:
@@ -499,7 +505,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             except _VertexHttpError as error:
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
-                recovery = self._recovery_attempts(model, error.status_code, error.preview)
+                recovery = self._recovery_attempts(model, error.status_code, error.preview, origin_model=origin_model)
                 if recovery:
                     attempts = recovery
                     continue

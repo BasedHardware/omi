@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
-from utils.llm.vertex_pt_routing import is_prohibited_company_paid_model
+from utils.llm.vertex_pt_routing import (
+    LANE_OVERFLOW_ORIGINS as FEATURE_PT_OVERFLOW_ORIGIN,
+    OVERFLOW_ORIGIN_OPTION,
+    is_prohibited_company_paid_model,
+    lane_overflow_origin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +310,13 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         # Structured-output features use .with_structured_output(), which routes through
         # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
+    # Price ceiling for a feature later admitted to PT. The map is data
+    # (FEATURE_PT_OVERFLOW_ORIGIN); an absent feature adds nothing, so every
+    # current route's options stay unchanged.
+    if feature in FEATURE_PT_OVERFLOW_ORIGIN:
+        origin = lane_overflow_origin(feature)
+        if origin:
+            options[OVERFLOW_ORIGIN_OPTION] = origin
     return options
 
 
