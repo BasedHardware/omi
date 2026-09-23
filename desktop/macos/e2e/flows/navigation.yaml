@@ -4,6 +4,8 @@ tier: manual
 description: Top navigation bar smoke — the flat destination row (Home, Activity, Tasks, Rewind, Apps), Activity's navigating chip row into the hub's other three pages and the "‹ Activity" control back off each of them, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DrillInBack.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiMotion.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellClickThrough.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Startup/UnhandledKeystrokeSink.swift

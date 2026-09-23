@@ -4,6 +4,7 @@ tier: 2
 description: Top-bar navigation via Cmd+1..4 and Cmd+, shortcut bridge actions
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/FindCommandRouter.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ShortcutsSettingsSection.swift

@@ -4,6 +4,11 @@ tier: manual
 description: Memory menu — navigate full-width Activity, Memories, Conversations, and Brain Map destinations
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationActionItemRow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptFindField.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptSearchModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/GlassContentChrome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/GlassPageStates.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowPrompts.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/NavigationControls.swift
