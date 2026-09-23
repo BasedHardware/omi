@@ -29,6 +29,10 @@ def runtime(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://tdt.invalid')
+    # The scheduling tests below are written in 6 s steps (one 6 s send = one POST).
+    # Pin that unit here so they test mechanics, not the shipped default, which
+    # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
@@ -1069,14 +1073,16 @@ def test_default_buffer_cap_fits_documented_memory():
 
 
 def test_pace_and_max_context_env_clamps(monkeypatch):
-    from utils.stt.window_anchor import read_max_context_seconds, read_pace_seconds
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS, read_max_context_seconds, read_pace_seconds
 
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '0')
     assert read_pace_seconds() == 1.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '99')
     assert read_pace_seconds() == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', 'nope')
-    assert read_pace_seconds() == 6.0
+    # Pace decides window size, and window size is what drives accuracy on this leg,
+    # so pin the fallback to the declared default rather than a literal.
+    assert read_pace_seconds() == DEFAULT_PACE_SECONDS == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '1')
     assert read_max_context_seconds() == 6.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '100')
@@ -1388,6 +1394,30 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
     sock.send(b'\x01\x00' * 16000 * 6)
     await _wait_requests(client, 2)
     assert delays and delays[0] >= 0
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_default_pace_waits_for_fifteen_seconds_of_speech(monkeypatch):
+    # Window size drives accuracy on this leg, so continuous speech must not be posted
+    # in small slices: at the default pace, 6 s does not post and 15 s does.
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS
+
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = Client(data={'segments': [{'text': 'Go on', 'start': 0.0, 'end': 5.0}]})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    assert sock._pace_seconds == DEFAULT_PACE_SECONDS == 15.0
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 6)
+    for _ in range(50):
+        await _REAL_SLEEP(0)
+    assert client.requests == []
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 9)
+    await _wait_requests(client, 1)
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
 
