@@ -71,6 +71,10 @@ export function registerModelManagerHandlers(): void {
   ipcMain.handle('models:cancel', (_e, id: string) => {
     controllers.get(id)?.abort()
     controllers.delete(id)
+    // Guarantee a terminal 'cancelled' signal for the UI even if the abort races
+    // the read loop (which can otherwise surface as 'error'). The engine's own
+    // cancel emit is idempotent alongside this one.
+    broadcast({ id, received: 0, total: 0, phase: 'cancelled' })
     return true
   })
 
