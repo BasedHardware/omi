@@ -27,9 +27,27 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
+
+typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
+
+class _ChatTelemetryAttempt {
+  _ChatTelemetryAttempt(this.attempt);
+
+  final ProductAttempt attempt;
+  ProductOutcome? outcome;
+  ProductFailure failure = ProductFailure.none;
+  bool firstResultVisible = false;
+  Timer? timeout;
+
+  void dispose() => timeout?.cancel();
+}
 
 class MessageProvider extends ChangeNotifier {
-  MessageProvider();
+  MessageProvider({ChatFilesUploader? filesUploader}) : _filesUploader = filesUploader ?? uploadFilesServer;
+
+  final ChatFilesUploader _filesUploader;
+  final Map<String, _ChatTelemetryAttempt> _chatTelemetryAttempts = {};
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
@@ -55,11 +73,60 @@ class MessageProvider extends ChangeNotifier {
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
+  final Map<File, MessageFile> _uploadedBySelection = Map.identity();
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void _registerChatTelemetryAttempt(String messageId, ProductAttempt attempt) {
+    _chatTelemetryAttempts[messageId]?.dispose();
+    final state = _ChatTelemetryAttempt(attempt);
+    _chatTelemetryAttempts[messageId] = state;
+    state.timeout = Timer(const Duration(seconds: 30), () {
+      if (state.outcome == null || !state.attempt.isComplete) {
+        state.attempt.complete(ProductOutcome.unobserved);
+      }
+      state.dispose();
+      _chatTelemetryAttempts.removeWhere((_, candidate) => identical(candidate, state));
+    });
+  }
+
+  void _transferChatTelemetryAttempt(String oldMessageId, String newMessageId) {
+    if (oldMessageId == newMessageId) return;
+    final state = _chatTelemetryAttempts.remove(oldMessageId);
+    if (state == null) return;
+    _chatTelemetryAttempts[newMessageId]?.dispose();
+    _chatTelemetryAttempts[newMessageId] = state;
+  }
+
+  void _finishChatTelemetryAttempt(String messageId, ProductOutcome outcome,
+      {ProductFailure failure = ProductFailure.none}) {
+    final state = _chatTelemetryAttempts[messageId];
+    if (state == null) return;
+    state.outcome = outcome;
+    state.failure = failure;
+    if (outcome != ProductOutcome.success || state.firstResultVisible) {
+      state.attempt.complete(outcome, failure: failure);
+      state.dispose();
+      _chatTelemetryAttempts.remove(messageId);
+    }
+  }
+
+  /// Called by the AI message widget after its content has been laid out.
+  /// Transport completion alone never counts as a first visible answer.
+  void markChatResultVisible(String messageId) {
+    final state = _chatTelemetryAttempts[messageId];
+    if (state == null || state.firstResultVisible || state.attempt.isComplete) return;
+    state.firstResultVisible = true;
+    state.attempt.firstResult();
+    if (state.outcome != null) {
+      state.attempt.complete(state.outcome!, failure: state.failure);
+      state.dispose();
+      _chatTelemetryAttempts.remove(messageId);
+    }
   }
 
   void setChatApps(List<App> apps) {
@@ -293,20 +360,23 @@ class MessageProvider extends ChangeNotifier {
 
   void clearSelectedFile(int index) {
     if (index < 0 || index >= selectedFiles.length) return;
-    selectedFiles.removeAt(index);
+    final removed = selectedFiles.removeAt(index);
     selectedFileTypes.removeAt(index);
-    if (index < uploadedFiles.length) uploadedFiles.removeAt(index);
+    final uploaded = _uploadedBySelection.remove(removed);
+    if (uploaded != null) uploadedFiles.remove(uploaded);
     notifyListeners();
   }
 
   void clearSelectedFiles() {
     selectedFiles.clear();
     selectedFileTypes.clear();
+    _uploadedBySelection.clear();
     notifyListeners();
   }
 
   void clearUploadedFiles() {
     uploadedFiles.clear();
+    _uploadedBySelection.clear();
     notifyListeners();
   }
 
@@ -316,6 +386,7 @@ class MessageProvider extends ChangeNotifier {
     selectedFiles = [];
     selectedFileTypes = [];
     uploadedFiles = [];
+    _uploadedBySelection.clear();
     uploadingFiles = {};
     notifyListeners();
   }
@@ -325,13 +396,17 @@ class MessageProvider extends ChangeNotifier {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
       List<MessageFile>? res;
       try {
-        res = await uploadFilesServer(files, appId: appId);
+        res = await _filesUploader(files, appId: appId);
       } catch (e) {
         Logger.debug('uploadFiles failed: $e');
         res = null;
       }
       if (res != null) {
-        uploadedFiles.addAll(res);
+        for (var i = 0; i < res.length && i < files.length; i++) {
+          if (!selectedFiles.any((f) => identical(f, files[i]))) continue;
+          uploadedFiles.add(res[i]);
+          _uploadedBySelection[files[i]] = res[i];
+        }
       } else {
         for (var i = selectedFiles.length - 1; i >= 0; i--) {
           if (files.any((f) => identical(f, selectedFiles[i]))) {
@@ -400,20 +475,28 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
-  Future setMessageNps(ServerMessage message, int value, {String? reason}) async {
-    await setMessageResponseRating(message.id, value, reason: reason);
+  Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
+    if (!await setMessageResponseRating(message.id, value, reason: reason)) return false;
     message.askForNps = false;
     // Update local message rating so it persists when scrolling
     message.rating = value == 0 ? null : value;
     notifyListeners();
+    return true;
   }
 
   Future clearChat() async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-    messages = List<ServerMessage>.from(mes);
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setClearingChat(false);
+    try {
+      var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+      messages = List<ServerMessage>.from(mes);
+      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    } catch (e) {
+      Logger.debug('Failed to clear chat: $e');
+      final l10n = globalNavigatorKey.currentContext?.l10n;
+      AppSnackbar.showSnackbarError(l10n?.somethingWentWrong ?? 'Something went wrong! Please try again later.');
+    } finally {
+      setClearingChat(false);
+    }
     notifyListeners();
   }
 
@@ -470,12 +553,31 @@ class MessageProvider extends ChangeNotifier {
     if (_voiceSendInFlight) return;
     if (audioBytes.isEmpty) return;
     _voiceSendInFlight = true;
-    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
-    var file = await FileUtils.saveAudioBytesToTempFile(
-      audioBytes,
-      DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
-      codec?.getFrameSize() ?? 160,
+    final chatAttempt = ProductTelemetry.instance.start(
+      ProductJourney.chatVoice,
+      surface: ProductSurface.chat,
     );
+    var chatAttemptCompleted = false;
+    late String responseMessageId;
+    void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (chatAttemptCompleted) return;
+      chatAttemptCompleted = true;
+      _finishChatTelemetryAttempt(responseMessageId, outcome, failure: failure);
+    }
+
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
+    late final File file;
+    try {
+      file = await FileUtils.saveAudioBytesToTempFile(
+        audioBytes,
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
+        codec?.getFrameSize() ?? 160,
+      );
+    } catch (_) {
+      _voiceSendInFlight = false;
+      chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      return;
+    }
 
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -490,6 +592,8 @@ class MessageProvider extends ChangeNotifier {
     var message = ServerMessage.empty();
     messages.add(message);
     var aiIndex = messages.length - 1;
+    responseMessageId = message.id;
+    _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
 
     // Voice response playback is triggered only from the Omi device-button
@@ -538,6 +642,9 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[aiIndex] = message;
+          _transferChatTelemetryAttempt(responseMessageId, message.id);
+          _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+          chatAttemptCompleted = true;
           if (playResponseAudio) {
             OmiVoicePlaybackService.instance.updateStreamingResponse(
               messageId: playbackMessageId,
@@ -566,9 +673,11 @@ class MessageProvider extends ChangeNotifier {
             }
             notifyListeners();
             setShowTypingIndicator(false);
+            completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             return;
           }
           message.text = chunk.text;
+          completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
         }
@@ -578,12 +687,16 @@ class MessageProvider extends ChangeNotifier {
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.interrupt();
       }
+      completeChat(ProductOutcome.failure, failure: ProductFailure.network);
       notifyListeners();
     } finally {
       _voiceSendInFlight = false;
     }
 
     setShowTypingIndicator(false);
+    if (!chatAttemptCompleted) {
+      completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
+    }
   }
 
   Future sendMessageStreamToServer(String text, {ChatPageContext? context}) async {
@@ -613,9 +726,23 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
+    final chatAttempt = ProductTelemetry.instance.start(
+      ProductJourney.chatText,
+      surface: ProductSurface.chat,
+    );
+    var chatAttemptCompleted = false;
+    late String responseMessageId;
+    void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (chatAttemptCompleted) return;
+      chatAttemptCompleted = true;
+      _finishChatTelemetryAttempt(responseMessageId, outcome, failure: failure);
+    }
+
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
     final aiIndex = messages.length - 1;
+    responseMessageId = message.id;
+    _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
@@ -664,6 +791,9 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[aiIndex] = message;
+          _transferChatTelemetryAttempt(responseMessageId, message.id);
+          _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+          chatAttemptCompleted = true;
           notifyListeners();
           continue;
         }
@@ -674,16 +804,19 @@ class MessageProvider extends ChangeNotifier {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             notifyListeners();
             return;
           }
           message.text = chunk.text;
+          completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
         }
       }
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
+      completeChat(ProductOutcome.failure, failure: ProductFailure.network);
       notifyListeners();
     } finally {
       timer?.cancel();
@@ -691,6 +824,9 @@ class MessageProvider extends ChangeNotifier {
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
+    }
+    if (!chatAttemptCompleted) {
+      completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
   }
 
@@ -725,5 +861,15 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
+  }
+
+  @override
+  void dispose() {
+    for (final state in _chatTelemetryAttempts.values) {
+      state.dispose();
+      if (!state.attempt.isComplete) state.attempt.complete(ProductOutcome.unobserved);
+    }
+    _chatTelemetryAttempts.clear();
+    super.dispose();
   }
 }

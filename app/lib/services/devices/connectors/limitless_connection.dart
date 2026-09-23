@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -18,6 +19,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
   final _rawDataBuffer = <int>[];
   int? _firstFlashPageTimestampMs;
 
+  /// Pendant RTC minus phone wall clock (ms), measured from a Type-8 RX clock
+  /// notification before [SetCurrentTime]. Applied to flash-page timestamps so
+  /// batch uploads align with real-time conversations (#5734).
+  int? _clockDriftOffsetMs;
+  bool _timeSynced = false;
+  Completer<void>? _clockDriftCompleter;
+
   // Fragment reassembly: index -> {seq -> payload}
   final Map<int, Map<int, List<int>>> _fragmentBuffer = {};
 
@@ -30,6 +38,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _isReinitializing = false;
   bool _pendingReinit = false;
   bool _isBatchMode = false;
+
+  /// Drift of pendant RTC vs phone at connect, before forward clock sync.
+  /// Null when no Type-8 clock was observed (fail-open: no correction).
+  int? get clockDriftOffsetMs => _clockDriftOffsetMs;
 
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
@@ -48,13 +60,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
+    _resetClockDriftCapture();
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     await Future.delayed(const Duration(seconds: 1));
 
     _attachRxSubscription();
 
-    await Future.delayed(const Duration(seconds: 1));
+    // Wait the same 1s settle window as before, but return early if a Type-8
+    // clock arrives so we measure drift before SetCurrentTime (#5734).
+    await _awaitPreSyncClock(const Duration(seconds: 1));
 
     await _initialize();
 
@@ -137,9 +152,62 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await unpairWithoutReset();
   }
 
+  void _resetClockDriftCapture() {
+    _clockDriftOffsetMs = null;
+    _timeSynced = false;
+    _clockDriftCompleter = Completer<void>();
+  }
+
+  Future<void> _awaitPreSyncClock(Duration timeout) async {
+    if (_clockDriftOffsetMs != null || _timeSynced) return;
+    final completer = _clockDriftCompleter;
+    if (completer == null || completer.isCompleted) {
+      await Future.delayed(timeout);
+      return;
+    }
+    try {
+      await completer.future.timeout(timeout);
+    } on TimeoutException {
+      // Fail-open: proceed to SetCurrentTime without a measured offset.
+    }
+  }
+
+  /// Records pendant−phone drift from a Type-8 clock notification.
+  ///
+  /// Only the first pre-sync reading is kept; later Type-8s (post SetCurrentTime)
+  /// would show ~0 drift and must not overwrite the offline-page correction.
+  void _tryCaptureClockDrift(List<int> data) {
+    if (_timeSynced || _clockDriftOffsetMs != null) return;
+
+    final pendantEpochMs = LimitlessClockDrift.extractType8PendantEpochMs(data);
+    if (pendantEpochMs == null) return;
+
+    final phoneEpochMs = DateTime.now().millisecondsSinceEpoch;
+    final drift = LimitlessClockDrift.measureClockDriftOffsetMs(
+      pendantEpochMs: pendantEpochMs,
+      phoneEpochMs: phoneEpochMs,
+    );
+    if (drift == null) return;
+
+    _clockDriftOffsetMs = drift;
+    DebugLogManager.logEvent('limitless_clock_drift_measured', {
+      'pendantEpochMs': pendantEpochMs,
+      'phoneEpochMs': phoneEpochMs,
+      'driftOffsetMs': drift,
+    });
+    final completer = _clockDriftCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
   Future<void> _initialize() async {
     try {
-      // Command 1: Time sync
+      // Freeze drift capture *before* SetCurrentTime leaves the phone so a
+      // Type-8 arriving during the write cannot be mistaken for pre-sync RTC (#5734).
+      _timeSynced = true;
+      // Command 1: Time sync (forward-only). Drift was measured from any Type-8
+      // pendant-clock RX during the connect listen window above.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       await Future.delayed(const Duration(seconds: 1));
@@ -152,7 +220,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       _isInitialized = true;
-      DebugLogManager.logInfo('Limitless device initialized successfully');
+      DebugLogManager.logInfo('Limitless device initialized successfully', {
+        if (_clockDriftOffsetMs != null) 'clockDriftOffsetMs': _clockDriftOffsetMs,
+      });
     } catch (e) {
       Logger.debug('Limitless: Initialization failed: $e');
       DebugLogManager.logError(e, null, 'Limitless initialization failed');
@@ -165,6 +235,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     _tryParseButtonStatus(data);
     _tryParseDeviceStatus(data);
+    // Type-8 clock may be a bare payload or a BLE-wrapped single fragment.
+    _tryCaptureClockDrift(data);
 
     // Parse BLE packet to get fragmentation info
     final packet = _parseBlePacket(data);
@@ -202,6 +274,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       _fragmentBuffer.remove(index);
+
+      // Reassembled payload: Type-8 clock lives inside wrapper field 4.
+      _tryCaptureClockDrift(completePayload);
 
       if (_isBatchMode) {
         _handlePendantMessage(completePayload);
@@ -1194,7 +1269,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
         return {
           'opus_frames': <List<int>>[],
-          'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+          // Leave phone-now out so WAL sync can skip drift on a missing page RTC.
+          'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs,
           'max_index': maxIndex,
           'did_start_session': didStartSession,
           'did_stop_session': didStopSession,
@@ -1220,7 +1296,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       return {
         'opus_frames': allFrames,
-        'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+        // Raw pendant RTC (or null). WAL sync applies clockDriftOffsetMs.
+        'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs,
         'did_start_session': didStartSession,
         'did_stop_session': didStopSession,
         'did_start_recording': didStartRecording,

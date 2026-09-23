@@ -20,7 +20,11 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
-    const terminalStatuses = {WalStatus.corrupted, WalStatus.outsideRecoveryWindow};
+    const terminalStatuses = {
+      WalStatus.corrupted,
+      WalStatus.outsideRecoveryWindow,
+      WalStatus.unsupportedAudio,
+    };
 
     test('isSyncing wins over every non-terminal status', () {
       for (final s in WalStatus.values.where((status) => !terminalStatuses.contains(status))) {
@@ -47,6 +51,24 @@ void main() {
           makeWal(status: WalStatus.outsideRecoveryWindow, retryCount: r).syncDisplayState,
           WalSyncDisplayState.outsideRecoveryWindow,
           reason: 'retryCount=$r must not downgrade it to waiting/retrying/failed',
+        );
+      }
+    });
+
+    test('unsupportedAudio wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.unsupportedAudio, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.unsupportedAudio,
+        reason: 'audio the server cannot read must never render as an active upload',
+      );
+    });
+
+    test('unsupportedAudio -> unsupportedAudio regardless of retry count', () {
+      for (final r in [0, 1, walMaxAutoRetries]) {
+        expect(
+          makeWal(status: WalStatus.unsupportedAudio, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.unsupportedAudio,
+          reason: 'retryCount=$r must not downgrade it back to the failed/tap-Retry loop',
         );
       }
     });
@@ -94,6 +116,67 @@ void main() {
     });
   });
 
+  group('worstSessionSyncState', () {
+    test('empty session -> null (nothing to report)', () {
+      expect(worstSessionSyncState(const []), isNull);
+    });
+
+    test('a single healthy WAL reports its own state', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.miss)]),
+        WalSyncDisplayState.waiting,
+      );
+    });
+
+    test('failed outranks retrying, syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, retryCount: 1),
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries),
+          makeWal(status: WalStatus.miss),
+        ]),
+        WalSyncDisplayState.failed,
+        reason: 'the indicator must name the WAL that needs the user, not the busiest one',
+      );
+    });
+
+    test('retrying outranks syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: 1),
+        ]),
+        WalSyncDisplayState.retrying,
+      );
+    });
+
+    test('corrupted and outsideRecoveryWindow are terminal like failed', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.corrupted)]),
+        WalSyncDisplayState.corrupted,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.outsideRecoveryWindow)]),
+        WalSyncDisplayState.outsideRecoveryWindow,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.unsupportedAudio)]),
+        WalSyncDisplayState.unsupportedAudio,
+      );
+    });
+
+    test('only failed is retryable', () {
+      for (final state in WalSyncDisplayState.values) {
+        expect(
+          isRetryableSyncState(state),
+          state == WalSyncDisplayState.failed,
+          reason: '$state must not offer a retry that cannot succeed',
+        );
+      }
+    });
+  });
+
   group('Wal jobId/uploadedAt persistence', () {
     test('round-trips through toJson/fromJson', () {
       final w = makeWal(status: WalStatus.uploaded, jobId: 'job-xyz')..uploadedAt = 1700000123;
@@ -106,6 +189,14 @@ void main() {
     test('outsideRecoveryWindow survives a restart', () {
       final w = makeWal(status: WalStatus.outsideRecoveryWindow);
       expect(Wal.fromJson(w.toJson()).status, WalStatus.outsideRecoveryWindow);
+    });
+
+    test('unsupportedAudio survives a restart', () {
+      final w = makeWal(status: WalStatus.unsupportedAudio, jobId: 'job-resolved');
+      w.markUnsupportedAudio();
+      final back = Wal.fromJson(w.toJson());
+      expect(back.status, WalStatus.unsupportedAudio);
+      expect(back.jobId, isNull, reason: 'the job reached a verdict; keeping its id would re-poll it');
     });
 
     test('legacy json without job fields defaults safely', () {

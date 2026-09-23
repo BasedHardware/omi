@@ -18,6 +18,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 class HomeContentPage extends StatefulWidget {
   const HomeContentPage({super.key});
@@ -43,10 +44,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   Future<void> _loadSummaries() async {
     if (!mounted) return;
     setState(() => _loadingSummaries = true);
-    final summaries = await getDailySummaries(limit: 3, offset: 0);
+    final result = await getDailySummaries(limit: 3, offset: 0);
     if (mounted) {
       setState(() {
-        _recentSummaries = summaries;
+        // Keep the row that is already there when the read fails.
+        if (result.ok) _recentSummaries = result.items;
         _loadingSummaries = false;
       });
     }
@@ -138,7 +140,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 SliverToBoxAdapter(child: _buildMindMapPreview(context)),
 
                 // Bottom padding so content isn't hidden behind chat bar + nav
-                const SliverToBoxAdapter(child: SizedBox(height: 160)),
+                SliverToBoxAdapter(child: SizedBox(height: homeChatBarClearance(context))),
               ] else if (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations)
                 // Hide both the recent-convos preview AND the get-started tiles
                 // while we're still fetching — otherwise users with conversations
@@ -153,7 +155,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   hasScrollBody: false,
                   child: Padding(
                     // Bottom padding leaves room for the floating chat bar.
-                    padding: const EdgeInsets.only(bottom: 160),
+                    padding: EdgeInsets.only(bottom: homeChatBarClearance(context)),
                     child: Center(
                       child: Text(
                         context.l10n.tapPlusToStartRecording,

@@ -10,7 +10,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query, Request
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -124,6 +124,7 @@ from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
@@ -411,6 +412,12 @@ def _write_file(path: str, data: bytes):
     """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
         f.write(data)
+
+
+def _set_instructions_url_flag(external_integration: dict) -> None:
+    if path := (external_integration.get('setup_instructions_file_path') or '').strip():
+        external_integration['setup_instructions_file_path'] = path
+        external_integration['is_instructions_url'] = path.startswith('http')
 
 
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
@@ -839,14 +846,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
         # Trigger on
         if external_integration.get('triggers_on'):
             normalize_required_webhook_url(external_integration)
-            if external_integration.get('setup_instructions_file_path'):
-                external_integration['setup_instructions_file_path'] = external_integration[
-                    'setup_instructions_file_path'
-                ].strip()
-                if external_integration['setup_instructions_file_path'].startswith('http'):
-                    external_integration['is_instructions_url'] = True
-                else:
-                    external_integration['is_instructions_url'] = False
+            _set_instructions_url_flag(external_integration)
 
         # Actions
         if actions := external_integration.get('actions'):
@@ -1096,6 +1096,7 @@ def update_app(
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         backfill_app_home_url_from_auth_steps(data['external_integration'])
+        _set_instructions_url_flag(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)
@@ -1183,7 +1184,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
         ext_int_update['chat_messages_enabled'] = False
         ext_int_update['chat_messages_target'] = 'app'
         ext_int_update['chat_messages_notify'] = False
-    update_dict['external_integration'] = ext_int_update
+    update_dict.update({f'external_integration.{key}': value for key, value in ext_int_update.items()})
 
     update_app_in_db(update_dict)
 
@@ -1270,14 +1271,17 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
+    old_review = get_specific_user_review(app_id, uid) or {}
     review_data = {
         'score': data.score,
         'review': data.review or '',
         'username': data.username or '',
-        'response': data.response or '',
+        'response': old_review.get('response', ''),
         'rated_at': datetime.now(timezone.utc).isoformat(),
         'uid': uid,
     }
+    if old_review.get('responded_at'):
+        review_data['responded_at'] = old_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
@@ -1317,6 +1321,8 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
         'response': old_review.get('response', ''),
         'uid': uid,
     }
+    if old_review.get('responded_at'):
+        review_data['responded_at'] = old_review['responded_at']
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
@@ -1542,7 +1548,7 @@ async def generate_sample_prompts_endpoint(
     import json
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
 1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
@@ -1597,7 +1603,7 @@ async def generate_app_endpoint(
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -1644,7 +1650,7 @@ async def generate_app_icon_endpoint(
     import base64
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
-    enforce_chat_quota(uid, platform=x_app_platform)
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
     app_name = data.name.strip()
     app_description = data.description.strip()
@@ -2185,7 +2191,7 @@ def _disabled_app_install_detail(app: App, uid: str) -> str:
 
 
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -2197,7 +2203,9 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        setup_url = app.external_integration.setup_completed_url
+        separator = '&' if '?' in setup_url else '?'
+        res = await client.get(f'{setup_url}{separator}uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
@@ -2206,18 +2214,20 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
-    await run_blocking(db_executor, enable_app, uid, app_id)
+    newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
     if (
-        (app.private is None or not app.private)
+        newly_enabled
+        and (app.private is None or not app.private)
         and (app.uid is None or app.uid != uid)
         and not await run_blocking(db_executor, is_tester, uid)
     ):
         await run_blocking(db_executor, increase_app_installs_count, app_id)
+    record_product_event('app_enabled', request=request, op='enable')
     return {'status': 'ok'}
 
 
 @router.post('/v1/apps/disable', response_model=AppMutationResponse)
-def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
     if is_app_enabled(uid, app_id):
@@ -2227,6 +2237,7 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
             app = App(**app)
             if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 decrease_app_installs_count(app_id)
+        record_product_event('app_enabled', request=request, op='disable')
         return {'status': 'ok'}
 
     raise HTTPException(status_code=404, detail='App not found')
@@ -2428,7 +2439,10 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
     if app.get('uid') != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to delete API keys for this app')
 
-    delete_api_key_db(app_id, key_id)
+    if not delete_api_key_db(app_id, key_id):
+        # The client shows "API key revoked successfully" for any 2xx, so a delete that
+        # removed nothing must not be reported as a confirmed revocation.
+        raise HTTPException(status_code=404, detail='API key not found')
 
     return {'status': 'ok', 'message': 'API key deleted'}
 

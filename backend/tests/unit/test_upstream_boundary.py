@@ -159,7 +159,13 @@ def _ensure_process_conversation_importable():
     )
     sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
+    # AutoMock getattr is truthy. The custom-STT LLM skip helper must fail-open
+    # here or process_conversation returns before memory/task/goal fan-out.
+    skip_helper = MagicMock(return_value=False)
+    sys.modules["utils.subscription"].should_skip_omi_paid_postprocessing = skip_helper
+
     _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
+    _PROCESS_CONVERSATION_MODULE.should_skip_omi_paid_postprocessing = skip_helper
     return _PROCESS_CONVERSATION_MODULE
 
 
@@ -191,6 +197,7 @@ class TestExtractionSeamFanOut:
         assert "_extract_memories(uid, conversation)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
+        assert "_save_action_items(uid, conversation, people)" in source
         assert "submit_with_context(postprocess_executor, update_goal_progress" in source
 
     def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
@@ -204,6 +211,7 @@ class TestExtractionSeamFanOut:
 
         submitted = []
         extract_memories = MagicMock()
+        save_action_items = MagicMock()
 
         def _capture_submit(_executor, fn, *args, **kwargs):
             submitted.append((fn, args))
@@ -236,11 +244,13 @@ class TestExtractionSeamFanOut:
 
         with (
             patch.object(pc, "is_trial_paywalled", return_value=False),
+            patch.object(pc, "should_skip_omi_paid_postprocessing", return_value=False),
             patch.object(pc.redis_db, "get_conversation_meeting_id", return_value=None),
             patch.object(pc, "_get_structured", return_value=(structured, False)),
             patch.object(pc, "_get_conversation_obj", return_value=conversation),
             patch.object(pc, "trigger_conversation_apps"),
             patch.object(pc, "_extract_memories", extract_memories),
+            patch.object(pc, "_save_action_items", save_action_items),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
@@ -249,7 +259,10 @@ class TestExtractionSeamFanOut:
 
         submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
         extract_memories.assert_called_once_with("uid-boundary", conversation)
-        assert "_save_action_items" in submitted_fns
+        save_action_items.assert_called_once()
+        assert save_action_items.call_args.args[0] == "uid-boundary"
+        assert save_action_items.call_args.args[1] is conversation
+        assert "_save_action_items" not in submitted_fns
         assert "update_goal_progress" in submitted_fns
         assert "_extract_memories" not in submitted_fns
 

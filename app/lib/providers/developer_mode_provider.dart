@@ -81,17 +81,13 @@ class DeveloperModeProvider extends BaseProvider {
 
   Future getWebhooksStatus() async {
     var res = await webhooksStatus();
-    if (res == null) {
-      conversationEventsToggled = false;
-      transcriptsToggled = false;
-      audioBytesToggled = false;
-      daySummaryToggled = false;
-    } else {
-      conversationEventsToggled = res['memory_created'];
-      transcriptsToggled = res['realtime_transcript'];
-      audioBytesToggled = res['audio_bytes'];
-      daySummaryToggled = res['day_summary'];
-    }
+    // A failed read is not "all four are off": keep the last known values instead of
+    // reporting the webhooks as disabled and caching that over the good ones.
+    if (res == null) return;
+    conversationEventsToggled = res['memory_created'];
+    transcriptsToggled = res['realtime_transcript'];
+    audioBytesToggled = res['audio_bytes'];
+    daySummaryToggled = res['day_summary'];
     SharedPreferencesUtil().conversationEventsToggled = conversationEventsToggled;
     SharedPreferencesUtil().transcriptsToggled = transcriptsToggled;
     SharedPreferencesUtil().audioBytesToggled = audioBytesToggled;
@@ -203,13 +199,16 @@ class DeveloperModeProvider extends BaseProvider {
     var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
     var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
+    var webhooksSaved = false;
     try {
-      Future.wait([w1, w2, w3, w4]);
-      prefs.webhookAudioBytes = webhookAudioBytes.text;
-      prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
-      prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
-      prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
-      prefs.webhookDaySummary = webhookDaySummary.text;
+      webhooksSaved = !(await Future.wait([w1, w2, w3, w4])).contains(false);
+      if (webhooksSaved) {
+        prefs.webhookAudioBytes = webhookAudioBytes.text;
+        prefs.webhookAudioBytesDelay = webhookAudioBytesDelay.text;
+        prefs.webhookOnTranscriptReceived = webhookOnTranscriptReceived.text;
+        prefs.webhookOnConversationCreated = webhookOnConversationCreated.text;
+        prefs.webhookDaySummary = webhookDaySummary.text;
+      }
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
@@ -227,6 +226,13 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
+    if (!webhooksSaved) {
+      AppSnackbar.showSnackbarError(
+        globalNavigatorKey.currentContext?.l10n.failedToSaveCheckConnection ??
+            'Failed to save. Please check your connection.',
+      );
+      return;
+    }
     AppSnackbar.showSnackbar(globalNavigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!');
   }
 

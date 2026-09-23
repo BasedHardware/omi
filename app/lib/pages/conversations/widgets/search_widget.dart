@@ -7,9 +7,11 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/conversations/widgets/speaker_filter_sheet.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 class SearchWidget extends StatefulWidget {
@@ -71,6 +73,23 @@ class _SearchWidgetState extends State<SearchWidget> {
     }
   }
 
+  ProductFailure _searchFailure(ConversationSearchResult result) {
+    final statusCode = result.statusCode;
+    if (statusCode == null) return ProductFailure.network;
+    if (statusCode >= 500) return ProductFailure.server;
+    return ProductFailure.invalidResponse;
+  }
+
+  bool _isCurrentSearchSurface(String value) {
+    if (!mounted || searchController.text != value) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+    final homeProvider = _homeProvider;
+    final conversationProvider = _convoProvider;
+    if (homeProvider == null || conversationProvider == null || homeProvider.selectedIndex != 1) return false;
+    return homeProvider.showConvoSearchBar || conversationProvider.previousQuery == value;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -88,11 +107,42 @@ class _SearchWidgetState extends State<SearchWidget> {
               onChanged: (value) {
                 var provider = Provider.of<ConversationProvider>(context, listen: false);
                 _debouncer.run(() async {
-                  await provider.searchConversations(value);
-                  if (value.isNotEmpty) {
-                    // Track search query with results count
-                    PlatformManager.instance.analytics.searchQueryEntered(value, provider.searchedConversations.length);
+                  if (value.isEmpty) {
+                    await provider.searchConversations(value);
+                    return;
                   }
+
+                  final attempt = ProductTelemetry.instance.start(
+                    ProductJourney.search,
+                    surface: ProductSurface.conversations,
+                  );
+                  final result = await provider.searchConversations(value);
+                  if (!mounted || searchController.text != value) {
+                    attempt.complete(ProductOutcome.superseded);
+                    return;
+                  }
+
+                  if (!result.isSuccess) {
+                    attempt.complete(ProductOutcome.failure, failure: _searchFailure(result));
+                    return;
+                  }
+
+                  final resultCount = result.items.length;
+                  if (resultCount == 0) {
+                    attempt.complete(ProductOutcome.empty, resultCount: 0);
+                  } else {
+                    // The provider has updated the visible list. Keep the
+                    // first-result signal separate from transport completion.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_isCurrentSearchSurface(value)) {
+                        attempt.firstResult();
+                        attempt.complete(ProductOutcome.success, resultCount: resultCount);
+                      } else {
+                        attempt.complete(ProductOutcome.superseded);
+                      }
+                    });
+                  }
+                  PlatformManager.instance.analytics.searchQueryEntered(value, resultCount);
                 });
                 setShowClearButton();
               },
@@ -166,6 +216,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
+                  tooltip: context.l10n.filterByDate,
                   icon: FaIcon(
                     hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,

@@ -13,7 +13,7 @@ import os
 
 import firebase_admin
 
-from utils.x_connector import raise_if_x_sync_job_failed, run_x_sync_job
+from utils.x_connector import is_oauth_configured, raise_if_x_sync_job_failed, run_x_sync_job
 
 logging.basicConfig(level=logging.INFO)
 
@@ -32,6 +32,13 @@ def _init_firebase() -> None:
 
 def main() -> None:
     _init_firebase()
+    # Credential gate: without an X OAuth app configured every per-user token
+    # refresh is a guaranteed 400 and the RapidAPI fallback a guaranteed
+    # failure, so the sweep would walk the whole connected-user registry for
+    # nothing. An unconfigured deployment is a healthy no-op, not a failure.
+    if not is_oauth_configured():
+        logger.info("x-connector-sync-job skipped: no X OAuth app configured")
+        return
     logger.info("Starting x-connector-sync-job...")
     summary = asyncio.run(run_x_sync_job())
     logger.info("x-connector-sync-job summary: %s", summary)

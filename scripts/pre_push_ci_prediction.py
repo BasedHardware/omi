@@ -31,7 +31,9 @@ LOCAL_CHECK_ORDER = (
 PHASE_ORDER = (
     *LOCAL_CHECK_ORDER,
     "app-analysis-tests",
+    "app-journeys-hermetic",
     "app-compile-smoke",
+    "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
@@ -266,6 +268,56 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+IOS_PIGEON_DEFINITIONS = {
+    "app/lib/pigeon_interfaces.dart",
+    "app/lib/phone_mic_interface.dart",
+}
+
+
+def _is_app_ios_compile_input(path: str) -> bool:
+    """Wake the iOS simulator compile on native iOS, Pigeon, pubspec, or this job.
+
+    Generated Pigeon Swift lives under ``app/ios/``, so it is covered by that
+    prefix. Ordinary Dart under ``app/lib/`` stays on Android compile smoke.
+    Editing this workflow (or detect-changes) must wake the job so a change
+    to the compile check actually runs the compile check.
+    """
+    return (
+        path.startswith("app/ios/")
+        or path.startswith(".github/actions/detect-changes/")
+        or path in IOS_PIGEON_DEFINITIONS
+        or path in {
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+        }
+    )
+
+
+def _is_app_journey_input(path: str) -> bool:
+    """Wake the hermetic seeded-journey lane (SCA-490).
+
+    Journey definitions and their support, the C3 replay world, the dev
+    controls harness, and non-generated app/lib production Dart (which runs
+    the full small suite as its conservative fallback) all select the lane.
+    Generated Dart and l10n template files stay owned by the codegen/l10n
+    lanes; native Android/iOS trees stay owned by the compile smoke.
+    """
+    if path.startswith("app/lib/l10n/app_") and (path.endswith(".arb") or path.endswith(".dart")):
+        return False
+    if _is_generated_dart(path):
+        return False
+    if path.startswith("app/lib/") and path.endswith(".dart"):
+        return True
+    return path.startswith(
+        ("app/integration_test/journeys/", "app/test/support/capture/", "app/lib/services/dev_controls/")
+    ) or path in {
+        "contracts/session/session-evidence-v1.schema.json",
+        "scripts/dev-harness/mobile-verify.sh",
+        "scripts/dev-harness/dev_harness/mobile_verify.py",
+    }
+
+
 def _matches_desktop_release_pathspec(path: str, pathspec: str) -> bool:
     """Match a changed file against one planner git pathspec."""
     if path == pathspec:
@@ -348,12 +400,19 @@ def resolve_impact(
     )
 
     for path in normalized_paths:
+        # The hermetic journey lane owns inputs beyond app/ (the evidence
+        # contract and the verify entrypoint), so it is resolved per path
+        # before the component blocks.
+        if _is_app_journey_input(path):
+            selected.add("app-journeys-hermetic")
         if path.startswith("app/"):
             # Unknown paths within a component remain conservative: they wake
             # its normal analyzer/test lane rather than silently doing nothing.
             selected.update({"app-ci-only", "app-analysis-tests"})
             if _is_app_compile_smoke_input(path):
                 selected.add("app-compile-smoke")
+            if _is_app_ios_compile_input(path):
+                selected.add("app-ios-compile")
             if path.endswith(".dart") and not _is_generated_dart(path):
                 selected.add("app-dart-format")
             if _is_app_l10n_input(path):
@@ -394,7 +453,9 @@ def resolve_impact(
             {
                 "app-ci-only",
                 "app-analysis-tests",
+                "app-journeys-hermetic",
                 "app-compile-smoke",
+                "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
@@ -451,7 +512,9 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_ios_compile": str(plan.includes("app-ios-compile")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
+        "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),

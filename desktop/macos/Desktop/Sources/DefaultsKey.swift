@@ -144,6 +144,8 @@ enum DefaultsKey: String {
   case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
   /// UID that last owned persisted BYOK keys on this Mac.
   case byokOwnerUid = "byok_owner_uid"
+  /// Durable, owner-scoped explanation shown after unsafe legacy/foreign BYOK keys are cleared.
+  case byokOwnerResetNotice = "byok_owner_reset_notice"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
@@ -160,6 +162,13 @@ enum DefaultsKey: String {
   /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
   case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
+  /// Local embedding runtime: skip Apple NLCE / hybrid and keep Gemini screen search.
+  case disableLocalEmbeddings = "disableLocalEmbeddings"
+  /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
+  /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
+  case localEmbeddingsEnabled = "localEmbeddingsEnabled"
+  /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
+  case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

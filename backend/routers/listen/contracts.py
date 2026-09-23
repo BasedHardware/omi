@@ -81,6 +81,7 @@ class ListenSessionState:
     fair_use_plan: Optional[Any] = None
     dg_usage_ms_pending: int = 0
     last_audio_received_time: Optional[float] = None
+    last_audio_resume_time: Optional[float] = None
     last_activity_time: Optional[float] = None
     # Client-provided close provenance. This is set before a normal WebSocket
     # close so finalization can distinguish an internal rotation from a

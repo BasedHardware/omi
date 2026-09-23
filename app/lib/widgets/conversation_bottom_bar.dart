@@ -19,6 +19,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
@@ -39,6 +40,7 @@ class ConversationBottomBar extends StatefulWidget {
   final bool hasActionItems;
   final ServerConversation? conversation;
   final Function(Future<void> Function(double start, double end))? onSeekFunctionReady;
+  final VoidCallback? onAudioInteraction;
 
   const ConversationBottomBar({
     super.key,
@@ -50,6 +52,7 @@ class ConversationBottomBar extends StatefulWidget {
     this.hasActionItems = true,
     this.conversation,
     this.onSeekFunctionReady,
+    this.onAudioInteraction,
   });
 
   @override
@@ -149,6 +152,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// (#4471). Requires the dense conversation artifact + spans; the per-part
   /// playlist fallback is not used for segment taps.
   Future<void> seekToTranscriptSegment(double segmentStartSeconds, double segmentEndSeconds) async {
+    widget.onAudioInteraction?.call();
     if (!_isAudioInitialized) {
       await _initAudioIfNeeded();
     }
@@ -312,6 +316,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Future<void> _togglePlayPause() async {
+    widget.onAudioInteraction?.call();
     if (!_isAudioInitialized && !_isAudioLoading) {
       await _initAudioIfNeeded();
     }
@@ -398,6 +403,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               icon: FontAwesomeIcons.solidComments,
               isSelected: widget.selectedTab == ConversationTab.transcript,
               onTap: () => widget.onTabSelected(ConversationTab.transcript),
+              semanticLabel: context.l10n.transcript,
             ),
             const SizedBox(width: 8),
             _buildStopButton(),
@@ -437,6 +443,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     icon: FontAwesomeIcons.solidComments,
                     isSelected: isTranscriptSelected,
                     onTap: () => widget.onTabSelected(ConversationTab.transcript),
+                    semanticLabel: context.l10n.transcript,
                   ),
           ),
         ),
@@ -459,6 +466,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     icon: FontAwesomeIcons.solidFileLines,
                     isSelected: false,
                     onTap: () => widget.onTabSelected(ConversationTab.summary),
+                    semanticLabel: context.l10n.summary,
                   ),
           ),
         ),
@@ -469,6 +477,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             icon: FontAwesomeIcons.listCheck,
             isSelected: widget.selectedTab == ConversationTab.actionItems,
             onTap: () => widget.onTabSelected(ConversationTab.actionItems),
+            semanticLabel: context.l10n.actionItems,
           ),
         ],
       ],
@@ -509,32 +518,42 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
+    required String semanticLabel,
   }) {
-    return Container(
-      height: 56,
-      width: 56,
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Container(
+        height: 56,
+        width: 56,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(28),
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              onTap();
+            },
+            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(28),
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            onTap();
-          },
-          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -543,17 +562,22 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Widget _buildSummaryPillContent(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, _) {
-        final summarizedApp = provider.getSummarizedApp();
-        final app = summarizedApp != null
-            ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
+        final summarySelection = provider.getSummarySelection();
+        final app = summarySelection.isApp
+            ? provider.appsList.firstWhereOrNull((element) => element.id == summarySelection.appId)
             : null;
 
-        return _buildSummaryPillInner(context, provider, app);
+        return _buildSummaryPillInner(context, provider, summarySelection, app);
       },
     );
   }
 
-  Widget _buildSummaryPillInner(BuildContext context, ConversationDetailProvider provider, App? app) {
+  Widget _buildSummaryPillInner(
+    BuildContext context,
+    ConversationDetailProvider provider,
+    ConversationSummarySelection summarySelection,
+    App? app,
+  ) {
     final isReprocessing = provider.loadingReprocessConversation;
     final reprocessingApp = provider.selectedAppForReprocessing;
 
@@ -574,8 +598,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     String displayName = context.l10n.summary;
     if (isReprocessing && reprocessingApp != null) {
       displayName = reprocessingApp.name;
-    } else if (app != null) {
-      displayName = app.name;
+    } else if (summarySelection.isApp) {
+      displayName = app?.name ?? context.l10n.unknownApp;
     }
 
     if (displayName.length > 8) {
@@ -591,9 +615,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         appImageUrl = Assets.images.herologo.path;
         isLocalAsset = true;
       }
-    } else if (app != null) {
+    } else if (summarySelection.isApp && app != null) {
       appImageUrl = app.getImageUrl();
     }
+    final isUnknownApp = !isReprocessing && summarySelection.isApp && app == null;
 
     return Container(
       height: 56,
@@ -621,7 +646,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // App icon or default icon
-              _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing),
+              _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing, isUnknownApp: isUnknownApp),
               const SizedBox(width: 6),
               // App name
               Flexible(
@@ -781,10 +806,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Future<void> _seekToCombinedPosition(
-    Duration targetPosition, {
-    bool invalidateSegmentStop = true,
-  }) async {
+  Future<void> _seekToCombinedPosition(Duration targetPosition, {bool invalidateSegmentStop = true}) async {
+    widget.onAudioInteraction?.call();
     if (_audioPlayer == null) return;
 
     // Scrubber seeks invalidate any in-flight segment end-handler.
@@ -840,37 +863,47 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
+    required String semanticLabel,
   }) {
-    return Material(
-      key: key,
-      elevation: 4,
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: Container(
-        height: 56,
-        width: 56,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      excludeSemantics: true,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        onTap();
+      },
+      child: Material(
+        key: key,
+        elevation: 4,
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: Container(
+          height: 56,
+          width: 56,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                spreadRadius: 1,
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                onTap();
+              },
+              child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(28),
-            onTap: () {
-              HapticFeedback.mediumImpact();
-              onTap();
-            },
-            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),
@@ -898,7 +931,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading) {
+  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading, {bool isUnknownApp = false}) {
     const double size = 28;
 
     if (isLoading) {
@@ -906,6 +939,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         width: size,
         height: size,
         child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+      );
+    }
+
+    if (isUnknownApp) {
+      return const SizedBox(
+        width: size,
+        height: size,
+        child: Icon(Icons.apps_outlined, color: Colors.white, size: 24),
       );
     }
 

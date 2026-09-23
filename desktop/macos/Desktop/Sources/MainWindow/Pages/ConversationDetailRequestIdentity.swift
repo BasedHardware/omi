@@ -22,23 +22,30 @@ struct ConversationSummaryRevision: Hashable {
   let sectionBodies: [String]
   let actionItemDescriptions: [String]
   let secondaryResultContents: [String]
+  let sourceSegmentIDs: [[String]]
 
   init(conversation: ServerConversation) {
-    primaryContent = ConversationSummarySelection.primarySummary(for: conversation).content
+    let selection = ConversationSummarySelection.primarySummary(for: conversation)
+    primaryContent = selection.content
+    sourceSegmentIDs =
+      (selection.kind == .sections ? conversation.structured.sections.map(\.sourceSegmentIDs) : [])
+      + conversation.structured.actionItems.filter { !$0.deleted }.map(\.sourceSegmentIDs)
     sectionBodies = conversation.structured.sections.map(\.bodyMarkdown)
     actionItemDescriptions = conversation.structured.actionItems
       .filter { !$0.deleted }
       .map(\.description)
-    secondaryResultContents = ConversationSummarySelection.secondaryResults(for: conversation).map(\.content)
+    secondaryResultContents = ConversationSummarySelection.secondaryResults(for: conversation).map(\.result.content)
   }
 
   init(
     primaryContent: String,
     sectionBodies: [String] = [],
     actionItemDescriptions: [String] = [],
-    secondaryResultContents: [String] = []
+    secondaryResultContents: [String] = [],
+    sourceSegmentIDs: [[String]] = []
   ) {
     self.primaryContent = primaryContent
+    self.sourceSegmentIDs = sourceSegmentIDs
     self.sectionBodies = sectionBodies
     self.actionItemDescriptions = actionItemDescriptions
     self.secondaryResultContents = secondaryResultContents

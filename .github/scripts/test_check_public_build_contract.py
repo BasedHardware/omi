@@ -1508,5 +1508,28 @@ class RuntimeServiceAccountPreflightTests(unittest.TestCase):
         self.assertIn("print-access-token failed", str(caught.exception))
 
 
+class RepositoryBetaRoutingConfig(unittest.TestCase):
+    """Keep the public web Beta build on the same development serving plane as other Beta clients."""
+
+    def test_web_development_build_is_beta_and_prod_stays_stable(self) -> None:
+        contract = json.loads((ROOT / "config/public-build-contract.json").read_text(encoding="utf-8"))
+        values = json.loads((ROOT / "config/public-build-values.json").read_text(encoding="utf-8"))
+        app_inputs = {item["name"] for item in contract["targets"]["app"]["inputs"]}
+
+        self.assertIn("NEXT_PUBLIC_API_BASE_URL", app_inputs)
+        self.assertEqual(
+            values["environments"]["development"]["values"]["NEXT_PUBLIC_API_BASE_URL"],
+            "https://api.omiapi.com",
+        )
+        self.assertEqual(
+            values["environments"]["prod"]["values"]["NEXT_PUBLIC_API_BASE_URL"],
+            "https://api.omi.me",
+        )
+
+        workflow = (ROOT / ".github/workflows/gcp_app.yml").read_text(encoding="utf-8")
+        self.assertIn("github.ref == 'refs/heads/development'", workflow)
+        self.assertIn("environment: ${{ github.event_name == 'workflow_dispatch'", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -55,10 +55,14 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
+        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+        {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
+        {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://diarizer.omiapi.com:80"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
@@ -112,10 +116,11 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags,
+        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -220,7 +225,7 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_belief_model_env(payload: str) -> str:
-    """MEMORY_BELIEF_MODEL_ENABLED is declared beside every dev MEMORY_ENABLED site.
+    """Belief processing and its deployment-wide pause are declared together.
 
     The belief model gates writes in process_conversation (backend-listen, pusher, and
     the Cloud Run backend for reprocess), API memory create (backend-integration), and
@@ -229,7 +234,9 @@ def with_belief_model_env(payload: str) -> str:
     """
     return payload.replace(
         '{"name": "MEMORY_ENABLED", "value": "on"},',
-        '{"name": "MEMORY_ENABLED", "value": "on"},\n        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n'
+        '        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},\n'
+        '        {"name": "MEMORY_BELIEF_AUTOMATION_PAUSED", "value": "false"},',
     )
 
 
@@ -446,6 +453,24 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
         and "'true'" in error.message
         for error in errors
     )
+
+
+@pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    # utils.free_tier_basic_gates lights a gate only on an untrimmed,
+    # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
+    # the loose summary-flag literal set while every host ran ungated.
+    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    env_config['gke']['backend-listen']['env'][flag]['value'] = literal
+    env_config['gke']['pusher']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend-sync']['env'][flag]['value'] = literal
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
 
 
 def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():
@@ -1246,7 +1271,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,dg-nova-3,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
         ),
     ]
 
@@ -2621,7 +2646,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     )
 
 
-_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL']
+_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL', 'HOSTED_SPEAKER_EMBEDDING_API_URL']
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
@@ -2655,6 +2680,72 @@ def test_repo_ilb_endpoints_use_http_scheme(env_name):
             _check_service('gke', svc_name, svc_cfg)
 
     assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
+
+
+def test_speaker_embedding_missing_on_sync_host_fails_admission():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
+                    'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'},
+                },
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'}},
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('dev', env_config)
+
+    assert errors == [
+        validator.ValidationError(
+            'dev/cloud_run/backend-sync',
+            'HOSTED_SPEAKER_EMBEDDING_API_URL must be a non-empty literal on every speaker-ID host',
+        )
+    ]
+
+
+def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'}},
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {
+                        'HOSTED_SPEAKER_EMBEDDING_API_URL': {
+                            'value': 'http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080',
+                        }
+                    }
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+    messages = [error.message for error in errors]
+    assert any('not cluster-local DNS' in message for message in messages)
+    assert any('must match gke/backend-listen' in message for message in messages)
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+def test_composed_manifest_declares_speaker_embedding_on_sync_hosts(env_name):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, env_name)
+
+    assert validator.validate_speaker_embedding_hosts(env_name, env_config) == []
 
 
 # --- live Cloud Run check validates services only (this pipeline deploys no Cloud Run jobs) ---
@@ -2692,3 +2783,46 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
     assert 'jobs' not in state  # no live job state → consumer skips job env checks
     assert 'backend' in state['services']  # services are still fetched + validated
     assert any('services' in cmd for cmd in described)
+
+
+def test_live_chain_ramp_accepts_policy_tokens_only_when_explicitly_enabled():
+    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+
+    env_map = {
+        'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
+        'STT_CONNECT_ORDER_FROM_CONFIG': {'value': 'true'},
+    }
+    config = {'gke': {'backend-listen': {'env': env_map}}}
+    assert _validate_stt_serving_model_policy('prod', config) == []
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'false'
+    assert _validate_stt_serving_model_policy('prod', config)
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'true'
+    env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
+    assert _validate_stt_serving_model_policy('prod', config)
+
+
+@pytest.mark.parametrize('binding', [{'env_var': 'COHORT', 'default': ''}, {'env_var': 'COHORT'}])
+@pytest.mark.parametrize('actual', [{}, {'value': ''}, {'valueFrom': {'secretKeyRef': {'name': 'COHORT'}}}])
+def test_only_explicit_optional_empty_defaults_admit_empty_values(binding, actual):
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='fixture',
+        expected={'COHORT': binding},
+        actual={'COHORT': actual},
+        strict_provisional=True,
+    )
+    assert (errors == []) is (binding.get('default') == '' and actual == {'value': ''})
+
+
+@pytest.mark.parametrize('cohort', ['uid:', 'pct:100', 'uid:fixture-a,'])
+def test_rendered_cloud_run_state_rejects_invalid_free_tier_cohort(monkeypatch, cohort):
+    validator = load_validator()
+    config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    state = render_cloud_run_state(config, monkeypatch)
+    for entry in state['services']['backend-sync-backfill']['env']:
+        if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT':
+            entry['value'] = cohort
+    errors = validator._validate_cloud_run(config, state, strict_provisional=False)
+    assert len(errors) == 1
+    assert errors[0].scope == 'cloud_run/backend-sync-backfill'
+    assert 'FREE_TIER_LOCAL_PROCESSING_COHORT' in errors[0].message

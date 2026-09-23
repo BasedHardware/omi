@@ -16,6 +16,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
 import 'local_storage_page.dart';
@@ -79,6 +80,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusFileUnavailable);
       case WalSyncDisplayState.outsideRecoveryWindow:
         return (Colors.redAccent, l.syncStatusTooOld);
+      case WalSyncDisplayState.unsupportedAudio:
+        return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -106,6 +109,35 @@ class WalListItem extends StatelessWidget {
           child: Text(
             context.l10n.retry,
             style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    }
+    // No upload can resolve these, so offer removal rather than a chevron that
+    // leads to a detail page with nothing actionable on it.
+    if (state == WalSyncDisplayState.corrupted ||
+        state == WalSyncDisplayState.outsideRecoveryWindow ||
+        state == WalSyncDisplayState.unsupportedAudio) {
+      return GestureDetector(
+        onTap: () async {
+          final confirmed = await OmiConfirmDialog.show(
+            context,
+            title: context.l10n.deleteRecording,
+            message: context.l10n.thisCannotBeUndone,
+            confirmLabel: context.l10n.delete,
+            confirmColor: Colors.red,
+          );
+          if (confirmed == true) await syncProvider.deleteWal(wal);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(
+            context.l10n.delete,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ),
       );
@@ -546,8 +578,13 @@ class _SyncPageState extends State<SyncPage> {
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress.
-      subtitle = l.syncProcessingBackgroundHint;
+      final counts = syncProvider.offlineServerProcessingCounts;
+      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
+            processed: counts.processed,
+            total: counts.total,
+            counterLabel: (p, t) => l.processingProgress(p, t),
+          ) ??
+          l.syncProcessingBackgroundHint;
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, Colors.deepPurpleAccent, () {
@@ -610,12 +647,13 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   String? _progressLine(SyncState s, String? speedStr) {
-    final cur = s.currentFile ?? 0;
-    final tot = s.totalFiles ?? 0;
-    final parts = <String>[];
-    if (tot > 0) parts.add(context.l10n.syncCardProgressOf(cur, tot));
-    if (speedStr != null) parts.add(speedStr);
-    return parts.isEmpty ? null : parts.join(' · ');
+    return SyncCardProgressLine.subtitle(
+      phase: s.phase,
+      currentFile: s.currentFile,
+      totalFiles: s.totalFiles,
+      counterLabel: (processed, total) => context.l10n.syncCardProgressOf(processed, total),
+      speedSuffix: speedStr,
+    );
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {

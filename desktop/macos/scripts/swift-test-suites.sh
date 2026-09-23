@@ -312,6 +312,9 @@ run_suite() {
     echo "suite timed out after ${budget}s" >>"$log_path"
     status=124
   fi
+  if [ "$status" = "124" ]; then
+    print_batch_diagnostics "$log_path" "suite $suite (timed out)"
+  fi
   record_suite_seconds "$log_path" "$log_dir"
   echo "$status" >"$status_path"
   exit "$status"
@@ -319,6 +322,19 @@ run_suite() {
 
 # Many suites, one SwiftPM process — the green fast path. A pass marks every
 # suite in the batch green; anything else is thrown away and re-run per suite.
+# A killed or failing batch used to vanish with its temp log; the step summary
+# then named the batch and nothing else (#13456: two attempts, no test name).
+# Print what XCTest had reached so the hang or failure has a name.
+print_batch_diagnostics() {
+  local log_path="$1"
+  local label="$2"
+  echo "--- $label: last XCTest progress lines ---"
+  grep -E "^Test (Case|Suite) '.*' (started|passed|failed)" "$log_path" 2>/dev/null | tail -n 12 || true
+  echo "--- $label: failures and crashes ---"
+  grep -E "error: |: failed - |Fatal error|Exited with unexpected signal|Executed [0-9]+ tests" "$log_path" 2>/dev/null | tail -n 20 || true
+  echo "--- end $label ---"
+}
+
 run_batch() {
   local log_dir="$1"
   local batch_id="$2"
@@ -347,6 +363,9 @@ run_batch() {
   if [ -f "$timeout_path" ]; then
     echo "batch of ${batch_size} suite(s) timed out after ${budget}s" >>"$log_path"
     status=124
+  fi
+  if [ "$status" != "0" ]; then
+    print_batch_diagnostics "$log_path" "batch $batch_id (exit $status)"
   fi
 
   if [ "$status" = "0" ]; then
@@ -608,23 +627,32 @@ while IFS= read -r suite; do
   suites+=("$suite")
 done < <(cut -f1 "$suite_map" | sort -u)
 
-# A suite that drives RuntimeOwnerAuthorityTestFixture transitions the
-# process-global owner authority through that same standard domain, so it
-# belongs to the sequential cluster whether or not anyone remembered to list
-# it. ChatToolExecutorPolicyTests did not, and a concurrent suite moving
-# `auth_userId` underneath it failed its tool calls with
-# `authorized_execution_owner_changed`, which blocked a release cut (#11511).
-declare -a fixture_files=()
-while IFS= read -r fixture_file; do
-  fixture_files+=("$fixture_file")
+# A suite that drives one of these owner-test surfaces transitions or directly
+# mutates the process-global owner through the production-standard defaults
+# domain, so it belongs to the sequential cluster whether or not anyone
+# remembered to list it:
+#
+# - `RuntimeOwnerAuthorityTestFixture` is the explicit authority fixture.
+# - `withAutomationOwnerIfMissing` temporarily transitions that same domain.
+# - Rewind storage's auth helpers hide their standard-domain mutation behind a
+#   shared support type, so the calling suite does not mention the authority
+#   fixture itself.
+#
+# Missing the first surface blocked a release cut in #11511. Missing the latter
+# two let MemoryAtlas change `auth_userId` while Kernel projection installed its
+# temporary reset owner in #12039, failing the owner-scoped clear.
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)'
+declare -a auth_domain_files=()
+while IFS= read -r auth_domain_file; do
+  auth_domain_files+=("$auth_domain_file")
 done < <(find "$TESTS_ROOT" -type f -name '*.swift' \
-  -exec grep -l 'RuntimeOwnerAuthorityTestFixture' {} +)
+  -exec grep -lE "$auth_domain_marker_pattern" {} +)
 
 declare -a derived_serial_suites=()
-if [ "${#fixture_files[@]}" -gt 0 ]; then
+if [ "${#auth_domain_files[@]}" -gt 0 ]; then
   while IFS= read -r suite; do
     derived_serial_suites+=("$suite")
-  done < <(grep -hE "$suite_class_pattern" "${fixture_files[@]}" \
+  done < <(grep -hE "$suite_class_pattern" "${auth_domain_files[@]}" \
     | sed -E "$suite_class_name" \
     | sort -u)
 fi

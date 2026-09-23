@@ -242,7 +242,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get searchConversations => 'ค้นหาการสนทนา...';
 
   @override
-  String selectedCount(int count, Object s) {
+  String selectedCount(int count) {
     return 'เลือก $count รายการ';
   }
 
@@ -434,6 +434,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
+
+  @override
+  String get omiButtonActions => 'การทำงานของปุ่ม Omi';
 
   @override
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
@@ -2031,6 +2034,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistoryPartial => 'ประวัติความทรงจำบางส่วนไม่พร้อมใช้งาน กำลังแสดงประวัติที่ได้รับจนถึงตอนนี้';
 
   @override
+  String get memoryHistory => 'ประวัติ';
+
+  @override
+  String get memoryAllowUse => 'อนุญาตให้ใช้';
+
+  @override
+  String get memoryDontUse => 'ไม่ต้องใช้';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override
@@ -2123,7 +2135,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get alwaysInContext => 'อยู่ในบริบทเสมอ';
 
   @override
-  String get memoryContentHint => 'ฉันชอบกินไอศกรีม...';
+  String get memoryContentHint => 'ฉันชอบประชุมช่วงเช้า';
 
   @override
   String get failedToSaveMemory => 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ';
@@ -2636,9 +2648,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewAndManageConversations => 'ตรวจสอบและจัดการการสนทนาที่บันทึกไว้';
 
   @override
-  String get startCapturingConversations => 'เริ่มบันทึกการสนทนาด้วยอุปกรณ์ Omi ของคุณเพื่อดูที่นี่';
-
-  @override
   String get useMobileAppToCapture => 'ใช้แอปมือถือของคุณในการบันทึกเสียง';
 
   @override
@@ -3131,9 +3140,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcribing => 'กำลังแปลง...';
-
-  @override
-  String get transcriptionFailed => 'การแปลงล้มเหลว';
 
   @override
   String get discardedConversation => 'การสนทนาที่ถูกยกเลิก';
@@ -3653,10 +3659,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get preparingSystemAudioCapture => 'กำลังเตรียมการจับภาพเสียงของระบบ';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'คลิกปุ่มเพื่อจับภาพเสียงสำหรับการถอดความสด ข้อมูลเชิงลึกของ AI และการบันทึกอัตโนมัติ';
-
-  @override
   String get reconnecting => 'กำลังเชื่อมต่อใหม่...';
 
   @override
@@ -3702,9 +3704,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get startRecordingToSeeTranscript => 'เริ่มการบันทึกเพื่อดูการถอดความสด';
-
-  @override
   String get paused => 'หยุดชั่วคราว';
 
   @override
@@ -3723,9 +3722,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get settingUpSystemAudioCapture => 'กำลังตั้งค่าการจับภาพเสียงของระบบ';
-
-  @override
-  String get capturingAudioAndGeneratingTranscript => 'กำลังจับภาพเสียงและสร้างการถอดความ';
 
   @override
   String get clickToBeginRecordingSystemAudio => 'คลิกเพื่อเริ่มการบันทึกเสียงของระบบ';
@@ -8718,6 +8714,43 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String uploadingAudioForTranscription(String duration) {
+    return 'Uploading $duration of audio for transcription...';
+  }
+
+  @override
+  String audioUploadRetrying(String duration) {
+    return 'Retrying upload... $duration of audio kept on your phone';
+  }
+
+  @override
+  String audioUploadFailedTapRetry(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+  }
+
+  @override
+  String audioUploadFailedKeptLocal(String duration) {
+    return 'Upload failed — $duration of audio kept on your phone.';
+  }
+
+  @override
+  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+
+  @override
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
+
+  @override
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
+
+  @override
+  String get capturing => 'Capturing';
+
+  @override
+  String get capturingPhotos => 'Capturing photos';
+
+  @override
   String get willSyncAutomatically => 'จะซิงค์โดยอัตโนมัติ';
 
   @override
@@ -9924,4 +9957,135 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที';
+
+  @override
+  String get home => 'หน้าหลัก';
+
+  @override
+  String get failedToUpdateBaselineStatus => 'ไม่สามารถอัปเดตสถานะเส้นฐานได้';
+
+  @override
+  String get unstarConversation => 'เอาดาวออกจากบทสนทนา';
+
+  @override
+  String get moreOptions => 'ตัวเลือกเพิ่มเติม';
+
+  @override
+  String get filterByDate => 'กรองตามวันที่';
+
+  @override
+  String get memoryGraph => 'กราฟความทรงจำ';
+
+  @override
+  String voiceIntroduction(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'title': 'Let Omi get to know you',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'hint': 'Say the whole sentence and finish it in your own words.',
+        'name': 'My name is ___, and I spend most of my time ___.',
+        'work': 'Right now, I am working on ___.',
+        'enjoy': 'Outside of that, I really enjoy ___.',
+        'food': 'My favorite food is ___.',
+        'remember': 'Something I would like help remembering is ___.',
+        'day': 'A good day for me includes ___.',
+        'another': 'Try another prompt',
+        'start': 'Start speaking',
+        'skipPrompt': 'Skip this prompt',
+        'captured': 'Voice sample captured',
+        'silence': 'Take your time. Speak toward your phone microphone.',
+        'audio': 'Audio detected',
+        'review': 'Here is what I heard',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'saveVoice': 'Save voice profile',
+        'savingVoice': 'Saving your voice profile…',
+        'savedVoice': 'Voice profile saved',
+        'voiceLater': 'Set up my voice later',
+        'keep': 'Save selected answers',
+        'without': 'Continue without saving answers',
+        'savedMemories': 'Your memories are saved',
+        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+        'addSample': 'Add another sentence',
+        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'noMemories': 'You can tell Omi more about yourself whenever you like.',
+        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
+        'goalPrompt': 'Right now my number one goal is to ___.',
+        'savedGoal': 'Your goal is saved',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'saveFinish': 'Save and finish',
+        'retryRemaining': 'Retry remaining',
+        'saveHint': 'Saves your voice profile and checked answers.',
+        'savedAll': 'Your introduction is saved.',
+        'continueSaved': 'Continue with what is saved',
+        'reviewAnswers': 'Review answers',
+        'originalGoal': 'Use original wording',
+        'savingAnswers': 'Saving your answers…',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceRecognitionStatus(String status) {
+    String _temp0 = intl.Intl.selectLogic(
+      status,
+      {
+        'ready': 'เสียงพร้อมสำหรับการจดจำ',
+        'saved_sample_awaiting_embedding': 'บันทึกตัวอย่างแล้ว ยังต้องประมวลผลเสียง',
+        'not_learned': 'ยังไม่ได้เรียนรู้เสียง',
+        'other': 'ไม่ทราบสถานะเสียง',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get tagSpeakerIncludingLaterSpeech => 'แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย';
+
+  @override
+  String get updateSummaryWithNewNames => 'อัปเดตสรุปด้วยชื่อใหม่';
+
+  @override
+  String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
+
+  @override
+  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+
+  @override
+  String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'คุณช่วยอะไรฉันได้บ้าง?',
+        'goal': 'ช่วยฉันตั้งเป้าหมายหน่อย',
+        'activity': 'สรุปกิจกรรมล่าสุดของฉัน',
+        'improve': 'ฉันจะพัฒนาตัวเองได้อย่างไร?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'สัปดาห์หน้า';
+
+  @override
+  String get clearSearch => 'ล้างการค้นหา';
 }

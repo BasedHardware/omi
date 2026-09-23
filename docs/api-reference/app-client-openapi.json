@@ -7476,6 +7476,32 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
+          },
           "transcript_segments": {
             "default": [],
             "items": {
@@ -8578,6 +8604,32 @@
             },
             "title": "Suggested Summarization Apps",
             "type": "array"
+          },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
           },
           "transcript_segments": {
             "default": [],
@@ -12180,10 +12232,33 @@
             "title": "Artifact Ref",
             "type": "object"
           },
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "capture_confidence": {
             "default": 0.5,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "client_device_id": {
             "anyOf": [
@@ -12219,6 +12294,25 @@
             "title": "Independence Group",
             "type": "string"
           },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Quote Refs",
+            "type": "array"
+          },
           "redaction_status": {
             "default": "active",
             "title": "Redaction Status",
@@ -12244,6 +12338,17 @@
             "default": "unknown",
             "title": "Source Type",
             "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
           }
         },
         "required": [
@@ -17687,6 +17792,16 @@
             "title": "Apps",
             "type": "object"
           },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenActivityCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_screenshots": {
             "default": 0,
             "title": "Total Screenshots",
@@ -17976,6 +18091,16 @@
             "description": "Fixed confidence that the source was captured correctly",
             "title": "Capture Confidence"
           },
+          "capture_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryCaptureContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "category": {
             "$ref": "#/components/schemas/MemoryCategory",
             "default": "interesting",
@@ -18212,6 +18337,122 @@
         "title": "MemoryAssistantSettings",
         "type": "object"
       },
+      "MemoryCaptureContext": {
+        "description": "Original capture metadata, separate from API transport and device.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "assistant",
+                  "inferred",
+                  "third_party",
+                  "screen",
+                  "user_spoken",
+                  "user_written"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "independence_group": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independence Group"
+          },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 5,
+            "title": "Quote Refs",
+            "type": "array"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_signal": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Signal"
+          },
+          "source_type": {
+            "maxLength": 64,
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "required": [
+          "source_type"
+        ],
+        "title": "MemoryCaptureContext",
+        "type": "object"
+      },
       "MemoryCategory": {
         "enum": [
           "interesting",
@@ -18274,6 +18515,18 @@
             ],
             "title": "Belief Class"
           },
+          "belief_computed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Computed At"
+          },
           "body": {
             "anyOf": [
               {
@@ -18307,6 +18560,16 @@
             ],
             "description": "Fixed confidence that the source was captured correctly",
             "title": "Capture Confidence"
+          },
+          "capture_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryCaptureContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "capture_device_ids": {
             "items": {
@@ -18950,6 +19213,90 @@
         "title": "MemorySummaryRatingResponse",
         "type": "object"
       },
+      "MemoryUseAction": {
+        "enum": [
+          "suppress",
+          "allow",
+          "useful"
+        ],
+        "title": "MemoryUseAction",
+        "type": "string"
+      },
+      "MemoryUseRequest": {
+        "additionalProperties": false,
+        "description": "Retry-stable owner action for one canonical memory.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/MemoryUseAction"
+          },
+          "expected_item_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Item Revision"
+          },
+          "feedback_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Feedback Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "feedback_id"
+        ],
+        "title": "MemoryUseRequest",
+        "type": "object"
+      },
+      "MemoryUseResponse": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/MemoryUseAction"
+          },
+          "curation_weight": {
+            "title": "Curation Weight",
+            "type": "integer"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "item_revision": {
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suppressed": {
+            "title": "Suppressed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "memory_id",
+          "action",
+          "feedback_id",
+          "item_revision",
+          "suppressed",
+          "curation_weight"
+        ],
+        "title": "MemoryUseResponse",
+        "type": "object"
+      },
       "MemoryValueRequest": {
         "additionalProperties": false,
         "description": "Canonical body for single-value memory mutations.",
@@ -19462,6 +19809,219 @@
           "target_level"
         ],
         "title": "MigrationTargetRequest",
+        "type": "object"
+      },
+      "MobileFeedbackKind": {
+        "description": "Explicit mobile feedback surfaces with separate reason taxonomies.",
+        "enum": [
+          "summary_helpfulness",
+          "recording_quality"
+        ],
+        "title": "MobileFeedbackKind",
+        "type": "string"
+      },
+      "MobileFeedbackReason": {
+        "description": "Closed reasons mobile can attach to explicit output feedback.\n\nReasons intentionally describe the failure mode rather than asking a\nmodel to classify free text.  Positive feedback can omit a reason;\nnegative feedback may send one of these values only.",
+        "enum": [
+          "summary_inaccurate",
+          "summary_incomplete",
+          "summary_irrelevant",
+          "summary_wrong_context",
+          "summary_other",
+          "recording_missing_audio",
+          "recording_poor_transcription",
+          "recording_wrong_speaker",
+          "recording_delayed_or_stuck",
+          "recording_fragmented_or_duplicated",
+          "recording_other"
+        ],
+        "title": "MobileFeedbackReason",
+        "type": "string"
+      },
+      "MobileFeedbackReceipt": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "persisted": {
+            "const": true,
+            "default": true,
+            "title": "Persisted",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "mobile_feedback_receipt.v1",
+            "default": "mobile_feedback_receipt.v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "event_id",
+          "created"
+        ],
+        "title": "MobileFeedbackReceipt",
+        "type": "object"
+      },
+      "MobileFeedbackRequest": {
+        "description": "Authenticated, idempotent mobile summary/recording feedback write.",
+        "properties": {
+          "app_build": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Build"
+          },
+          "app_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version"
+          },
+          "client_app_namespace": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client App Namespace"
+          },
+          "client_app_profile": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client App Profile"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "feedback_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MobileFeedbackKind"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileFeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schema_version": {
+            "const": "mobile_feedback.v1",
+            "default": "mobile_feedback.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "recording"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "value": {
+            "enum": [
+              -1,
+              1
+            ],
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "kind",
+          "target_id",
+          "value"
+        ],
+        "title": "MobileFeedbackRequest",
         "type": "object"
       },
       "MoveConversationRequest": {
@@ -20492,6 +21052,10 @@
               }
             ],
             "title": "Updated At"
+          },
+          "voice_readiness": {
+            "$ref": "#/components/schemas/VoiceReadiness",
+            "default": "unknown"
           }
         },
         "required": [
@@ -22261,6 +22825,59 @@
         "title": "ScreenActivityAppSummary",
         "type": "object"
       },
+      "ScreenActivityCoverage": {
+        "properties": {
+          "capture_completeness": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Capture Completeness",
+            "type": "string"
+          },
+          "first_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Observed At"
+          },
+          "last_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Observed At"
+          },
+          "row_limit": {
+            "minimum": 1.0,
+            "title": "Row Limit",
+            "type": "integer"
+          },
+          "source": {
+            "const": "synced_screen_activity",
+            "default": "synced_screen_activity",
+            "title": "Source",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "row_limit",
+          "truncated"
+        ],
+        "title": "ScreenActivityCoverage",
+        "type": "object"
+      },
       "ScreenActivityRow": {
         "properties": {
           "appName": {
@@ -22343,6 +22960,16 @@
             },
             "title": "Apps",
             "type": "object"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScreenActivityCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "total_screenshots": {
             "title": "Total Screenshots",
@@ -22925,6 +23552,17 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
           }
         },
         "required": [
@@ -25033,6 +25671,19 @@
           "detail"
         ],
         "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
+      "SyncUserTimeZoneRequest": {
+        "properties": {
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "title": "SyncUserTimeZoneRequest",
         "type": "object"
       },
       "SynthesizeAIUserProfileRequest": {
@@ -28873,6 +29524,16 @@
         ],
         "title": "VoiceMessageTranscriptionResponse",
         "type": "object"
+      },
+      "VoiceReadiness": {
+        "enum": [
+          "ready",
+          "saved_sample_awaiting_embedding",
+          "not_learned",
+          "unknown"
+        ],
+        "title": "VoiceReadiness",
+        "type": "string"
       },
       "WebSearchAssistantSettings": {
         "properties": {
@@ -39546,7 +40207,6 @@
     },
     "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of all segments in the transcript of a conversation with the given speaker_id.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file should be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch",
         "parameters": [
           {
@@ -39672,7 +40332,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Set Assignee Conversation Segment",
+        "summary": "Set Assignee Conversation Speaker",
         "tags": [
           "conversations"
         ]
@@ -41439,7 +42099,6 @@
     },
     "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of a segment in the transcript of a conversation.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file shuold be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch",
         "parameters": [
           {
@@ -52090,6 +52749,110 @@
         ]
       }
     },
+    "/v1/mobile/feedback": {
+      "post": {
+        "description": "Persist one explicit mobile feedback action.\n\nSummary targets are authenticated conversation ids. Recording targets are\nauthenticated recording-session ids whose user-scoped binding is read\nbefore the write. The idempotency key is scoped to the authenticated UID,\nso a retry is safe while a reused key with a different payload is rejected.",
+        "operationId": "submit_mobile_feedback_v1_mobile_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileFeedbackReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Mobile Feedback",
+        "tags": [
+          "mobile-feedback"
+        ]
+      }
+    },
     "/v1/payment-methods/default": {
       "post": {
         "description": "Set the default payment method for the user",
@@ -56749,6 +57512,31 @@
           },
           {
             "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -56771,15 +57559,6 @@
             "required": false,
             "schema": {
               "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
               "type": "string"
             }
           }
@@ -62451,6 +63230,91 @@
         ]
       }
     },
+    "/v1/users/time-zone": {
+      "put": {
+        "description": "Persist the device's IANA timezone without requiring push notification registration.",
+        "operationId": "sync_user_time_zone_v1_users_time_zone_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncUserTimeZoneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FcmTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Sync User Time Zone"
+      }
+    },
     "/v1/users/training-data-opt-in": {
       "get": {
         "description": "Get the user's training data opt-in status.",
@@ -65804,6 +66668,31 @@
           },
           {
             "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -65817,15 +66706,6 @@
             "required": false,
             "schema": {
               "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
               "type": "string"
             }
           }
@@ -66763,6 +67643,33 @@
             }
           },
           {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "released",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,
@@ -67099,7 +68006,7 @@
     },
     "/v3/memories/ledger-history": {
       "get": {
-        "description": "Return explicit owner-scoped rejected and closed ledger rows.\n\n``GET /v3/memories`` remains the current product view and continues to\nfilter these rows.  This history endpoint is intentionally read-only and\ncanonical-only; it returns rows newest-first by ``updated_at`` then\n``memory_id`` (``limit`` is capped at 500 and the compatibility\n``offset + limit`` window at 5000).  The provider window is bounded to 500\nrows plus one sentinel; an incomplete provider/budget window is marked with\n``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never\nresurrected for history UI.",
+        "description": "Return explicit owner-scoped rejected and closed ledger rows.\n\n``GET /v3/memories`` remains the current product view and continues to\nfilter these rows.  This history endpoint is intentionally read-only and\ncanonical-only; it returns rows newest-first by ``updated_at`` then\n``memory_id`` (``limit`` is capped at 500 and the compatibility\n``offset + limit`` window at 5000).  The provider window is bounded to 500\nrows plus one sentinel.  When available, the sentinel becomes an\nowner-bound signed keyset cursor in ``X-Omi-Memory-Next-Cursor``; an\nincomplete provider/budget window is also marked with\n``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never\nresurrected for history UI.",
         "operationId": "get_ledger_history_v3_memories_ledger_history_get",
         "parameters": [
           {
@@ -67120,6 +68027,22 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           },
           {
@@ -68088,6 +69011,103 @@
           }
         ],
         "summary": "Review Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/use": {
+      "post": {
+        "description": "Record an owner use decision without changing truth or currency.\n\nThe route is additive and only available when the belief-model beta flag\nis enabled.  The canonical mutation adapter supplies authenticated owner,\naccount-generation, source, deletion, and operation-journal fences.",
+        "operationId": "use_memory_v3_memories__memory_id__use_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryUseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryUseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Use Memory",
         "tags": [
           "memories"
         ]

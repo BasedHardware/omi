@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c7_registry_test.dart",
+  "owner": "C7",
+  "before": "f224a4f31801ea39b7bb6ba8053e34768fe3a896cc0e18185cd2852051e4f321",
+  "after": "d1d8528a228a6ecb373db40854cd8bd738a6c7ee992414e3d4b56de555f27fd0",
+  "reason": "Spine A pre-delivery oracle audit: Flutter matcher compares Map fields inside Dart records by identity. The loopback-free probe in .local/t6-c7-record-matcher-probe.log rejected equal values. Normalize complete name/property payloads into nested lists/maps, retaining every field, with an active protected positive/negative matcher regression. Pending markers are unchanged."
+}

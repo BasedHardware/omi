@@ -8,17 +8,29 @@ overlay:
   gke:
     backend-listen:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'false'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
         HOSTED_TRANSLATION_API_URL:
           value: http://nllb.omi.me
         MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'false'
+        MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
@@ -75,10 +87,20 @@ overlay:
             key: MCP_OAUTH_CLIENTS_JSON
     pusher:
       env:
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'false'
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -118,7 +140,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -134,6 +156,20 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      FREE_TIER_LOCAL_PROCESSING:
+        value: 'false'
+      FREE_TIER_LOCAL_PROCESSING_COHORT:
+        value: ''
+      FREE_TIER_EMERGENCY_STOP:
+        value: 'false'
+      MEMORY_BELIEF_MODEL_ENABLED:
+        value: 'false'
+      BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
+        value: 'false'
+      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+        value: 'false'
+      MEMORY_BELIEF_AUTOMATION_PAUSED:
+        value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
   cloud_run:
@@ -156,13 +192,30 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
+          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+            value: 'false'
+          ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+            value: '1'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
@@ -232,13 +285,25 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
@@ -291,9 +356,21 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
@@ -346,9 +423,19 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
@@ -387,6 +474,8 @@ overlay:
             value: memories-backend
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
+            value: 'false'
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -399,6 +488,8 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'false'

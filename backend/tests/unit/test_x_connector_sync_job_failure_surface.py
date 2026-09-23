@@ -43,6 +43,9 @@ def x_connector_sync_job(monkeypatch):
     assert spec is not None and spec.loader is not None
     job = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(job)
+    # The credential gate is exercised in test_x_sync_credential_gating.py; these
+    # cases are about the failure surface once the sweep is allowed to run.
+    monkeypatch.setattr(job, "is_oauth_configured", lambda: True)
     return job
 
 
