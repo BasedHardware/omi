@@ -17,6 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/ui/feedback/omi_feedback.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -1045,15 +1046,7 @@ class ActionItemsProvider extends ChangeNotifier {
       notifyListeners();
 
       if (context != null && context.mounted) {
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.bulkDeleteFailed),
-              backgroundColor: const Color(0xFFB3261E),
-              duration: const Duration(seconds: 3),
-            ),
-          );
+        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
       }
       return false;
     }
@@ -1101,28 +1094,13 @@ class ActionItemsProvider extends ChangeNotifier {
     final items = selected.where((i) => !i.exported).toList(growable: false);
     final total = items.length;
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-
     if (total == 0) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.bulkExportAlreadyExported),
-          backgroundColor: const Color(0xFF2C2C2E),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      OmiFeedback.info(context, context.l10n.bulkExportAlreadyExported);
       endSelection();
       return;
     }
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(context.l10n.bulkExportInProgress),
-        duration: const Duration(seconds: 30),
-        backgroundColor: Colors.blue,
-      ),
-    );
+    OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
     final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
     final successCount = results.where((r) => r == ExportResult.success).length;
@@ -1131,18 +1109,14 @@ class ActionItemsProvider extends ChangeNotifier {
     await fetchActionItems();
     endSelection();
 
-    if (!context.mounted) return;
-    messenger.clearSnackBars();
-    final message = successCount == total
-        ? context.l10n.bulkExportSuccess(successCount, platform.displayName)
-        : context.l10n.bulkExportPartial(successCount, total, platform.displayName);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: successCount == total ? Colors.green : Colors.orange,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    if (!context.mounted) {
+      return;
+    }
+    if (successCount == total) {
+      OmiFeedback.confirm(context, context.l10n.bulkExportSuccess(successCount, platform.displayName));
+    } else {
+      OmiFeedback.error(context, context.l10n.bulkExportPartial(successCount, total, platform.displayName));
+    }
   }
 
   @override
