@@ -70,11 +70,8 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         uid = configurable.get('user_id')
         chat_session_id = configurable.get('chat_session_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_files_tool - error accessing config: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error: Configuration error - {str(e)}"
+        logger.error(f"❌ search_files_tool - error accessing config: {e}", exc_info=True)
+        return "Error: Configuration error."
 
     if not chat_session_id:
         return "No active chat session. Files are not available."
@@ -111,10 +108,8 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         return answer
 
     except ValueError as e:
-        return f"Session error: {str(e)}"
+        logger.warning(f"Session error in search_files_tool: {e}")
+        return "Session error occurred. Please try again."
     except Exception as e:
-        import traceback
-
-        logger.error(f"Error in search_files_tool: {e}")
-        traceback.print_exc()
-        return f"I encountered an error while searching the files. Please try again or rephrase your question."
+        logger.error(f"Error in search_files_tool: {e}", exc_info=True)
+        return "I encountered an error while searching the files. Please try again or rephrase your question."

@@ -172,8 +172,8 @@ def get_memories_tool(
         requested_view = normalize_temporal_read_view(view)
         effective_view = requested_view if belief_model_enabled() else 'released'
         as_of_dt = _parse_aware_iso(as_of)
-    except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
+    except ValueError:
+        return "Error: Invalid temporal read arguments."
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
@@ -199,8 +199,8 @@ def get_memories_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
 
     if end_date:
         try:
@@ -209,8 +209,8 @@ def get_memories_tool(
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     memories: List[MemoryDB] = []
     scan_truncated = False
@@ -406,8 +406,8 @@ def search_memories_tool(
         requested_view = normalize_temporal_read_view(view)
         effective_view = requested_view if belief_model_enabled() else 'released'
         as_of_dt = _parse_aware_iso(as_of)
-    except ValueError as e:
-        return f"Error: Invalid temporal read arguments: {e}"
+    except ValueError:
+        return "Error: Invalid temporal read arguments."
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
     if blocked:
@@ -420,8 +420,8 @@ def search_memories_tool(
     try:
         scope_start_dt = _parse_aware_iso(scope.get("start_date") if isinstance(scope.get("start_date"), str) else None)
         scope_end_dt = _parse_aware_iso(scope.get("end_date") if isinstance(scope.get("end_date"), str) else None)
-    except ValueError as e:
-        return f"Error: chat_scope dates invalid ({e})"
+    except ValueError:
+        return "Error: chat_scope dates invalid."
 
     # Cap limit at 20
     limit = min(limit, 20)
@@ -519,9 +519,5 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        logger.error(f"❌ search_memories_tool - Error performing memory search: {e}", exc_info=True)
+        return "Error searching memories. Please try again."

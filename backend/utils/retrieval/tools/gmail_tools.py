@@ -286,6 +286,5 @@ async def get_gmail_messages_tool(
 
         return result.strip()
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
-        traceback.print_exc()
-        return f"Unexpected error fetching Gmail messages: {str(e)}"
+        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}", exc_info=True)
+        return "Unexpected error fetching Gmail messages. Please try again."
