@@ -1765,26 +1765,27 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundActivity => 'Background activity';
 
   @override
-  String get backgroundActivityDesc => 'Hayaang tumakbo ang Omi sa background para sa mas magandang stability';
+  String get backgroundActivityDesc =>
+      'Para patuloy na mag-record ang Omi kapag naka-off ang screen o lumipat ka ng app.';
 
   @override
   String get locationAccess => 'Location access';
 
   @override
-  String get locationAccessDesc => 'Paganahin ang background location para sa buong karanasan';
+  String get locationAccessDesc => 'Para maitala ng Omi kung saan nangyari ang iyong mga usapan.';
 
   @override
   String get notifications => 'Mga Notipikasyon';
 
   @override
-  String get notificationsDesc => 'Paganahin ang mga notipikasyon upang manatiling informed';
+  String get notificationsDesc =>
+      'Para makapagpadala ang Omi ng mga buod ng usapan, paalala sa gawain at sagot mula sa iyong mga app.';
 
   @override
   String get locationServiceDisabled => 'Ang Location Service ay Disabled';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Ang Location Service ay Disabled. Mangyaring pumunta sa Settings > Privacy & Security > Location Services at paganahin ito';
+  String get locationServiceDisabledDesc => 'Naka-off ang Location Services sa device na ito. I-on ito sa Settings.';
 
   @override
   String get backgroundLocationDenied => 'Ang Background Location Access ay Dineny';
@@ -10145,7 +10146,7 @@ class AppLocalizationsTl extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10163,7 +10164,7 @@ class AppLocalizationsTl extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10254,4 +10255,25 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get allow => 'Payagan';
+
+  @override
+  String get permissionAllowed => 'Pinayagan';
+
+  @override
+  String get permissionBlockedHint => 'Naka-off sa Settings. Payagan ito doon para magamit ito.';
+
+  @override
+  String get useDifferentAccount => 'Gumamit ng Ibang Account';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Hakbang $current sa $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.';
 }

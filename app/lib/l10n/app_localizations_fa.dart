@@ -1758,26 +1758,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get backgroundActivity => 'فعالیت پس‌زمینه';
 
   @override
-  String get backgroundActivityDesc => 'اجازه دهید Omi در پس‌زمینه اجرا شود برای پایداری بهتر';
+  String get backgroundActivityDesc => 'تا Omi هنگام خاموش بودن صفحه یا تغییر برنامه همچنان ضبط کند.';
 
   @override
   String get locationAccess => 'دسترسی به مکان';
 
   @override
-  String get locationAccessDesc => 'مکان پس‌زمینه را برای تجربه کامل فعال کنید';
+  String get locationAccessDesc => 'تا Omi بتواند محل انجام گفتگوهایتان را ثبت کند.';
 
   @override
   String get notifications => 'اطلاع‌رسانی‌ها';
 
   @override
-  String get notificationsDesc => 'اطلاع‌رسانی را برای اطلاع‌رسانی فعال کنید';
+  String get notificationsDesc =>
+      'تا Omi بتواند خلاصه گفتگوها، یادآوری کارها و پاسخ‌های برنامه‌هایتان را برایتان بفرستد.';
 
   @override
   String get locationServiceDisabled => 'سرویس مکان غیرفعال است';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'سرویس مکان غیرفعال است. لطفاً به Settings > Privacy & Security > Location Services بروید و آن را فعال کنید';
+  String get locationServiceDisabledDesc => 'خدمات موقعیت‌یابی روی این دستگاه خاموش است. آن را در تنظیمات روشن کنید.';
 
   @override
   String get backgroundLocationDenied => 'دسترسی مکان پس‌زمینه رد شد';
@@ -10054,7 +10054,7 @@ class AppLocalizationsFa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10072,7 +10072,7 @@ class AppLocalizationsFa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10163,4 +10163,24 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'تغییرات ذخیره‌نشده شما از بین خواهد رفت.';
+
+  @override
+  String get allow => 'اجازه دادن';
+
+  @override
+  String get permissionAllowed => 'مجاز';
+
+  @override
+  String get permissionBlockedHint => 'در تنظیمات خاموش است. برای استفاده، آن را آنجا مجاز کنید.';
+
+  @override
+  String get useDifferentAccount => 'استفاده از حساب دیگر';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'مرحله $current از $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند.';
 }

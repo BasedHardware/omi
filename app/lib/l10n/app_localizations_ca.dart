@@ -1768,26 +1768,28 @@ class AppLocalizationsCa extends AppLocalizations {
   String get backgroundActivity => 'Activitat en segon pla';
 
   @override
-  String get backgroundActivityDesc => 'Deixeu que Omi s\'executi en segon pla per a una millor estabilitat';
+  String get backgroundActivityDesc =>
+      'Perquè l\'Omi continuï capturant amb la pantalla apagada o quan canvies d\'app.';
 
   @override
   String get locationAccess => 'Accés a la ubicació';
 
   @override
-  String get locationAccessDesc => 'Activeu la ubicació en segon pla per a l\'experiència completa';
+  String get locationAccessDesc => 'Perquè l\'Omi pugui anotar on han tingut lloc les teves converses.';
 
   @override
   String get notifications => 'Notificacions';
 
   @override
-  String get notificationsDesc => 'Activeu les notificacions per mantenir-vos informat';
+  String get notificationsDesc =>
+      'Perquè l\'Omi et pugui enviar resums de converses, recordatoris de tasques i respostes de les teves apps.';
 
   @override
   String get locationServiceDisabled => 'Servei d\'ubicació desactivat';
 
   @override
   String get locationServiceDisabledDesc =>
-      'El servei d\'ubicació està desactivat. Aneu a Configuració > Privadesa i seguretat > Serveis d\'ubicació i activeu-lo';
+      'Els serveis d\'ubicació estan desactivats en aquest dispositiu. Activa\'ls a Configuració.';
 
   @override
   String get backgroundLocationDenied => 'Accés a la ubicació en segon pla denegat';
@@ -10111,7 +10113,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10129,7 +10131,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10220,4 +10222,25 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Es perdran els canvis no desats.';
+
+  @override
+  String get allow => 'Permet';
+
+  @override
+  String get permissionAllowed => 'Permès';
+
+  @override
+  String get permissionBlockedHint => 'Desactivat a Configuració. Permet-ho allà per fer-ho servir.';
+
+  @override
+  String get useDifferentAccount => 'Utilitza un altre compte';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Pas $current de $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Deixa que l\'Omi funcioni en segon pla durant 2 dies i començarà a donar-te comentaris útils.';
 }

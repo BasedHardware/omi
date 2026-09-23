@@ -1769,26 +1769,28 @@ class AppLocalizationsEl extends AppLocalizations {
   String get backgroundActivity => 'Δραστηριότητα παρασκηνίου';
 
   @override
-  String get backgroundActivityDesc => 'Επιτρέψτε στο Omi να εκτελείται στο παρασκήνιο για καλύτερη σταθερότητα';
+  String get backgroundActivityDesc =>
+      'Ώστε το Omi να συνεχίζει την καταγραφή όταν η οθόνη είναι σβηστή ή αλλάζετε εφαρμογή.';
 
   @override
   String get locationAccess => 'Πρόσβαση τοποθεσίας';
 
   @override
-  String get locationAccessDesc => 'Ενεργοποιήστε την τοποθεσία παρασκηνίου για την πλήρη εμπειρία';
+  String get locationAccessDesc => 'Ώστε το Omi να σημειώνει πού έγιναν οι συνομιλίες σας.';
 
   @override
   String get notifications => 'Ειδοποιήσεις';
 
   @override
-  String get notificationsDesc => 'Ενεργοποιήστε τις ειδοποιήσεις για να ενημερώνεστε';
+  String get notificationsDesc =>
+      'Ώστε το Omi να σας στέλνει περιλήψεις συνομιλιών, υπενθυμίσεις εργασιών και απαντήσεις από τις εφαρμογές σας.';
 
   @override
   String get locationServiceDisabled => 'Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη. Παρακαλώ μεταβείτε στις Ρυθμίσεις > Απόρρητο & Ασφάλεια > Υπηρεσίες Τοποθεσίας και ενεργοποιήστε την';
+      'Οι Υπηρεσίες τοποθεσίας είναι απενεργοποιημένες σε αυτή τη συσκευή. Ενεργοποιήστε τις στις Ρυθμίσεις.';
 
   @override
   String get backgroundLocationDenied => 'Απορρίφθηκε η Πρόσβαση Τοποθεσίας Παρασκηνίου';
@@ -10124,7 +10126,7 @@ class AppLocalizationsEl extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10142,7 +10144,7 @@ class AppLocalizationsEl extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10233,4 +10235,25 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.';
+
+  @override
+  String get allow => 'Να επιτρέπεται';
+
+  @override
+  String get permissionAllowed => 'Επιτρέπεται';
+
+  @override
+  String get permissionBlockedHint => 'Απενεργοποιημένο στις Ρυθμίσεις. Επιτρέψτε το εκεί για να το χρησιμοποιήσετε.';
+
+  @override
+  String get useDifferentAccount => 'Χρήση άλλου λογαριασμού';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Βήμα $current από $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Αφήστε το Omi να λειτουργεί στο παρασκήνιο για 2 ημέρες και θα αρχίσει να σας δίνει χρήσιμα σχόλια.';
 }

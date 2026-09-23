@@ -3444,7 +3444,7 @@ abstract class AppLocalizations {
   /// Description for background activity permission
   ///
   /// In en, this message translates to:
-  /// **'Let Omi run in the background for better stability'**
+  /// **'So Omi keeps capturing when the screen is off or you switch apps.'**
   String get backgroundActivityDesc;
 
   /// Title for location access permission
@@ -3456,7 +3456,7 @@ abstract class AppLocalizations {
   /// Description for location access permission
   ///
   /// In en, this message translates to:
-  /// **'Enable background location for the full experience'**
+  /// **'So Omi can note where your conversations happened.'**
   String get locationAccessDesc;
 
   /// AppBar title for notifications settings page
@@ -3468,7 +3468,7 @@ abstract class AppLocalizations {
   /// Description for notifications permission
   ///
   /// In en, this message translates to:
-  /// **'Enable notifications to stay informed'**
+  /// **'So Omi can send you conversation summaries, task reminders and replies from your apps.'**
   String get notificationsDesc;
 
   /// Title for dialog when location services are off
@@ -3480,7 +3480,7 @@ abstract class AppLocalizations {
   /// Instructions to enable location services
   ///
   /// In en, this message translates to:
-  /// **'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it'**
+  /// **'Location Services are off on this device. Turn them on in Settings.'**
   String get locationServiceDisabledDesc;
 
   /// Title for dialog when background location is denied
@@ -18678,7 +18678,7 @@ abstract class AppLocalizations {
   /// Guided voice introduction copy. English source fallback pending translation review.
   ///
   /// In en, this message translates to:
-  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
+  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
   String voiceIntroduction(String part);
 
   /// Stored voice readiness only; no guarantee of a queued learning job.
@@ -18770,6 +18770,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your unsaved changes will be lost.'**
   String get discardChangesMessage;
+
+  /// Button that shows the system permission prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get allow;
+
+  /// Status shown next to a permission the user has granted
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get permissionAllowed;
+
+  /// Shown under a permission the system will no longer ask for
+  ///
+  /// In en, this message translates to:
+  /// **'Turned off in Settings. Allow it there to use this.'**
+  String get permissionBlockedHint;
+
+  /// Consent step: signs out and returns to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Different Account'**
+  String get useDifferentAccount;
+
+  /// Screen-reader label of the onboarding progress dots
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String onboardingStepOf(int current, int total);
+
+  /// Completion screen at the end of first-run onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Omi running in the background for 2 days and it will start giving you useful feedback.'**
+  String get onboardingCompleteMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

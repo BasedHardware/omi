@@ -1762,26 +1762,26 @@ class AppLocalizationsTe extends AppLocalizations {
   String get backgroundActivity => 'నేపథ్య కార్యకలాపం';
 
   @override
-  String get backgroundActivityDesc => 'Omi ను మెరుగైన స్థిరత్వ కోసం నేపథ్యంలో నడవనివ్వండి';
+  String get backgroundActivityDesc => 'స్క్రీన్ ఆఫ్‌లో ఉన్నా లేదా యాప్ మార్చినా Omi రికార్డింగ్ కొనసాగించడానికి.';
 
   @override
   String get locationAccess => 'స్థానం యాక్సెస్';
 
   @override
-  String get locationAccessDesc => 'పూర్ణ అనుభవం కోసం నేపథ్య స్థానాన్ని ప్రారంభించండి';
+  String get locationAccessDesc => 'మీ సంభాషణలు ఎక్కడ జరిగాయో Omi నమోదు చేయడానికి.';
 
   @override
   String get notifications => 'నోటిఫికేషన్‌లు';
 
   @override
-  String get notificationsDesc => 'సమాచారం పొందడానికి నోటిఫికేషన్‌లను ప్రారంభించండి';
+  String get notificationsDesc =>
+      'Omi మీకు సంభాషణ సారాంశాలు, టాస్క్ రిమైండర్‌లు మరియు మీ యాప్‌ల ప్రత్యుత్తరాలను పంపడానికి.';
 
   @override
   String get locationServiceDisabled => 'స్థానం సేవ నిలిపివేయబడింది';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'స్థానం సేవ నిలిపివేయబడింది. దయచేసి సెట్టింగ్‌లు > గోప్యతా & నిరాపత్త > స్థానం సేవలకు వెళ్లి దీన్ని ప్రారంభించండి';
+  String get locationServiceDisabledDesc => 'ఈ పరికరంలో లొకేషన్ సేవలు ఆఫ్‌లో ఉన్నాయి. సెట్టింగ్‌లలో ఆన్ చేయండి.';
 
   @override
   String get backgroundLocationDenied => 'నేపథ్య స్థానం యాక్సెస్ నిరాకరించబడింది';
@@ -10102,7 +10102,7 @@ class AppLocalizationsTe extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10120,7 +10120,7 @@ class AppLocalizationsTe extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10211,4 +10211,25 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.';
+
+  @override
+  String get allow => 'అనుమతించు';
+
+  @override
+  String get permissionAllowed => 'అనుమతించబడింది';
+
+  @override
+  String get permissionBlockedHint => 'సెట్టింగ్‌లలో ఆఫ్ చేయబడింది. దీన్ని ఉపయోగించడానికి అక్కడ అనుమతించండి.';
+
+  @override
+  String get useDifferentAccount => 'వేరే ఖాతాను ఉపయోగించండి';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'దశ $current / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omiని 2 రోజులు బ్యాక్‌గ్రౌండ్‌లో నడవనివ్వండి, అప్పుడు అది ఉపయోగకరమైన ఫీడ్‌బ్యాక్ ఇవ్వడం ప్రారంభిస్తుంది.';
 }

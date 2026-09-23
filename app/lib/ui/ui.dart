@@ -18,6 +18,7 @@
 /// | Toasts, undo, copy | `OmiFeedback.confirm/info/error/undo`, `OmiClipboard.copy` |
 /// | Dates, durations, speaker names | `OmiDateFormat.of(context)`, `OmiDuration`, `SpeakerNames` |
 /// | Startup / background prompts | `PromptQueue.instance.enqueue` |
+/// | A permission pre-prompt (reason, Allow, Open Settings) | `OmiPermissionRow` |
 /// | A `Route` object | `omiPageRoute(builder:)`; to push a page use `routeToPage` |
 ///
 /// Page backgrounds are `OmiColors.surface0` (also the scaffold default); never read
@@ -28,6 +29,7 @@ export 'components/omi_button.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';
+export 'components/omi_permission_row.dart';
 export 'components/omi_search_field.dart';
 export 'components/omi_settings.dart';
 export 'components/omi_sheet.dart';

@@ -1768,26 +1768,27 @@ class AppLocalizationsHu extends AppLocalizations {
   String get backgroundActivity => 'Háttérműködés';
 
   @override
-  String get backgroundActivityDesc => 'Engedd, hogy az Omi a háttérben fusson a jobb stabilitás érdekében';
+  String get backgroundActivityDesc => 'Hogy az Omi kikapcsolt képernyőnél vagy alkalmazásváltáskor is rögzítsen.';
 
   @override
   String get locationAccess => 'Helymeghatározás';
 
   @override
-  String get locationAccessDesc => 'Háttérhelymeghatározás engedélyezése a teljes élményhez';
+  String get locationAccessDesc => 'Hogy az Omi feljegyezhesse, hol zajlottak a beszélgetéseid.';
 
   @override
   String get notifications => 'Értesítések';
 
   @override
-  String get notificationsDesc => 'Értesítések engedélyezése tájékozott maradáshoz';
+  String get notificationsDesc =>
+      'Hogy az Omi elküldhesse a beszélgetések összefoglalóit, a feladatemlékeztetőket és az alkalmazásaid válaszait.';
 
   @override
   String get locationServiceDisabled => 'Helymeghatározási szolgáltatás letiltva';
 
   @override
   String get locationServiceDisabledDesc =>
-      'A helymeghatározási szolgáltatás le van tiltva. Kérlek, menj a Beállítások > Adatvédelem és biztonság > Helyszolgáltatások menübe, és engedélyezd';
+      'A helymeghatározás ki van kapcsolva ezen az eszközön. Kapcsold be a Beállításokban.';
 
   @override
   String get backgroundLocationDenied => 'Háttérhelymeghatározás megtagadva';
@@ -10093,7 +10094,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10111,7 +10112,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10202,4 +10203,25 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get allow => 'Engedélyezés';
+
+  @override
+  String get permissionAllowed => 'Engedélyezve';
+
+  @override
+  String get permissionBlockedHint => 'Ki van kapcsolva a Beállításokban. A használathoz engedélyezze ott.';
+
+  @override
+  String get useDifferentAccount => 'Másik fiók használata';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current. lépés / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Hagyd az Omit 2 napig a háttérben futni, és elkezd hasznos visszajelzést adni.';
 }

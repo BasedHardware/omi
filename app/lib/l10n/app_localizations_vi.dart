@@ -1762,26 +1762,26 @@ class AppLocalizationsVi extends AppLocalizations {
   String get backgroundActivity => 'Hoạt động Nền';
 
   @override
-  String get backgroundActivityDesc => 'Cho phép Omi chạy trong nền để ổn định hơn';
+  String get backgroundActivityDesc => 'Để Omi tiếp tục ghi khi màn hình tắt hoặc bạn chuyển ứng dụng.';
 
   @override
   String get locationAccess => 'Truy cập Vị trí';
 
   @override
-  String get locationAccessDesc => 'Bật vị trí nền để có trải nghiệm đầy đủ';
+  String get locationAccessDesc => 'Để Omi ghi lại nơi diễn ra các cuộc trò chuyện của bạn.';
 
   @override
   String get notifications => 'Thông báo';
 
   @override
-  String get notificationsDesc => 'Bật thông báo để luôn được thông tin';
+  String get notificationsDesc =>
+      'Để Omi gửi cho bạn tóm tắt cuộc trò chuyện, lời nhắc công việc và phản hồi từ các ứng dụng.';
 
   @override
   String get locationServiceDisabled => 'Dịch vụ vị trí đã bị tắt';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Dịch vụ vị trí đã bị tắt. Vui lòng vào Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ vị trí và bật nó';
+  String get locationServiceDisabledDesc => 'Dịch vụ định vị đang tắt trên thiết bị này. Hãy bật trong Cài đặt.';
 
   @override
   String get backgroundLocationDenied => 'Quyền truy cập vị trí nền bị từ chối';
@@ -10049,7 +10049,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10067,7 +10067,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10158,4 +10158,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Các thay đổi chưa lưu của bạn sẽ bị mất.';
+
+  @override
+  String get allow => 'Cho phép';
+
+  @override
+  String get permissionAllowed => 'Đã cho phép';
+
+  @override
+  String get permissionBlockedHint => 'Đã tắt trong Cài đặt. Hãy cho phép ở đó để sử dụng.';
+
+  @override
+  String get useDifferentAccount => 'Dùng tài khoản khác';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Bước $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Hãy để Omi chạy nền trong 2 ngày và nó sẽ bắt đầu đưa ra phản hồi hữu ích.';
 }

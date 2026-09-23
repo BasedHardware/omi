@@ -1727,25 +1727,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundActivity => '后台活动';
 
   @override
-  String get backgroundActivityDesc => '允许 Omi 在后台运行以获得更好的稳定性';
+  String get backgroundActivityDesc => '以便在屏幕关闭或切换应用时，Omi 仍能继续录制。';
 
   @override
   String get locationAccess => '位置权限';
 
   @override
-  String get locationAccessDesc => '启用后台位置以获得完整体验';
+  String get locationAccessDesc => '以便 Omi 记录你的对话发生在哪里。';
 
   @override
   String get notifications => '通知';
 
   @override
-  String get notificationsDesc => '启用通知以保持了解';
+  String get notificationsDesc => '以便 Omi 向你发送对话摘要、任务提醒和应用回复。';
 
   @override
   String get locationServiceDisabled => '位置服务已禁用';
 
   @override
-  String get locationServiceDisabledDesc => '请启用位置服务';
+  String get locationServiceDisabledDesc => '此设备的定位服务已关闭。请在设置中开启。';
 
   @override
   String get backgroundLocationDenied => '后台位置权限被拒绝';
@@ -9863,7 +9863,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9881,7 +9881,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -9972,4 +9972,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '未保存的更改将会丢失。';
+
+  @override
+  String get allow => '允许';
+
+  @override
+  String get permissionAllowed => '已允许';
+
+  @override
+  String get permissionBlockedHint => '已在设置中关闭。请在设置中允许后使用。';
+
+  @override
+  String get useDifferentAccount => '使用其他账号';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get onboardingCompleteMessage => '让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。';
 }

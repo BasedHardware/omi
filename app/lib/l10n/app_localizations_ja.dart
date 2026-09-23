@@ -1729,25 +1729,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backgroundActivity => 'バックグラウンド活動';
 
   @override
-  String get backgroundActivityDesc => 'より安定した動作のためにOmiをバックグラウンドで実行させる';
+  String get backgroundActivityDesc => '画面がオフのときや他のアプリに切り替えたときもOmiが記録を続けられるようにします。';
 
   @override
   String get locationAccess => '位置情報アクセス';
 
   @override
-  String get locationAccessDesc => '完全な体験のためにバックグラウンド位置情報を有効にする';
+  String get locationAccessDesc => 'Omiが会話の場所を記録できるようにします。';
 
   @override
   String get notifications => '通知';
 
   @override
-  String get notificationsDesc => '最新情報を受け取るために通知を有効にする';
+  String get notificationsDesc => 'Omiが会話の要約、タスクのリマインダー、アプリからの返信を送れるようにします。';
 
   @override
   String get locationServiceDisabled => '位置情報サービスが無効';
 
   @override
-  String get locationServiceDisabledDesc => '位置情報サービスが無効です。設定 > プライバシーとセキュリティ > 位置情報サービスに移動して有効にしてください';
+  String get locationServiceDisabledDesc => 'このデバイスの位置情報サービスがオフです。設定でオンにしてください。';
 
   @override
   String get backgroundLocationDenied => 'バックグラウンド位置情報アクセスが拒否されました';
@@ -9882,7 +9882,7 @@ class AppLocalizationsJa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9900,7 +9900,7 @@ class AppLocalizationsJa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -9991,4 +9991,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '保存されていない変更は失われます。';
+
+  @override
+  String get allow => '許可';
+
+  @override
+  String get permissionAllowed => '許可済み';
+
+  @override
+  String get permissionBlockedHint => '設定でオフになっています。使用するには設定で許可してください。';
+
+  @override
+  String get useDifferentAccount => '別のアカウントを使う';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'ステップ $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omiをバックグラウンドで2日間動かすと、役立つフィードバックが届き始めます。';
 }

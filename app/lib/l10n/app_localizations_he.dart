@@ -1746,26 +1746,25 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundActivity => 'פעילות רקע';
 
   @override
-  String get backgroundActivityDesc => 'תן ל-Omi להפעיל ברקע לטובת יציבות טובה יותר';
+  String get backgroundActivityDesc => 'כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.';
 
   @override
   String get locationAccess => 'גישה למיקום';
 
   @override
-  String get locationAccessDesc => 'הפעל מיקום רקע עבור החוויה המלאה';
+  String get locationAccessDesc => 'כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.';
 
   @override
   String get notifications => 'הודעות';
 
   @override
-  String get notificationsDesc => 'הפעל הודעות כדי להישאר מעודכן';
+  String get notificationsDesc => 'כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.';
 
   @override
   String get locationServiceDisabled => 'שירות מיקום מושבת';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'שירות מיקום מושבת. בבקשה עבור להגדרות > פרטיות וביטחון > שירותי מיקום והפעל אותו';
+  String get locationServiceDisabledDesc => 'שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.';
 
   @override
   String get backgroundLocationDenied => 'גישת מיקום רקע נדחתה';
@@ -9972,7 +9971,7 @@ class AppLocalizationsHe extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9990,7 +9989,7 @@ class AppLocalizationsHe extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10081,4 +10080,24 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'השינויים שלא נשמרו יאבדו.';
+
+  @override
+  String get allow => 'אפשר';
+
+  @override
+  String get permissionAllowed => 'מאושר';
+
+  @override
+  String get permissionBlockedHint => 'כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.';
+
+  @override
+  String get useDifferentAccount => 'שימוש בחשבון אחר';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'שלב $current מתוך $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל.';
 }

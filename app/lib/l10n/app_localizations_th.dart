@@ -1749,26 +1749,25 @@ class AppLocalizationsTh extends AppLocalizations {
   String get backgroundActivity => 'กิจกรรมพื้นหลัง';
 
   @override
-  String get backgroundActivityDesc => 'ให้ Omi ทำงานในพื้นหลังเพื่อความเสถียรที่ดีขึ้น';
+  String get backgroundActivityDesc => 'เพื่อให้ Omi บันทึกต่อไปเมื่อปิดหน้าจอหรือสลับแอป';
 
   @override
   String get locationAccess => 'การเข้าถึงตำแหน่ง';
 
   @override
-  String get locationAccessDesc => 'เปิดใช้งานตำแหน่งพื้นหลังเพื่อประสบการณ์ที่สมบูรณ์';
+  String get locationAccessDesc => 'เพื่อให้ Omi บันทึกได้ว่าบทสนทนาของคุณเกิดขึ้นที่ไหน';
 
   @override
   String get notifications => 'การแจ้งเตือน';
 
   @override
-  String get notificationsDesc => 'เปิดใช้งานการแจ้งเตือนเพื่อรับข้อมูล';
+  String get notificationsDesc => 'เพื่อให้ Omi ส่งสรุปบทสนทนา การเตือนงาน และคำตอบจากแอปของคุณได้';
 
   @override
   String get locationServiceDisabled => 'บริการตำแหน่งถูกปิด';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'บริการตำแหน่งถูกปิด กรุณาไปที่ การตั้งค่า > ความเป็นส่วนตัวและความปลอดภัย > บริการตำแหน่ง แล้วเปิดใช้งาน';
+  String get locationServiceDisabledDesc => 'บริการหาตำแหน่งปิดอยู่ในอุปกรณ์นี้ เปิดได้ในการตั้งค่า';
 
   @override
   String get backgroundLocationDenied => 'การเข้าถึงตำแหน่งพื้นหลังถูกปฏิเสธ';
@@ -9995,7 +9994,7 @@ class AppLocalizationsTh extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10013,7 +10012,7 @@ class AppLocalizationsTh extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10104,4 +10103,24 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป';
+
+  @override
+  String get allow => 'อนุญาต';
+
+  @override
+  String get permissionAllowed => 'อนุญาตแล้ว';
+
+  @override
+  String get permissionBlockedHint => 'ปิดอยู่ในการตั้งค่า อนุญาตในการตั้งค่าเพื่อใช้งาน';
+
+  @override
+  String get useDifferentAccount => 'ใช้บัญชีอื่น';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'ขั้นตอนที่ $current จาก $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'ปล่อยให้ Omi ทำงานเบื้องหลัง 2 วัน แล้วจะเริ่มให้คำแนะนำที่เป็นประโยชน์';
 }

@@ -1762,26 +1762,27 @@ class AppLocalizationsMk extends AppLocalizations {
   String get backgroundActivity => 'Активност во позадина';
 
   @override
-  String get backgroundActivityDesc => 'Дозволи Omi да работи во позадина за подобра стабилност';
+  String get backgroundActivityDesc =>
+      'За Omi да продолжи да снима кога екранот е исклучен или кога менувате апликација.';
 
   @override
   String get locationAccess => 'Пристап на локација';
 
   @override
-  String get locationAccessDesc => 'Активирајте локација во позадина за целосно искуство';
+  String get locationAccessDesc => 'За Omi да може да забележи каде се одвивале вашите разговори.';
 
   @override
   String get notifications => 'Известувања';
 
   @override
-  String get notificationsDesc => 'Активирајте известувања за да останете информирани';
+  String get notificationsDesc =>
+      'За Omi да може да ви испраќа резимеа од разговори, потсетници за задачи и одговори од вашите апликации.';
 
   @override
   String get locationServiceDisabled => 'Услугата за локација е деактивирана';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Услугата за локација е деактивирана. Ве молиме одите на Поставки > Приватност и безбедност > Услуги за локација и активирајте ја';
+  String get locationServiceDisabledDesc => 'Услугите за локација се исклучени на овој уред. Вклучете ги во Поставки.';
 
   @override
   String get backgroundLocationDenied => 'Пристап на локација во позадина одбиен';
@@ -10107,7 +10108,7 @@ class AppLocalizationsMk extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10125,7 +10126,7 @@ class AppLocalizationsMk extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10216,4 +10217,25 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Вашите незачувани промени ќе бидат изгубени.';
+
+  @override
+  String get allow => 'Дозволи';
+
+  @override
+  String get permissionAllowed => 'Дозволено';
+
+  @override
+  String get permissionBlockedHint => 'Исклучено во Поставки. Дозволете го таму за да го користите.';
+
+  @override
+  String get useDifferentAccount => 'Користи друга сметка';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Чекор $current од $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Оставете го Omi да работи во заднина 2 дена и ќе почне да ви дава корисни повратни информации.';
 }

@@ -1766,26 +1766,27 @@ class AppLocalizationsTa extends AppLocalizations {
   String get backgroundActivity => 'பின்னணி செயல்பாடு';
 
   @override
-  String get backgroundActivityDesc => 'Omi ஐ பின்னணிയில் இயங்க விடுங்கள் சிறந்த நிலைத்தன்மைக்கு';
+  String get backgroundActivityDesc => 'திரை அணைந்திருந்தாலும் அல்லது ஆப்ஸ் மாற்றினாலும் Omi தொடர்ந்து பதிவு செய்ய.';
 
   @override
   String get locationAccess => 'இட அணுகல்';
 
   @override
-  String get locationAccessDesc => 'முழு அভிজ்ஞதைக்கு பின்னணி இட অணுகல் ஐ இயக்கவும்';
+  String get locationAccessDesc => 'உங்கள் உரையாடல்கள் எங்கே நடந்தன என்பதை Omi குறிக்க.';
 
   @override
   String get notifications => 'அறிவிப்புகள்';
 
   @override
-  String get notificationsDesc => 'தகவல் உள்வாங்குவதற்கு அறிவிப்புகளை இயக்கவும்';
+  String get notificationsDesc =>
+      'உரையாடல் சுருக்கங்கள், பணி நினைவூட்டல்கள் மற்றும் உங்கள் ஆப்ஸின் பதில்களை Omi அனுப்ப.';
 
   @override
   String get locationServiceDisabled => 'இட சேவை முடக்கப்பட்டுள்ளது';
 
   @override
   String get locationServiceDisabledDesc =>
-      'இட சேவை முடக்கப்பட்டுள்ளது. அமைப்புகளுக்கு செல்லவும் > தனிமை & பாதுகாப்பு > இட சேவைகள் மற்றும் இதை இயக்கவும்';
+      'இந்தச் சாதனத்தில் இருப்பிடச் சேவைகள் முடக்கத்தில் உள்ளன. அமைப்புகளில் இயக்கவும்.';
 
   @override
   String get backgroundLocationDenied => 'பின்னணி இட அணுகல் மறுக்கப்பட்டுள்ளது';
@@ -10124,7 +10125,7 @@ class AppLocalizationsTa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10142,7 +10143,7 @@ class AppLocalizationsTa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10233,4 +10234,25 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்.';
+
+  @override
+  String get allow => 'அனுமதி';
+
+  @override
+  String get permissionAllowed => 'அனுமதிக்கப்பட்டது';
+
+  @override
+  String get permissionBlockedHint => 'அமைப்புகளில் முடக்கப்பட்டுள்ளது. இதைப் பயன்படுத்த அங்கே அனுமதிக்கவும்.';
+
+  @override
+  String get useDifferentAccount => 'வேறு கணக்கைப் பயன்படுத்து';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'படி $current / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omi-ஐ 2 நாட்கள் பின்னணியில் இயங்க விடுங்கள்; பிறகு பயனுள்ள கருத்துகளைத் தரத் தொடங்கும்.';
 }

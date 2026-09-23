@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class DeviceSelectionPage extends StatefulWidget {
@@ -47,7 +48,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
       // Listen to video progress
       _videoController.addListener(_updateVideoProgress);
     } catch (e) {
-      print('Error initializing video: $e');
+      Logger.debug('Error initializing video: $e');
     }
   }
 

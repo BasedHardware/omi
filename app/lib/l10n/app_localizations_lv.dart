@@ -1760,26 +1760,27 @@ class AppLocalizationsLv extends AppLocalizations {
   String get backgroundActivity => 'Fona aktivitāte';
 
   @override
-  String get backgroundActivityDesc => 'Ļaujiet Omi darboties fonā labākai stabilitātei';
+  String get backgroundActivityDesc => 'Lai Omi turpinātu ierakstīt, kad ekrāns ir izslēgts vai pārslēdzat lietotni.';
 
   @override
   String get locationAccess => 'Atrašanās vietas piekļuve';
 
   @override
-  String get locationAccessDesc => 'Iespējojiet fona atrašanās vietu pilnai pieredzei';
+  String get locationAccessDesc => 'Lai Omi varētu atzīmēt, kur notika jūsu sarunas.';
 
   @override
   String get notifications => 'Paziņojumi';
 
   @override
-  String get notificationsDesc => 'Iespējojiet paziņojumus, lai būtu informēti';
+  String get notificationsDesc =>
+      'Lai Omi varētu sūtīt sarunu kopsavilkumus, uzdevumu atgādinājumus un atbildes no jūsu lietotnēm.';
 
   @override
   String get locationServiceDisabled => 'Atrašanās vietas pakalpojums atspējots';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Atrašanās vietas pakalpojums ir atspējots. Lūdzu, dodieties uz Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi un iespējojiet to';
+      'Atrašanās vietas pakalpojumi šajā ierīcē ir izslēgti. Ieslēdziet tos iestatījumos.';
 
   @override
   String get backgroundLocationDenied => 'Fona atrašanās vietas piekļuve liegta';
@@ -10078,7 +10079,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10096,7 +10097,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10187,4 +10188,25 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get allow => 'Atļaut';
+
+  @override
+  String get permissionAllowed => 'Atļauts';
+
+  @override
+  String get permissionBlockedHint => 'Izslēgts iestatījumos. Lai to izmantotu, atļaujiet to tur.';
+
+  @override
+  String get useDifferentAccount => 'Izmantot citu kontu';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current. solis no $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Ļaujiet Omi 2 dienas darboties fonā, un tas sāks sniegt noderīgu atgriezenisko saiti.';
 }

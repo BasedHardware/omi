@@ -1762,26 +1762,27 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundActivity => 'Arka plan etkinliği';
 
   @override
-  String get backgroundActivityDesc => 'Daha iyi stabilite için Omi\'nin arka planda çalışmasına izin verin';
+  String get backgroundActivityDesc =>
+      'Ekran kapalıyken veya uygulama değiştirdiğinizde Omi\'nin kayda devam etmesi için.';
 
   @override
   String get locationAccess => 'Konum erişimi';
 
   @override
-  String get locationAccessDesc => 'Tam deneyim için arka plan konumunu etkinleştirin';
+  String get locationAccessDesc => 'Omi\'nin konuşmalarınızın nerede geçtiğini not edebilmesi için.';
 
   @override
   String get notifications => 'Bildirimler';
 
   @override
-  String get notificationsDesc => 'Bilgilendirilmek için bildirimleri etkinleştirin';
+  String get notificationsDesc =>
+      'Omi\'nin size konuşma özetleri, görev hatırlatıcıları ve uygulamalarınızdan yanıtlar gönderebilmesi için.';
 
   @override
   String get locationServiceDisabled => 'Konum Servisi Devre Dışı';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Konum Servisi Devre Dışı. Lütfen Ayarlar > Gizlilik ve Güvenlik > Konum Servisleri\'ne gidin ve etkinleştirin';
+  String get locationServiceDisabledDesc => 'Bu cihazda Konum Servisleri kapalı. Ayarlar\'dan açın.';
 
   @override
   String get backgroundLocationDenied => 'Arka Plan Konum Erişimi Reddedildi';
@@ -10066,7 +10067,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10084,7 +10085,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10175,4 +10176,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Kaydedilmemiş değişiklikleriniz kaybolacak.';
+
+  @override
+  String get allow => 'İzin Ver';
+
+  @override
+  String get permissionAllowed => 'İzin verildi';
+
+  @override
+  String get permissionBlockedHint => 'Ayarlar\'da kapalı. Kullanmak için oradan izin verin.';
+
+  @override
+  String get useDifferentAccount => 'Başka Bir Hesap Kullan';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Adım $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omi\'yi 2 gün arka planda çalışır bırakın, size faydalı geri bildirimler vermeye başlayacak.';
 }

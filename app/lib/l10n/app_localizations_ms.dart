@@ -1763,26 +1763,27 @@ class AppLocalizationsMs extends AppLocalizations {
   String get backgroundActivity => 'Aktiviti latar belakang';
 
   @override
-  String get backgroundActivityDesc => 'Biarkan Omi berjalan di latar belakang untuk kestabilan yang lebih baik';
+  String get backgroundActivityDesc => 'Supaya Omi terus merakam apabila skrin dimatikan atau anda menukar apl.';
 
   @override
   String get locationAccess => 'Akses lokasi';
 
   @override
-  String get locationAccessDesc => 'Dayakan lokasi latar belakang untuk pengalaman penuh';
+  String get locationAccessDesc => 'Supaya Omi boleh mencatat tempat perbualan anda berlaku.';
 
   @override
   String get notifications => 'Pemberitahuan';
 
   @override
-  String get notificationsDesc => 'Dayakan pemberitahuan untuk terus dimaklumkan';
+  String get notificationsDesc =>
+      'Supaya Omi boleh menghantar ringkasan perbualan, peringatan tugas dan balasan daripada apl anda.';
 
   @override
   String get locationServiceDisabled => 'Perkhidmatan Lokasi Dilumpuhkan';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Perkhidmatan Lokasi dilumpuhkan. Sila pergi ke Tetapan > Privasi & Keselamatan > Perkhidmatan Lokasi dan dayakannya';
+      'Perkhidmatan Lokasi dimatikan pada peranti ini. Hidupkannya dalam Tetapan.';
 
   @override
   String get backgroundLocationDenied => 'Akses Lokasi Latar Belakang Ditolak';
@@ -10081,7 +10082,7 @@ class AppLocalizationsMs extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10099,7 +10100,7 @@ class AppLocalizationsMs extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10190,4 +10191,25 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Perubahan anda yang belum disimpan akan hilang.';
+
+  @override
+  String get allow => 'Benarkan';
+
+  @override
+  String get permissionAllowed => 'Dibenarkan';
+
+  @override
+  String get permissionBlockedHint => 'Dimatikan dalam Tetapan. Benarkan di sana untuk menggunakannya.';
+
+  @override
+  String get useDifferentAccount => 'Gunakan Akaun Lain';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Langkah $current daripada $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mula memberi maklum balas yang berguna.';
 }

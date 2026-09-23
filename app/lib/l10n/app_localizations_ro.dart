@@ -1766,26 +1766,27 @@ class AppLocalizationsRo extends AppLocalizations {
   String get backgroundActivity => 'Activitate în fundal';
 
   @override
-  String get backgroundActivityDesc => 'Permiteți ca Omi să ruleze în fundal pentru o stabilitate mai bună';
+  String get backgroundActivityDesc => 'Ca Omi să continue înregistrarea cu ecranul stins sau când schimbi aplicația.';
 
   @override
   String get locationAccess => 'Acces la locație';
 
   @override
-  String get locationAccessDesc => 'Activează locația în fundal pentru experiența completă';
+  String get locationAccessDesc => 'Ca Omi să poată nota unde au avut loc conversațiile tale.';
 
   @override
   String get notifications => 'Notificări';
 
   @override
-  String get notificationsDesc => 'Activează notificările pentru a fi informat';
+  String get notificationsDesc =>
+      'Ca Omi să îți poată trimite rezumate ale conversațiilor, mementouri pentru sarcini și răspunsuri din aplicații.';
 
   @override
   String get locationServiceDisabled => 'Serviciul de locație dezactivat';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Serviciul de locație este dezactivat. Te rugăm să mergi la Setări > Confidențialitate și securitate > Servicii de locație și să-l activezi';
+      'Serviciile de localizare sunt dezactivate pe acest dispozitiv. Activează-le din Setări.';
 
   @override
   String get backgroundLocationDenied => 'Acces la locație în fundal refuzat';
@@ -10101,7 +10102,7 @@ class AppLocalizationsRo extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10119,7 +10120,7 @@ class AppLocalizationsRo extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10210,4 +10211,25 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Modificările nesalvate se vor pierde.';
+
+  @override
+  String get allow => 'Permite';
+
+  @override
+  String get permissionAllowed => 'Permis';
+
+  @override
+  String get permissionBlockedHint => 'Dezactivat în Setări. Permite-l acolo pentru a folosi funcția.';
+
+  @override
+  String get useDifferentAccount => 'Folosește alt cont';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Pasul $current din $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Lasă Omi să ruleze în fundal 2 zile și va începe să îți ofere feedback util.';
 }

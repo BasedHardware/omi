@@ -1761,26 +1761,28 @@ class AppLocalizationsSk extends AppLocalizations {
   String get backgroundActivity => 'Aktivita na pozadí';
 
   @override
-  String get backgroundActivityDesc => 'Nechajte Omi bežať na pozadí pre lepšiu stabilitu';
+  String get backgroundActivityDesc =>
+      'Aby Omi pokračoval v zázname aj pri vypnutej obrazovke alebo po prepnutí aplikácie.';
 
   @override
   String get locationAccess => 'Prístup k polohe';
 
   @override
-  String get locationAccessDesc => 'Povoliť polohu na pozadí pre plný zážitok';
+  String get locationAccessDesc => 'Aby Omi mohol zaznamenať, kde sa vaše konverzácie odohrali.';
 
   @override
   String get notifications => 'Upozornenia';
 
   @override
-  String get notificationsDesc => 'Povoliť upozornenia, aby ste zostali informovaní';
+  String get notificationsDesc =>
+      'Aby vám Omi mohol posielať zhrnutia konverzácií, pripomienky úloh a odpovede z vašich aplikácií.';
 
   @override
   String get locationServiceDisabled => 'Služba polohy je vypnutá';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Služba polohy je vypnutá. Prejdite do Nastavenia > Súkromie a zabezpečenie > Služby polohy a povoľte ju';
+      'Lokalizačné služby sú na tomto zariadení vypnuté. Zapnite ich v Nastaveniach.';
 
   @override
   String get backgroundLocationDenied => 'Prístup k polohe na pozadí bol zamietnutý';
@@ -10044,7 +10046,7 @@ class AppLocalizationsSk extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10062,7 +10064,7 @@ class AppLocalizationsSk extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10153,4 +10155,24 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neuložené zmeny sa stratia.';
+
+  @override
+  String get allow => 'Povoliť';
+
+  @override
+  String get permissionAllowed => 'Povolené';
+
+  @override
+  String get permissionBlockedHint => 'Vypnuté v Nastaveniach. Povoľte to tam, aby ste to mohli používať.';
+
+  @override
+  String get useDifferentAccount => 'Použiť iný účet';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Krok $current z $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Nechajte Omi 2 dni bežať na pozadí a začne vám dávať užitočnú spätnú väzbu.';
 }

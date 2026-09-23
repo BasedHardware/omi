@@ -1757,26 +1757,26 @@ class AppLocalizationsBn extends AppLocalizations {
   String get backgroundActivity => 'পটভূমিতে কার্যকলাপ';
 
   @override
-  String get backgroundActivityDesc => 'উন্নত স্থিতিশীলতার জন্য Omi কে পটভূমিতে চলতে দিন';
+  String get backgroundActivityDesc => 'যাতে স্ক্রিন বন্ধ থাকলে বা অ্যাপ বদলালেও Omi ক্যাপচার চালিয়ে যায়।';
 
   @override
   String get locationAccess => 'অবস্থান অ্যাক্সেস';
 
   @override
-  String get locationAccessDesc => 'সম্পূর্ণ অভিজ্ঞতার জন্য পটভূমি অবস্থান সক্ষম করুন';
+  String get locationAccessDesc => 'যাতে Omi আপনার কথোপকথন কোথায় হয়েছে তা লিখে রাখতে পারে।';
 
   @override
   String get notifications => 'বিজ্ঞপ্তি';
 
   @override
-  String get notificationsDesc => 'অবহিত থাকতে বিজ্ঞপ্তি সক্ষম করুন';
+  String get notificationsDesc =>
+      'যাতে Omi আপনাকে কথোপকথনের সারাংশ, টাস্ক রিমাইন্ডার এবং আপনার অ্যাপ থেকে উত্তর পাঠাতে পারে।';
 
   @override
   String get locationServiceDisabled => 'অবস্থান সেবা অক্ষম করা হয়েছে';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'অবস্থান সেবা অক্ষম। সেটিংস > গোপনীয়তা ও সুরক্ষা > অবস্থান সেবায় যান এবং এটি সক্ষম করুন';
+  String get locationServiceDisabledDesc => 'এই ডিভাইসে লোকেশন সার্ভিস বন্ধ। সেটিংসে চালু করুন।';
 
   @override
   String get backgroundLocationDenied => 'পটভূমি অবস্থান অ্যাক্সেস অনুমোদিত নয়';
@@ -10058,7 +10058,7 @@ class AppLocalizationsBn extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10076,7 +10076,7 @@ class AppLocalizationsBn extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10167,4 +10167,25 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।';
+
+  @override
+  String get allow => 'অনুমতি দিন';
+
+  @override
+  String get permissionAllowed => 'অনুমোদিত';
+
+  @override
+  String get permissionBlockedHint => 'সেটিংসে বন্ধ আছে। এটি ব্যবহার করতে সেখানে অনুমতি দিন।';
+
+  @override
+  String get useDifferentAccount => 'অন্য অ্যাকাউন্ট ব্যবহার করুন';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'ধাপ $current / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omi-কে ২ দিন ব্যাকগ্রাউন্ডে চলতে দিন, তারপর এটি আপনাকে কাজের মতামত দিতে শুরু করবে।';
 }
