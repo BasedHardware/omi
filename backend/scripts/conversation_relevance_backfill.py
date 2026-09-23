@@ -9,8 +9,10 @@ Two kinds of row are visible only because they predate the relevance step:
    stamped before that reader change is deployed.
 2. Conversations never assessed at all (no ``relevance_decision``): offline
    sync, client finalize, and desktop captures from before the relevance step.
-   The deterministic rules (no model, no cost) run over their transcript; only
-   a rule discard is written. What the rules cannot settle is left alone.
+   Only audio-transcript sources are eligible, and an empty transcript is never
+   a discard here. The deterministic rules (no model, no cost) run over the
+   transcript; only a rule discard is written. What they cannot settle is left
+   alone.
 
 A row a user curated (starred, renamed, restored, shared, foldered, photos) or
 one with stored calendar-meeting evidence is never touched. Every write goes
@@ -45,6 +47,29 @@ from utils.conversations.relevance_rules import RULES_VERSION, deterministic_rel
 from utils.conversations.wake_word import find_wake_word_matches
 
 BACKFILL_TRIGGER = 'backfill'
+
+# Only conversations whose content is an audio transcript. App/workflow imports
+# (external_integration, workflow), camera captures (openglass), screen capture,
+# onboarding, and rows with no recorded source keep their content elsewhere, so
+# the transcript rules cannot see it: the first production run hid ~49k of them.
+AUDIO_TRANSCRIPT_SOURCES = frozenset(
+    {
+        'friend',
+        'omi',
+        'fieldy',
+        'bee',
+        'plaud',
+        'frame',
+        'friend_com',
+        'apple_watch',
+        'phone',
+        'phone_call',
+        'desktop',
+        'sdcard',
+        'limitless',
+        'rayban_meta',
+    }
+)
 _DEFAULT_PAGE_SIZE = 200
 
 
@@ -72,6 +97,8 @@ def verdict_for(conversation: Mapping[str, Any]) -> Optional[str]:
         return None
     if _has_calendar_evidence(conversation):
         return None
+    if str(_value(conversation.get('source')) or '') not in AUDIO_TRANSCRIPT_SOURCES:
+        return None
     segments = conversation.get('transcript_segments') or []
     if not isinstance(segments, list):
         return None
@@ -79,6 +106,10 @@ def verdict_for(conversation: Mapping[str, Any]) -> Optional[str]:
         return None
     texts = [str(segment.get('text') or '') for segment in segments if isinstance(segment, Mapping)]
     verdict, rule = deterministic_relevance(texts, None)
+    # After the fact, no transcript is unknown content (stored elsewhere, or not
+    # decoded), never evidence of filler; only the live step may discard it.
+    if rule == 'empty_transcript':
+        return None
     return rule if verdict == 'discard' else None
 
 

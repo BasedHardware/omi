@@ -6,6 +6,7 @@ from scripts.conversation_relevance_backfill import Summary, backfill_user, deci
 def _row(text='Mm-hmm.', **fields):
     row = {
         'id': fields.pop('id', 'c1'),
+        'source': 'omi',
         'status': 'completed',
         'discarded': False,
         'transcript_segments': [{'text': text, 'start': 0.0, 'end': 1.0}],
@@ -21,6 +22,18 @@ def test_legacy_review_row_is_stamped_without_reading_its_transcript():
 def test_unassessed_filler_is_discarded_by_rule():
     assert verdict_for(_row()) == 'filler_only'
     assert verdict_for(_row(text="That's all.")) == 'no_content_words'
+
+
+def test_non_audio_sources_are_never_judged_by_transcript_rules():
+    """App imports, workflows, and camera captures keep content outside transcript_segments."""
+    for source in ('external_integration', 'workflow', 'openglass', 'screenpipe', 'onboarding', None, 'unknown'):
+        assert verdict_for(_row(source=source)) is None, source
+        assert verdict_for(_row(text='', source=source)) is None, source
+
+
+def test_an_empty_transcript_is_unknown_not_filler():
+    assert verdict_for(_row(text='')) is None
+    assert verdict_for({**_row(), 'transcript_segments': []}) is None
 
 
 def test_content_the_rules_cannot_settle_is_left_alone():
