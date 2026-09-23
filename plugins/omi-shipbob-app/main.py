@@ -227,7 +227,7 @@ def make_shipbob_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"ShipBob API error: {response.status_code}"): {response.text}")
+            log(f"ShipBob API error: {response.status_code}")
             return {"error": "ShipBob API request failed.", "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
