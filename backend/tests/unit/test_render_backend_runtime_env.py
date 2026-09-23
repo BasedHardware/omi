@@ -258,8 +258,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
     assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert notifications_env['OMI_CUSTOMER_DATA_PROJECT']['value'] == 'based-hardware'
     assert set(notifications_job['secrets']) == {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
