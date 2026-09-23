@@ -2,14 +2,17 @@ import { join } from 'path'
 import type { ModelEntry } from '../../shared/types'
 
 /**
- * A small, curated set of well-known GGUF chat models. ids/labels/files are the
- * stable parts; `sizeBytes` is an expected-size hint for progress + a disk
- * preflight; `sha256` is optional — when known it enables content-addressed
- * verify + an exact Hugging Face cache hit, when absent we still dedupe by the
- * snapshot path and fall back to size verification.
+ * A small, curated set of well-known GGUF chat models.
  *
- * These are deliberately conservative popular repos; extend the list without
- * touching the downloader.
+ * SUPPLY-CHAIN PINNING POLICY: every entry is pinned to an explicit Hugging Face
+ * commit `revision` (not `main`) and records the file's LFS `sha256`. Together
+ * these mean: (1) the download URL is immutable, (2) the post-download verify is a
+ * real content check (not just a ±5% size hint), and (3) the Hugging Face cache
+ * dedupe is an exact `blobs/<sha256>` hit. An upstream re-quant therefore cannot
+ * silently change the bytes users run. When adding an entry, resolve the current
+ * commit + LFS oid from the HF API and paste them here — do not use `main`.
+ *
+ * sizes/oids verified against the HF API on 2026-09-22.
  */
 export const MODEL_REGISTRY: ModelEntry[] = [
   {
@@ -17,8 +20,9 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     label: 'Qwen2.5 3B Instruct (Q4_K_M) — small, snappy',
     repo: 'bartowski/Qwen2.5-3B-Instruct-GGUF',
     file: 'Qwen2.5-3B-Instruct-Q4_K_M.gguf',
-    revision: 'main',
-    sizeBytes: 2_000_000_000,
+    revision: 'f302c64a2269a69fb27b2f9473b362f5bb8e78d8',
+    sizeBytes: 1_929_903_264,
+    sha256: '9c9f56a391a3abbd5b89d0245bf6106081bcc3173119d4229235dd9d23253f94',
     minRamGb: 6,
     vision: false
   },
@@ -27,8 +31,9 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     label: 'Qwen2.5 7B Instruct (Q4_K_M) — stronger',
     repo: 'bartowski/Qwen2.5-7B-Instruct-GGUF',
     file: 'Qwen2.5-7B-Instruct-Q4_K_M.gguf',
-    revision: 'main',
-    sizeBytes: 4_700_000_000,
+    revision: '8911e8a47f92bac19d6f5c64a2e2095bd2f7d031',
+    sizeBytes: 4_683_074_240,
+    sha256: '65b8fcd92af6b4fefa935c625d1ac27ea29dcb6ee14589c55a8f115ceaaa1423',
     minRamGb: 8,
     vision: false
   },
@@ -37,20 +42,11 @@ export const MODEL_REGISTRY: ModelEntry[] = [
     label: 'Llama 3.2 3B Instruct (Q4_K_M)',
     repo: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
     file: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-    revision: 'main',
-    sizeBytes: 2_100_000_000,
+    revision: '5ab33fa94d1d04e903623ae72c95d1696f09f9e8',
+    sizeBytes: 2_019_377_696,
+    sha256: '6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff',
     minRamGb: 6,
     vision: false
-  },
-  {
-    id: 'qwen2.5-vl-3b-instruct-q4km',
-    label: 'Qwen2.5-VL 3B Instruct (Q4_K_M) — vision',
-    repo: 'mmengr7l/Qwen2.5-VL-3B-Instruct-GGUF',
-    file: 'Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf',
-    revision: 'main',
-    sizeBytes: 2_200_000_000,
-    minRamGb: 8,
-    vision: true
   }
 ]
 

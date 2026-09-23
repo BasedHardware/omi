@@ -122,6 +122,14 @@ export async function downloadModel(
       })
     } catch (e) {
       out.destroy()
+      if (signal?.aborted) {
+        // User cancelled — keep the .part so a later retry can resume.
+        emit({ id: entry.id, received, total: entry.sizeBytes, phase: 'cancelled' })
+        return
+      }
+      // Non-abort failure: drop the corrupt/incomplete part so a retry starts
+      // clean instead of resuming a broken file that would fail verify forever.
+      await rm(part, { force: true }).catch(() => {})
       emit({ id: entry.id, received, total: entry.sizeBytes, phase: 'error', error: (e as Error).message })
       return
     }
@@ -133,11 +141,13 @@ export async function downloadModel(
   if (entry.sha256) {
     const got = await sha256OfFile(part)
     if (got !== entry.sha256) {
-      emit({ id: entry.id, received: size, total: entry.sizeBytes, phase: 'error', error: 'sha256 mismatch' })
+      await rm(part, { force: true }).catch(() => {})
+      emit({ id: entry.id, received: 0, total: entry.sizeBytes, phase: 'error', error: 'sha256 mismatch (part removed; retry will re-download)' })
       return
     }
   } else if (entry.sizeBytes && Math.abs(size - entry.sizeBytes) > entry.sizeBytes * 0.05) {
-    emit({ id: entry.id, received: size, total: entry.sizeBytes, phase: 'error', error: `size ${size} != expected ~${entry.sizeBytes}` })
+    await rm(part, { force: true }).catch(() => {})
+    emit({ id: entry.id, received: 0, total: entry.sizeBytes, phase: 'error', error: `size ${size} != expected ~${entry.sizeBytes} (part removed)` })
     return
   }
   await rename(part, target)
