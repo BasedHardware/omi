@@ -26,7 +26,8 @@
       "expo",
       "react",
       "react-native",
-      "nativewind/types"
+      "nativewind/types",
+      "jest"
     ]
   },
   "include": [

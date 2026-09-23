@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMemoriesStore } from '@/state/memoriesStore';
 import { useConversationsStore } from '@/state/conversationsStore';
+import { useAuthStore } from '@/state/authStore';
+import { createActionItem } from '@/api/omiApi';
+import { runAgent } from '@/services/localAgent';
 import type { Conversation, Memory } from '@/api/omiApi';
 
 function dayLabel(iso?: string): string {
@@ -46,7 +49,40 @@ export default function HomeScreen() {
   const loadMemories = useMemoriesStore((s) => s.load);
   const loadConversations = useConversationsStore((s) => s.load);
   const router = useRouter();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState('')
+  const uid = useAuthStore((s) => s.uid)
+
+  // On-device local agent: a task/reminder command is handled without the cloud;
+  // anything else falls through to "Ask Omi" chat.
+  const submit = async (): Promise<void> => {
+    const text = query.trim()
+    if (!text) return
+    const action = await runAgent(text)
+    if (action.kind === 'chat') {
+      // Chat streaming isn't wired on this surface yet; don't pretend to answer.
+      Alert.alert('Ask Omi', 'Chat isn’t wired on this screen yet — task/reminder commands work: try "add a task: …".')
+      return
+    }
+    if (!uid) {
+      Alert.alert('Sign in required', 'Sign in so tasks sync to your account.')
+      return
+    }
+    let due_at: string | null = null
+    if (action.kind === 'create_reminder' && action.minutesFromNow) {
+      due_at = new Date(Date.now() + action.minutesFromNow * 60_000).toISOString()
+    }
+    try {
+      await createActionItem(action.title, { due_at })
+      setQuery('')
+      Alert.alert(
+        action.kind === 'create_reminder' ? 'Reminder set' : 'Task added',
+        action.title
+      )
+    } catch {
+      Alert.alert('Could not save', 'Check your connection and try again.')
+    }
+  }
+;
 
   useEffect(() => {
     loadMemories();
@@ -121,6 +157,8 @@ export default function HomeScreen() {
             placeholderTextColor="#7A7A80"
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={() => void submit()}
+            returnKeyType="go"
           />
           <TouchableOpacity style={styles.micBtn} activeOpacity={0.8}>
             <Text style={styles.micIcon}>🎙</Text>

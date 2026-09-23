@@ -82,6 +82,18 @@ export async function getActionItems(limit = 50, offset = 0): Promise<ActionItem
   return asList<ActionItem>(res.data, 'action_items');
 }
 
+/** POST /v1/action-items — create a task the account can see across surfaces. */
+export async function createActionItem(
+  description: string,
+  opts: { due_at?: string | null } = {},
+): Promise<ActionItem> {
+  const res = await omiApi.post<ActionItem>('/v1/action-items', {
+    description,
+    ...(opts.due_at ? { due_at: opts.due_at } : {}),
+  });
+  return res.data;
+}
+
 export interface ActionItem {
   id: string;
   description: string;
