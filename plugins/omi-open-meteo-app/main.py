@@ -437,12 +437,12 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Open-Meteo request failed with status {exc.response.status_code}.")
+    except MalformedResponseError as exc:
+        logger.error("Open-Meteo malformed response: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPError as exc:
         logger.error("Open-Meteo request failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Open-Meteo request failed due to a network error.")
-    except Exception as exc:
-        logger.error("Unexpected error during Open-Meteo weather request: %s", type(exc).__name__, exc_info=True)
-        return ChatToolResponse(error="Open-Meteo request failed.")
 
 
 @app.post("/tools/get_weather_forecast", response_model=ChatToolResponse)
@@ -501,12 +501,12 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Open-Meteo forecast request failed with status {exc.response.status_code}.")
+    except MalformedResponseError as exc:
+        logger.error("Open-Meteo forecast malformed response: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error=str(exc))
     except (httpx.HTTPError, IndexError) as exc:
         logger.error("Open-Meteo forecast request failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Open-Meteo forecast request failed due to a network error.")
-    except Exception as exc:
-        logger.error("Unexpected error during Open-Meteo forecast request: %s", type(exc).__name__, exc_info=True)
-        return ChatToolResponse(error="Open-Meteo forecast request failed.")
 
 
 @app.post("/tools/get_air_quality", response_model=ChatToolResponse)
@@ -550,9 +550,9 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Open-Meteo air-quality request failed with status {exc.response.status_code}.")
+    except MalformedResponseError as exc:
+        logger.error("Open-Meteo air-quality malformed response: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPError as exc:
         logger.error("Open-Meteo air-quality request failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Open-Meteo air-quality request failed due to a network error.")
-    except Exception as exc:
-        logger.error("Unexpected error during Open-Meteo air-quality request: %s", type(exc).__name__, exc_info=True)
-        return ChatToolResponse(error="Open-Meteo air-quality request failed.")

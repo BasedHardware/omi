@@ -219,5 +219,50 @@ class TestOpenMeteoErrorSanitization(unittest.TestCase):
         asyncio.run(_run())
 
 
+    def test_get_current_weather_malformed_payload_message(self):
+        async def _run():
+            with patch.object(main, "_resolve_location", return_value=({"latitude": 52.52, "longitude": 13.41, "name": "Berlin"}, None)), \
+                 patch.object(main, "_request_json", side_effect=main.MalformedResponseError("malformed JSON payload (expected an object)")):
+                req = main.CurrentWeatherRequest(location="Berlin")
+                res = await main.get_current_weather(req)
+                self.assertEqual("malformed JSON payload (expected an object)", res.error)
+                self.assertNotIn("network error", res.error)
+                self.assertNotIn("HTTPError", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_weather_forecast_malformed_geocoding_array_message(self):
+        async def _run():
+            with patch.object(main, "_resolve_location", side_effect=main.MalformedResponseError("geocoding results were not a JSON array")):
+                req = main.ForecastRequest(location="Berlin", days=3)
+                res = await main.get_weather_forecast(req)
+                self.assertEqual("geocoding results were not a JSON array", res.error)
+                self.assertNotIn("network error", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_air_quality_malformed_missing_coordinates_message(self):
+        async def _run():
+            with patch.object(main, "_resolve_location", side_effect=main.MalformedResponseError("geocoding result was missing numeric coordinates")):
+                req = main.AirQualityRequest(location="Berlin")
+                res = await main.get_air_quality(req)
+                self.assertEqual("geocoding result was missing numeric coordinates", res.error)
+                self.assertNotIn("network error", res.error)
+
+        asyncio.run(_run())
+
+    def test_malformed_response_error_not_masked_as_network_error(self):
+        """MalformedResponseError subclasses HTTPError — must not fall into network branch."""
+        async def _run():
+            with patch.object(main, "_resolve_location", return_value=({"latitude": 52.52, "longitude": 13.41, "name": "Berlin"}, None)), \
+                 patch.object(main, "_request_json", side_effect=main.MalformedResponseError("malformed JSON payload (could not decode body)")):
+                req = main.CurrentWeatherRequest(location="Berlin")
+                res = await main.get_current_weather(req)
+                self.assertNotIn("network error", res.error)
+                self.assertIn("malformed JSON payload", res.error)
+
+        asyncio.run(_run())
+
+
 if __name__ == "__main__":
     unittest.main()
