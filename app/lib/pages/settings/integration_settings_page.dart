@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -94,26 +95,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          context.l10n.appSettings(widget.appName),
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.appSettings(widget.appName)),
         actions: [
           if (widget.showRefresh)
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              onPressed: widget.onRefresh,
-              tooltip: context.l10n.refresh,
-            ),
+            OmiIconButton(icon: const Icon(Icons.refresh), label: context.l10n.refresh, onPressed: widget.onRefresh),
         ],
       ),
       body: SafeArea(
@@ -160,27 +147,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              GestureDetector(
-                onTap: _disconnect,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.logout, color: Colors.red, size: 20),
-                      const SizedBox(width: 12),
-                      Text(
-                        context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
-                        style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
+              OmiButton.destructive(
+                label: context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
+                icon: Icons.logout,
+                onPressed: _disconnect,
+                expand: true,
               ),
             ],
           ),
