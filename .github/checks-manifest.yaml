@@ -1269,6 +1269,11 @@ checks:
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
+  - id: mcp-category-filter-tests
+    command: ["python3", "mcp/tests/test_category_filters.py"]
+    triggers: ["mcp/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "_parse_categories logged and dropped unknown categories, and both dispatchers omit an empty filter, so get_memories(categories=[\"finance\"]) requested the unfiltered list and returned every memory; unknown categories must raise a value-naming ValueError before any request, as the date filters already do"
   - id: plugin-oauth-client-log-safety-tests
     command: ["python3", "plugins/oauth/test_client_log_safety.py"]
     triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]
