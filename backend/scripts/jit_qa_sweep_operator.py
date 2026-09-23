@@ -50,8 +50,8 @@ QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # Keep these equal to the deployed memories route's QA request contract.  The
-# checked-in gpt-6-luna card ($0.20/M in, $1.20/M out) prices 24,576 input +
-# 2,048 output at $0.0073728, under the $0.05 cap; the gateway's durable
+# checked-in gpt-6-luna card ($0.10/M in, $0.60/M out) prices 24,576 input +
+# 2,048 output at $0.0036864, under the $0.05 cap; the gateway's durable
 # attempt row is the usage/cost authority.
 QA_SWEEP_MAX_INPUT_TOKENS = 24_576
 QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048

@@ -14,7 +14,8 @@
 # schema, not a rate change to the short-context fields, so it does not by
 # itself require a new rate_card_id — see the OpenAI GPT-5.6 Sol/Terra cards
 # below for why their existing IDs were kept. The gpt-6-luna card is a new id
-# because the model id changed; its prices are carried over unverified.
+# because the model id changed. Its prices are half of gpt-5.6-luna per
+# operator directive (David Zhang, 2026-09-23), pending official rates.
 rate_cards:
   - rate_card_id: openai.gpt-5-nano.2026-07-17
     provider: openai
@@ -43,22 +44,23 @@ rate_cards:
   # tokens" as the boundary (i.e. the short tier covers <=272,000 tokens).
   # Sol and Terra are dated to that 2026-07-30 price list.
   #
-  # gpt-6-luna prices are inherited from openai.gpt-5.6-luna.2026-07-30 and
-  # carried over unverified, pending official gpt-6-luna rates. Numeric
-  # short- and long-context prices are unchanged. The card id is dated
-  # 2026-09-22 because the model id changed, not because a rate was published.
+  # Prices per operator directive (David Zhang, 2026-09-23): gpt-6-luna at
+  # half of openai.gpt-5.6-luna.2026-07-30, pending official published rates.
+  # long_context_threshold_tokens stays 272000, inherited pending official
+  # gpt-6-luna pricing docs. The card id is dated 2026-09-22 because the
+  # model id changed, not because a provider rate sheet was published.
   - rate_card_id: openai.gpt-6-luna.2026-09-22
     provider: openai
     model: gpt-6-luna
-    input_micro_usd_per_million: 200000
-    cached_input_micro_usd_per_million: 20000
-    output_micro_usd_per_million: 1200000
-    cache_write_micro_usd_per_million: 250000
+    input_micro_usd_per_million: 100000
+    cached_input_micro_usd_per_million: 10000
+    output_micro_usd_per_million: 600000
+    cache_write_micro_usd_per_million: 125000
     long_context_threshold_tokens: 272000
-    long_context_input_micro_usd_per_million: 400000
-    long_context_cached_input_micro_usd_per_million: 40000
-    long_context_output_micro_usd_per_million: 1800000
-    long_context_cache_write_micro_usd_per_million: 500000
+    long_context_input_micro_usd_per_million: 200000
+    long_context_cached_input_micro_usd_per_million: 20000
+    long_context_output_micro_usd_per_million: 900000
+    long_context_cache_write_micro_usd_per_million: 250000
 
   - rate_card_id: openai.gpt-5.6-sol.2026-07-30
     provider: openai

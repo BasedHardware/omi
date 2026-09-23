@@ -102,10 +102,10 @@
         "reasoning_effort": "low",
         "rate_card_id": "openai.gpt-6-luna.2026-09-22",
         "rates_usd_per_million": {
-          "input": 0.2,
-          "cached_input": 0.02,
-          "cache_write": 0.25,
-          "output": 1.2
+          "input": 0.1,
+          "cached_input": 0.01,
+          "cache_write": 0.125,
+          "output": 0.6
         },
         "source": "backend/routers/desktop_proactivity.py:58-70; backend/llm_gateway/config/generated_route_overrides.yaml:48-50; backend/llm_gateway/config/cost_rate_cards.yaml:51-63"
       },
@@ -138,10 +138,10 @@
         "backend_global_max_completion_tokens": 16384,
         "rate_card_id": "openai.gpt-6-luna.2026-09-22",
         "rates_usd_per_million": {
-          "input": 0.2,
-          "cached_input": 0.02,
-          "cache_write": 0.25,
-          "output": 1.2
+          "input": 0.1,
+          "cached_input": 0.01,
+          "cache_write": 0.125,
+          "output": 0.6
         },
         "cost_receipt_status": "missing; client pi model cost is zero and server desktop chat ledger marks provider token cost missing",
         "source": "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityDelivery.swift:334-368; desktop/macos/Desktop/Sources/Chat/AgentClient.swift:625-730; desktop/macos/agent/src/adapters/pi-mono.ts:174-186,501-567,1415-1429; backend/routers/desktop_chat.py:235-277,710-727,1084-1137,1700-1716; backend/llm_gateway/config/generated_route_overrides.yaml:9-11; backend/llm_gateway/config/cost_rate_cards.yaml:51-63"
