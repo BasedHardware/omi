@@ -2952,15 +2952,6 @@ class ChatProvider: ObservableObject {
     return artifactsDirectory
   }
 
-  /// Reinitialize after settings change
-  func reinitialize() async {
-    // This can land mid-turn. Revoke before the transcript goes away.
-    revokeActiveTurn(reason: .superseded)
-    messages = []
-    resetMessagesPagination()
-    await initialize()
-  }
-
   /// Retry loading after a failure — clears error state and re-runs initialize
   func retryLoad() async {
     sessionsLoadError = nil
