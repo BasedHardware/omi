@@ -1,4 +1,9 @@
-"""Visibility and recovery coverage for legacy sync review fragments."""
+"""Visibility and recovery coverage for sync review fragments.
+
+Readers trust the stored ``discarded`` flag alone: intake stores review
+fragments hidden, and scripts/conversation_relevance_backfill.py rewrites rows
+from before it did.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +33,9 @@ def conversations_db(monkeypatch):
     from database import conversations
 
     rows = {
-        'review-new': _review(id='review-new', created_at=datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)),
+        'review-new': _review(
+            id='review-new', created_at=datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc), discarded=True
+        ),
         'kept-new': _review(
             id='kept-new',
             created_at=datetime(2026, 9, 22, 11, 59, tzinfo=timezone.utc),
@@ -41,7 +48,9 @@ def conversations_db(monkeypatch):
                 'events': [],
             },
         ),
-        'review-middle': _review(id='review-middle', created_at=datetime(2026, 9, 22, 11, 58, tzinfo=timezone.utc)),
+        'review-middle': _review(
+            id='review-middle', created_at=datetime(2026, 9, 22, 11, 58, tzinfo=timezone.utc), discarded=True
+        ),
         'kept-middle': _review(
             id='kept-middle',
             created_at=datetime(2026, 9, 22, 11, 57, tzinfo=timezone.utc),
@@ -54,7 +63,9 @@ def conversations_db(monkeypatch):
                 'events': [],
             },
         ),
-        'review-old': _review(id='review-old', created_at=datetime(2026, 9, 22, 11, 56, tzinfo=timezone.utc)),
+        'review-old': _review(
+            id='review-old', created_at=datetime(2026, 9, 22, 11, 56, tzinfo=timezone.utc), discarded=True
+        ),
         'kept-old': _review(
             id='kept-old',
             created_at=datetime(2026, 9, 22, 11, 55, tzinfo=timezone.utc),
@@ -72,7 +83,7 @@ def conversations_db(monkeypatch):
     return conversations
 
 
-def test_low_signal_policy_protects_curated_and_enriched_rows():
+def test_low_signal_policy_protects_only_curated_rows():
     from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 
     assert is_low_signal_sync_fragment(_review())
@@ -86,13 +97,19 @@ def test_low_signal_policy_protects_curated_and_enriched_rows():
         {'folder_user_set': True},
         {'visibility': 'shared'},
         {'sync_relevance_user_kept': True},
-        {'structured': {'overview': 'Generated summary'}},
     ):
         row = _review(**protected)
         assert not is_low_signal_sync_fragment(row), protected
+    # Generated output is not curation: the pipeline writes it for everything.
+    for generated in (
+        {'structured': {'overview': 'Generated summary'}},
+        {'structured': {'sections': [{'heading': 'Context'}]}},
+        {'client_processing': {'schema_version': 1}},
+    ):
+        assert is_low_signal_sync_fragment(_review(**generated)), generated
 
 
-def test_default_list_fills_pages_around_legacy_review_rows(conversations_db):
+def test_default_list_pages_by_the_stored_flag(conversations_db):
     page = conversations_db.get_conversations_without_photos('u', limit=2, offset=0)
     assert [row['id'] for row in page] == ['kept-new', 'kept-middle']
     next_page = conversations_db.get_conversations_without_photos('u', limit=2, offset=2)
@@ -106,29 +123,6 @@ def test_default_list_fills_pages_around_legacy_review_rows(conversations_db):
 def test_count_matches_default_list_and_archive(conversations_db):
     assert conversations_db.get_conversations_count('u') == 3
     assert conversations_db.get_conversations_count('u', include_discarded=True) == 6
-
-
-def test_count_does_not_subtract_review_rows_missing_discarded_field(monkeypatch):
-    from database import conversations
-
-    missing = _review(id='missing')
-    missing.pop('discarded')
-    rows = {
-        'missing': missing,
-        'kept': _review(
-            id='kept',
-            sync_relevance='keep',
-            structured={
-                'title': 'Lunch',
-                'overview': 'A note',
-                'sections': [],
-                'action_items': [],
-                'events': [],
-            },
-        ),
-    }
-    _install_listing(monkeypatch, rows)
-    assert conversations.get_conversations_count('u') == 1
 
 
 def test_restore_promotes_legacy_review_and_persists_user_choice(monkeypatch):
@@ -224,7 +218,7 @@ def test_explicit_discard_clears_restore_marker(monkeypatch):
     ref.update.assert_called_once_with({'discarded': True, 'sync_relevance_user_kept': False})
 
 
-def test_typesense_projection_hides_legacy_review_without_changing_schema():
+def test_typesense_indexes_the_stored_flag_only():
     from utils.conversations.typesense_index import build_conversation_index_document
 
     document = build_conversation_index_document(
@@ -238,5 +232,24 @@ def test_typesense_projection_hides_legacy_review_without_changing_schema():
             'structured': {'title': 'Mm-hmm.', 'overview': ''},
         },
     )
+    # A legacy row is visible until the backfill stamps it; no read-time projection.
     assert document is not None
-    assert document['discarded'] is True
+    assert document['discarded'] is False
+
+
+def test_restore_of_any_row_persists_the_user_choice(monkeypatch):
+    """A model-discarded sync row is not ``review``; its restore must still stick."""
+    from database import conversations
+
+    row = _review(id='restored', sync_relevance='keep', discarded=True)
+    db = StrictFirestore({('users', 'u', 'conversations', 'restored'): row})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', MagicMock())
+
+    assert conversations.restore_conversation_from_discarded('u', 'restored') is True
+    assert db.transactions[0].updates == [
+        (
+            ('users', 'u', 'conversations', 'restored'),
+            {'discarded': False, 'sync_relevance_user_kept': True},
+        )
+    ]

@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from typing import Any
 
@@ -224,6 +225,44 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
         label = 'other'
     try:
         LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
+# Conversation relevance (utils/conversations/relevance.py): one increment per
+# processed conversation. `decided_by="policy"` counts triggers that never
+# assess; a share of them that grows is a path skipping the gate by design,
+# and `reason="model_error"` is the model tier failing open to keep.
+CONVERSATION_RELEVANCE_LABELS = {
+    'trigger': frozenset(
+        {'capture_end', 'client_finalize', 'sync_update', 'first_open', 'user_reprocess', 'merge', 'sync_intake'}
+    ),
+    'verdict': frozenset({'keep', 'discard'}),
+    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'override'}),
+}
+
+CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
+    'conversation_relevance_decision_total',
+    (
+        'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
+        'bounded reason (a rule id, model_keep/model_discard/model_error, a policy trigger, '
+        'restored, or calendar_overlap). Never labeled by uid. Per-pod; sum() across jobs.'
+    ),
+    ['trigger', 'verdict', 'decided_by', 'reason'],
+)
+
+_RELEVANCE_REASON = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
+
+
+def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str, reason: str) -> None:
+    """Never raises: observability must not change a processing outcome."""
+    try:
+        labels = {
+            name: value if value in CONVERSATION_RELEVANCE_LABELS[name] else 'other'
+            for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
+        }
+        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels).inc()
     except Exception:
         pass
 
@@ -797,7 +836,7 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 # `action_items_list` was 48.8% of every billable Firestore document read before
 # the 12/min per-uid cap shipped (#12258); the residual cost is a small number of
 # large-backlog accounts re-reading a full backlog on every allowed poll. These
-# two counters are how a deploy proves the remaining reads went away, rather than
+# counters are how a deploy proves the remaining reads went away, rather than
 # inferring it from the billing export a week later.
 OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL = Counter(
     'omi_action_items_list_throttled_total',
@@ -811,9 +850,32 @@ OMI_ACTION_ITEMS_LIST_CACHE_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL = Counter(
+    'omi_action_items_list_refused_total',
+    (
+        'GET /v1/action-items requests classified as the stale Windows build. '
+        'decision=allow while ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE is off; '
+        'decision=refuse when the request is rejected with 426. '
+        'client is the closed classification constant, never a raw User-Agent.'
+    ),
+    ['client', 'decision'],
+)
+
+_ACTION_ITEMS_LIST_REFUSED_CLIENTS = frozenset({'stale_windows'})
+_ACTION_ITEMS_LIST_REFUSED_DECISIONS = frozenset({'allow', 'refuse'})
+
 
 def record_action_items_list_throttled(*, client: str, policy: str) -> None:
     OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL.labels(client=client, policy=policy).inc()
+
+
+def record_action_items_list_refused(*, client: str, decision: str) -> None:
+    """client: stale_windows. decision: allow | refuse. Unknown values collapse to other."""
+    if client not in _ACTION_ITEMS_LIST_REFUSED_CLIENTS:
+        client = 'other'
+    if decision not in _ACTION_ITEMS_LIST_REFUSED_DECISIONS:
+        decision = 'other'
+    OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL.labels(client=client, decision=decision).inc()
 
 
 def record_action_items_list_cache(outcome: str) -> None:

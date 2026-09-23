@@ -23,6 +23,7 @@ from utils.stt.live_metrics import (
     WINDOW_CAP,
     WINDOW_CONTEXT,
     WINDOW_FORCED_CUTS,
+    WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
 )
@@ -46,7 +47,39 @@ from utils.stt.window_anchor import (
 WINDOW_AGC_TARGET_PEAK = 0.8
 WINDOW_AGC_MAX_GAIN = 4.0
 WINDOW_INGEST_AGC = True
+# Deadband on the *posted* (decode) stage only, applied per window. Audio already
+# peaking above this fraction of full scale is not quiet, and gaining it costs
+# accuracy: on a dense-speech clip, gaining loud passages moved substitutions from
+# 27 to 37, and reverting the VAD threshold never moved them back. Below the
+# deadband the boost is worth its distortion; above it there is nothing to rescue.
+# 0.4 is equivalent to "never apply less than 2x (6 dB)".
+#
+# It is judged per posted window, not on the session envelope. On the same clip,
+# passages peaking at 0.37 and 0.39 were dropped entirely (37 reference words)
+# when the session peak of 0.54 denied them gain, while every passage at 0.42 and
+# above survived. Admission is deliberately NOT deadbanded — the copy Silero
+# scores is still always gained, which is what admits quiet far-field.
+WINDOW_AGC_DEADBAND_PEAK = 0.4
+# How much of the end of a posted window decides its gain. A growing window
+# re-posts audio that has already been transcribed; the newest seconds are what
+# this POST is actually for, so they choose the level. Long enough to be a stable
+# estimate, short enough not to be dominated by an earlier louder speaker.
+WINDOW_AGC_TAIL_SECONDS = 10.0
 _INT16_ABS_MAX = 32767.0
+# TDT sometimes skips a whole leading utterance of a long window: on a public
+# earnings clip, [34.9 s, 58.9 s] came back with text only from 15.1 s in, while
+# [34.9 s, 50.0 s] and [36.0 s, 58.9 s] both transcribed that utterance in full.
+# The leg would then emit the later text and anchor past the skipped speech, losing
+# it for good. When the first segment starts this late AND the VAD saw at least
+# HEAD_RECOVERY_MIN_SPEECH_SECONDS of speech before it, the head is posted again on
+# its own — it still starts at the anchor's sentence boundary, the case TDT handles.
+# Normal leading gaps are the 0.3 s lead-in plus a breath, far under 3 s.
+HEAD_RECOVERY_MIN_GAP_SECONDS = 3.0
+HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
+# How far an empty window at max context slides. It was the pace, which was 6 s;
+# with window size now set by a 15 s pace, sliding by pace would discard 15 s of
+# speech the model returned nothing for. Keep the slide at the measured 6 s.
+EMPTY_CAP_SLIDE_SECONDS = 6.0
 
 
 def pcm16_peak(pcm: bytes) -> float:
@@ -82,6 +115,35 @@ def bounded_agc_pcm16(
     samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
     out = np.clip(samples * gain, -32768, 32767).astype(np.int16)
     return out.tobytes(), float(gain)
+
+
+def window_needs_gain(peak: float) -> bool:
+    """Whether the POSTED (decode) stage should gain a window with this peak.
+
+    Judged per posted window, never on the session envelope: a loud session still
+    contains quiet passages, and those need the boost. Admission does not consult
+    this at all — the copy Silero scores is always gained, which is what admits
+    quiet far-field.
+    """
+    return peak <= WINDOW_AGC_DEADBAND_PEAK * _INT16_ABS_MAX
+
+
+def posted_window_gain(pcm: bytes, tail_bytes: int) -> float:
+    """One uniform gain for a posted window: chosen by its tail, bounded by its whole.
+
+    The tail is the newest audio, which is what this POST exists to transcribe, so it
+    decides whether the window is quiet and how much boost it wants. The whole window
+    then caps that boost at the point where it would clip, so rescuing a quiet passage
+    never distorts a louder prefix. Returns 1.0 to mean "post untouched".
+    """
+    tail = pcm[-tail_bytes:] if tail_bytes and len(pcm) > tail_bytes else pcm
+    tail_peak = pcm16_peak(tail)
+    if tail_peak <= 0.0 or not window_needs_gain(tail_peak):
+        return 1.0
+    desired = (_INT16_ABS_MAX * WINDOW_AGC_TARGET_PEAK) / tail_peak
+    whole_peak = pcm16_peak(pcm)
+    headroom = (_INT16_ABS_MAX / whole_peak) if whole_peak > 0.0 else WINDOW_AGC_MAX_GAIN
+    return max(1.0, min(WINDOW_AGC_MAX_GAIN, desired, headroom))
 
 
 class SessionPcmGain:
@@ -267,11 +329,38 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._agc_peak = peak
 
     def _normalize_posted_pcm(self, pcm: bytes) -> bytes:
-        # Buffer is original-level. One uniform scale for this window; gain is
-        # taken from the session envelope frozen at POST start (see _post_window).
-        out, gain = bounded_agc_pcm16(pcm, peak=self._agc_peak)
+        # Buffer is original-level. One uniform scale for this window, taken from
+        # *this window's* own peak — not the session envelope.
+        #
+        # The session envelope is the wrong reference for the deadband. A clip
+        # whose loudest moment is 0.54 of full scale still contains passages at
+        # 0.37, and judging those by the session peak denies them a boost they
+        # do need: two such passages went missing entirely (37 reference words)
+        # while every passage at 0.42 and above was captured. Scoring each window
+        # on itself gains the quiet stretches and leaves the loud ones alone.
+        #
+        # Each POST remains internally uniform, which is the property that
+        # matters — the failure mode fixed in #15566 was several gain levels
+        # inside one posted window, not different gains between windows.
+        #
+        # The window's *whole* peak is still the wrong reference, for the same
+        # reason one step down. A growing window that spans a level change reads
+        # its loudest content, applies no gain, and loses the quiet part: on dev
+        # the identical clip scored WER 0.155 or 0.262 depending only on where
+        # the anchor fell (anchored at 53s the window peaks at 0.377 and is
+        # gained; at 34s it peaks at 0.431 and is not). So the TAIL — the newest
+        # audio, which is what this POST is for — chooses the gain, and the whole
+        # window caps it at the clipping point. On the measured case the tail
+        # wants 2.16x and the window allows 2.30x, so the quiet passage is
+        # rescued with no distortion of the loud prefix.
+        gain = posted_window_gain(pcm, self._to_bytes(WINDOW_AGC_TAIL_SECONDS))
+        if gain <= 1.0:
+            self._agc_last_gain = 1.0
+            return pcm
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        out = np.clip(samples * gain, -32768, 32767).astype(np.int16)
         self._agc_last_gain = gain
-        return out
+        return out.tobytes()
 
     def finalize(self) -> None:
         self._pause_requested = True
@@ -353,13 +442,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         segments = await self._post_and_parse(job.pcm, job.duration)
         if self._dead:
             return
+        segments = await self._recover_skipped_head(job, segments)
+        if self._dead:
+            return
         decision = decide_window(
             segments,
             job.duration,
             self._max_context_seconds,
             force=job.force,
             pause=job.pause,
-            empty_cap_slide=self._pace_seconds,
+            empty_cap_slide=EMPTY_CAP_SLIDE_SECONDS,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -373,6 +465,29 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if decision.new_anchor is not None:
             rel_bytes = min(job.end_bytes - job.start_bytes, max(0, self._to_bytes(decision.new_anchor)))
             self._advance_anchor(job.start_bytes + rel_bytes)
+
+    async def _recover_skipped_head(self, job: _WindowJob, segments: list[RawSegment]) -> list[RawSegment]:
+        if not segments or segments[0].start < HEAD_RECOVERY_MIN_GAP_SECONDS:
+            return segments
+        head = min(job.duration, segments[0].start)
+        head_bytes = self._to_bytes(head)
+        with self._lock:
+            speech = self._to_seconds(self._speech_bytes_locked(job.start_bytes, job.start_bytes + head_bytes))
+        if speech < HEAD_RECOVERY_MIN_SPEECH_SECONDS:
+            return segments
+        # One attempt, never recursive: a head that is skipped again stays skipped.
+        recovered = await self._post_and_parse(job.pcm[:head_bytes], head)
+        kept = [s for s in recovered if s.start < head]
+        WINDOW_HEAD_RECOVERIES.labels(outcome='recovered' if kept else 'empty').inc()
+        return [*kept, *segments]
+
+    def _speech_bytes_locked(self, start: int, end: int) -> int:
+        total = 0
+        for a, b in self._speech_spans:
+            lo, hi = max(a, start), min(b, end)
+            if hi > lo:
+                total += hi - lo
+        return total
 
     def _idle_wait_timeout(self) -> float | None:
         if self._closed or self._dead or self._idle_flushed:

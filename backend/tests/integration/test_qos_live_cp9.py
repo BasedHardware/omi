@@ -8,7 +8,7 @@ Tests every code path changed in the QoS profile refactor:
   P4: _effective_byok_provider() mapping
   P5: BYOK profile hardcoded to byok
   P6: Structured output compatibility on OpenAI (real .with_structured_output() call)
-  P7: Prompt caching (cache_key binding for gpt-5.6-luna)
+  P7: Prompt caching (cache_key binding for gpt-6-luna)
   P8: Streaming client construction and invocation
   P9: OpenRouter vendor prefix and temperature config
   P10: Anthropic client via get_model() + anthropic_client
@@ -119,7 +119,7 @@ class TestP3_CreateByokClient:
     """P3: _create_byok_client creates valid ChatOpenAI instances."""
 
     def test_openai_byok_client(self):
-        client = _create_byok_client('gpt-5.6-luna', 'openai', os.environ['OPENAI_API_KEY'])
+        client = _create_byok_client('gpt-6-luna', 'openai', os.environ['OPENAI_API_KEY'])
         assert client is not None
         response = client.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), "BYOK OpenAI client returned empty"
@@ -142,7 +142,7 @@ class TestP3_CreateByokClient:
         assert client is None
 
     def test_streaming_byok_client(self):
-        client = _create_byok_client('gpt-5.6-luna', 'openai', os.environ['OPENAI_API_KEY'], streaming=True)
+        client = _create_byok_client('gpt-6-luna', 'openai', os.environ['OPENAI_API_KEY'], streaming=True)
         assert client is not None
         response = client.invoke(SIMPLE_PROMPT)
         assert response.content.strip()
@@ -156,7 +156,7 @@ class TestP4_EffectiveBYOKProvider:
     """P4: Provider mapping for BYOK key type resolution."""
 
     def test_openai(self):
-        assert _effective_byok_provider('gpt-5.6-luna', 'openai') == 'openai'
+        assert _effective_byok_provider('gpt-6-luna', 'openai') == 'openai'
 
     def test_gemini(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
@@ -280,7 +280,7 @@ class TestP7_PromptCaching:
         assert llm_with is not llm_without
 
     def test_luna_supports_cache_key_routing(self):
-        assert supports_prompt_cache('gpt-5.6-luna')
+        assert supports_prompt_cache('gpt-6-luna')
 
 
 # ---------------------------------------------------------------------------
@@ -415,4 +415,4 @@ class TestP13_QosInfo:
     def test_pinned_features_included(self):
         info = get_qos_info()
         assert 'fair_use' in info
-        assert info['fair_use']['model'] == 'gpt-5.6-luna'
+        assert info['fair_use']['model'] == 'gpt-6-luna'

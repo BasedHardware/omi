@@ -378,7 +378,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna",
+                    "model": "gpt-6-luna",
                     "choices": [{"message": {"content": '{"summary":"ok"}'}}],
                     "usage": {"prompt_tokens": 8},
                 },
@@ -404,7 +404,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
 
     response = Response()
     result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
-    assert result.provider_model == "gpt-5.6-luna"
+    assert result.provider_model == "gpt-6-luna"
     assert response.headers["X-Proactive-Quota-Limit"] == "200"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
@@ -1058,7 +1058,7 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     reasoning_provider = desktop_proactivity._proactive_provider_request(
         request("proactive_reasoning"), "user-1", "request-2"
     )
-    assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
+    assert reasoning_provider.payload["model"] == "gpt-6-luna"
     assert reasoning_provider.payload["reasoning_effort"] == "low"
 
 
@@ -1466,7 +1466,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna-2026-08-01",
+                    "model": "gpt-6-luna-2026-08-01",
                     "choices": [{"message": {"content": '{"summary":"ok"}'}}],
                     "usage": {
                         "prompt_tokens": 1200,
@@ -1504,7 +1504,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     assert seen["json"]["max_completion_tokens"] == 2400
     assert seen["headers"]["X-Omi-User-Uid"] == "user-1"
     assert result.lane == "omi:auto:desktop-proactive-reasoning"
-    assert result.provider_model == "gpt-5.6-luna-2026-08-01"
+    assert result.provider_model == "gpt-6-luna-2026-08-01"
     assert result.usage.cached_tokens == 1024
     assert result.cache_write is False
     assert result.fallback_class == "none"
@@ -1558,7 +1558,7 @@ async def test_truncated_reasoning_retries_once_without_extra_quota(monkeypatch)
                 {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":'}}]}
                 if len(calls) == 1
                 else {
-                    "model": "gpt-5.6-luna",
+                    "model": "gpt-6-luna",
                     "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
                 }
             )
@@ -1658,7 +1658,7 @@ async def test_complete_invalid_json_returns_422_without_retry(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna",
+                    "model": "gpt-6-luna",
                     "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":3}'}}],
                 },
             )
@@ -1765,7 +1765,7 @@ async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_o
                 200,
                 request=httpx.Request('POST', url),
                 json={
-                    'model': 'gpt-5.6-luna',
+                    'model': 'gpt-6-luna',
                     'choices': [{'finish_reason': 'stop', 'message': {'content': '{"summary":3}'}}],
                 },
             )

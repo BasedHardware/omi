@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Kõik mälestused on nüüd avalikud",
     "newMemory": "✨ Uus mälestus",
     "editMemory": "✏️ Muuda mälestust",
-    "memoryContentHint": "Mulle meeldib süüa jäätist...",
+    "memoryContentHint": "Eelistan hommikusi koosolekuid.",
     "failedToSaveMemory": "Salvestamine ebaõnnestus. Palun kontrollige oma ühendust.",
     "saveMemory": "Salvesta mälestus",
     "retry": "Proovi uuesti",
@@ -3251,5 +3251,10 @@
     "voiceRecognitionStatus": "{status, select, ready{Hääl on tuvastamiseks valmis} saved_sample_awaiting_embedding{Näidis salvestatud, hääle töötlemine on ootel} not_learned{Hääl pole õpitud} other{Hääle olek teadmata}}",
     "tagSpeakerIncludingLaterSpeech": "Märgi ka selle kõneleja hilisem kõne",
     "updateSummaryWithNewNames": "Uuenda kokkuvõtet uute nimedega",
-    "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik"
+    "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Mida sa minu heaks teha saad?} goal{Aita mul eesmärk seada} activity{Tee kokkuvõte minu hiljutisest tegevusest} improve{Kuidas saan end parandada?} other{}}",
+    "nextWeek": "Järgmisel nädalal",
+    "clearSearch": "Tühjenda otsing"
 }

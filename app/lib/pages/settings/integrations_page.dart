@@ -1,4 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -15,6 +16,8 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 enum IntegrationApp { appleHealth, googleCalendar, gmail }
+
+enum _IntegrationAuthOutcome { alreadyAuthenticated, cancelled, started, failed }
 
 extension IntegrationAppExtension on IntegrationApp {
   String get displayName {
@@ -105,6 +108,8 @@ class IntegrationsPage extends StatefulWidget {
 }
 
 class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBindingObserver {
+  final Map<IntegrationApp, ProductAttempt> _pendingIntegrationAttempts = {};
+
   @override
   void initState() {
     super.initState();
@@ -118,6 +123,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   @override
   void dispose() {
+    for (final attempt in _pendingIntegrationAttempts.values) {
+      attempt.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
+    }
+    _pendingIntegrationAttempts.clear();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -126,7 +135,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend();
+      _loadFromBackend().then((_) => _resolvePendingIntegrationAttempts());
     }
   }
 
@@ -134,29 +143,73 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
     await context.read<IntegrationProvider>().loadFromBackend();
+    _resolvePendingIntegrationAttempts();
+  }
+
+  void _resolvePendingIntegrationAttempts() {
+    if (!mounted || _pendingIntegrationAttempts.isEmpty) return;
+    final provider = context.read<IntegrationProvider>();
+    for (final entry in Map<IntegrationApp, ProductAttempt>.from(_pendingIntegrationAttempts).entries) {
+      if (provider.isAppConnected(entry.key)) {
+        entry.value.complete(ProductOutcome.success);
+        _pendingIntegrationAttempts.remove(entry.key);
+      }
+    }
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
     if (!app.isAvailable) {
       return;
     }
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.integrationConnect,
+      surface: ProductSurface.integration,
+    );
     PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
 
     if (app == IntegrationApp.googleCalendar) {
       final service = GoogleCalendarService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) return;
+      final outcome = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      _completeIntegrationAttempt(attempt, app, outcome);
+      return;
     }
 
     if (app == IntegrationApp.gmail) {
       final service = GmailService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) return;
+      final outcome = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      _completeIntegrationAttempt(attempt, app, outcome);
+      return;
     }
 
     if (app == IntegrationApp.appleHealth) {
       await _openAppleHealthDetail();
+      if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
+        attempt.complete(ProductOutcome.success);
+      } else {
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
+      }
       return;
+    }
+    attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+  }
+
+  void _completeIntegrationAttempt(ProductAttempt attempt, IntegrationApp app, _IntegrationAuthOutcome outcome) {
+    switch (outcome) {
+      case _IntegrationAuthOutcome.alreadyAuthenticated:
+        attempt.complete(ProductOutcome.success);
+      case _IntegrationAuthOutcome.started:
+        if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
+          attempt.complete(ProductOutcome.success);
+        } else {
+          // OAuth has handed off to the browser. Keep this attempt open until
+          // the returning app observes the persisted connection state.
+          _pendingIntegrationAttempts.remove(app)?.complete(ProductOutcome.superseded);
+          _pendingIntegrationAttempts[app] = attempt;
+        }
+      case _IntegrationAuthOutcome.cancelled:
+        attempt.complete(ProductOutcome.cancelled);
+      case _IntegrationAuthOutcome.failed:
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
     }
   }
 
@@ -177,13 +230,18 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (mounted) await _loadFromBackend();
   }
 
-  Future<bool> _handleAuthFlow(IntegrationApp app, bool isAuthenticated, Future<bool> Function() authenticate) async {
-    if (isAuthenticated) return false;
+  Future<_IntegrationAuthOutcome> _handleAuthFlow(
+    IntegrationApp app,
+    bool isAuthenticated,
+    Future<bool> Function() authenticate,
+  ) async {
+    if (isAuthenticated) return _IntegrationAuthOutcome.alreadyAuthenticated;
 
     final shouldAuth = await _showAuthDialog(app);
-    if (shouldAuth == true) {
+    if (shouldAuth != true) return _IntegrationAuthOutcome.cancelled;
+    {
       // Capture ScaffoldMessenger before async operation to avoid use_build_context_synchronously
-      if (!mounted) return false;
+      if (!mounted) return _IntegrationAuthOutcome.failed;
       final scaffoldMessenger = ScaffoldMessenger.of(context);
 
       final success = await authenticate();
@@ -196,6 +254,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         }
         await _loadFromBackend();
         Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+        return _IntegrationAuthOutcome.started;
       } else {
         PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
         if (mounted) {
@@ -207,9 +266,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             ),
           );
         }
+        return _IntegrationAuthOutcome.failed;
       }
     }
-    return true;
   }
 
   Future<void> _disconnectApp(IntegrationApp app) async {

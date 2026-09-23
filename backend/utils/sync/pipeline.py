@@ -73,6 +73,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import (
@@ -140,9 +141,9 @@ from utils.sync.telemetry import bounded_exception_type as _bounded_exception_ty
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
-from utils.sync.assignment import needs_fragment_review
+from utils.sync.assignment import fragment_rule, needs_fragment_review
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
+from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
 
 logger = logging.getLogger(__name__)
 
@@ -789,11 +790,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    # Recoverable filler-only review skips enrichment; meaningful speech stays kept.
-    # Re-evaluate the entire current transcript so later content promotes it.
-    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(
-        conversation_data.get('transcript_segments', [])
-    ):
+    # Intake already discarded a rule-settled fragment; skip the processing
+    # spend. Everything else goes through the relevance step (SYNC_UPDATE),
+    # which reassesses the whole merged transcript, so later speech promotes it.
+    segments = conversation_data.get('transcript_segments', [])
+    if conversation_data.get('sync_relevance') == 'review' and needs_fragment_review(segments):
+        record_conversation_relevance(
+            trigger='sync_intake', verdict='discard', decided_by='rule', reason=fragment_rule(segments)[1]
+        )
         return
 
     # Convert to Conversation object
@@ -804,9 +808,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=ProcessingTrigger.SYNC_UPDATE,
+        user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
         persistence_observer=_require_current_conversation_persistence,
     )
 

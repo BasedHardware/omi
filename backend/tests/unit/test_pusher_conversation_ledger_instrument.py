@@ -89,7 +89,7 @@ async def test_ledger_write_is_gated_on_the_accounting_flag(monkeypatch) -> None
             api_surface='chat_completions',
             payer='omi',
             provider='openai',
-            configured_model='gpt-5.6-luna',
+            configured_model='gpt-6-luna',
             outcome='success',
         )
 

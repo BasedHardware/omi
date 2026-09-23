@@ -67,6 +67,20 @@ from models.conversation_enums import (
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.relevance import (
+    RELEVANCE_DECISION_FIELD,
+    Neighbor,
+    RelevanceDecision,
+    decide_relevance,
+    final_relevance,
+)
+from utils.conversations.relevance_io import (
+    adjacent_conversation,
+    apply_relevance,
+    record_decision,
+    rules_only_relevance,
+)
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -385,9 +399,12 @@ def _get_structured(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    force_process: bool = False,
     people: Optional[List[Person]] = None,
     conversation_id: Optional[str] = None,
+    *,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
+    relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         task_intelligence_capture = _proposes_task_candidates(conversation)
@@ -504,100 +521,55 @@ def _get_structured(
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
-        # For re-processing, we don't discard, just re-structure.
-        if force_process:
-            conv_started_at = cast(datetime, main_conv.started_at)
-            if _conversation_notes_v2_enabled():
-                prefix = build_conversation_prompt_prefix(
-                    conversation_id=prompt_conversation_id,
-                    transcript=action_items_transcript,
-                    started_at=conv_started_at,
-                    timezone_name=tz_str,
-                    language_code=language_code,
-                    calendar_context=calendar_context,
-                    photos=main_conv.photos,
-                    speaker_map=speaker_map,
-                    transcript_segment_ids=transcript_segment_ids,
-                )
-                with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                    structured = get_conversation_notes(
-                        prefix,
-                        started_at=conv_started_at,
-                        language_code=language_code,
-                        output_language_code=user_language,
-                        tz=tz_str,
-                        task_intelligence_capture=task_intelligence_capture,
-                        existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
-                        trusted_wake_word_markers=has_wake_word_marker,
-                    )
-                validate_structured_source_segment_ids(structured, transcript_segment_ids)
-                return structured, False
-            # reprocess endpoint
-            with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                structured = get_reprocess_transcript_structure(
-                    transcript_text,
-                    conv_started_at,
-                    language_code,
-                    tz_str,
-                    photos=main_conv.photos,
-                    output_language_code=user_language,
-                    transcript_segment_ids=transcript_segment_ids,
-                )
-            with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
-                structured.action_items = extract_action_items(
-                    action_items_transcript,
-                    conv_started_at,
-                    language_code,
-                    tz_str,
-                    photos=main_conv.photos,
-                    existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
-                    output_language_code=user_language,
-                    task_intelligence_capture=task_intelligence_capture,
-                    trusted_wake_word_markers=has_wake_word_marker,
-                    primary_user_name=_primary_user_name(uid),
-                )
-            validate_structured_source_segment_ids(structured, transcript_segment_ids)
-            return structured, False
-
         # Transcript span, not the wall window: `started_at` is the streaming-session
         # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
         duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
-
-        # Determine whether to discard the conversation based on its content (transcript and/or photos).
+        segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-        # The discard verdict is a desktop post-processing gate, and the release
-        # probe's terminal contract only completes through a kept conversation,
-        # so the probe uid must skip it (gate convention, utils/release_probe.py).
-        # The probe's synthetic transcript cannot rely on the deterministic
-        # >100-word keep line: the trailing fixture passes flush late — at
-        # teardown, into the rollover generation — so the durably-present word
-        # count varies with STT yield, and the discard LLM fences the lane at
-        # terminal_failure (run 35583992730).
-        if is_release_probe_uid(uid):
-            discarded = False
-        else:
+
+        def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
-                discarded = should_discard_conversation(
+                return should_discard_conversation(
                     discard_transcript,
                     main_conv.photos,
                     duration_seconds,
                     trusted_wake_word_markers=has_wake_word_marker,
+                    on_error=on_error,
+                    neighbor_gap_seconds=neighbor.gap_seconds if neighbor else None,
+                    neighbor_position=neighbor.position if neighbor else None,
                 )
-        if discarded:
-            # Calendar overlap outranks discard (SCA-381): a scrap recorded
-            # inside a booked meeting is evidence, never noise. Only a positive
-            # overlap hit keeps it; a disconnected calendar, a missing token, or
-            # a failed lookup leaves the discard verdict standing.
-            if _calendar_overlap_retains_conversation(uid, main_conv.started_at, main_conv.finished_at):
-                logger.info(
-                    'Calendar overlap overrides discard for uid=%s conversation=%s window=[%s, %s]',
-                    uid,
-                    getattr(conversation, 'id', '?'),
-                    main_conv.started_at,
-                    main_conv.finished_at,
-                )
-            else:
-                return Structured(emoji=random.choice(['🧠', '🎉'])), True
+
+        decision = decide_relevance(
+            trigger=trigger,
+            texts=[segment.text for segment in segments],
+            speech_seconds=sum(max(0.0, segment.end - segment.start) for segment in segments) if segments else None,
+            # Only described photos reach the model (ConversationPhoto.photos_as_string).
+            has_photos=any((photo.description or '').strip() for photo in main_conv.photos or []),
+            user_kept=user_kept,
+            # The release probe's terminal contract only completes through a
+            # kept conversation (gate convention, utils/release_probe.py); its
+            # synthetic transcript's durable word count varies with STT yield
+            # (run 35583992730), so no tier may judge it.
+            exempt=is_release_probe_uid(uid),
+            trusted_wake_word=has_wake_word_marker,
+            model_discards=model_discards,
+            calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                uid, main_conv.started_at, main_conv.finished_at
+            ),
+            neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
+        )
+        if relevance_observer is not None:
+            relevance_observer(decision)
+        if decision.reason == 'calendar_overlap':
+            logger.info(
+                'Calendar overlap overrides discard for uid=%s conversation=%s window=[%s, %s]',
+                uid,
+                getattr(conversation, 'id', '?'),
+                main_conv.started_at,
+                main_conv.finished_at,
+            )
+        if decision.discard:
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -627,17 +599,29 @@ def _get_structured(
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            structured = get_transcript_structure(
-                transcript_text,
-                conv_started_at,
-                language_code,
-                tz_str,
-                uid,
-                photos=main_conv.photos,
-                calendar_meeting_context=calendar_context,
-                output_language_code=user_language,
-                transcript_segment_ids=transcript_segment_ids,
-            )
+            if PROCESSING_MODES[trigger].run_now:
+                # Legacy (pre-notes-v2) reprocess prompt; it takes no calendar context.
+                structured = get_reprocess_transcript_structure(
+                    transcript_text,
+                    conv_started_at,
+                    language_code,
+                    tz_str,
+                    photos=main_conv.photos,
+                    output_language_code=user_language,
+                    transcript_segment_ids=transcript_segment_ids,
+                )
+            else:
+                structured = get_transcript_structure(
+                    transcript_text,
+                    conv_started_at,
+                    language_code,
+                    tz_str,
+                    uid,
+                    photos=main_conv.photos,
+                    calendar_meeting_context=calendar_context,
+                    output_language_code=user_language,
+                    transcript_segment_ids=transcript_segment_ids,
+                )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
                 action_items_transcript,
@@ -646,7 +630,7 @@ def _get_structured(
                 tz_str,
                 photos=main_conv.photos,
                 existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
-                calendar_meeting_context=calendar_context,
+                calendar_meeting_context=None if PROCESSING_MODES[trigger].run_now else calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
                 trusted_wake_word_markers=has_wake_word_marker,
@@ -2125,12 +2109,23 @@ def _store_deferred_conversation(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Conversation:
     """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
     is_initial_creation = _is_ingress_create(conversation)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
@@ -2145,6 +2140,7 @@ def _store_deferred_conversation(
     # in-memory snapshot. A None ``processing_state`` is likewise never
     # stamped: merge=True would write the explicit null as a real key.
     payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation:
         persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
     else:
@@ -2231,6 +2227,8 @@ def _store_deterministic_minimum(
     plan: FreeTierProcessingPlan,
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Tuple[Conversation, bool]:
     """Persist a conversation at the no-LLM deterministic minimum, terminally.
 
@@ -2261,6 +2259,15 @@ def _store_deterministic_minimum(
     ingest site, not through this persist.
     """
     is_initial_creation = _is_ingress_create(conversation)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = build_deterministic_minimum_structured(
         conversation,
         tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
@@ -2274,6 +2281,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
     if is_initial_creation:
@@ -2308,6 +2316,8 @@ def _store_projected_conversation(
     plan: FreeTierProcessingPlan,
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Tuple[Conversation, bool]:
     """Persist the untrusted display projection plus the deterministic-minimum structured.
 
@@ -2317,7 +2327,9 @@ def _store_projected_conversation(
     ``deferred=False``, ``status=completed``, no managed seams. Shares the
     persist path with ``_store_deterministic_minimum``.
     """
-    return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
+    return _store_deterministic_minimum(
+        uid, conversation, plan, client_projection=client_projection, trigger=trigger, user_kept=user_kept
+    )
 
 
 def _flag_off_identified_basic_deny(
@@ -2532,8 +2544,6 @@ def process_conversation(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    force_process: bool = False,
-    is_reprocess: bool = False,
     app_id: Optional[str] = None,
     explicit_app: Optional[App] = None,
     app_usage_attribution: Optional[AppUsageAttribution] = None,
@@ -2541,11 +2551,20 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
-    bypass_jit_first_open: bool = False,
     derived_effects_disposition_observer: Callable[[DerivedEffectsDisposition], None] | None = None,
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Conversation:
+    """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
+    fixes run-now, reprocess, JIT bypass, and relevance policy together.
+
+    ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
+    which the wire model does not carry; it outranks every relevance tier.
+    """
+    mode = PROCESSING_MODES[trigger]
+    force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
@@ -2654,9 +2673,16 @@ def process_conversation(
             )
         if plan.mode != 'process_normally':
             stored, persisted = (
-                _store_projected_conversation(uid, conversation, plan, client_projection=effective_projection)
+                _store_projected_conversation(
+                    uid,
+                    conversation,
+                    plan,
+                    client_projection=effective_projection,
+                    trigger=trigger,
+                    user_kept=user_kept,
+                )
                 if plan.mode == 'store_projection'
-                else _store_deterministic_minimum(uid, conversation, plan)
+                else _store_deterministic_minimum(uid, conversation, plan, trigger=trigger, user_kept=user_kept)
             )
             report_persistence(
                 persisted,
@@ -2672,13 +2698,12 @@ def process_conversation(
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
     # enrichment (summary, action items, memories, embeddings, app results) is deferred until
-    # they first OPEN the conversation (get_conversation_by_id reprocesses it with
-    # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
-    # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
-    # trigger and manual reprocess — bypass this so the enrichment actually runs.
-    # force_process does not bypass JIT first-open: Flutter create and macOS
-    # finalize need it to still defer folders/apps when rollout admits. Explicit
-    # "run everything now" paths pass bypass_jit_first_open=True.
+    # they first OPEN the conversation (the FIRST_OPEN trigger). Paid desktop plans
+    # (Operator / Architect), BYOK users, and all non-desktop sources are processed
+    # normally here. Every trigger whose mode runs now or reprocesses bypasses this
+    # so the enrichment actually runs. Running now does not bypass JIT first-open:
+    # Flutter create and macOS finalize still defer folders/apps when rollout
+    # admits; only triggers whose mode sets bypass_jit_first_open run everything.
     # Unreachable when FREE_TIER_LOCAL_PROCESSING is on (the branch above already
     # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
     elif (
@@ -2689,7 +2714,9 @@ def process_conversation(
         and not probe_uid
         and should_defer_desktop_processing(uid)
     ):
-        deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
+        deferred = _store_deferred_conversation(
+            uid, conversation, client_projection=client_projection, trigger=trigger, user_kept=user_kept
+        )
         # Flag-off legacy deferral reports False even when the write succeeded.
         # That is deliberate and pre-existing: the conversation is not terminally
         # processed (status=processing, deferred=True; first-open will reprocess).
@@ -2697,7 +2724,7 @@ def process_conversation(
         report_persistence(False)
         return deferred
     # Eager-extraction gate (S14 proactivity half, flag-off): first-open
-    # (force_process) and manual reprocess are the remaining eager managed
+    # (run now) and manual reprocess are the remaining eager managed
     # spend for desktop conversations. Default off
     # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
     # no new terminal marker. When on, an identified-basic deny lands at the
@@ -2713,7 +2740,12 @@ def process_conversation(
         eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
         if eager_basic_deny is not None:
             stored, persisted = _store_deterministic_minimum(
-                uid, conversation, eager_basic_deny, client_projection=client_projection
+                uid,
+                conversation,
+                eager_basic_deny,
+                client_projection=client_projection,
+                trigger=trigger,
+                user_kept=user_kept,
             )
             report_persistence(
                 persisted,
@@ -2768,16 +2800,22 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    decisions: list[RelevanceDecision] = []
     structured, discarded = _get_structured(
         uid,
         language_code,
         conversation,
-        force_process,
         people=people,
         conversation_id=generated_conversation_id,
+        trigger=trigger,
+        user_kept=user_kept,
+        relevance_observer=decisions.append,
     )
     conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
     _attach_client_projection(conversation, client_projection)
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    if relevance is not None:
+        record_decision(relevance)
 
     # Persist the completed generation before it can trigger any derived work.
     # A discard or replacement that wins this transaction must not create
@@ -2785,6 +2823,9 @@ def process_conversation(
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if relevance is not None:
+        # Server-side audit record, deliberately outside the client wire model.
+        payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
         # minimum's local_pending); the object the caller returns must agree,

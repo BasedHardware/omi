@@ -593,7 +593,7 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: gpt-5.6-luna
+            value: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0.80'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
