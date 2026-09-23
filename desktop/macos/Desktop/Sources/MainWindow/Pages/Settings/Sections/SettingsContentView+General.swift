@@ -381,7 +381,8 @@ private struct AudioRecordingModeSwitcher: View {
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .strokeBorder(Ink.hairline, lineWidth: 1)
     )
-    .frame(width: 230)
+    // Wide enough for "Only Meetings" in equal segments at the default text size.
+    .frame(width: 300)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Audio Recording")
   }
