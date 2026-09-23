@@ -9,12 +9,13 @@ final class DesktopUXContractTests: XCTestCase {
   private let locale = Locale(identifier: "en_US")
   private var calendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+    calendar.timeZone = TimeZone(identifier: "America/Los_Angeles") ?? .gmt
     return calendar
   }()
 
   private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 10, _ minute: Int = 17) -> Date {
-    calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+    calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))
+      ?? .distantPast
   }
 
   // MARK: - Dates
@@ -160,7 +161,7 @@ final class DesktopUXContractTests: XCTestCase {
 
   private func isolatedDefaults() -> UserDefaults {
     let suite = "DesktopUXContractTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    let defaults = UserDefaults(suiteName: suite) ?? .standard
     defaults.removePersistentDomain(forName: suite)
     return defaults
   }
@@ -200,7 +201,7 @@ final class DesktopUXContractTests: XCTestCase {
     // literal is spelled `settingId: "…"` outside the search index itself.
     let anchorPattern = try NSRegularExpression(pattern: #"settingId: "([^"]+)""#)
     var anchors = Set<String>()
-    let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)!
+    let files = try XCTUnwrap(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
     for case let url as URL in files
     where url.pathExtension == "swift" && url.lastPathComponent != "SettingsSidebar.swift" {
       // omi-test-quality: source-inspection -- static contract: search anchors are string IDs spread across view builders with no runtime registry to query
