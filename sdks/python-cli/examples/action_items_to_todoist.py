@@ -1,7 +1,9 @@
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
+
 
 def convert(source, destination):
     raw = Path(source).read_bytes()
@@ -23,8 +25,13 @@ def convert(source, destination):
             desc = act.get("description") or act.get("title") or "Action Item"
             content = desc.replace("\r", " ").replace("\n", " ").strip()
 
-            task = {"content": content}
-            due = act.get("due_at") or act.get("due_date")
+            task = {
+                "content": content,
+                "labels": ["omi", "ai-wearable"]
+            }
+
+            # Prioritize due_at emitted by Omi CLI, then fallback to due_date or due_string
+            due = act.get("due_at") or act.get("due_date") or act.get("due_string")
             if due:
                 task["due_string"] = due
 
@@ -46,12 +53,29 @@ def convert(source, destination):
             except OSError:
                 pass
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python action_items_to_todoist.py <source.json> <destination.json>", file=sys.stderr)
-        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Format Omi action items for Todoist REST API task creation."
+    )
+    parser.add_argument("source", help="Path to input JSON file from 'omi --json action-item list'.")
+    parser.add_argument("destination", nargs="?", default=None, help="Path to output JSON file.")
+    parser.add_argument("-o", "--output", dest="output_flag", default=None, help="Path to output JSON file.")
+
+    args = parser.parse_args()
+    dest = args.output_flag or args.destination
+    if not dest:
+        parser.error("Destination JSON path must be provided either as a positional argument or via -o/--output flag.")
+
     try:
-        convert(sys.argv[1], sys.argv[2])
+        convert(args.source, dest)
     except FileExistsError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
