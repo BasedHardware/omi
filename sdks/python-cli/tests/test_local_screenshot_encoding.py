@@ -66,6 +66,7 @@ def test_screenshot_command_writes_multilingual_content(config_path: Path, cli_r
     assert payload["path"] == str(output)
     assert payload["screenshot_id"] == "9"
 
+
 @pytest.mark.parametrize("output_name", ["shot[red]marked[/red].jpg", "shot[/bold].jpg"])
 @pytest.mark.parametrize("json_mode", [False, True])
 def test_screenshot_output_path_preserves_literal_markup(
