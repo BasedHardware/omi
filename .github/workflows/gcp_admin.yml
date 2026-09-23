@@ -66,6 +66,8 @@ jobs:
       actions: read
       contents: read
       id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -77,7 +79,11 @@ jobs:
           target: admin
           environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF (omi-gha-deploy-prod, pinned to this file on main +
+          # the prod environment); development keeps its JSON lane.
+          gcp_credentials: ${{ env.DEPLOY_ENVIRONMENT != 'prod' && secrets.GCP_CREDENTIALS || '' }}
+          workload_identity_provider: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || '' }}
+          workload_identity_service_account: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'omi-ci-web-prod@based-hardware.iam.gserviceaccount.com' || '' }}
           # Keyless runtime identity: Firestore via roles/datastore.user, Auth
           # reads via roles/firebaseauth.viewer, per-secret secretAccessor. The
           # Admin SDK uses it through ADC; no service-account key is mounted.
