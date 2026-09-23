@@ -10302,4 +10302,139 @@ class AppLocalizationsRo extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'Offline, se memorează · $minutes min';
   }
+
+  @override
+  String get memoryDetailsTitle => 'Amintire';
+
+  @override
+  String get editMemoryTitle => 'Editează amintirea';
+
+  @override
+  String get newMemoryTitle => 'Amintire nouă';
+
+  @override
+  String get memoryReadOnlyHint => 'Această amintire este păstrată ca istoric și nu poate fi editată.';
+
+  @override
+  String get openConversation => 'Deschide conversația';
+
+  @override
+  String get memoryGraphTitle => 'Graficul amintirilor';
+
+  @override
+  String get memoryReviewTitle => 'Ce am aflat azi';
+
+  @override
+  String get memoryReviewRight => 'Corect';
+
+  @override
+  String get memoryReviewWrong => 'Greșit';
+
+  @override
+  String get memoryReviewFix => 'Corectează';
+
+  @override
+  String get memoryReviewConfirmed => 'Confirmat. Voi ține cont de asta.';
+
+  @override
+  String get memoryReviewDropped => 'Eliminat. Voi evita astfel de informații.';
+
+  @override
+  String get memoryReviewUpdated => 'Actualizat.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Nu s-a putut salva, încearcă din nou';
+
+  @override
+  String get indentTask => 'Indentează';
+
+  @override
+  String get outdentTask => 'Reduce indentarea';
+
+  @override
+  String get goalDeleted => 'Obiectiv șters';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Nu s-au putut accepta aceste sarcini. Poate ai acceptat deja această partajare.';
+
+  @override
+  String get pausePlayback => 'Pauză';
+
+  @override
+  String get deleteSample => 'Șterge mostra';
+
+  @override
+  String get deletePersonTitle => 'Ștergi persoana?';
+
+  @override
+  String get deletePersonLabel => 'Șterge persoana';
+
+  @override
+  String get noPeopleYet => 'Nicio persoană încă';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi $count sarcini?',
+      one: 'Ștergi 1 sarcină?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarcini',
+      one: '1 sarcină',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Au fost adăugate $count sarcini în listă',
+      one: 'A fost adăugată 1 sarcină în listă',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Adaugă $count sarcini',
+      one: 'Adaugă 1 sarcină',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarcini',
+      one: '1 sarcină',
+    );
+    return '$name a partajat $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exportat în $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Termen: $date';
+  }
 }

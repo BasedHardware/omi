@@ -10308,4 +10308,139 @@ class AppLocalizationsMk extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'Офлајн, баферирање · $minutes мин';
   }
+
+  @override
+  String get memoryDetailsTitle => 'Спомен';
+
+  @override
+  String get editMemoryTitle => 'Уреди спомен';
+
+  @override
+  String get newMemoryTitle => 'Нов спомен';
+
+  @override
+  String get memoryReadOnlyHint => 'Овој спомен се чува како историја и не може да се уредува.';
+
+  @override
+  String get openConversation => 'Отвори разговор';
+
+  @override
+  String get memoryGraphTitle => 'Граф на спомени';
+
+  @override
+  String get memoryReviewTitle => 'Што научив денес';
+
+  @override
+  String get memoryReviewRight => 'Точно';
+
+  @override
+  String get memoryReviewWrong => 'Погрешно';
+
+  @override
+  String get memoryReviewFix => 'Поправи';
+
+  @override
+  String get memoryReviewConfirmed => 'Потврдено. Ќе го земам предвид.';
+
+  @override
+  String get memoryReviewDropped => 'Отфрлено. Ќе избегнувам вакви факти.';
+
+  @override
+  String get memoryReviewUpdated => 'Ажурирано.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Не може да се зачува, обидете се повторно';
+
+  @override
+  String get indentTask => 'Вовлечи';
+
+  @override
+  String get outdentTask => 'Извлечи';
+
+  @override
+  String get goalDeleted => 'Целта е избришана';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Не може да се прифатат овие задачи. Можеби веќе го прифативте ова споделување.';
+
+  @override
+  String get pausePlayback => 'Пауза';
+
+  @override
+  String get deleteSample => 'Избриши примерок';
+
+  @override
+  String get deletePersonTitle => 'Да се избрише лицето?';
+
+  @override
+  String get deletePersonLabel => 'Избриши лице';
+
+  @override
+  String get noPeopleYet => 'Сè уште нема лица';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Да се избришат $count задачи?',
+      one: 'Да се избрише 1 задача?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count задачи',
+      one: '1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Додадени се $count задачи во вашата листа',
+      one: 'Додадена е 1 задача во вашата листа',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Додај $count задачи',
+      one: 'Додај 1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count задачи',
+      one: '1 задача',
+    );
+    return '$name сподели $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Извезено во $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Рок: $date';
+  }
 }

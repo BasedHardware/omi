@@ -12081,5 +12081,163 @@
                 "type": "int"
             }
         }
+    },
+    "memoryDetailsTitle": "Memory",
+    "@memoryDetailsTitle": {
+        "description": "Title of the sheet that shows one memory read-only"
+    },
+    "editMemoryTitle": "Edit Memory",
+    "@editMemoryTitle": {
+        "description": "Title of the memory edit sheet"
+    },
+    "newMemoryTitle": "New Memory",
+    "@newMemoryTitle": {
+        "description": "Title of the new-memory sheet"
+    },
+    "memoryReadOnlyHint": "This memory is kept as history and can't be edited.",
+    "@memoryReadOnlyHint": {
+        "description": "Shown under a read-only (historical or superseded) memory"
+    },
+    "openConversation": "Open conversation",
+    "@openConversation": {
+        "description": "Accessibility label for the button that opens the conversation a memory came from"
+    },
+    "memoryGraphTitle": "Memory Graph",
+    "@memoryGraphTitle": {
+        "description": "Navigation title of the memory graph page"
+    },
+    "memoryReviewTitle": "Things I learned today",
+    "@memoryReviewTitle": {
+        "description": "Heading of the card listing memories Omi learned today"
+    },
+    "memoryReviewRight": "Right",
+    "@memoryReviewRight": {
+        "description": "Confirms a learned memory is correct (button)"
+    },
+    "memoryReviewWrong": "Wrong",
+    "@memoryReviewWrong": {
+        "description": "Marks a learned memory as incorrect (button)"
+    },
+    "memoryReviewFix": "Fix",
+    "@memoryReviewFix": {
+        "description": "Opens an inline editor to correct a learned memory (button)"
+    },
+    "memoryReviewConfirmed": "Confirmed. I'll act on this.",
+    "@memoryReviewConfirmed": {
+        "description": "Status after the user confirms a learned memory"
+    },
+    "memoryReviewDropped": "Dropped. I'll avoid facts like this.",
+    "@memoryReviewDropped": {
+        "description": "Status after the user marks a learned memory wrong"
+    },
+    "memoryReviewUpdated": "Updated.",
+    "@memoryReviewUpdated": {
+        "description": "Status after the user corrects a learned memory"
+    },
+    "memoryReviewSaveFailed": "Couldn't save, try again",
+    "@memoryReviewSaveFailed": {
+        "description": "Shown when a verdict or correction on a learned memory failed"
+    },
+    "indentTask": "Indent",
+    "@indentTask": {
+        "description": "Menu action: nest a task one level under the task above it"
+    },
+    "outdentTask": "Outdent",
+    "@outdentTask": {
+        "description": "Menu action: move a nested task one level back out"
+    },
+    "goalDeleted": "Goal deleted",
+    "@goalDeleted": {
+        "description": "Undo toast after deleting a goal"
+    },
+    "sharedTasksAcceptFailed": "Couldn't accept these tasks. You may have already accepted this share.",
+    "@sharedTasksAcceptFailed": {
+        "description": "Error when accepting shared tasks fails"
+    },
+    "pausePlayback": "Pause",
+    "@pausePlayback": {
+        "description": "Pause playback of an audio sample (button label)"
+    },
+    "deleteSample": "Delete sample",
+    "@deleteSample": {
+        "description": "Accessibility label for deleting a person's voice sample"
+    },
+    "deletePersonTitle": "Delete Person?",
+    "@deletePersonTitle": {
+        "description": "Title of the confirmation before deleting a person"
+    },
+    "deletePersonLabel": "Delete person",
+    "@deletePersonLabel": {
+        "description": "Accessibility label for the delete control on a person row"
+    },
+    "noPeopleYet": "No People Yet",
+    "@noPeopleYet": {
+        "description": "Empty state title on the People page"
+    },
+    "deleteTasksTitle": "{count, plural, =1{Delete 1 Task?} other{Delete {count} Tasks?}}",
+    "@deleteTasksTitle": {
+        "description": "Title of the confirmation before deleting several tasks at once",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "tasksCountLabel": "{count, plural, =1{1 task} other{{count} tasks}}",
+    "@tasksCountLabel": {
+        "description": "Screen-reader label for the task count beside a section header",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "sharedTasksAdded": "{count, plural, =1{Added 1 task to your list} other{Added {count} tasks to your list}}",
+    "@sharedTasksAdded": {
+        "description": "Toast after accepting shared tasks",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "sharedTasksAddButton": "{count, plural, =1{Add 1 Task} other{Add {count} Tasks}}",
+    "@sharedTasksAddButton": {
+        "description": "Button that accepts tasks someone shared",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "sharedTasksTitle": "{name} shared {count, plural, =1{1 task} other{{count} tasks}}",
+    "@sharedTasksTitle": {
+        "description": "Title of the sheet showing tasks someone shared with the user",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "exportedToPlatform": "Exported to {platform}",
+    "@exportedToPlatform": {
+        "description": "Caption on a task that was exported to another app, e.g. 'Exported to Todoist'",
+        "placeholders": {
+            "platform": {
+                "type": "String"
+            }
+        }
+    },
+    "taskDueDate": "Due {date}",
+    "@taskDueDate": {
+        "description": "A task's due date, e.g. 'Due Sep 23, 2026'",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
     }
 }

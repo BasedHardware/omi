@@ -10250,4 +10250,138 @@ class AppLocalizationsVi extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'Ngoại tuyến, đang lưu tạm · $minutes phút';
   }
+
+  @override
+  String get memoryDetailsTitle => 'Ký ức';
+
+  @override
+  String get editMemoryTitle => 'Sửa ký ức';
+
+  @override
+  String get newMemoryTitle => 'Ký ức mới';
+
+  @override
+  String get memoryReadOnlyHint => 'Ký ức này được lưu làm lịch sử và không thể chỉnh sửa.';
+
+  @override
+  String get openConversation => 'Mở cuộc trò chuyện';
+
+  @override
+  String get memoryGraphTitle => 'Biểu đồ ký ức';
+
+  @override
+  String get memoryReviewTitle => 'Những điều tôi biết hôm nay';
+
+  @override
+  String get memoryReviewRight => 'Đúng';
+
+  @override
+  String get memoryReviewWrong => 'Sai';
+
+  @override
+  String get memoryReviewFix => 'Sửa';
+
+  @override
+  String get memoryReviewConfirmed => 'Đã xác nhận. Tôi sẽ dựa vào điều này.';
+
+  @override
+  String get memoryReviewDropped => 'Đã bỏ. Tôi sẽ tránh những thông tin như thế này.';
+
+  @override
+  String get memoryReviewUpdated => 'Đã cập nhật.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Không thể lưu, hãy thử lại';
+
+  @override
+  String get indentTask => 'Thụt lề';
+
+  @override
+  String get outdentTask => 'Giảm thụt lề';
+
+  @override
+  String get goalDeleted => 'Đã xóa mục tiêu';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Không thể nhận các việc này. Có thể bạn đã nhận lượt chia sẻ này rồi.';
+
+  @override
+  String get pausePlayback => 'Tạm dừng';
+
+  @override
+  String get deleteSample => 'Xóa mẫu';
+
+  @override
+  String get deletePersonTitle => 'Xóa người này?';
+
+  @override
+  String get deletePersonLabel => 'Xóa người';
+
+  @override
+  String get noPeopleYet => 'Chưa có ai';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count việc?',
+      one: 'Xóa 1 việc?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count việc',
+      one: '1 việc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã thêm $count việc vào danh sách',
+      one: 'Đã thêm 1 việc vào danh sách',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Thêm $count việc',
+      one: 'Thêm 1 việc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count việc',
+      one: '1 việc',
+    );
+    return '$name đã chia sẻ $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Đã xuất sang $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Hạn $date';
+  }
 }

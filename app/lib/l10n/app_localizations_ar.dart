@@ -10193,4 +10193,138 @@ class AppLocalizationsAr extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'غير متصل، يتم التخزين المؤقت · $minutes د';
   }
+
+  @override
+  String get memoryDetailsTitle => 'ذكرى';
+
+  @override
+  String get editMemoryTitle => 'تعديل الذكرى';
+
+  @override
+  String get newMemoryTitle => 'ذكرى جديدة';
+
+  @override
+  String get memoryReadOnlyHint => 'هذه الذكرى محفوظة كسجل ولا يمكن تعديلها.';
+
+  @override
+  String get openConversation => 'فتح المحادثة';
+
+  @override
+  String get memoryGraphTitle => 'خريطة الذكريات';
+
+  @override
+  String get memoryReviewTitle => 'أشياء تعلمتها اليوم';
+
+  @override
+  String get memoryReviewRight => 'صحيح';
+
+  @override
+  String get memoryReviewWrong => 'خطأ';
+
+  @override
+  String get memoryReviewFix => 'تصحيح';
+
+  @override
+  String get memoryReviewConfirmed => 'تم التأكيد. سأعمل وفق ذلك.';
+
+  @override
+  String get memoryReviewDropped => 'تم الحذف. سأتجنب معلومات كهذه.';
+
+  @override
+  String get memoryReviewUpdated => 'تم التحديث.';
+
+  @override
+  String get memoryReviewSaveFailed => 'تعذّر الحفظ، حاول مرة أخرى';
+
+  @override
+  String get indentTask => 'إزاحة للداخل';
+
+  @override
+  String get outdentTask => 'إزاحة للخارج';
+
+  @override
+  String get goalDeleted => 'تم حذف الهدف';
+
+  @override
+  String get sharedTasksAcceptFailed => 'تعذّر قبول هذه المهام. ربما قبلت هذه المشاركة من قبل.';
+
+  @override
+  String get pausePlayback => 'إيقاف مؤقت';
+
+  @override
+  String get deleteSample => 'حذف العينة';
+
+  @override
+  String get deletePersonTitle => 'حذف الشخص؟';
+
+  @override
+  String get deletePersonLabel => 'حذف الشخص';
+
+  @override
+  String get noPeopleYet => 'لا يوجد أشخاص بعد';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف $count مهام؟',
+      one: 'حذف مهمة واحدة؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مهام',
+      one: 'مهمة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تمت إضافة $count مهام إلى قائمتك',
+      one: 'تمت إضافة مهمة واحدة إلى قائمتك',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'إضافة $count مهام',
+      one: 'إضافة مهمة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مهام',
+      one: 'مهمة واحدة',
+    );
+    return 'شارك $name $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'تم التصدير إلى $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'الاستحقاق $date';
+  }
 }

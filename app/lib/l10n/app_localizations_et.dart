@@ -10249,4 +10249,139 @@ class AppLocalizationsEt extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'Võrguühenduseta, puhverdamine · $minutes min';
   }
+
+  @override
+  String get memoryDetailsTitle => 'Mälestus';
+
+  @override
+  String get editMemoryTitle => 'Muuda mälestust';
+
+  @override
+  String get newMemoryTitle => 'Uus mälestus';
+
+  @override
+  String get memoryReadOnlyHint => 'Seda mälestust hoitakse ajaloona ja seda ei saa muuta.';
+
+  @override
+  String get openConversation => 'Ava vestlus';
+
+  @override
+  String get memoryGraphTitle => 'Mälestuste graaf';
+
+  @override
+  String get memoryReviewTitle => 'Mida ma täna õppisin';
+
+  @override
+  String get memoryReviewRight => 'Õige';
+
+  @override
+  String get memoryReviewWrong => 'Vale';
+
+  @override
+  String get memoryReviewFix => 'Paranda';
+
+  @override
+  String get memoryReviewConfirmed => 'Kinnitatud. Arvestan sellega.';
+
+  @override
+  String get memoryReviewDropped => 'Loobutud. Väldin selliseid fakte.';
+
+  @override
+  String get memoryReviewUpdated => 'Uuendatud.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Salvestamine ebaõnnestus, proovi uuesti';
+
+  @override
+  String get indentTask => 'Taanda';
+
+  @override
+  String get outdentTask => 'Vähenda taanet';
+
+  @override
+  String get goalDeleted => 'Eesmärk kustutatud';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Neid ülesandeid ei saanud vastu võtta. Võib-olla oled selle jagamise juba vastu võtnud.';
+
+  @override
+  String get pausePlayback => 'Paus';
+
+  @override
+  String get deleteSample => 'Kustuta näidis';
+
+  @override
+  String get deletePersonTitle => 'Kas kustutada isik?';
+
+  @override
+  String get deletePersonLabel => 'Kustuta isik';
+
+  @override
+  String get noPeopleYet => 'Isikuid veel pole';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kas kustutada $count ülesannet?',
+      one: 'Kas kustutada 1 ülesanne?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ülesannet',
+      one: '1 ülesanne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sinu loendisse lisati $count ülesannet',
+      one: 'Sinu loendisse lisati 1 ülesanne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Lisa $count ülesannet',
+      one: 'Lisa 1 ülesanne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ülesannet',
+      one: '1 ülesannet',
+    );
+    return '$name jagas $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Eksporditud rakendusse $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Tähtaeg $date';
+  }
 }

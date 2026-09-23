@@ -10312,4 +10312,139 @@ class AppLocalizationsCa extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'Sense connexió, emmagatzemant · $minutes min';
   }
+
+  @override
+  String get memoryDetailsTitle => 'Record';
+
+  @override
+  String get editMemoryTitle => 'Edita el record';
+
+  @override
+  String get newMemoryTitle => 'Record nou';
+
+  @override
+  String get memoryReadOnlyHint => 'Aquest record es conserva com a historial i no es pot editar.';
+
+  @override
+  String get openConversation => 'Obre la conversa';
+
+  @override
+  String get memoryGraphTitle => 'Gràfic de records';
+
+  @override
+  String get memoryReviewTitle => 'Coses que he après avui';
+
+  @override
+  String get memoryReviewRight => 'Correcte';
+
+  @override
+  String get memoryReviewWrong => 'Incorrecte';
+
+  @override
+  String get memoryReviewFix => 'Corregeix';
+
+  @override
+  String get memoryReviewConfirmed => 'Confirmat. Ho tindré en compte.';
+
+  @override
+  String get memoryReviewDropped => 'Descartat. Evitaré dades com aquesta.';
+
+  @override
+  String get memoryReviewUpdated => 'Actualitzat.';
+
+  @override
+  String get memoryReviewSaveFailed => 'No s\'ha pogut desar, torna-ho a provar';
+
+  @override
+  String get indentTask => 'Augmenta el sagnat';
+
+  @override
+  String get outdentTask => 'Redueix el sagnat';
+
+  @override
+  String get goalDeleted => 'Objectiu suprimit';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'No s\'han pogut acceptar aquestes tasques. Potser ja has acceptat aquesta compartició.';
+
+  @override
+  String get pausePlayback => 'Pausa';
+
+  @override
+  String get deleteSample => 'Suprimeix la mostra';
+
+  @override
+  String get deletePersonTitle => 'Vols suprimir la persona?';
+
+  @override
+  String get deletePersonLabel => 'Suprimeix la persona';
+
+  @override
+  String get noPeopleYet => 'Encara no hi ha persones';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vols suprimir $count tasques?',
+      one: 'Vols suprimir 1 tasca?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasques',
+      one: '1 tasca',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'S\'han afegit $count tasques a la llista',
+      one: 'S\'ha afegit 1 tasca a la llista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Afegeix $count tasques',
+      one: 'Afegeix 1 tasca',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasques',
+      one: '1 tasca',
+    );
+    return '$name ha compartit $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exportat a $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Venciment: $date';
+  }
 }

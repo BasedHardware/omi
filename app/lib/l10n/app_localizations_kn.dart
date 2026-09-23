@@ -10288,4 +10288,138 @@ class AppLocalizationsKn extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return 'ಆಫ್‌ಲೈನ್, ಬಫರ್ ಆಗುತ್ತಿದೆ · $minutes ನಿಮಿಷ';
   }
+
+  @override
+  String get memoryDetailsTitle => 'ನೆನಪು';
+
+  @override
+  String get editMemoryTitle => 'ನೆನಪನ್ನು ಸಂಪಾದಿಸಿ';
+
+  @override
+  String get newMemoryTitle => 'ಹೊಸ ನೆನಪು';
+
+  @override
+  String get memoryReadOnlyHint => 'ಈ ನೆನಪನ್ನು ಇತಿಹಾಸವಾಗಿ ಇರಿಸಲಾಗಿದೆ ಮತ್ತು ಸಂಪಾದಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get openConversation => 'ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ';
+
+  @override
+  String get memoryGraphTitle => 'ನೆನಪಿನ ಗ್ರಾಫ್';
+
+  @override
+  String get memoryReviewTitle => 'ಇಂದು ನಾನು ಕಲಿತದ್ದು';
+
+  @override
+  String get memoryReviewRight => 'ಸರಿ';
+
+  @override
+  String get memoryReviewWrong => 'ತಪ್ಪು';
+
+  @override
+  String get memoryReviewFix => 'ಸರಿಪಡಿಸಿ';
+
+  @override
+  String get memoryReviewConfirmed => 'ದೃಢಪಡಿಸಲಾಗಿದೆ. ಇದರಂತೆ ನಡೆದುಕೊಳ್ಳುತ್ತೇನೆ.';
+
+  @override
+  String get memoryReviewDropped => 'ಕೈಬಿಡಲಾಗಿದೆ. ಇಂತಹ ಸಂಗತಿಗಳನ್ನು ತಪ್ಪಿಸುತ್ತೇನೆ.';
+
+  @override
+  String get memoryReviewUpdated => 'ನವೀಕರಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get memoryReviewSaveFailed => 'ಉಳಿಸಲಾಗಲಿಲ್ಲ, ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get indentTask => 'ಒಳಸರಿಸಿ';
+
+  @override
+  String get outdentTask => 'ಹೊರಸರಿಸಿ';
+
+  @override
+  String get goalDeleted => 'ಗುರಿ ಅಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get sharedTasksAcceptFailed => 'ಈ ಕಾರ್ಯಗಳನ್ನು ಸ್ವೀಕರಿಸಲಾಗಲಿಲ್ಲ. ನೀವು ಈಗಾಗಲೇ ಈ ಹಂಚಿಕೆಯನ್ನು ಸ್ವೀಕರಿಸಿರಬಹುದು.';
+
+  @override
+  String get pausePlayback => 'ವಿರಾಮ';
+
+  @override
+  String get deleteSample => 'ಮಾದರಿಯನ್ನು ಅಳಿಸಿ';
+
+  @override
+  String get deletePersonTitle => 'ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deletePersonLabel => 'ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸಿ';
+
+  @override
+  String get noPeopleYet => 'ಇನ್ನೂ ಯಾವುದೇ ವ್ಯಕ್ತಿಗಳಿಲ್ಲ';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸುವುದೇ?',
+      one: '1 ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಕಾರ್ಯಗಳು',
+      one: '1 ಕಾರ್ಯ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ನಿಮ್ಮ ಪಟ್ಟಿಗೆ $count ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಲಾಗಿದೆ',
+      one: 'ನಿಮ್ಮ ಪಟ್ಟಿಗೆ 1 ಕಾರ್ಯವನ್ನು ಸೇರಿಸಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಿ',
+      one: '1 ಕಾರ್ಯ ಸೇರಿಸಿ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಕಾರ್ಯಗಳನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ',
+      one: '1 ಕಾರ್ಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ',
+    );
+    return '$name $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platform ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'ಅಂತಿಮ ದಿನಾಂಕ $date';
+  }
 }

@@ -10064,4 +10064,138 @@ class AppLocalizationsZh extends AppLocalizations {
   String captureOfflineBufferingFor(int minutes) {
     return '离线，正在缓冲 · $minutes 分钟';
   }
+
+  @override
+  String get memoryDetailsTitle => '记忆';
+
+  @override
+  String get editMemoryTitle => '编辑记忆';
+
+  @override
+  String get newMemoryTitle => '新记忆';
+
+  @override
+  String get memoryReadOnlyHint => '此记忆作为历史保存，无法编辑。';
+
+  @override
+  String get openConversation => '打开对话';
+
+  @override
+  String get memoryGraphTitle => '记忆图谱';
+
+  @override
+  String get memoryReviewTitle => '今天了解到的';
+
+  @override
+  String get memoryReviewRight => '正确';
+
+  @override
+  String get memoryReviewWrong => '错误';
+
+  @override
+  String get memoryReviewFix => '更正';
+
+  @override
+  String get memoryReviewConfirmed => '已确认。我会据此行事。';
+
+  @override
+  String get memoryReviewDropped => '已舍弃。我会避免此类信息。';
+
+  @override
+  String get memoryReviewUpdated => '已更新。';
+
+  @override
+  String get memoryReviewSaveFailed => '无法保存，请重试';
+
+  @override
+  String get indentTask => '缩进';
+
+  @override
+  String get outdentTask => '取消缩进';
+
+  @override
+  String get goalDeleted => '目标已删除';
+
+  @override
+  String get sharedTasksAcceptFailed => '无法接受这些任务。你可能已经接受过此分享。';
+
+  @override
+  String get pausePlayback => '暂停';
+
+  @override
+  String get deleteSample => '删除样本';
+
+  @override
+  String get deletePersonTitle => '删除此人？';
+
+  @override
+  String get deletePersonLabel => '删除此人';
+
+  @override
+  String get noPeopleYet => '还没有人员';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个任务？',
+      one: '删除 1 个任务？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已将 $count 个任务添加到你的列表',
+      one: '已将 1 个任务添加到你的列表',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '添加 $count 个任务',
+      one: '添加 1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$name 分享了$_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '已导出到 $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return '截止 $date';
+  }
 }

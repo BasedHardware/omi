@@ -18866,6 +18866,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Offline, buffering · {minutes} min'**
   String captureOfflineBufferingFor(int minutes);
+
+  /// Title of the sheet that shows one memory read-only
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get memoryDetailsTitle;
+
+  /// Title of the memory edit sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Memory'**
+  String get editMemoryTitle;
+
+  /// Title of the new-memory sheet
+  ///
+  /// In en, this message translates to:
+  /// **'New Memory'**
+  String get newMemoryTitle;
+
+  /// Shown under a read-only (historical or superseded) memory
+  ///
+  /// In en, this message translates to:
+  /// **'This memory is kept as history and can\'t be edited.'**
+  String get memoryReadOnlyHint;
+
+  /// Accessibility label for the button that opens the conversation a memory came from
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get openConversation;
+
+  /// Navigation title of the memory graph page
+  ///
+  /// In en, this message translates to:
+  /// **'Memory Graph'**
+  String get memoryGraphTitle;
+
+  /// Heading of the card listing memories Omi learned today
+  ///
+  /// In en, this message translates to:
+  /// **'Things I learned today'**
+  String get memoryReviewTitle;
+
+  /// Confirms a learned memory is correct (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Right'**
+  String get memoryReviewRight;
+
+  /// Marks a learned memory as incorrect (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong'**
+  String get memoryReviewWrong;
+
+  /// Opens an inline editor to correct a learned memory (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get memoryReviewFix;
+
+  /// Status after the user confirms a learned memory
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed. I\'ll act on this.'**
+  String get memoryReviewConfirmed;
+
+  /// Status after the user marks a learned memory wrong
+  ///
+  /// In en, this message translates to:
+  /// **'Dropped. I\'ll avoid facts like this.'**
+  String get memoryReviewDropped;
+
+  /// Status after the user corrects a learned memory
+  ///
+  /// In en, this message translates to:
+  /// **'Updated.'**
+  String get memoryReviewUpdated;
+
+  /// Shown when a verdict or correction on a learned memory failed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save, try again'**
+  String get memoryReviewSaveFailed;
+
+  /// Menu action: nest a task one level under the task above it
+  ///
+  /// In en, this message translates to:
+  /// **'Indent'**
+  String get indentTask;
+
+  /// Menu action: move a nested task one level back out
+  ///
+  /// In en, this message translates to:
+  /// **'Outdent'**
+  String get outdentTask;
+
+  /// Undo toast after deleting a goal
+  ///
+  /// In en, this message translates to:
+  /// **'Goal deleted'**
+  String get goalDeleted;
+
+  /// Error when accepting shared tasks fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t accept these tasks. You may have already accepted this share.'**
+  String get sharedTasksAcceptFailed;
+
+  /// Pause playback of an audio sample (button label)
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pausePlayback;
+
+  /// Accessibility label for deleting a person's voice sample
+  ///
+  /// In en, this message translates to:
+  /// **'Delete sample'**
+  String get deleteSample;
+
+  /// Title of the confirmation before deleting a person
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Person?'**
+  String get deletePersonTitle;
+
+  /// Accessibility label for the delete control on a person row
+  ///
+  /// In en, this message translates to:
+  /// **'Delete person'**
+  String get deletePersonLabel;
+
+  /// Empty state title on the People page
+  ///
+  /// In en, this message translates to:
+  /// **'No People Yet'**
+  String get noPeopleYet;
+
+  /// Title of the confirmation before deleting several tasks at once
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Task?} other{Delete {count} Tasks?}}'**
+  String deleteTasksTitle(int count);
+
+  /// Screen-reader label for the task count beside a section header
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 task} other{{count} tasks}}'**
+  String tasksCountLabel(int count);
+
+  /// Toast after accepting shared tasks
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Added 1 task to your list} other{Added {count} tasks to your list}}'**
+  String sharedTasksAdded(int count);
+
+  /// Button that accepts tasks someone shared
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Add 1 Task} other{Add {count} Tasks}}'**
+  String sharedTasksAddButton(int count);
+
+  /// Title of the sheet showing tasks someone shared with the user
+  ///
+  /// In en, this message translates to:
+  /// **'{name} shared {count, plural, =1{1 task} other{{count} tasks}}'**
+  String sharedTasksTitle(String name, int count);
+
+  /// Caption on a task that was exported to another app, e.g. 'Exported to Todoist'
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {platform}'**
+  String exportedToPlatform(String platform);
+
+  /// A task's due date, e.g. 'Due Sep 23, 2026'
+  ///
+  /// In en, this message translates to:
+  /// **'Due {date}'**
+  String taskDueDate(String date);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
