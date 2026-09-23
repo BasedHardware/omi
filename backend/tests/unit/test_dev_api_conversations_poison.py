@@ -212,8 +212,8 @@ def test_pagination_is_clamped_before_firestore():
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=0, include_transcript=True)
         developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5)
     high = m.call_args_list[0].args
-    assert high[1] == 100 and high[2] == 0  # limit 99999 -> 100, offset -1 -> 0
-    assert m.call_args_list[1].args[1] == 25  # transcript reads cap tighter
+    assert high[1] == 1000 and high[2] == 0  # limit 99999 -> 1000, offset -1 -> 0
+    assert m.call_args_list[1].args[1] == 500  # transcript reads cap tighter
     assert m.call_args_list[2].args[1] == 1  # limit 0 -> 1
 
 
