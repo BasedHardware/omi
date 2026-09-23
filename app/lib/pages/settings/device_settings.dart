@@ -48,6 +48,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _syncAlertsEnabled = SharedPreferencesUtil().syncAlertsEnabled;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
@@ -331,6 +332,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ),
             ),
           ],
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.bell,
+            title: 'Sync Health Alerts',
+            subtitle: provider.isSyncStalled
+                ? 'Sync stalled: No recordings synced for >4h'
+                : 'Alert if Omi has not synced recordings for over 4 hours',
+            chipValue: provider.isSyncStalled ? 'Stalled' : null,
+            showChevron: false,
+            trailing: Semantics(
+              label: 'Sync Health Alerts',
+              child: Switch(
+                key: const Key('sync_health_alerts_toggle'),
+                value: _syncAlertsEnabled,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF636366),
+                onChanged: (value) {
+                  setState(() => _syncAlertsEnabled = value);
+                  SharedPreferencesUtil().syncAlertsEnabled = value;
+                },
+              ),
+            ),
+          ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.stethoscope,

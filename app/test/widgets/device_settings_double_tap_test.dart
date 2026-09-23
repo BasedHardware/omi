@@ -39,6 +39,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   }
 
   @override
+  bool get isSyncStalled => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

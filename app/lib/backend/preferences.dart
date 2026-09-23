@@ -596,6 +596,22 @@ class SharedPreferencesUtil {
 
   set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
+  // Whether sync health alerts are enabled for paired devices (#15501).
+  // Defaults to true so users receive an alert if Omi stops syncing.
+  bool get syncAlertsEnabled => getBool('syncAlertsEnabled', defaultValue: true);
+
+  set syncAlertsEnabled(bool value) => saveBool('syncAlertsEnabled', value);
+
+  // Milliseconds epoch timestamp of the last recorded sync or audio ingestion.
+  int get lastSyncTimestamp => getInt('lastSyncTimestamp', defaultValue: 0);
+
+  set lastSyncTimestamp(int value) => saveInt('lastSyncTimestamp', value);
+
+  // Milliseconds epoch timestamp of the last dispatched sync stall notification.
+  int get lastSyncAlertTimestamp => getInt('lastSyncAlertTimestamp', defaultValue: 0);
+
+  set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
+
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
     final json = getString('sttConfig_${provider.name}');

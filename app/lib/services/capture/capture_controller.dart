@@ -33,6 +33,7 @@ import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
@@ -490,6 +491,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOfflineRecordingFinalized(String _) {
+    SyncHealthWatchdog.instance.recordSyncActivity(source: 'batch_recording_finalized');
     if (_offlineSessionStartSeconds == 0) return;
     _offlineSessionStartSeconds = _nowSeconds;
     _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
@@ -1474,6 +1476,7 @@ class CaptureController extends ChangeNotifier
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
         _recordingTelemetry.observeAudio(snapshot.length);
+        SyncHealthWatchdog.instance.recordSyncActivity(source: 'ble_audio');
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null

@@ -1017,11 +1017,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   // Only show orange indicator for files still on device (SD card or Limitless)
                   final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
+                  final isStalled = deviceProvider.isSyncStalled;
 
                   // Show sync icon only on Conversations tab and if there's a paired device OR if there are pending files on device
-                  if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice)) {
+                  if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice || isStalled)) {
                     return HeaderCircleButton(
-                      semanticLabel: context.l10n.sync,
+                      semanticLabel: isStalled ? 'Sync stalled' : context.l10n.sync,
                       onTap: () {
                         HapticFeedback.mediumImpact();
                         final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
@@ -1029,17 +1030,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       },
                       color: isSyncing
                           ? Colors.deepPurple.withValues(alpha: 0.2)
-                          : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                          : isStalled
+                              ? Colors.amber.withValues(alpha: 0.2)
+                              : hasPendingOnDevice
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                       icon: Icon(
-                        Icons.cloud_rounded,
+                        isStalled ? Icons.cloud_off_rounded : Icons.cloud_rounded,
                         size: 18,
                         color: isSyncing
                             ? Colors.deepPurpleAccent
-                            : hasPendingOnDevice
-                                ? Colors.orangeAccent
-                                : Colors.white70,
+                            : isStalled
+                                ? Colors.amberAccent
+                                : hasPendingOnDevice
+                                    ? Colors.orangeAccent
+                                    : Colors.white70,
                       ),
                     );
                   }
