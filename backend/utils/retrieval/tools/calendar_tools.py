@@ -1210,7 +1210,9 @@ async def delete_calendar_event_tool(
                                     await delete_google_calendar_event(new_token, event_id_val)
                                     mutation_result.succeeded.append(event)
                                 except Exception as delete_error:
-                                    logger.error(f"❌ Failed to delete {event_title_found}: {delete_error}", exc_info=True)
+                                    logger.error(
+                                        f"❌ Failed to delete {event_title_found}: {delete_error}", exc_info=True
+                                    )
                                     mutation_result.failed.append((event_title_found, "Failed to delete event"))
 
                         return format_deleted_calendar_events(mutation_result)

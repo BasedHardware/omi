@@ -316,7 +316,9 @@ class TestFileToolsSanitization:
                 {"question": "Summary"},
                 config=CONFIG,
             )
-            assert res == "I encountered an error while searching the files. Please try again or rephrase your question."
+            assert (
+                res == "I encountered an error while searching the files. Please try again or rephrase your question."
+            )
             assert "secret_key_file" not in res
 
 
