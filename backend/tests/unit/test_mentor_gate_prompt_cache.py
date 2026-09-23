@@ -241,7 +241,9 @@ def test_cache_disabled_when_the_route_is_not_an_openai_gpt56_model():
     with patch.object(pn, 'should_route_features_through_gateway', return_value=False):
         with patch.object(pn, 'get_model_config', return_value=('gemini-2.5-flash', 'gemini')):
             assert pn.gate_cache_supported() is False
-        with patch.object(pn, 'get_model_config', return_value=('gpt-5.6-luna', 'openai')):
+        with patch.object(pn, 'get_model_config', return_value=('gpt-6-luna', 'openai')):
+            assert pn.gate_cache_supported() is True
+        with patch.object(pn, 'get_model_config', return_value=('gpt-5.6-sol', 'openai')):
             assert pn.gate_cache_supported() is True
 
 

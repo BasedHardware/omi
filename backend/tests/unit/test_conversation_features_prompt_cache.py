@@ -261,7 +261,7 @@ def real_langchain_runnables():
     """Real langchain objects, built once: constructing them is the expensive part."""
     from langchain_openai import ChatOpenAI
 
-    model = ChatOpenAI(model='gpt-5.6-luna', api_key='sk-not-used')
+    model = ChatOpenAI(model='gpt-6-luna', api_key='sk-not-used')
     return (
         model,
         model.bind(extra_body={'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}),

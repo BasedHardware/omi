@@ -304,7 +304,7 @@ def test_non_gemini_models_that_merely_contain_the_substrings_stay_routable():
     """Perplexity `sonar-pro` is not a Gemini Pro SKU; containment must not
     reach outside the Google model family."""
     assert not ptr.is_prohibited_company_paid_model('sonar-pro')
-    assert not ptr.is_prohibited_company_paid_model('gpt-5.6-luna')
+    assert not ptr.is_prohibited_company_paid_model('gpt-6-luna')
 
 
 def test_every_desktop_text_anchor_serves_a_declared_company_paid_model():
