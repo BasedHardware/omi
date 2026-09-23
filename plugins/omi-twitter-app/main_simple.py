@@ -20,9 +20,7 @@ twitter_client = TwitterClient()
 tweet_detector = TweetDetector()
 
 app = FastAPI(
-    title="OMI Twitter Integration",
-    description="Real-time Twitter posting via OMI voice commands",
-    version="1.0.0"
+    title="OMI Twitter Integration", description="Real-time Twitter posting via OMI voice commands", version="1.0.0"
 )
 
 
@@ -160,7 +158,7 @@ async def root(uid: str = Query(None)):
             </body>
         </html>
         """)
-    
+
     # Default API info
     return {
         "app": "OMI Twitter Integration",
@@ -170,8 +168,8 @@ async def root(uid: str = Query(None)):
         "endpoints": {
             "auth": "/auth?uid=<user_id>",
             "webhook": "/webhook?session_id=<session>&uid=<user_id>",
-            "setup_check": "/setup-completed?uid=<user_id>"
-        }
+            "setup_check": "/setup-completed?uid=<user_id>",
+        },
     }
 
 
@@ -179,12 +177,12 @@ async def root(uid: str = Query(None)):
 async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     """Start OAuth flow for Twitter authentication."""
     redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
-    
+
     try:
         # Get authorization URL (Tweepy generates its own state parameter)
         # We store the mapping between Tweepy's state and our uid internally
         auth_url = twitter_client.get_authorization_url(redirect_uri, uid)
-        
+
         # Don't modify the URL - Tweepy's state parameter is already included
         return RedirectResponse(url=auth_url)
     except Exception as e:
@@ -193,11 +191,7 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
 
 
 @app.get("/auth/callback")
-async def auth_callback(
-    request: Request,
-    state: str = Query(None),
-    code: str = Query(None)
-):
+async def auth_callback(request: Request, state: str = Query(None), code: str = Query(None)):
     """Handle OAuth callback from Twitter."""
     if not code:
         return HTMLResponse(
@@ -209,38 +203,34 @@ async def auth_callback(
                 </body>
             </html>
             """,
-            status_code=400
+            status_code=400,
         )
-    
+
     # state is Tweepy's generated state parameter
-    
+
     try:
         # Exchange code for access token using stored OAuth handler
         # This also retrieves the uid we associated with this state
         full_url = str(request.url)
         token_data, uid = twitter_client.get_access_token(full_url, state)
-        
+
         # Save user tokens with expiration info
         access_token = token_data.get('access_token')
         refresh_token = token_data.get('refresh_token')
         expires_in = token_data.get('expires_in', 7200)
-        
+
         access_status = 'received' if access_token else 'missing'
         refresh_status = 'received' if refresh_token else 'missing'
         print(f"🔑 Token data received:", flush=True)
         print(f"   Access token: {access_status}", flush=True)
         print(f"   Refresh token: {refresh_status}", flush=True)
         print(f"   Expires in: {expires_in}s ({expires_in/3600:.1f}h)", flush=True)
-        
+
         SimpleUserStorage.save_user(
-            uid=uid,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=expires_in
+            uid=uid, access_token=access_token, refresh_token=refresh_token, expires_in=expires_in
         )
-        
-        return HTMLResponse(
-            content="""
+
+        return HTMLResponse(content="""
             <!DOCTYPE html>
             <html lang="en">
                 <head>
@@ -522,9 +512,8 @@ async def auth_callback(
                     </div>
                 </body>
             </html>
-            """
-        )
-    
+            """)
+
     except Exception as e:
         # `state` comes straight from the query string, so it is attacker-controlled.
         # Percent-encode it for the URL query and HTML-escape the result for the
@@ -541,7 +530,7 @@ async def auth_callback(
                 </body>
             </html>
             """,
-            status_code=500
+            status_code=500,
         )
 
 
@@ -557,7 +546,7 @@ async def webhook(
     request: Request,
     uid: str = Query(..., description="User ID from OMI"),
     session_id: str = Query(None, description="Session ID from OMI (optional)"),
-    sample_rate: int = Query(None, description="Sample rate (optional, for audio streams)")
+    sample_rate: int = Query(None, description="Sample rate (optional, for audio streams)"),
 ):
     """
     Real-time transcript webhook endpoint.
@@ -567,53 +556,50 @@ async def webhook(
     # This ensures session persists across all segments
     if not session_id:
         session_id = f"omi_session_{uid}"
-    
+
     # Get user
     user = SimpleUserStorage.get_user(uid)
-    
+
     if not user or not user.get("access_token"):
         return JSONResponse(
-            content={
-                "message": "User not authenticated. Please complete setup first.",
-                "setup_required": True
-            },
-            status_code=401
+            content={"message": "User not authenticated. Please complete setup first.", "setup_required": True},
+            status_code=401,
         )
-    
+
     # Check if token needs refresh
     if SimpleUserStorage.is_token_expired(uid):
         print(f"🔄 Token expired for user {uid[:10]}...", flush=True)
-        
+
         # Check if we have a valid refresh token
         refresh_token = user.get("refresh_token")
-        
+
         if not refresh_token or refresh_token == "null":
             print(f"⚠️  No refresh token! User must re-authenticate with offline.access scope.", flush=True)
             return JSONResponse(
                 content={
                     "message": "🔄 Your session expired. Please re-authenticate in the OMI app to continue tweeting.",
-                    "setup_required": True
+                    "setup_required": True,
                 },
-                status_code=401
+                status_code=401,
             )
-        
+
         # Try to refresh
         try:
             print(f"🔄 Refreshing token...", flush=True)
             new_token_data = twitter_client.refresh_access_token(refresh_token)
-            
+
             # Save new tokens
             SimpleUserStorage.save_user(
                 uid=uid,
                 access_token=new_token_data.get("access_token"),
                 refresh_token=new_token_data.get("refresh_token", refresh_token),
-                expires_in=new_token_data.get("expires_in", 7200)
+                expires_in=new_token_data.get("expires_in", 7200),
             )
-            
+
             # Update user reference
             user = SimpleUserStorage.get_user(uid)
             print(f"✅ Token refreshed!", flush=True)
-            
+
         except Exception as e:
             print(f"❌ Refresh error: {e}", flush=True)
             # Delete old invalid token
@@ -622,17 +608,17 @@ async def webhook(
             return JSONResponse(
                 content={
                     "message": "🔄 Session expired. Please re-authenticate in the OMI app.",
-                    "setup_required": True
+                    "setup_required": True,
                 },
-                status_code=401
+                status_code=401,
             )
-    
+
     # Parse payload from OMI
     try:
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    
+
     # Handle both formats:
     # 1. Direct list: [{"text": "...", ...}, ...]
     # 2. Dict with segments: {"session_id": "...", "segments": [...]}
@@ -646,49 +632,41 @@ async def webhook(
     elif isinstance(payload, list):
         # Direct list of segments
         segments = payload
-    
+
     # Log what we received for debugging
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    
+
     if not segments or not isinstance(segments, list):
         # Silent response for empty/invalid data
         return {"status": "ok"}
-    
+
     # Ensure we have a consistent session_id per user
     # Use uid as session_id so it persists across calls
     if not session_id:
         session_id = f"omi_session_{uid}"
-    
+
     # Get or create session
     session = SimpleSessionStorage.get_or_create_session(session_id, uid)
-    
+
     # Debug: show current session state
     print(f"📊 Session state: mode={session.get('tweet_mode')}, count={session.get('segments_count', 0)}", flush=True)
-    
+
     # Process segments
     response_message = await process_segments(session, segments, user)
-    
+
     # Only send notifications for final tweet post (success or failure)
     # Silent responses during collection so user doesn't get spammed
     if response_message and ("✅ Tweet posted:" in response_message or "❌ Failed:" in response_message):
         print("✉️  USER NOTIFICATION sent (tweet result)", flush=True)
-        return {
-            "message": response_message,
-            "session_id": session_id,
-            "processed_segments": len(segments)
-        }
-    
+        return {"message": response_message, "session_id": session_id, "processed_segments": len(segments)}
+
     # Silent response for everything else (listening, collecting, etc.)
     response_len = len(response_message or "")
     print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 
-async def process_segments(
-    session: dict,
-    segments: List[Dict[str, Any]],
-    user: dict
-) -> str:
+async def process_segments(session: dict, segments: List[Dict[str, Any]], user: dict) -> str:
     """
     ALWAYS collect exactly 3 segments after 'Tweet Now', then AI extracts the tweet.
     - Segment 1: Contains "Tweet Now" + start of tweet
@@ -696,13 +674,13 @@ async def process_segments(
     - Segment 3: End part (auto-collected)
     - AI decides what's actually the tweet and cleans it
     """
-    
+
     # Extract text from segments
     segment_texts = [seg.get("text", "") for seg in segments]
     full_text = " ".join(segment_texts)
-    
+
     session_id = session["session_id"]
-    
+
     print(f"📊 Session mode: {session['tweet_mode']}, Count: {session.get('segments_count', 0)}/3", flush=True)
 
     # Check for trigger phrase
@@ -710,43 +688,40 @@ async def process_segments(
         tweet_content = tweet_detector.extract_tweet_content(full_text)
 
         print(f"🎤 TRIGGER! Starting 3-segment collection...", flush=True)
-        
+
         # Start collecting - ALWAYS wait for 2 more segments
         SimpleSessionStorage.update_session(
-            session_id,
-            tweet_mode="recording",
-            accumulated_text=tweet_content or "",
-            segments_count=1
+            session_id, tweet_mode="recording", accumulated_text=tweet_content or "", segments_count=1
         )
-        
+
         # Silent - don't notify user yet
         return "collecting_1"
-    
+
     # If in recording mode, collect more segments
     elif session["tweet_mode"] == "recording":
         accumulated = session.get("accumulated_text") or ""
         segments_count = session.get("segments_count", 0)
-        
+
         # Add this segment
         accumulated += " " + full_text
         segments_count += 1
-        
+
         print(f"📝 Segment {segments_count}/3 received", flush=True)
-        
+
         # Always collect 3 segments
         if segments_count >= 3:
             print(f"✅ Got all 3 segments! Sending to AI...", flush=True)
-            
+
             # AI extracts the actual tweet from all 3 segments
             cleaned_content = await tweet_detector.ai_extract_tweet_from_segments(accumulated)
             tweet_len = len(cleaned_content or "")
 
             print(f"✨ AI extracted tweet (len={tweet_len})", flush=True)
-            
+
             if len(cleaned_content.strip()) > 3:
                 print(f"📤 Posting to Twitter...", flush=True)
                 result = await twitter_client.post_tweet(user["access_token"], cleaned_content)
-                
+
                 if result and result.get("success"):
                     SimpleSessionStorage.reset_session(session_id)
                     print(f"🎉 SUCCESS! Tweet ID: {result.get('tweet_id')}", flush=True)
@@ -762,14 +737,10 @@ async def process_segments(
                 return "❌ No valid tweet content"
         else:
             # Still collecting (need segment 2 or 3)
-            SimpleSessionStorage.update_session(
-                session_id,
-                accumulated_text=accumulated,
-                segments_count=segments_count
-            )
+            SimpleSessionStorage.update_session(session_id, accumulated_text=accumulated, segments_count=segments_count)
             # Silent - don't notify user yet
             return f"collecting_{segments_count}"
-    
+
     # Passive listening - silent
     return "listening"
 
@@ -1133,20 +1104,15 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("APP_PORT", 8000))
     host = os.getenv("APP_HOST", "0.0.0.0")
-    
+
     print("🐦 OMI Twitter Integration - Simple Mode")
     print("=" * 50)
     print("✅ Using in-memory storage (no database)")
     print(f"🚀 Starting on {host}:{port}")
     print("⚠️  Note: Data resets when server restarts")
     print("=" * 50)
-    
-    uvicorn.run(
-        "main_simple:app",
-        host=host,
-        port=port,
-        reload=True
-    )
 
+    uvicorn.run("main_simple:app", host=host, port=port, reload=True)
