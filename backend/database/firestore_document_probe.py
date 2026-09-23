@@ -668,32 +668,40 @@ def _wrap_list_documents(original: Any) -> Any:
     def list_documents(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         path = getattr(self, '_path', ())
+        inner = original(self, *args, **kwargs)
         yielded = 0
-        try:
-            for ref in original(self, *args, **kwargs):
-                yielded += 1
-                _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
-                yield ref
-        finally:
+
+        def on_item(ref: Any) -> None:
+            nonlocal yielded
+            yielded += 1
+            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
+
+        def on_finish() -> None:
             if yielded == 0:
                 _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedSync(inner, on_item, on_finish)
 
     return list_documents
 
 
 def _wrap_async_list_documents(original: Any) -> Any:
-    async def list_documents(self: Any, *args: Any, **kwargs: Any) -> Any:
+    def list_documents(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         path = getattr(self, '_path', ())
+        inner = original(self, *args, **kwargs)
         yielded = 0
-        try:
-            async for ref in original(self, *args, **kwargs):
-                yielded += 1
-                _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
-                yield ref
-        finally:
+
+        def on_item(ref: Any) -> None:
+            nonlocal yielded
+            yielded += 1
+            _record(getattr(ref, '_path', None) or path, True, kind='query', caller=caller)
+
+        def on_finish() -> None:
             if yielded == 0:
                 _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedAsync(inner, on_item, on_finish)
 
     return list_documents
 
@@ -703,23 +711,26 @@ def _wrap_collections(original: Any) -> Any:
         # ListCollectionIds bills one read per request, not per collection id.
         caller = call_site()
         path = getattr(self, '_path', ())
-        try:
-            yield from original(self, *args, **kwargs)
-        finally:
+        inner = original(self, *args, **kwargs)
+
+        def on_finish() -> None:
             _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedSync(inner, lambda _item: None, on_finish)
 
     return collections
 
 
 def _wrap_async_collections(original: Any) -> Any:
-    async def collections(self: Any, *args: Any, **kwargs: Any) -> Any:
+    def collections(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         path = getattr(self, '_path', ())
-        try:
-            async for item in original(self, *args, **kwargs):
-                yield item
-        finally:
+        inner = original(self, *args, **kwargs)
+
+        def on_finish() -> None:
             _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedAsync(inner, lambda _item: None, on_finish)
 
     return collections
 
@@ -730,32 +741,40 @@ def _wrap_partitions(original: Any) -> Any:
         # yielded cursor, or one if the call returns nothing.
         caller = call_site()
         path = _parent_path(self)
+        inner = original(self, *args, **kwargs)
         yielded = 0
-        try:
-            for part in original(self, *args, **kwargs):
-                yielded += 1
-                _record(path, True, kind='query', caller=caller)
-                yield part
-        finally:
+
+        def on_item(_part: Any) -> None:
+            nonlocal yielded
+            yielded += 1
+            _record(path, True, kind='query', caller=caller)
+
+        def on_finish() -> None:
             if yielded == 0:
                 _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedSync(inner, on_item, on_finish)
 
     return get_partitions
 
 
 def _wrap_async_partitions(original: Any) -> Any:
-    async def get_partitions(self: Any, *args: Any, **kwargs: Any) -> Any:
+    def get_partitions(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
         path = _parent_path(self)
+        inner = original(self, *args, **kwargs)
         yielded = 0
-        try:
-            async for part in original(self, *args, **kwargs):
-                yielded += 1
-                _record(path, True, kind='query', caller=caller)
-                yield part
-        finally:
+
+        def on_item(_part: Any) -> None:
+            nonlocal yielded
+            yielded += 1
+            _record(path, True, kind='query', caller=caller)
+
+        def on_finish() -> None:
             if yielded == 0:
                 _record(path, False, kind='query', caller=caller, outcome='floor')
+
+        return _ObservedAsync(inner, on_item, on_finish)
 
     return get_partitions
 
