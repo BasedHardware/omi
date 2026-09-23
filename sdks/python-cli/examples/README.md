@@ -1,17 +1,16 @@
-# OMI Python CLI – Primeri
+# OMI Python‑CLI Examples
 
-Ta mapa vsebuje primere, ki prikazujejo, kako uporabljati `omi-cli` za različne scenarije. Vsak primer je samostojen in vsebuje kratko razlago ter potrebne ukaze za zagon.
+This directory contains example quick‑start guides and sample projects for the **omi‑cli** Python SDK. Each guide demonstrates a specific use‑case and can be run directly after following the prerequisites listed in the file.
 
-## Seznam primerov
+## Available Guides
 
-- **agent_quickstart.md** – Osnovni vodnik za hitro zagon agenta (angleščina).
-- **agent_quickstart.sl.md** – Osnovni vodnik za hitro zagon agenta (slovenščina). <!-- New Slovenian translation -->
-- **chatbot_example.md** – Primer ustvarjanja preprostega chatbot-a.
-- **voice_assistant.md** – Nastavitev glasovnega asistenta z uporabo OMI.
-- **edge_deployment.md** – Navodila za namestitev agenta na edge naprave.
+- **Agent Quickstart (English)** – `agent_quickstart.md`
+- **Agent Quickstart (Spanish)** – `agent_quickstart.es.md`
+- **Agent Quickstart (German)** – `agent_quickstart.de.md`
+- **Agent Quickstart (French)** – `agent_quickstart.fr.md`
+- **Agent Quickstart (Slovenian)** – `agent_quickstart.sl.md` ← *newly added*
+- **Tool Integration** – `tool_integration.md`
+- **Streaming Responses** – `streaming_responses.md`
 
-## Kako uporabljati primere
+## How to use
 
-1. **Klonirajte repozitorij**:
-
-   

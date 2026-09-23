@@ -1,12 +1,11 @@
-# Vodič za hitro zagon agenta (Slovenian)
+# Hiter začetek za AI agente (Slovenian)
 
-Ta vodnik vas popelje skozi osnovno nastavitev in uporabo **LLM/Agent** delovnega toka z uporabo `omi-cli`. Vse kode in ukazi ostanejo nespremenjeni – le besedilo je prevedeno v slovenščino.
+Ta vodnik vas popelje skozi osnovno uporabo **omi‑cli** za ustvarjanje in zagon AI agenta v Python‑CLI SDK‑ju. Vse ukaze in kodo lahko kopirate neposredno – le besedilo je prevedeno v slovenščino.
+
+---
 
 ## Predpogoji
 
-- **Python 3.9+** nameščen na vašem sistemu.
-- **omi-cli** nameščen globalno ali v virtualnem okolju.
-- Dostop do **OpenAI API** ključa (ali drugega podprtega LLM ponudnika).
-
-## Namestitev
-
+- **Python 3.9+** (priporočeno 3.11)
+- **omi‑cli** nameščen globalno ali v virtualnem okolju  
+  
