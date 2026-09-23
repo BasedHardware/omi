@@ -266,9 +266,12 @@ struct SBOnboardingView: View {
     case .howHeard: howHeardWidget
     case .language: languageWidget
     case .role: roleWidget
-    case .mic: permStepWidget("microphone", "Microphone", "so I can hear your side of conversations") { model.answerMic() }
+    case .mic:
+      permStepWidget("microphone", "Microphone", "so I can hear your side of conversations") { model.answerMic() }
     case .systemAudio:
-      permStepWidget("system_audio", "System Audio", "so I can hear the other side of calls — Zoom, Meet") { model.answerSystemAudio() }
+      permStepWidget("system_audio", "System Audio", "so I can hear the other side of calls — Zoom, Meet") {
+        model.answerSystemAudio()
+      }
     case .screen:
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
@@ -517,7 +520,9 @@ struct SBOnboardingView: View {
   @ViewBuilder private var filesWidget: some View {
     switch model.localFileProfileState {
     case .idle:
-      permStepWidget("full_disk_access", "Full Disk Access", "so I can cite your files — read-only, and it stays on this Mac") {
+      permStepWidget(
+        "full_disk_access", "Full Disk Access", "so I can cite your files — read-only, and it stays on this Mac"
+      ) {
         model.answerFiles()
       }
     case .scanning:

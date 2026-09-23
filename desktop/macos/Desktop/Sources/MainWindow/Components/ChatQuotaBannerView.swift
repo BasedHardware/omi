@@ -91,7 +91,7 @@ struct ChatQuotaBannerView: View {
       .accessibilityIdentifier("chat-quota-banner-view-plan")
 
       DismissButton(action: onDismiss, accessibilityLabel: "Dismiss", size: .compact)
-      .accessibilityIdentifier("chat-quota-banner-dismiss")
+        .accessibilityIdentifier("chat-quota-banner-dismiss")
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)

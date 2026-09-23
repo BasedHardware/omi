@@ -208,7 +208,7 @@ struct MemoryAtlasDetailPanel: View {
       .accessibilityIdentifier("memory_atlas_focus_selection")
 
       DismissButton(action: onClose, accessibilityLabel: "Clear Selection", size: .compact)
-      .accessibilityIdentifier("memory_atlas_clear_selection")
+        .accessibilityIdentifier("memory_atlas_clear_selection")
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)

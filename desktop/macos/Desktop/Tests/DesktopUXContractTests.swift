@@ -41,7 +41,8 @@ final class DesktopUXContractTests: XCTestCase {
   }
 
   func testRangeNamesTheDayOnceAndBothTimes() {
-    let range = OmiDateFormat.range(date(2026, 9, 23, 10, 17), date(2026, 9, 23, 11, 19), calendar: calendar, locale: locale)
+    let range = OmiDateFormat.range(
+      date(2026, 9, 23, 10, 17), date(2026, 9, 23, 11, 19), calendar: calendar, locale: locale)
     XCTAssertTrue(range.contains("10:17") && range.contains("11:19"), range)
     XCTAssertEqual(range.components(separatedBy: "Sep").count - 1, 1, "the day appears once: \(range)")
     // A missing or inverted end reads as the start alone rather than a nonsense span.
@@ -67,7 +68,8 @@ final class DesktopUXContractTests: XCTestCase {
   private func segment(
     _ speaker: String?, isUser: Bool = false, personId: String? = nil, text: String = "hello"
   ) -> TranscriptSegment {
-    TranscriptSegment(id: UUID().uuidString, text: text, speaker: speaker, isUser: isUser, personId: personId, start: 0, end: 1)
+    TranscriptSegment(
+      id: UUID().uuidString, text: text, speaker: speaker, isUser: isUser, personId: personId, start: 0, end: 1)
   }
 
   func testSpeakerLabelsAreYouThenPersonThenOneBasedNumber() {
@@ -107,9 +109,11 @@ final class DesktopUXContractTests: XCTestCase {
     let start = date(2026, 9, 23, 10, 0)
     let conversation = ServerConversation(
       id: "c1", createdAt: start, startedAt: start, finishedAt: start.addingTimeInterval(2565),
-      structured: Structured(title: "Dictation", overview: "", emoji: "", category: "other", actionItems: [], events: []),
+      structured: Structured(
+        title: "Dictation", overview: "", emoji: "", category: "other", actionItems: [], events: []),
       transcriptSegments: [
-        TranscriptSegment(id: "s1", text: "remind me to call", speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 8)
+        TranscriptSegment(
+          id: "s1", text: "remind me to call", speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 8)
       ],
       transcriptSegmentsIncluded: true, geolocation: nil, photos: [], appsResults: [], source: .desktop, language: "en",
       status: .completed, discarded: false, deleted: false, isLocked: false, starred: false, folderId: nil,

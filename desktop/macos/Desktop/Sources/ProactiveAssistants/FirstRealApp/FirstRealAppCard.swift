@@ -47,7 +47,12 @@ struct FirstRealAppCard: View {
     }
     .buttonStyle(.plain)
     .overlay(alignment: .topTrailing) {
-      DismissButton(action: { FirstRealAppCardCoordinator.shared.handleCardDismissed(); FloatingControlBarManager.shared.dismissCurrentNotification() }, accessibilityLabel: "Dismiss", size: .compact)
+      DismissButton(
+        action: {
+          FirstRealAppCardCoordinator.shared.handleCardDismissed()
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        }, accessibilityLabel: "Dismiss", size: .compact
+      )
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
     }

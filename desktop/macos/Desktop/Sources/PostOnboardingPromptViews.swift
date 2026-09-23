@@ -265,7 +265,7 @@ struct PromptSuggestionBanner: View {
     .overlay(alignment: .topTrailing) {
       ZStack(alignment: .topTrailing) {
         DismissButton(action: onDismiss, size: .compact)
-        .padding(OmiSpacing.md)
+          .padding(OmiSpacing.md)
       }
     }
   }

@@ -1580,7 +1580,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       .scaledFont(size: 10)
       .foregroundColor(Ink.secondary)
 
-      DismissButton(action: { clearSelection(resetCamera: true) }, accessibilityLabel: "Clear Selection", size: .compact)
+      DismissButton(
+        action: { clearSelection(resetCamera: true) }, accessibilityLabel: "Clear Selection", size: .compact
+      )
       .accessibilityIdentifier("memory_atlas_clear_selection")
     }
     .padding(.horizontal, compact ? 12 : 18)

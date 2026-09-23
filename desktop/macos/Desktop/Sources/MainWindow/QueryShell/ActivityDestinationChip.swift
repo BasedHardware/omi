@@ -169,9 +169,9 @@ struct BrainSectionPageLayout<Search: View, Content: View>: View {
               onSelect(destination)
             }
           }
-            .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
-            .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
-            .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
+          .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+          .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
+          .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
 
           content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
