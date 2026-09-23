@@ -554,10 +554,14 @@ def should_discard_conversation(
     *,
     trusted_wake_word_markers: bool = False,
     on_error: Optional[Callable[[Exception], None]] = None,
+    neighbor_gap_seconds: Optional[float] = None,
+    neighbor_position: Optional[str] = None,
 ) -> bool:
     """Model tier of the relevance decision (utils/conversations/relevance.py).
 
-    Fails open to keep; ``on_error`` lets the caller record that it did.
+    Fails open to keep; ``on_error`` lets the caller record that it did. A
+    neighbor (a kept conversation within the boundary gap) is described by its
+    gap and position only; none of its content enters the prompt.
     """
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
@@ -591,6 +595,14 @@ def should_discard_conversation(
                 "(a specific task, reminder, name/person, appointment, or meaningful request like 'call mom' or 'buy milk'). "
                 "Generic filler words, acknowledgments, or incomplete thoughts in short conversations should be discarded."
             )
+    if neighbor_gap_seconds is not None:
+        relation = 'started' if neighbor_position == 'before' else 'ended'
+        anchor = 'after another saved conversation ended' if relation == 'started' else 'before another one started'
+        duration_context += (
+            f"\nThis snippet {relation} {int(neighbor_gap_seconds)} seconds {anchor}. "
+            "If it only continues, answers, or closes that conversation and adds no task, fact, plan, "
+            "or name of its own, discard it."
+        )
 
     prompt_template = '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
 

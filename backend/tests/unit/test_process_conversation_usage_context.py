@@ -757,7 +757,7 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     )
     captured: dict[str, object] = {}
 
-    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, on_error: object = None):
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, **_kwargs: object):
         captured.update(
             transcript=transcript,
             photos=photos,

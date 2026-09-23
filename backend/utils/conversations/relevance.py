@@ -14,7 +14,8 @@ recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional, Sequence
+from datetime import datetime
+from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
@@ -26,24 +27,73 @@ DecidedBy = Literal['policy', 'user', 'rule', 'model', 'override']
 
 
 @dataclass(frozen=True)
+class Neighbor:
+    """A kept conversation within the boundary gap of the one being judged."""
+
+    conversation_id: str
+    gap_seconds: float
+    position: Literal['before', 'after']  # where the neighbor sits relative to this one
+
+
+@dataclass(frozen=True)
 class RelevanceDecision:
     verdict: Literal['keep', 'discard']
     decided_by: DecidedBy
     reason: str
     trigger: ProcessingTrigger
+    # Set when a discarded fragment belongs to an adjacent kept conversation.
+    neighbor_id: Optional[str] = None
 
     @property
     def discard(self) -> bool:
         return self.verdict == 'discard'
 
     def as_record(self) -> dict[str, Any]:
-        return {
+        record: dict[str, Any] = {
             'verdict': self.verdict,
             'decided_by': self.decided_by,
             'reason': self.reason,
             'trigger': self.trigger.value,
             'rules_version': RULES_VERSION,
         }
+        if self.neighbor_id:
+            record['neighbor_id'] = self.neighbor_id
+        return record
+
+
+def find_neighbor(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    conversation_id: Optional[str],
+    started_at: Optional[datetime],
+    finished_at: Optional[datetime],
+    gap_seconds: float,
+) -> Optional[Neighbor]:
+    """The nearest visible completed conversation whose span is within ``gap_seconds``.
+
+    Pure: callers fetch candidate rows. Same boundary gap that splits
+    conversations, so a neighbor is exactly a conversation this one would have
+    joined had capture not split it.
+    """
+    if started_at is None or finished_at is None:
+        return None
+    best: Optional[Neighbor] = None
+    for row in rows:
+        other_id = row.get('id')
+        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
+            continue
+        if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
+            continue
+        if other_end <= started_at:
+            gap, position = (started_at - other_end).total_seconds(), 'before'
+        elif other_start >= finished_at:
+            gap, position = (other_start - finished_at).total_seconds(), 'after'
+        else:
+            gap, position = 0.0, 'before'  # overlapping capture of the same moment
+        if gap < gap_seconds and (best is None or gap < best.gap_seconds):
+            best = Neighbor(str(other_id), gap, position)
+    return best
 
 
 def decide_relevance(
@@ -55,15 +105,18 @@ def decide_relevance(
     user_kept: bool,
     exempt: bool,
     trusted_wake_word: bool,
-    model_discards: Optional[Callable[[Callable[[Exception], None]], bool]],
+    model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
+    neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
     ``model_discards`` receives an error callback; the model tier fails open to
     keep, and the callback lets the decision record say so. ``None`` means the
     plan withholds the model (free-tier desktop): the rules still run, and what
-    they cannot settle is kept.
+    they cannot settle is kept. ``neighbor`` is looked up only for the model
+    tier: a short fragment is judged as a possible continuation of the adjacent
+    conversation, and a discard links to it instead of standing alone.
     ``calendar_retains`` is consulted only for a discard verdict: a scrap
     recorded inside a booked meeting is evidence, never noise (SCA-381).
     """
@@ -102,11 +155,15 @@ def decide_relevance(
         nonlocal model_failed
         model_failed = True
 
-    discards = model_discards(on_model_error)
+    adjacent = neighbor()
+    discards = model_discards(on_model_error, adjacent)
     if model_failed:
         return keep('model', 'model_error')
     if discards:
-        return discard_unless_calendar('model', 'model_discard')
+        decision = discard_unless_calendar('model', 'neighbor_fragment' if adjacent else 'model_discard')
+        if adjacent and decision.discard:
+            return RelevanceDecision('discard', 'model', 'neighbor_fragment', trigger, adjacent.conversation_id)
+        return decision
     return keep('model', 'model_keep')
 
 

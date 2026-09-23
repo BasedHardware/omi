@@ -65,14 +65,17 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
+    Neighbor,
     RelevanceDecision,
     decide_relevance,
     final_relevance,
+    find_neighbor,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -520,7 +523,7 @@ def _get_structured(
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
 
-        def model_discards(on_error: Callable[[Exception], None]) -> bool:
+        def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
                 return should_discard_conversation(
                     discard_transcript,
@@ -528,6 +531,8 @@ def _get_structured(
                     duration_seconds,
                     trusted_wake_word_markers=has_wake_word_marker,
                     on_error=on_error,
+                    neighbor_gap_seconds=neighbor.gap_seconds if neighbor else None,
+                    neighbor_position=neighbor.position if neighbor else None,
                 )
 
         decision = decide_relevance(
@@ -547,6 +552,7 @@ def _get_structured(
             calendar_retains=lambda: _calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
+            neighbor=lambda: _adjacent_conversation(uid, main_conv, conversation_id),
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -2094,6 +2100,35 @@ def _is_ingress_create(
 
 # Bound for reject-log provenance only. Schema caps are larger; logs must stay
 # a single line even when the payload never passed validation.
+NEIGHBOR_CANDIDATE_LIMIT = 10
+
+
+def _adjacent_conversation(
+    uid: str, conversation: Union[Conversation, CreateConversation], conversation_id: Optional[str]
+) -> Optional[Neighbor]:
+    """A kept conversation this one would have joined had capture not split it (fail-open)."""
+    started_at, finished_at = conversation.started_at, conversation.finished_at
+    if started_at is None or finished_at is None:
+        return None
+    try:
+        rows = conversations_db.get_conversations_finished_after(
+            uid,
+            status='completed',
+            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS),
+            limit=NEIGHBOR_CANDIDATE_LIMIT,
+        )
+    except Exception as error:
+        logger.warning('relevance neighbor lookup failed uid=%s: %s', uid, error)
+        return None
+    return find_neighbor(
+        rows,
+        conversation_id=conversation_id or getattr(conversation, 'id', None),
+        started_at=started_at,
+        finished_at=finished_at,
+        gap_seconds=DEFAULT_GAP_SECONDS,
+    )
+
+
 def _rules_only_relevance(
     uid: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
