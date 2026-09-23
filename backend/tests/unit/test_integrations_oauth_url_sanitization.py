@@ -83,4 +83,6 @@ def test_redis_setex_generic_exception_is_masked(monkeypatch):
     assert exc_info.value.detail == "Failed to initialize OAuth flow. Please try again."
     assert "secret_password" not in exc_info.value.detail
     assert "redis-prod-02" not in exc_info.value.detail
+
+
 # CI retrigger
