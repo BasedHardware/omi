@@ -48,7 +48,7 @@ omi conversation list --json --limit 5 \
   | jq '.[] | {id, title: .structured.title, started_at}'
 ```
 
-### 4. ᏗᎸᏫᏍᏓᏁᏗ ᎤᏰᏛᏗ ᏗᎸᏫᏍᏓᏁᏗ
+### 4. ᏗᎸᏫᏍᏓᏁᏗ ᎤᏰᏛᏗ
 
 ```bash
 omi action-item list --json --open
