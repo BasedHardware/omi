@@ -1745,7 +1745,8 @@ async def _chat_completions_unobserved(
             *jit_header_values,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("desktop_chat: invalid request: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request parameters.") from exc
     request_id = x_omi_request_id or str(uuid4())
     stub_headers = {
         'Cache-Control': 'no-cache',
@@ -1811,9 +1812,11 @@ async def _chat_completions_unobserved(
     except HTTPException:
         raise
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning("desktop_chat: upstream runtime error: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning("desktop_chat: invalid request: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request parameters.") from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
