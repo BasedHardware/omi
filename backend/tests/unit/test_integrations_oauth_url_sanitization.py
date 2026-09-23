@@ -3,6 +3,7 @@
 Verifies that Redis connection errors do not leak internal hostnames, ports,
 or credentials in the HTTP 500 response from GET /v1/integrations/{app_key}/oauth-url.
 """
+
 import os
 import pytest
 from unittest.mock import MagicMock, patch
@@ -27,7 +28,8 @@ def test_redis_setex_connection_error_is_masked(monkeypatch):
         },
     }
     monkeypatch.setattr(
-        integrations_routes, "resolve_integration_provider",
+        integrations_routes,
+        "resolve_integration_provider",
         lambda app_key: ("test", fake_provider),
     )
     monkeypatch.setenv("TEST_CLIENT_ID", "client-id-123")
@@ -64,7 +66,8 @@ def test_redis_setex_generic_exception_is_masked(monkeypatch):
         },
     }
     monkeypatch.setattr(
-        integrations_routes, "resolve_integration_provider",
+        integrations_routes,
+        "resolve_integration_provider",
         lambda app_key: ("test", fake_provider),
     )
     monkeypatch.setenv("TEST_CLIENT_ID2", "client-id-456")
