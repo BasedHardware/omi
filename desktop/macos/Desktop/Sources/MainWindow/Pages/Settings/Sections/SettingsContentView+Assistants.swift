@@ -135,7 +135,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: taskExtractionInterval) { _, newValue in
                 performStepHaptic()
                 TaskAssistantSettings.shared.extractionInterval = newValue
@@ -168,7 +168,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $taskMinConfidence, in: 0.3...0.9, step: 0.1)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: taskMinConfidence) { _, newValue in
                   performStepHaptic()
                   TaskAssistantSettings.shared.minConfidence = newValue
@@ -402,7 +402,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: insightExtractionInterval) { _, newValue in
                 performStepHaptic()
                 InsightAssistantSettings.shared.extractionInterval = newValue
@@ -435,7 +435,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $insightMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: insightMinConfidence) { _, newValue in
                   performStepHaptic()
                   InsightAssistantSettings.shared.minConfidence = newValue
@@ -612,7 +612,7 @@ extension SettingsContentView {
                   }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
-              .tint(Ink.accent)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: memoryExtractionInterval) { _, newValue in
                 performStepHaptic()
                 MemoryAssistantSettings.shared.extractionInterval = newValue
@@ -645,7 +645,7 @@ extension SettingsContentView {
               }
 
               Slider(value: $memoryMinConfidence, in: 0.5...0.95, step: 0.05)
-                .tint(Ink.accent)
+                .tint(SettingsSelection.valueFill)
                 .onChange(of: memoryMinConfidence) { _, newValue in
                   performStepHaptic()
                   MemoryAssistantSettings.shared.minConfidence = newValue
@@ -779,7 +779,7 @@ extension SettingsContentView {
               }
             ), in: 0...Double(analysisDelayOptions.count - 1), step: 1
           )
-          .tint(Ink.accent)
+          .tint(SettingsSelection.valueFill)
           .onChange(of: analysisDelay) { _, newValue in
             performStepHaptic()
             AssistantSettings.shared.analysisDelay = newValue

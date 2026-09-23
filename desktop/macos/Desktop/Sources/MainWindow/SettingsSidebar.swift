@@ -33,8 +33,8 @@ struct SettingsSearchItem: Identifiable {
       settingId: "general.fontsize"),
     SettingsSearchItem(
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
-      keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.fontsize"),
+      keywords: ["resize", "window", "default size"], section: .general, icon: "macwindow",
+      settingId: "general.window"),
     SettingsSearchItem(
       name: "Transparency", subtitle: "How much of the desktop shows through the glass",
       keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
@@ -591,12 +591,12 @@ struct SettingsSidebarItem: View {
           HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
             Image(systemName: icon)
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
+              .foregroundColor(SettingsSelection.rowIcon(isSelected: isSelected))
               .frame(width: iconWidth)
 
             Text(section.displayTitle)
-              .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-              .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+              .scaledFont(size: OmiType.body, weight: SettingsSelection.rowWeight(isSelected: isSelected))
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
               .truncationMode(.tail)
               .layoutPriority(1)
@@ -614,15 +614,10 @@ struct SettingsSidebarItem: View {
           .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
           .contentShape(Rectangle())
           .background(
-            // Selection is the one thing on this pane that is actionable and is not already a
-            // button, which is exactly what the single accent is for. A row *shaded* rather than
-            // filled cannot be told apart from a hover on a surface this light — the shading a dark
-            // palette could spend here does not exist on glass.
+            // The top bar's pill ladder, so the current page is marked the way the current tab is.
+            // See `SettingsSelection`.
             RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-              .fill(
-                isSelected
-                  ? AnyShapeStyle(Ink.accent)
-                  : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
+              .fill(SettingsSelection.rowFill(isSelected: isSelected, isHovering: isHovered))
           )
         }
         .buttonStyle(.plain)
@@ -659,12 +654,12 @@ struct SettingsSubsectionItem: View {
 
         Image(systemName: subsection.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
+          .foregroundColor(SettingsSelection.rowIcon(isSelected: isSelected))
           .frame(width: 16)
 
         Text(subsection.rawValue)
-          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+          .scaledFont(size: OmiType.body, weight: SettingsSelection.rowWeight(isSelected: isSelected))
+          .foregroundColor(Ink.primary)
 
         Spacer()
       }
@@ -673,10 +668,7 @@ struct SettingsSubsectionItem: View {
       .contentShape(Rectangle())
       .background(
         RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-          .fill(
-            isSelected
-              ? AnyShapeStyle(Ink.accent)
-              : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
+          .fill(SettingsSelection.rowFill(isSelected: isSelected, isHovering: isHovered))
       )
     }
     .buttonStyle(.plain)
