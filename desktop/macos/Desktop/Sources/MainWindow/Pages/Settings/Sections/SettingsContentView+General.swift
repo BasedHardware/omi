@@ -348,7 +348,7 @@ extension SettingsContentView {
         // The mode-change observer restores capture automatically, and automatic
         // starts never raise the TCC sheet. Enabling listening here IS an explicit
         // user action, so it owns the one-shot permission request itself (same
-        // contract as the Listen control's `cycleListening`).
+        // contract as the top bar's `selectListeningMode`).
         if AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
           currentMode: previousMode,
           requestedMode: mode,

@@ -52,6 +52,13 @@ Esc removes the **innermost layer first**, one layer per press:
 | Selected / on state | neutral ink: `GlassShell.pillFill` for nav rows, `PageGlass.chipFill` / `SettingsSelection` for chosen options, `OmiToggleStyle` (ink track) for switches | an `Ink.accent` / system-blue fill; the accent is reserved for the one actionable link on a surface |
 | Editing a long text setting in its own window (assistant prompts) | `AssistantPromptEditorView`: a draft, Cancel (Esc), Save (⌘↩), Reset to Default bottom-left behind `.shellConfirmation` | saving on every keystroke, a "Done" button |
 
+- A control that changes **what Omi records** (the top bar's microphone, and any future capture
+  switch with more than on/off) opens a menu naming the choices, marks the current one and says under
+  each what it records (`ShellListeningModeMenu`). It never cycles through modes on click: one stray
+  click must not start recording. A two-state capture toggle whose tooltip names the result is fine.
+- Status dots on the top bar's capture icons: filled green = recording now, green ring with a hollow
+  centre = armed (on, waiting for a call), hollow = off, filled red = blocked (`ShellStatusDot`).
+  The glyph never changes with state or mode; the off-slash and mode badge are drawn on it.
 - Icon buttons come in three diameters: 22 (inline), 28 (headers — default), 32 (top bar).
 - `help` is required and doubles as the accessibility label. An icon without words is only a control
   for people who already know what it does.
