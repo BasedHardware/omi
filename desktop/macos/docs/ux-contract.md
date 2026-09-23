@@ -43,7 +43,7 @@ Esc removes the **innermost layer first**, one layer per press:
 | Icon that opens a menu | `OmiIconMenu(systemName:help:) { … }` | `Menu` with `.borderlessButton` (shows a stray chevron, drops the fill) |
 | Text action | `OmiButtonStyle(.primary / .secondary / .destructive, size: .regular / .compact)` | a filled `Capsule`/`RoundedRectangle` label, `.bordered`, `.borderedProminent` |
 | Copy | `CopyButton(help:) { text }`; from a menu item, `OmiToastCenter.shared.copy(text, confirming:)` | `NSPasteboard.general.setString` |
-| Toggle | `OmiToggleStyle()` switch | `.checkbox` |
+| On/off setting | `OmiToggleStyle()` switch | `.checkbox` (checkboxes are only for picking items out of a list) |
 
 - Icon buttons come in three diameters: 22 (inline), 28 (headers — default), 32 (top bar).
 - `help` is required and doubles as the accessibility label. An icon without words is only a control

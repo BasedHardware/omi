@@ -41,7 +41,7 @@ struct NameSpeakerSheet: View {
   private var previewText: String {
     let text = segment.text
     if text.count > 120 {
-      return String(text.prefix(120)) + "..."
+      return String(text.prefix(120)) + "…"
     }
     return text
   }
@@ -96,30 +96,21 @@ struct NameSpeakerSheet: View {
         Button("Cancel") {
           onDismiss()
         }
-        .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .keyboardShortcut(.cancelAction)
 
         Button {
           Task { await save() }
         } label: {
           if isSaving {
             ProgressView()
-              .scaleEffect(0.6)
-              .frame(width: 14, height: 14)
+              .controlSize(.small)
           } else {
             Text("Save")
           }
         }
-        .buttonStyle(.plain)
-        .foregroundColor(canSave ? Ink.surface : Ink.secondary)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          Capsule()
-            .fill(canSave ? Ink.primary : Ink.rowFillHover)
-        )
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .keyboardShortcut(.defaultAction)
         .disabled(!canSave || isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
@@ -128,6 +119,20 @@ struct NameSpeakerSheet: View {
     .frame(width: 400, height: 450)
     .background(Ink.surface)
     .glassContent()
+    // Reopening a named speaker starts on who it is now, so fixing a wrong name is one click.
+    .onAppear {
+      if segment.isUser {
+        isUserSelected = true
+      } else if let personId = segment.personId {
+        selectedPersonId = personId
+      }
+    }
+  }
+
+  private var currentAssignmentName: String? {
+    if segment.isUser { return "You" }
+    guard let personId = segment.personId else { return nil }
+    return people.first { $0.id == personId }?.name
   }
 
   // MARK: - Speaker Info
@@ -139,13 +144,20 @@ struct NameSpeakerSheet: View {
           .fill(Ink.rowFillHover)
           .frame(width: 28, height: 28)
           .overlay(
-            Text(String(segment.speakerId))
+            Text(String(SpeakerLabelFormatter.displayNumber(speakerId: segment.speakerId)))
               .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(Ink.primary)
           )
-        Text("Speaker \(segment.speakerId)")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
+        VStack(alignment: .leading, spacing: 0) {
+          Text(SpeakerLabelFormatter.anonymousLabel(speakerId: segment.speakerId))
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+          if let current = currentAssignmentName {
+            Text("Currently: \(current)")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+        }
       }
 
       Text("\"\(previewText)\"")

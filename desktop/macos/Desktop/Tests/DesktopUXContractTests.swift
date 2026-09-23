@@ -97,6 +97,31 @@ final class DesktopUXContractTests: XCTestCase {
     XCTAssertEqual(text, "Alice: Hi\n\nSpeaker 2: Hey")
   }
 
+  // MARK: - One conversation, one duration
+
+  /// Activity and the Conversations list must report the same length for the same conversation.
+  /// Activity measured the capture window (`finishedAt - startedAt`), which on a live socket is how
+  /// long the socket had been open: an 8-second dictation read as 42m45s in Activity and 8s in the
+  /// list (FC-capture-session-window-read-as-content-duration).
+  func testActivityAndConversationsReportTheSameDuration() {
+    let start = date(2026, 9, 23, 10, 0)
+    let conversation = ServerConversation(
+      id: "c1", createdAt: start, startedAt: start, finishedAt: start.addingTimeInterval(2565),
+      structured: Structured(title: "Dictation", overview: "", emoji: "", category: "other", actionItems: [], events: []),
+      transcriptSegments: [
+        TranscriptSegment(id: "s1", text: "remind me to call", speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 8)
+      ],
+      transcriptSegmentsIncluded: true, geolocation: nil, photos: [], appsResults: [], source: .desktop, language: "en",
+      status: .completed, discarded: false, deleted: false, isLocked: false, starred: false, folderId: nil,
+      inputDeviceName: nil)
+    let activityRow = SpineConversation(conversation: conversation, memoryCount: 0, taskCount: 0, momentCount: 0)
+
+    XCTAssertEqual(activityRow.duration, 8)
+    XCTAssertEqual(SpineFormat.duration(activityRow.duration), conversation.formattedDuration)
+    XCTAssertTrue(activityRow.emoji.isEmpty, "no 💬 fallback: the row draws the neutral waveform")
+    XCTAssertEqual(activityRow.title, conversation.displayTitle)
+  }
+
   // MARK: - Navigation vocabulary
 
   func testBackChipNamesItsDestinationAndAdvertisesEscape() {

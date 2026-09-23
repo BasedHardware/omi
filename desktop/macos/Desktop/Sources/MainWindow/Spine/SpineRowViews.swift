@@ -200,11 +200,19 @@ struct SpineConversationRow: View {
 
   var body: some View {
     HStack(spacing: 13) {
-      Text(summary.emoji)
-        .font(.system(size: 19))
-        .frame(width: 40, height: 40)
-        .background(Circle().fill(Ink.rowFillHover))
-        .overlay(Circle().strokeBorder(Ink.separator, lineWidth: 1))
+      Group {
+        if summary.emoji.isEmpty {
+          Image(systemName: "waveform")
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(Ink.secondary)
+        } else {
+          Text(summary.emoji)
+            .scaledFont(size: OmiType.heading)
+        }
+      }
+      .frame(width: 40, height: 40)
+      .background(Circle().fill(Ink.rowFillHover))
+      .overlay(Circle().strokeBorder(Ink.separator, lineWidth: 1))
 
       VStack(alignment: .leading, spacing: 2) {
         Text(summary.title)

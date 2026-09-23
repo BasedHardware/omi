@@ -483,7 +483,7 @@ struct RewindPage: View {
         QuerySearchBar(
           text: $viewModel.searchQuery,
           accessibilityID: "rewind-search-field",
-          placeholder: "Search rewind",
+          placeholder: "Search Rewind",
           focus: $isSearchFocused, searchSurface: .rewind
         )
         .onChange(of: viewModel.searchQuery) { _, query in
@@ -859,7 +859,7 @@ struct RewindPage: View {
   private func searchField(showResultsCount: Bool = false) -> some View {
     RewindSearchBar(
       query: $viewModel.searchQuery,
-      placeholder: "Search rewind",
+      placeholder: "Search Rewind",
       isSearching: viewModel.isSearching,
       countLabel: showResultsCount && viewModel.activeSearchQuery != nil
         ? RewindSearchResultsPanel.countLabel(

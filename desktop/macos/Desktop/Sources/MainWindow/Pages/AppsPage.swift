@@ -2922,17 +2922,12 @@ struct AppDetailSheet: View {
 
               // Disable button shown only when app is enabled
               if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {
-                Button(action: {
+                // Disabling is reversible, so it is not drawn as a delete (a red trash can).
+                Button("Disable") {
                   Task { await appProvider.toggleApp(app) }
-                }) {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(Ink.errorRed)
-                    .frame(width: 36, height: 36)
-                    .background(Ink.errorRed.opacity(0.1))
-                    .cornerRadius(OmiChrome.controlRadius)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .help("Disable this app. You can enable it again any time.")
               }
             }
           }

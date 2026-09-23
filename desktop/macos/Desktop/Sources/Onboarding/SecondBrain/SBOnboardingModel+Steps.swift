@@ -609,6 +609,12 @@ extension SBOnboardingModel {
     if let l = NSEvent.addLocalMonitorForEvents(
       matching: mask,
       handler: { [weak self] event in
+        // The main menu is detached on these steps (see `armShortcutSummon`), which also took ⌘Q
+        // with it. Quitting must never depend on finishing a setup step.
+        if Self.isQuitChord(event) {
+          NSApp.terminate(nil)
+          return nil
+        }
         let matched = self?.handleShortcutEvent(event) ?? false
         return matched ? nil : event
       })
@@ -623,6 +629,13 @@ extension SBOnboardingModel {
     {
       shortcutMonitors.append(g)
     }
+  }
+
+  /// ⌘Q exactly (no other modifiers). Never a candidate chord, so it cannot collide with a pick.
+  nonisolated static func isQuitChord(_ event: NSEvent) -> Bool {
+    event.type == .keyDown
+      && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+      && event.charactersIgnoringModifiers?.lowercased() == "q"
   }
 
   /// The shortcuts offered on the current step — used so the user can just PRESS

@@ -120,6 +120,8 @@ struct PersonaPage: View {
         }
         .buttonStyle(.plain)
         .disabled(isLoading)
+        .help("Refresh Persona")
+        .accessibilityLabel("Refresh Persona")
       }
     }
   }
@@ -288,31 +290,15 @@ struct PersonaPage: View {
 
         // Actions
         HStack(spacing: OmiSpacing.md) {
-          Button {
+          OmiIconButton("pencil", help: "Edit Persona") {
             editName = persona.name
             editDescription = persona.description
             isEditing = true
-          } label: {
-            Image(systemName: "pencil")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 36, height: 36)
-              .background(Ink.rowFillHover)
-              .cornerRadius(OmiChrome.elementRadius)
           }
-          .buttonStyle(.plain)
 
-          Button {
+          OmiIconButton("trash", help: "Delete Persona…", isDestructive: true) {
             showingDeleteConfirmation = true
-          } label: {
-            Image(systemName: "trash")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-              .frame(width: 36, height: 36)
-              .background(Ink.errorRed.opacity(0.15))
-              .cornerRadius(OmiChrome.elementRadius)
           }
-          .buttonStyle(.plain)
         }
       }
       .padding(OmiSpacing.xl)
