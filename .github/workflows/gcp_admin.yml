@@ -78,6 +78,10 @@ jobs:
           environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Keyless runtime identity: Firestore via roles/datastore.user, Auth
+          # reads via roles/firebaseauth.viewer, per-secret secretAccessor. The
+          # Admin SDK uses it through ADC; no service-account key is mounted.
+          service_account: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod') == 'prod' && 'omi-admin-dashboard-runtime@based-hardware.iam.gserviceaccount.com' || '' }}
           network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
