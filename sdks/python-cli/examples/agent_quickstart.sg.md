@@ -74,6 +74,9 @@ omi --json local task search "taxes" --include-completed
 
 Kô complete na e delete task ba ye kô ûa se nâ nângâ mâ rêmâ mâralâ tî kô ye:
 
+
+Only complete or delete tasks when the user clearly asks:
+
 ```bash
 omi --json local task complete task_123
 omi --json local task delete task_123 --yes
