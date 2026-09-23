@@ -1,3 +1,0 @@
-{
-  "change": "Reduced chat freezes by pausing conversation refresh work while that page is hidden"
-}
