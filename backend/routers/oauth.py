@@ -1,4 +1,4 @@
-﻿import hmac
+import hmac
 import logging
 import os
 import secrets
