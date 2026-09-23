@@ -135,7 +135,12 @@ async def test_add_mcp_server_masks_oauth_client_registration_error(monkeypatch)
     monkeypatch.setattr(
         apps_routes,
         'discover_oauth_metadata',
-        AsyncMock(return_value={'registration_endpoint': 'https://oauth.example.com/reg'}),
+        AsyncMock(
+            return_value={
+                'authorization_endpoint': 'https://oauth.example.com/auth',
+                'registration_endpoint': 'https://oauth.example.com/reg',
+            }
+        ),
     )
     mock_reg = AsyncMock(side_effect=RuntimeError('dynamic_client_reg_failed: key=master_token_99'))
     monkeypatch.setattr(apps_routes, 'register_oauth_client', mock_reg)
