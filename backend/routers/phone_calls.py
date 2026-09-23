@@ -238,7 +238,7 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
     try:
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to generate phone access token. Please try again.")
 
 
