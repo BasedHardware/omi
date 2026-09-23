@@ -1,16 +1,16 @@
-# conversations_to_jsonl.py
+# conversations_to_jsonl – Convert transcripts to JSONL
 
-A tiny command‑line helper that turns a plain‑text conversation transcript into a
-JSONL file ready for LLM fine‑tuning or Retrieval‑Augmented Generation (RAG).
+Fine‑tuning or Retrieval‑Augmented Generation (RAG) pipelines for large language
+models often expect data in **JSON Lines (JSONL)** format, where each line is a
+JSON object representing a single conversation.
 
-## Why JSONL?
+This recipe shows how to turn a simple, human‑readable transcript into that
+format using the `conversations_to_jsonl.py` helper script.
 
-- **Line‑delimited** – each line is a single JSON object, making it easy to stream.
-- **Standard format** – most LLM fine‑tuning pipelines (OpenAI, Anthropic, etc.) accept JSONL.
-- **RAG‑friendly** – you can later split the JSONL into chunks and embed them.
+---
 
-## Input format
+## 📄 Expected transcript format
 
-The script expects a **simple, line‑oriented transcript** where each line starts
-with a speaker label followed by a colon (`:`) and the utterance text.
+The script works with a plain‑text file where each utterance is on its own line
+and is prefixed by the speaker name followed by a colon:
 
