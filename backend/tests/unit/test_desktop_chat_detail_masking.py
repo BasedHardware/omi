@@ -58,4 +58,3 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
     assert exc_info.value.detail == "Service temporarily unavailable. Please try again."
     assert "prod-cache-01" not in exc_info.value.detail
     assert "6379" not in exc_info.value.detail
-
