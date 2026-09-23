@@ -200,6 +200,11 @@ Future _init() async {
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
 
+  final customBackendUrl = SharedPreferencesUtil().customBackendUrl;
+  if (customBackendUrl.isNotEmpty) {
+    Env.overrideApiBaseUrl(customBackendUrl);
+  }
+
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
   if (F.env == Environment.prod) {

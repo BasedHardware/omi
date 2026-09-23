@@ -16,6 +16,7 @@ abstract class Env {
     defaultValue: '9099',
   );
   static late final EnvFields _instance;
+  static bool _isInitialized = false;
   static String? _apiBaseUrlOverride;
   static bool isTestFlight = false;
 
@@ -24,27 +25,50 @@ abstract class Env {
 
   static void init(EnvFields instance) {
     _instance = instance;
+    _isInitialized = true;
   }
 
-  static void overrideApiBaseUrl(String url) {
-    _apiBaseUrlOverride = url;
+  static void overrideApiBaseUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      _apiBaseUrlOverride = null;
+      return;
+    }
+    var normalized = url.trim();
+    if (!normalized.endsWith('/')) {
+      normalized = '$normalized/';
+    }
+    _apiBaseUrlOverride = normalized;
+  }
+
+  static void resetApiBaseUrlOverride() {
+    _apiBaseUrlOverride = null;
   }
 
   static void clearApiBaseUrlOverrideForTesting() {
     _apiBaseUrlOverride = null;
   }
 
+  static bool get isApiBaseUrlOverridden => _apiBaseUrlOverride != null && _apiBaseUrlOverride!.isNotEmpty;
+
   static String? get posthogApiKey => _instance.posthogApiKey;
+
+  static String? get _configuredApiBaseUrl {
+    if (_apiBaseUrlFromDefine.isNotEmpty) return _apiBaseUrlFromDefine;
+    if (_isInitialized) {
+      final configuredApiBaseUrl = _instance.apiBaseUrl;
+      if (configuredApiBaseUrl != null && configuredApiBaseUrl.isNotEmpty) {
+        return configuredApiBaseUrl;
+      }
+    }
+    return profile.defaultApiBaseUrl;
+  }
+
+  static String get defaultApiBaseUrl => _configuredApiBaseUrl ?? profile.defaultApiBaseUrl;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl {
     if (_apiBaseUrlOverride != null) return _apiBaseUrlOverride;
-    if (_apiBaseUrlFromDefine.isNotEmpty) return _apiBaseUrlFromDefine;
-    final configuredApiBaseUrl = _instance.apiBaseUrl;
-    if (configuredApiBaseUrl != null && configuredApiBaseUrl.isNotEmpty) {
-      return configuredApiBaseUrl;
-    }
-    return profile.defaultApiBaseUrl;
+    return _configuredApiBaseUrl;
   }
 
   static int get firebaseAuthEmulatorPort => int.tryParse(_firebaseAuthEmulatorPort) ?? 9099;
@@ -93,7 +117,7 @@ abstract class Env {
     bool releaseBuild = kReleaseMode,
   }) {
     final effectiveProfile = configuredProfile ?? (productionFamily ? AppEnvironmentProfile.production : profile);
-    final normalized = (configuredApiBaseUrl ?? apiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
+    final normalized = (configuredApiBaseUrl ?? _configuredApiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
     final expected = effectiveProfile.defaultApiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
 
     if (effectiveProfile == AppEnvironmentProfile.localDev) {

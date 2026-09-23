@@ -644,6 +644,17 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
+  String get customBackendUrl => getString('customBackendUrl', defaultValue: '');
+
+  set customBackendUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      remove('customBackendUrl');
+    } else {
+      saveString('customBackendUrl', trimmed);
+    }
+  }
+
   set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
 
   bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled');

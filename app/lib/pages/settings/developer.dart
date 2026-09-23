@@ -19,6 +19,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
+import 'package:omi/pages/settings/widgets/custom_backend_url_tile.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/payments/payments_page.dart';
@@ -659,6 +660,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  const CustomBackendUrlTile(),
                   const SizedBox(height: 32),
 
                   // Debug Logs Section
