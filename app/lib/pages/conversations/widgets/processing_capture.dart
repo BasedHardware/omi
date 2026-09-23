@@ -450,16 +450,23 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const FaIcon(FontAwesomeIcons.camera, size: 12, color: OmiColors.textSecondary),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${provider.photos.length}',
-                    style: const TextStyle(color: OmiColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+              // The count says what it counts to a screen reader (hub audit #20).
+              child: Semantics(
+                label: context.l10n.conversationPhotosCount(provider.photos.length),
+                child: ExcludeSemantics(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const FaIcon(FontAwesomeIcons.camera, size: 12, color: OmiColors.textSecondary),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${provider.photos.length}',
+                        style:
+                            const TextStyle(color: OmiColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -469,7 +476,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                 child: Text(
-                  '... ${provider.segments.last.text} ...',
+                  '… ${provider.segments.last.text} …',
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -821,7 +828,7 @@ getPhoneMicRecordingButton(
   {
     if (isLoading) {
       text = context.l10n.initialisingRecorder;
-      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+      icon = const OmiSpinner(size: OmiSpinnerSize.small);
     } else if (currentActualState == RecordingState.record) {
       text = context.l10n.pauseRecording;
       icon = Container(

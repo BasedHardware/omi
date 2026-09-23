@@ -340,6 +340,7 @@ class HomeConversationsPreview extends StatelessWidget {
           conversation: conversation,
           date: date,
           conversationIdx: index,
+          allowSelection: false,
         );
       }),
     );

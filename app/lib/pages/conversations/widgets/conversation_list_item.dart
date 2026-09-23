@@ -55,6 +55,10 @@ class ConversationListItem extends StatefulWidget {
   /// Optional reprocess override for tests.
   final Future<ServerConversation?> Function(String conversationId)? reprocess;
 
+  /// Whether the long-press menu offers Select (multi-select). Off where no selection bar is shown
+  /// (the Home preview), so selection mode can never start without a way to act on it or leave.
+  final bool allowSelection;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
@@ -62,6 +66,7 @@ class ConversationListItem extends StatefulWidget {
     required this.conversationIdx,
     this.isFromOnboarding = false,
     this.reprocess,
+    this.allowSelection = true,
   });
 
   @override
@@ -229,7 +234,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final action = await showConversationActionsSheet(
       context,
       conversation,
-      canSelect: provider.isConversationEligibleForMerge(conversation.id),
+      canSelect: widget.allowSelection && provider.isConversationEligibleForMerge(conversation.id),
     );
     if (action == null || !context.mounted) return;
     switch (action) {
