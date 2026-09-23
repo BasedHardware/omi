@@ -39,6 +39,9 @@ class Rule:
     remedy: str
     # Files that *are* the shared component for this rule, so they may spell the primitive.
     owners: tuple[str, ...] = ()
+    # Match across line breaks (a modifier chain spans lines). The allow marker may sit on any line
+    # of the match.
+    multiline: bool = False
 
 
 def _owners(*names: str) -> tuple[str, ...]:
@@ -110,6 +113,18 @@ RULES: tuple[Rule, ...] = (
         (THEME_DIR,),
     ),
     Rule(
+        "scaled-progress-view",
+        # `ProgressView(…)` followed, through any chain of simple modifiers, by `.scaleEffect(`.
+        re.compile(
+            r"ProgressView\([^()\n]*\)"
+            r"(?:\s*\.(?:progressViewStyle|tint|controlSize|frame|padding)\([^()\n]*(?:\([^()\n]*\))?[^()\n]*\))*"
+            r"\s*\.scaleEffect\("
+        ),
+        "Use `GlassLoadingState(label:)` for a page state, or `ProgressView().controlSize(.small)` for an "
+        "inline spinner. `.scaleEffect` blurs the spinner and leaves its layout frame at the unscaled size.",
+        multiline=True,
+    ),
+    Rule(
         "ascii-ellipsis",
         re.compile(
             r'(?:\b(?:Text|Button|Label|TextField|SecureField|Toggle|Menu|help|navigationTitle)\(\s*|'
@@ -158,7 +173,16 @@ def is_owner(rule: Rule, path: str) -> bool:
 def count(rule: Rule, text: str) -> int:
     total = 0
     raw_lines = text.splitlines()
-    stripped_lines = strip_comments(text).splitlines()
+    stripped = strip_comments(text)
+    if rule.multiline:
+        allow = re.compile(rf"{ALLOW_MARKER}\s*{re.escape(rule.id)}\b")
+        for match in rule.pattern.finditer(stripped):
+            first = stripped.count("\n", 0, match.start())
+            last = first + match.group(0).count("\n")
+            if not any(allow.search(line) for line in raw_lines[first : last + 1]):
+                total += 1
+        return total
+    stripped_lines = stripped.splitlines()
     for raw, stripped in zip(raw_lines, stripped_lines):
         if ALLOW_MARKER in raw and re.search(rf"{ALLOW_MARKER}\s*{re.escape(rule.id)}\b", raw):
             continue

@@ -30,38 +30,9 @@ struct ChatSessionsSidebar: View {
       if chatProvider.isLoadingSessions {
         loadingView
       } else if let error = chatProvider.sessionsLoadError {
-        VStack(spacing: OmiSpacing.md) {
-          Image(systemName: "exclamationmark.triangle")
-            .scaledFont(size: 24)
-            .foregroundColor(Ink.errorRed)
-
-          Text("Failed to load chats")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.primary)
-
-          Text(error)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-            .multilineTextAlignment(.center)
-            .lineLimit(3)
-
-          Button(action: {
-            Task { await chatProvider.retryLoad() }
-          }) {
-            Text("Try Again")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.sm)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(Ink.primary)
-              )
-          }
-          .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(OmiSpacing.lg)
+        GlassErrorState(
+          title: "Couldn't Load Chats", message: error,
+          retry: { Task { await chatProvider.retryLoad() } })
       } else if chatProvider.filteredSessions.isEmpty {
         emptyStateView
       } else {
@@ -111,8 +82,7 @@ struct ChatSessionsSidebar: View {
       HStack(spacing: OmiSpacing.xs) {
         if isTogglingStarredFilter {
           ProgressView()
-            .scaleEffect(0.5)
-            .frame(width: 12, height: 12)
+            .controlSize(.small)
         } else {
           Image(systemName: chatProvider.showStarredOnly ? "star.fill" : "star")
             .scaledFont(size: OmiType.caption)
@@ -212,35 +182,11 @@ struct ChatSessionsSidebar: View {
   // MARK: - Loading & Empty States
 
   private var loadingView: some View {
-    VStack {
-      Spacer()
-      ProgressView()
-        .scaleEffect(0.8)
-      Text("Loading chats…")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-        .padding(.top, OmiSpacing.sm)
-      Spacer()
-    }
+    GlassLoadingState(label: "Loading chats…")
   }
 
   private var emptyStateView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Spacer()
-      Image(systemName: emptyStateIcon)
-        .scaledFont(size: 32)
-        .foregroundColor(Ink.secondary)
-
-      Text(emptyStateTitle)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.secondary)
-
-      Text(emptyStateSubtitle)
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-      Spacer()
-    }
-    .padding()
+    GlassEmptyState(systemImage: emptyStateIcon, title: emptyStateTitle, message: emptyStateSubtitle)
   }
 
   private var emptyStateIcon: String {
@@ -255,11 +201,11 @@ struct ChatSessionsSidebar: View {
 
   private var emptyStateTitle: String {
     if !chatProvider.searchQuery.isEmpty {
-      return "No results"
+      return "No Results"
     } else if chatProvider.showStarredOnly {
-      return "No starred chats"
+      return "No Starred Chats"
     } else {
-      return "No chats yet"
+      return "No Chats Yet"
     }
   }
 
@@ -339,8 +285,7 @@ struct SessionRow: View {
 
         if isDeleting {
           ProgressView()
-            .scaleEffect(0.5)
-            .frame(width: 14, height: 14)
+            .controlSize(.small)
         }
 
         // Hover actions

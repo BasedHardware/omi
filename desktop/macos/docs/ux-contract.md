@@ -42,6 +42,7 @@ Esc removes the **innermost layer first**, one layer per press:
 | Icon-only action | `OmiIconButton("trash", help: "Delete conversation", isDestructive: true)` | a hand-sized `Image` in a `.buttonStyle(.plain)` |
 | Icon that opens a menu | `OmiIconMenu(systemName:help:) { … }` | `Menu` with `.borderlessButton` (shows a stray chevron, drops the fill) |
 | Text action | `OmiButtonStyle(.primary / .secondary / .destructive, size: .regular / .compact)` | a filled `Capsule`/`RoundedRectangle` label, `.bordered`, `.borderedProminent` |
+| Open / Install on an app card | `AppActionButton` (compact primary, one size on every card) | a second, smaller copy for small cards |
 | Copy | `CopyButton(help:) { text }`; from a menu item, `OmiToastCenter.shared.copy(text, confirming:)` | `NSPasteboard.general.setString` |
 | On/off setting | `OmiToggleStyle()` switch | `.checkbox` (checkboxes are only for picking items out of a list) |
 
@@ -132,6 +133,33 @@ matching mobile). Raw diarization labels (`SPEAKER_00`) never reach the UI.
 - A detail that replaces a list hides the list's search and filter chrome, or retargets it to the
   detail. Typing in a search field never closes the detail as a side effect.
 - Truncated titles carry `.help(fullTitle)`.
+
+## 10. Page states
+
+A page body that has no rows yet is in one of three states, and each has one component
+(`MainWindow/Components/GlassPageStates.swift`). Do not draw a local glyph-title-button stack.
+
+| State | Component | Carries |
+|---|---|---|
+| First load | `GlassLoadingState(label: "Loading tasks…")` | one regular spinner, body text in `Ink.secondary` |
+| Load failed | `GlassErrorState(title: "Couldn't Load Tasks", message:, retry:)` | `exclamationmark.triangle`, **Try Again** as `OmiButtonStyle(.secondary, size: .compact)` |
+| Nothing here / nothing matches | `GlassEmptyState(systemImage:title:message:) { actions }` | glyph at `OmiType.title`, title at subheading semibold, body message |
+
+- Every state picks a `placement`: `.page` fills the page body or a sidebar column, `.scrolling` sits
+  inside a `ScrollView` and keeps `QueryShellLayout.minimumBodyHeight`, `.panel` takes its intrinsic
+  size inside a self-sizing panel (`TransparentWindowStatusPanel`).
+- Empty-state actions are `OmiButtonStyle(.secondary, size: .compact)` ("Clear Search", "Clear
+  Filters"), or one `.primary` when the action is how the page gets its first row ("New Memory").
+- Titles are Title Case: "No Matching Tasks", "Couldn't Load Memories".
+- A skeleton (Apps' shimmer grid) may replace `GlassLoadingState` where it already previews the
+  layout that will land. Do not add a new one.
+- `ContentUnavailableView` is not used: it brings the system's type and grey, not the glass rungs.
+
+**Spinners.** A page's first load is `GlassLoadingState`. Every other spinner — in a button, a row,
+a toolbar, a field, a "Loading more…" footer — is `ProgressView().controlSize(.small)`. Never
+`.scaleEffect` a `ProgressView`: it blurs the arcs and leaves the layout frame at the unscaled size
+(rule `scaled-progress-view`). A spinner inside a button replaces or sits beside the label; the
+button keeps its `OmiButtonStyle`.
 
 ## Adding to this contract
 

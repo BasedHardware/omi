@@ -4152,16 +4152,7 @@ struct TasksPage: View {
   // MARK: - Loading View
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ProgressView()
-        .scaleEffect(1.2)
-        .tint(Ink.secondary)
-
-      Text("Loading tasks…")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading tasks…")
   }
 
   // MARK: - Error View
@@ -4181,12 +4172,8 @@ struct TasksPage: View {
 
       Spacer(minLength: 8)
 
-      Button("Try Again") {
-        viewModel.retrySortOrderSync()
-      }
-      .buttonStyle(.bordered)
-      .controlSize(.small)
-      .tint(Ink.secondary)
+      Button(GlassPageState.retryTitle) { viewModel.retrySortOrderSync() }
+        .buttonStyle(GlassPageState.retryStyle)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
@@ -4203,30 +4190,11 @@ struct TasksPage: View {
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("Failed to load tasks")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, OmiSpacing.section)
-
-      Button("Try Again") {
-        Task {
-          await viewModel.loadTasks()
-        }
-      }
-      .buttonStyle(.bordered)
-      .tint(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Couldn't Load Tasks",
+      message: "Check your connection and try again.",
+      retry: { Task { await viewModel.loadTasks() } }
+    )
   }
 
   // MARK: - Empty View
@@ -4235,33 +4203,18 @@ struct TasksPage: View {
     // Search with no hits gets its own messaging (mobile parity);
     // otherwise the list is genuinely empty for the current view.
     let isSearchEmpty = !viewModel.normalizedSearchQuery.isEmpty
-    return VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text(isSearchEmpty ? "No Matching Tasks" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
-        .scaledFont(size: 24, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text(
-        isSearchEmpty
-          ? "No \(viewModel.showCompleted ? "completed" : "to-do") tasks match “\(viewModel.normalizedSearchQuery)”"
-          : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
-      )
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(Ink.secondary)
-      .multilineTextAlignment(.center)
-
+    return GlassEmptyState(
+      systemImage: isSearchEmpty ? "magnifyingglass" : "tray",
+      title: isSearchEmpty ? "No Matching Tasks" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"),
+      message: isSearchEmpty
+        ? "No \(viewModel.showCompleted ? "completed" : "to-do") tasks match “\(viewModel.normalizedSearchQuery)”"
+        : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
+    ) {
       if isSearchEmpty {
-        Button("Clear Search") {
-          viewModel.searchText = ""
-        }
-        .buttonStyle(.bordered)
-        .tint(Ink.secondary)
+        Button("Clear Search") { viewModel.searchText = "" }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   // MARK: - Tasks List View
@@ -4999,8 +4952,7 @@ struct ChatSessionStatusIndicator: View {
         // Streaming: spinning indicator + status text
         HStack(spacing: OmiSpacing.xxs) {
           ProgressView()
-            .scaleEffect(0.5)
-            .frame(width: 10, height: 10)
+            .controlSize(.small)
 
           Text(streamingStatus ?? "Responding…")
             .scaledFont(size: OmiType.micro, weight: .medium)
@@ -5915,7 +5867,7 @@ struct TaskRow: View {
         Button("Cancel") {
           showDatePicker = false
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
         Button("Save") {
           showDatePicker = false
@@ -5923,8 +5875,7 @@ struct TaskRow: View {
             await onUpdateDetails?(task, nil, editDueDate, nil, nil)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
     .padding(OmiSpacing.lg)
@@ -5954,7 +5905,7 @@ struct TaskRow: View {
         Button("Cancel") {
           showRepeatPicker = false
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
         Button("Save") {
           showRepeatPicker = false
@@ -5963,8 +5914,7 @@ struct TaskRow: View {
             await onUpdateDetails?(task, nil, nil, nil, ruleToSave)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
     .padding(OmiSpacing.lg)
@@ -6168,18 +6118,11 @@ struct TagBadgeInteractive: View {
             }
           }
 
-          Button {
+          Button("Done") {
             showTagPicker = false
             onUpdateTags(Array(editingTags))
-          } label: {
-            Text("Done")
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.xs)
-              .background(Capsule().fill(Ink.primary))
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(OmiSpacing.md)
@@ -6376,8 +6319,7 @@ struct TaskCreateSheet: View {
       // Footer
       HStack(spacing: OmiSpacing.md) {
         Button("Cancel") { dismissSheet() }
-          .buttonStyle(.bordered)
-          .controlSize(.large)
+          .buttonStyle(OmiButtonStyle(.secondary))
 
         Button {
           Task { await createTask() }
@@ -6388,9 +6330,7 @@ struct TaskCreateSheet: View {
             Text("Create").frame(width: 60)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
-        .controlSize(.large)
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(!canSave || isSaving)
       }
       .padding(OmiSpacing.xl)

@@ -126,49 +126,16 @@ struct PersonaPage: View {
     }
   }
 
-  // MARK: - Loading View
+  // MARK: - Loading & Error
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ProgressView()
-        .scaleEffect(1.2)
-
-      Text("Loading persona…")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.top, 100)
+    GlassLoadingState(label: "Loading persona…", placement: .scrolling)
   }
 
-  // MARK: - Error View
-
   private func errorView(_ message: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: OmiType.hero)
-        .foregroundColor(Ink.errorRed)
-
-      Text(message)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-
-      Button {
-        Task { await loadPersona() }
-      } label: {
-        Text("Try Again")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.surface)
-          .padding(.horizontal, OmiSpacing.xl)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.elementRadius)
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.top, 100)
+    GlassErrorState(
+      title: "Couldn't Load Persona", message: message, placement: .scrolling,
+      retry: { Task { await loadPersona() } })
   }
 
   // MARK: - No Persona View
@@ -203,18 +170,9 @@ struct PersonaPage: View {
       Button {
         showingCreateForm = true
       } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "plus")
-          Text("Create Persona")
-        }
-        .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(Ink.surface)
-        .padding(.horizontal, OmiSpacing.xxl)
-        .padding(.vertical, OmiSpacing.md)
-        .background(Ink.primary)
-        .cornerRadius(OmiChrome.smallControlRadius)
+        Label("Create Persona", systemImage: "plus")
       }
-      .buttonStyle(.plain)
+      .buttonStyle(OmiButtonStyle(.primary))
 
       // Info about public memories
       HStack(spacing: OmiSpacing.sm) {
@@ -361,28 +319,16 @@ struct PersonaPage: View {
             Button {
               isEditing = false
             } label: {
-              Text("Cancel")
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(Ink.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, OmiSpacing.md)
-                .background(Ink.rowFillHover)
-                .cornerRadius(OmiChrome.elementRadius)
+              Text("Cancel").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OmiButtonStyle(.secondary))
 
             Button {
               Task { await saveEdits() }
             } label: {
-              Text("Save Changes")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(Ink.surface)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, OmiSpacing.md)
-                .background(Ink.primary)
-                .cornerRadius(OmiChrome.elementRadius)
+              Text("Save Changes").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(OmiButtonStyle(.primary))
           }
         } else {
           Button {
@@ -390,22 +336,16 @@ struct PersonaPage: View {
           } label: {
             HStack {
               if isRegenerating {
-                ProgressView()
-                  .scaleEffect(0.8)
+                ProgressView().controlSize(.small)
               } else {
                 Image(systemName: "arrow.triangle.2.circlepath")
               }
 
               Text(isRegenerating ? "Regenerating…" : "Regenerate from Memories")
             }
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.primary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, OmiSpacing.md)
-            .background(Ink.rowFillHover)
-            .cornerRadius(OmiChrome.elementRadius)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.secondary))
           .disabled(isRegenerating)
         }
       }
@@ -694,8 +634,7 @@ private struct CreatePersonaSheetContent: View {
               }
 
             if isCheckingUsername {
-              ProgressView()
-                .scaleEffect(0.7)
+              ProgressView().controlSize(.small)
             } else if let available = usernameAvailable {
               Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundColor(available ? .green : .red)
@@ -751,20 +690,14 @@ private struct CreatePersonaSheetContent: View {
         } label: {
           HStack {
             if isCreating {
-              ProgressView()
-                .scaleEffect(0.8)
+              ProgressView().controlSize(.small)
             }
 
             Text(isCreating ? "Creating…" : "Create Persona")
           }
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.surface)
           .frame(maxWidth: .infinity)
-          .padding(.vertical, OmiSpacing.md)
-          .background(canCreate ? Ink.primary : Ink.secondary)
-          .cornerRadius(OmiChrome.smallControlRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(!canCreate || isCreating)
       }
       .padding(OmiSpacing.xl)

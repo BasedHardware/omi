@@ -2733,32 +2733,14 @@ struct MemoriesPage: View {
 
       // Action buttons
       HStack(spacing: OmiSpacing.sm) {
-        Button {
-          pendingSelectedTags.removeAll()
-        } label: {
-          Text("Clear")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(Ink.rowFillHover)
-            .cornerRadius(OmiChrome.badgeRadius)
-        }
-        .buttonStyle(.plain)
+        Button("Clear") { pendingSelectedTags.removeAll() }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
-        Button {
+        Button("Apply") {
           viewModel.selectedTags = pendingSelectedTags
           showCategoryFilter = false
-        } label: {
-          Text("Apply")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.surface)
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(Ink.primary)
-            .cornerRadius(OmiChrome.badgeRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
       .padding(OmiSpacing.md)
     }
@@ -2843,7 +2825,7 @@ struct MemoriesPage: View {
         if viewModel.isLoadingMore {
           HStack(spacing: OmiSpacing.sm) {
             ProgressView()
-              .scaleEffect(0.8)
+              .controlSize(.small)
             Text("Loading more…")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
@@ -2935,78 +2917,35 @@ struct MemoriesPage: View {
   // MARK: - Empty States
 
   private var emptyState: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "brain.head.profile")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("No Memories Yet")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text(
-        "Your memories and tips will appear here.\nMemories are extracted from your conversations."
-      )
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(Ink.secondary)
-      .multilineTextAlignment(.center)
-
+    GlassEmptyState(
+      systemImage: "brain.head.profile",
+      title: "No Memories Yet",
+      message: "Your memories and tips will appear here.\nMemories are extracted from your conversations."
+    ) {
       Button {
         viewModel.showingAddMemory = true
       } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "plus")
-          Text("Add Your First Memory")
-        }
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.surface)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Capsule(style: .continuous).fill(Ink.primary))
+        Label("New Memory", systemImage: "plus")
       }
-      .buttonStyle(.plain)
-      .padding(.top, OmiSpacing.sm)
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var noResultsView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: 36)
-        .foregroundColor(Ink.secondary)
-
-      Text("No matching memories")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text(memoryNoResultsDescription)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-
-      HStack(spacing: OmiSpacing.sm) {
-        if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          Button {
-            viewModel.searchText = ""
-          } label: {
-            PageQueryActionLabel(icon: "xmark.circle", title: "Clear search", isPrimary: true)
-          }
-          .buttonStyle(.plain)
-        }
-
-        if hasActiveMemoryFilterScope {
-          Button {
-            clearMemoryFilters()
-          } label: {
-            PageQueryActionLabel(icon: "line.3.horizontal.decrease.circle", title: "Clear filters")
-          }
-          .buttonStyle(.plain)
-        }
+    GlassEmptyState(
+      systemImage: "magnifyingglass",
+      title: "No Matching Memories",
+      message: memoryNoResultsDescription
+    ) {
+      if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Button("Clear Search") { viewModel.searchText = "" }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
-      .fixedSize(horizontal: false, vertical: true)
+      if hasActiveMemoryFilterScope {
+        Button("Clear Filters") { clearMemoryFilters() }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityIdentifier("memories-filtered-empty")
   }
 
@@ -3029,48 +2968,15 @@ struct MemoriesPage: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .progressViewStyle(.circular)
-        .scaleEffect(1.2)
-
-      Text("Loading memories…")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading memories…")
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: 36)
-        .foregroundColor(Ink.errorRed)
-
-      Text("Failed to Load Memories")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-
-      Button {
-        Task { await viewModel.loadMemories() }
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "arrow.clockwise")
-          Text("Try Again")
-        }
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.surface)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Capsule(style: .continuous).fill(Ink.primary))
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Couldn't Load Memories",
+      message: "Check your connection and try again.",
+      retry: { Task { await viewModel.loadMemories() } }
+    )
   }
 
   // MARK: - Sheets
@@ -3483,7 +3389,7 @@ struct MemoryDetailPanel: View {
       Spacer(minLength: OmiSpacing.xs)
 
       if viewModel.isTogglingVisibility {
-        ProgressView().scaleEffect(0.6)
+        ProgressView().controlSize(.small)
       }
 
       // Publishing and deleting are both one-way-feeling acts, so neither gets
@@ -3548,31 +3454,17 @@ struct MemoryDetailPanel: View {
           .frame(minHeight: 260)
 
         HStack(spacing: OmiSpacing.sm) {
-          Button {
-            isEditingContent = false
-          } label: {
-            Text("Cancel")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
+          Button("Cancel") { isEditingContent = false }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
-          Button {
+          Button("Save") {
             viewModel.editText = editContentText
             Task {
               await viewModel.saveEditedMemory(memory)
               isEditingContent = false
             }
-          } label: {
-            Text("Save")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.xxs)
-              .background(Ink.primary)
-              .cornerRadius(OmiChrome.badgeRadius)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(editContentText.isEmpty)
         }
       }

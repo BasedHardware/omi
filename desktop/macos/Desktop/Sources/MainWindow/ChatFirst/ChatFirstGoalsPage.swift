@@ -36,8 +36,7 @@ struct ChatFirstGoalsPage: View {
           unavailableState(message)
         case .inactive, .loading:
           if goalsStore.activeGoals.isEmpty {
-            ProgressView("Loading goals")
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
+            GlassLoadingState(label: "Loading goals…")
           } else {
             goalContent
           }
@@ -106,8 +105,7 @@ struct ChatFirstGoalsPage: View {
           )
           .id(detail.goal.goalId)
         } else if goalsStore.primaryFocusedGoal != nil || pendingGoalID != nil {
-          ProgressView("Loading goal")
-            .frame(maxWidth: .infinity)
+          GlassLoadingState(label: "Loading goal…", placement: .scrolling)
         }
 
         if !goalsStore.otherActiveGoals.isEmpty {
@@ -140,31 +138,26 @@ struct ChatFirstGoalsPage: View {
   }
 
   private var emptyState: some View {
-    ContentUnavailableView {
-      Label("No active goals", systemImage: "target")
-    } description: {
-      Text("Omi can help you turn what matters into a clear goal.")
-    } actions: {
-      Button("Talk to Omi about a goal") {
+    GlassEmptyState(
+      systemImage: "target",
+      title: "No Active Goals",
+      message: "Omi can help you turn what matters into a clear goal."
+    ) {
+      Button("Talk to Omi About a Goal") {
         navigation.discuss(.goals, using: chatProvider)
       }
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       .accessibilityIdentifier("chat-first-goals-empty-discuss")
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private func unavailableState(_ message: String) -> some View {
-    ContentUnavailableView {
-      Label("Goals are unavailable", systemImage: "exclamationmark.triangle")
-    } description: {
-      Text(message)
-    } actions: {
-      Button("Refresh") {
-        Task { await refreshProjectionAndDetail() }
-      }
-      .accessibilityIdentifier("chat-first-goals-unavailable-refresh")
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Goals Are Unavailable",
+      message: message,
+      retryAccessibilityIdentifier: "chat-first-goals-unavailable-refresh",
+      retry: { Task { await refreshProjectionAndDetail() } }
+    )
   }
 
   private func refreshProjectionAndDetail() async {

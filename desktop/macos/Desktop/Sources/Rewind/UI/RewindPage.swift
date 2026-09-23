@@ -983,8 +983,7 @@ struct RewindPage: View {
     GeometryReader { geometry in
       if isLoadingFrame && currentImage == nil {
         ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(1.2)
+          .controlSize(.regular)
           .tint(Ink.surface)
           .frame(width: geometry.size.width, height: geometry.size.height)
       } else if let image = currentImage, image.size.height > 0, image.size.width > 0, geometry.size.height > 0,
@@ -1443,56 +1442,18 @@ struct RewindPage: View {
 
   private var loadingView: some View {
     TransparentWindowStatusPanel {
-      VStack(spacing: OmiSpacing.md) {
-        ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(1.2)
-          .tint(Ink.surface)
-
-        Text("Loading screenshots…")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
+      GlassLoadingState(label: "Loading screenshots…", placement: .panel)
     }
   }
 
   private func errorView(_: String) -> some View {
     TransparentWindowStatusPanel {
-      VStack(spacing: OmiSpacing.lg) {
-        ZStack {
-          Circle()
-            .fill(Ink.errorRed.opacity(0.1))
-            .frame(width: 80, height: 80)
-
-          Image(systemName: "exclamationmark.triangle")
-            .scaledFont(size: 36)
-            .foregroundColor(Ink.errorRed)
-        }
-
-        Text("Failed to Load Screenshots")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-
-        Text("Try again. If this continues, restart Omi.")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-
-        Button {
-          Task { await viewModel.loadInitialData() }
-        } label: {
-          HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: "arrow.clockwise")
-            Text("Try Again")
-          }
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(PageGlass.primaryActionLabel)
-          .padding(.horizontal, OmiSpacing.xl)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.elementRadius)
-        }
-        .buttonStyle(.plain)
-      }
+      GlassErrorState(
+        title: "Couldn't Load Screenshots",
+        message: "Try again. If this continues, restart Omi.",
+        placement: .panel,
+        retry: { Task { await viewModel.loadInitialData() } }
+      )
     }
   }
 
@@ -1636,7 +1597,7 @@ struct RewindPage: View {
           .foregroundColor(Ink.primary)
 
         ProgressView()
-          .scaleEffect(0.7)
+          .controlSize(.small)
       }
 
       Spacer()
@@ -1649,8 +1610,7 @@ struct RewindPage: View {
           HStack(spacing: OmiSpacing.xs) {
             if isFinishing {
               ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12, height: 12)
+                .controlSize(.small)
             } else if showSavedSuccess {
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.caption, weight: .bold)
