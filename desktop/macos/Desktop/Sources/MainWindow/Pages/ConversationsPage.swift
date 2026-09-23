@@ -243,7 +243,12 @@ struct ConversationsPage: View {
         initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
         onCaptureFocusResolved: onCaptureFocusResolved,
         onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
-        onOpenLinkedTask: onOpenLinkedTask
+        onOpenLinkedTask: onOpenLinkedTask,
+        onOpenConversation: { selectedConversation = $0 },
+        onCaptureGroupChanged: {
+          // The list refresh is AppState's; an open search holds its own results.
+          if !searchQuery.isEmpty { performSearch(query: searchQuery) }
+        }
       )
     } else {
       // Main view with recording header and conversation list
@@ -620,10 +625,7 @@ struct ConversationsPage: View {
               selectedConversationIds.insert(conversation.id)
             }
           },
-          appState: appState,
-          captureMembers: CaptureGroupPresentation.otherLoadedMembers(of: conversation, in: visibleSearchResults),
-          onOpenCaptureMember: { selectedConversation = $0 },
-          onCaptureGroupChanged: { performSearch(query: searchQuery) }
+          appState: appState
         )
       }
     }

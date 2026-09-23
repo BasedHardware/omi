@@ -22,6 +22,7 @@ from utils.stt.live_metrics import (
     WINDOW_ADMISSION,
     WINDOW_CAP,
     WINDOW_CONTEXT,
+    WINDOW_DECODER_LOOPS,
     WINDOW_FORCED_CUTS,
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
@@ -34,6 +35,7 @@ from utils.stt.window_anchor import (
     SILENCE_FLUSH_SECONDS,
     RawSegment,
     buffer_cap_seconds,
+    collapse_decoder_loops,
     decide_window,
     parse_tdt_segments,
     read_max_context_seconds,
@@ -673,7 +675,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
                 self.fail('provider_5xx')
                 raise ValueError('Invalid TDT response')
-            segments = parse_tdt_segments(cast(dict[str, Any], data), dur)
+            segments = [self._without_loops(seg) for seg in parse_tdt_segments(cast(dict[str, Any], data), dur)]
             outcome = 'success' if segments else 'empty'
             self._health_success()
             return segments
@@ -696,6 +698,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)
+
+    @staticmethod
+    def _without_loops(segment: RawSegment) -> RawSegment:
+        text, collapsed = collapse_decoder_loops(segment.text)
+        if not collapsed:
+            return segment
+        WINDOW_DECODER_LOOPS.inc(collapsed)
+        return RawSegment(text=text, start=segment.start, end=segment.end)
 
     async def _materialize(
         self, segments: tuple[RawSegment, ...] | list[RawSegment], pcm: bytes, start: float, dur: float

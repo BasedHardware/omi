@@ -199,14 +199,6 @@ enum CaptureGroupPresentation {
     }
   }
 
-  /// Loaded members of `conversation`'s group other than itself, in list order.
-  static func otherLoadedMembers(
-    of conversation: ServerConversation, in conversations: [ServerConversation]
-  ) -> [ServerConversation] {
-    guard let groupId = conversation.captureGroup?.id else { return [] }
-    return conversations.filter { $0.captureGroup?.id == groupId && $0.id != conversation.id }
-  }
-
   /// Group id → the member shown for it, for groups with at least two loaded members.
   private static func representativeIds(_ conversations: [ServerConversation]) -> [String: String] {
     var loaded: [String: [ServerConversation]] = [:]
