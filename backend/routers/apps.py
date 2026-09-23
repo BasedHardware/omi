@@ -6,7 +6,7 @@ from html import escape
 from datetime import datetime, timezone
 
 import httpx
-from typing import List, Optional
+from typing import List, Mapping, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
@@ -650,15 +650,23 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
-def _matches_search_text(app: App, query: str) -> bool:
-    """Whether `app` matches a lowercased search query.
+def _raw_app_matches_search_text(app: Mapping[str, object], query: str) -> bool:
+    """Whether an unhydrated app record matches a lowercased search query.
 
     Name *or* description — the contract the `q` parameter documents, and the same fields the
     clients' offline fallback ranks over (desktop `appRanking.ts`). Matching the name alone made
     the remote endpoint strictly narrower than that fallback: an app found offline by a word in
     its description returned "No apps found" once the endpoint answered.
+
+    This runs before install/review enrichment and Pydantic construction so a selective query pays
+    those costs only for its matches. Type guards preserve the poison-record contract: malformed
+    legacy fields cannot crash search and will still be rejected by `App` if another field matches.
     """
-    return query in app.name.lower() or query in (app.description or '').lower()
+    name = app.get('name')
+    description = app.get('description')
+    return (isinstance(name, str) and query in name.lower()) or (
+        isinstance(description, str) and query in description.lower()
+    )
 
 
 def _name_match_tier(app: App, query: str) -> int:
@@ -694,6 +702,8 @@ def search_apps(
     Returns a flat list of apps matching the search and filter criteria.
     """
 
+    search_query = q.strip().lower() if q and q.strip() else None
+
     enabled_app_ids = None
     if installed_apps:
         enabled_app_ids = list(get_enabled_apps(uid))
@@ -717,6 +727,13 @@ def search_apps(
     if skipped_no_id:
         logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
     apps_data = valid_apps_data
+
+    # The catalog read is shared and cached, but installs/reviews are separate Redis MGETs and
+    # App construction validates every record. Apply the query to the cheap cached projection
+    # first so each keystroke enriches only records it can return, without changing substring
+    # matching or ranking semantics.
+    if search_query:
+        apps_data = [app for app in apps_data if _raw_app_matches_search_text(app, search_query)]
 
     app_ids = [app['id'] for app in apps_data]
     apps_installs = get_apps_installs_count(app_ids)
@@ -748,11 +765,6 @@ def search_apps(
     # Always exclude persona type apps from results
     filtered_apps = [app for app in apps if not app.is_a_persona()]
 
-    # Apply text search filter
-    if q and q.strip():
-        search_query = q.strip().lower()
-        filtered_apps = [app for app in filtered_apps if _matches_search_text(app, search_query)]
-
     # Apply rating filter
     if rating is not None:
         filtered_apps = [app for app in filtered_apps if (app.rating_avg or 0) >= rating]
@@ -770,8 +782,7 @@ def search_apps(
         filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
     else:
         # sort by installs when searching, otherwise by name
-        if q and q.strip():
-            search_query = q.strip().lower()
+        if search_query:
             # Name matches rank above description-only matches before popularity: results are
             # paginated, so an exact-name app must not be pushed off page 1 by a more-installed
             # app that only mentions the query in its description.
