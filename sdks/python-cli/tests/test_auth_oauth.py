@@ -333,3 +333,48 @@ def test_exchange_firebase_token_raises_when_key_field_missing(monkeypatch) -> N
     with pytest.raises(AuthError) as info:
         oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
     assert "missing the api key" in str(info.value).lower()
+
+
+
+
+def test_refresh_json_preserves_contract(cli_runner, config_path, monkeypatch):
+    """Ensure --json auth refresh emits exactly one JSON object with expiry."""
+    import datetime
+    from omi_cli import config as cfg
+    from omi_cli.main import app
+    from omi_cli.auth import store
+
+    store.store_oauth_tokens(
+        "default",
+        id_token="expired_id_token",
+        refresh_token="refresh_token",
+        expires_at=0,
+        api_base="https://api.test.omi.local",
+    )
+
+    def fake_refresh(profile_name):
+        c = cfg.load()
+        p = c.get_profile(profile_name)
+        p.id_token_expires_at = datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc).timestamp()
+        c.set_profile(p)
+        cfg.save(c)
+
+    from omi_cli.auth import oauth
+    monkeypatch.setattr(oauth, "refresh_id_token", fake_refresh)
+
+    result = cli_runner.invoke(app, ["--json", "auth", "refresh"])
+
+    assert result.exit_code == 0, result.stderr
+    import json
+    data = json.loads(result.stdout)
+    assert data["profile"] == "default"
+    assert data["refreshed"] is True
+    assert "id_token_expires_at" in data
+    # The JSON encoder might output it as float timestamp or formatted datetime if CustomEncoder applies.
+    # We just ensure it's there and > 0, or we can check the exact value if it uses the custom encoder.
+    # The custom json encoder converts floats if they match certain keys? Wait, no.
+    # Let's just assert the value.
+    if isinstance(data["id_token_expires_at"], (int, float)):
+        assert data["id_token_expires_at"] == datetime.datetime(2025, 1, 1, tzinfo=datetime.timezone.utc).timestamp()
+    else:
+        assert data["id_token_expires_at"] == "2025-01-01T00:00:00Z"

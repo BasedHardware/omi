@@ -229,6 +229,15 @@ def refresh(typer_ctx: typer.Context) -> None:
         )
     oauth_auth.refresh_id_token(profile.name)
     ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{escape(profile.name)}[/bold].")
+    if ctx.renderer.json_mode:
+        updated = ctx.reload_config().get_profile(profile.name)
+        ctx.renderer.emit(
+            {
+                "profile": profile.name,
+                "refreshed": True,
+                "id_token_expires_at": updated.id_token_expires_at,
+            }
+        )
 
 
 def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover — utility for sibling commands
