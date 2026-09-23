@@ -55,10 +55,10 @@ label. Recording never raises.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 import re
-import sys
 import threading
 from typing import Any, Callable
 
@@ -294,7 +294,7 @@ def bound_caller(label: str) -> str:
     cannot page the saturation signal.
     """
     try:
-        if not isinstance(label, str) or len(label) > 96 or _CALLER_RE.match(label) is None:
+        if len(label) > 96 or _CALLER_RE.match(label) is None:
             return _OTHER
         if label in _known_callers:
             return label
@@ -317,7 +317,8 @@ def call_site() -> str:
     label names the function that asked for the read.
     """
     try:
-        frame = sys._getframe(1)
+        frame = inspect.currentframe()
+        frame = frame.f_back if frame is not None else None
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
