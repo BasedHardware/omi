@@ -18,10 +18,14 @@ Raw audio files typically originate from:
 
 ## Generate a manifest
 
-To index a directory of audio chunks:
+To index a directory of audio chunks, provide the input directory and destination JSON path:
 
 ```sh
+# Using -o / --output flag
 python sdks/python-cli/examples/audio_chunks_to_manifest.py /path/to/recordings -o audio_manifest.json
+
+# Or using positional arguments
+python sdks/python-cli/examples/audio_chunks_to_manifest.py /path/to/recordings audio_manifest.json
 ```
 
 The script searches recursively (`rglob`) across subdirectories, case-insensitively recognizing all standard audio extensions (`.wav`, `.pcm`, `.mp3`, `.m4a`, `.opus`, `.flac`, `.ogg`, `.aac`).
@@ -29,7 +33,7 @@ The script searches recursively (`rglob`) across subdirectories, case-insensitiv
 ## Safe atomic writes and collision prevention
 
 - **Atomic write:** The manifest is written to a temporary `.partial` file and atomically renamed via `os.replace()`. If interrupted, no half-written or corrupted manifest remains on disk.
-- **Overwrite guard:** If the destination file already exists, the script raises `FileExistsError` to prevent accidental overwrites of existing audit records.
+- **Overwrite guard:** If the destination file already exists, the script exits with an error to prevent accidental overwrites of existing audit records.
 
 ## Manifest format
 
