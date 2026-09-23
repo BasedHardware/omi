@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// How long each kind of feedback stays up (docs/ux-contract.md §6).
@@ -22,10 +24,9 @@ abstract final class OmiFeedbackTiming {
 
 enum OmiFeedbackKind { confirm, info, error, undo, progress }
 
-// TODO(ux-tokens): replace with OmiColors.success / danger / textSecondary once the token file lands.
-const Color _successIconColor = Color(0xFF30D158);
-const Color _errorIconColor = Color(0xFFFF453A);
-const Color _infoIconColor = Color(0xFFAEAEB2);
+const Color _successIconColor = OmiColors.success;
+const Color _errorIconColor = OmiColors.danger;
+const Color _infoIconColor = OmiColors.textSecondary;
 
 /// The app's one toast system: a floating, neutral snackbar with a small coloured status icon.
 ///

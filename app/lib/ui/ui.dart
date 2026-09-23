@@ -14,6 +14,10 @@
 /// | Empty / failed / first-load page body | `OmiEmptyState`, `OmiErrorState`, `OmiLoadingState` |
 /// | Settings | `OmiSettingsGroup` of `OmiSettingsRow` / `OmiSettingsRow.toggle`, `OmiSectionHeader`, `OmiSwitch` |
 /// | Search | `OmiSearchField(placeholder:)` |
+/// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert` |
+/// | Toasts, undo, copy | `OmiFeedback.confirm/info/error/undo`, `OmiClipboard.copy` |
+/// | Dates, durations, speaker names | `OmiDateFormat.of(context)`, `OmiDuration`, `SpeakerNames` |
+/// | Startup / background prompts | `PromptQueue.instance.enqueue` |
 /// | A `Route` object | `omiPageRoute(builder:)`; to push a page use `routeToPage` |
 ///
 /// Page backgrounds are `OmiColors.surface0` (also the scaffold default); never read
@@ -28,6 +32,13 @@ export 'components/omi_search_field.dart';
 export 'components/omi_settings.dart';
 export 'components/omi_sheet.dart';
 export 'components/omi_spinner.dart';
+export 'feedback/omi_clipboard.dart';
+export 'feedback/omi_dialogs.dart';
+export 'feedback/omi_feedback.dart';
+export 'format/omi_date_format.dart';
+export 'format/omi_duration.dart';
+export 'format/speaker_names.dart';
 export 'omi_routes.dart';
+export 'prompts/prompt_queue.dart';
 export 'omi_theme.dart';
 export 'omi_tokens.dart';

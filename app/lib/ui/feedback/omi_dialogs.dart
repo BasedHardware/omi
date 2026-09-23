@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// The app's single confirmation / alert system (docs/ux-contract.md §5).
@@ -17,9 +19,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// actions red, the safe choice bold); elsewhere a Material `AlertDialog` with text buttons, the
 /// destructive one in [omiDialogDangerColor].
 
-// TODO(ux-tokens): replace with OmiColors.danger once the token file lands.
 /// Destructive action colour on Material dialogs (iOS dark-mode systemRed; legible on every dark surface).
-const Color omiDialogDangerColor = Color(0xFFFF453A);
+const Color omiDialogDangerColor = OmiColors.danger;
 
 /// One button in an [OmiAlertDialog].
 class OmiDialogAction {
