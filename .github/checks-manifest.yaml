@@ -1239,6 +1239,11 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: plugin-sdk-model-tests
+    command: ["bash", "scripts/run-plugin-sdk-tests.sh"]
+    triggers: ["plugins/omi-plugin-sdk/**", "scripts/run-plugin-sdk-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the SDK owns the webhook models every plugin parses, and backend/models/structured.py imports ActionItem/Event/Section/Structured from it, but no lane ran plugins/omi-plugin-sdk/tests/ - so TranscriptSegment.combine_segments could delete a double space instead of collapsing it (welding 'Part 1 ' + 'Part 2' into 'Part 1Part 2') while the canonical backend copy collapsed it correctly"
   - id: coingecko-null-optionals-tests
     command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
