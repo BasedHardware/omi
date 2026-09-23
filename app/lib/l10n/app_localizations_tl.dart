@@ -10254,4 +10254,138 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get memoryDetailsTitle => 'Alaala';
+
+  @override
+  String get editMemoryTitle => 'I-edit ang Alaala';
+
+  @override
+  String get newMemoryTitle => 'Bagong Alaala';
+
+  @override
+  String get memoryReadOnlyHint => 'Itinatago ang alaalang ito bilang kasaysayan at hindi ito mae-edit.';
+
+  @override
+  String get openConversation => 'Buksan ang usapan';
+
+  @override
+  String get memoryGraphTitle => 'Graph ng Alaala';
+
+  @override
+  String get memoryReviewTitle => 'Mga natutunan ko ngayon';
+
+  @override
+  String get memoryReviewRight => 'Tama';
+
+  @override
+  String get memoryReviewWrong => 'Mali';
+
+  @override
+  String get memoryReviewFix => 'Ayusin';
+
+  @override
+  String get memoryReviewConfirmed => 'Nakumpirma. Isasaalang-alang ko ito.';
+
+  @override
+  String get memoryReviewDropped => 'Tinanggal. Iiwasan ko ang ganitong mga detalye.';
+
+  @override
+  String get memoryReviewUpdated => 'Na-update.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Hindi ma-save, subukan ulit';
+
+  @override
+  String get indentTask => 'I-indent';
+
+  @override
+  String get outdentTask => 'Bawasan ang indent';
+
+  @override
+  String get goalDeleted => 'Na-delete ang layunin';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Hindi matanggap ang mga gawaing ito. Baka natanggap mo na ang share na ito.';
+
+  @override
+  String get pausePlayback => 'I-pause';
+
+  @override
+  String get deleteSample => 'I-delete ang sample';
+
+  @override
+  String get deletePersonTitle => 'I-delete ang Tao?';
+
+  @override
+  String get deletePersonLabel => 'I-delete ang tao';
+
+  @override
+  String get noPeopleYet => 'Wala Pang Tao';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-delete ang $count Gawain?',
+      one: 'I-delete ang 1 Gawain?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Naidagdag ang $count gawain sa listahan mo',
+      one: 'Naidagdag ang 1 gawain sa listahan mo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Idagdag ang $count Gawain',
+      one: 'Idagdag ang 1 Gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return 'Nagbahagi si $name ng $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Na-export sa $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Takdang petsa $date';
+  }
 }

@@ -10211,4 +10211,138 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.';
+
+  @override
+  String get memoryDetailsTitle => 'జ్ఞాపకం';
+
+  @override
+  String get editMemoryTitle => 'జ్ఞాపకాన్ని సవరించు';
+
+  @override
+  String get newMemoryTitle => 'కొత్త జ్ఞాపకం';
+
+  @override
+  String get memoryReadOnlyHint => 'ఈ జ్ఞాపకం చరిత్రగా ఉంచబడింది, దీన్ని సవరించలేరు.';
+
+  @override
+  String get openConversation => 'సంభాషణను తెరవండి';
+
+  @override
+  String get memoryGraphTitle => 'జ్ఞాపకాల గ్రాఫ్';
+
+  @override
+  String get memoryReviewTitle => 'ఈరోజు నేను నేర్చుకున్నవి';
+
+  @override
+  String get memoryReviewRight => 'సరైనది';
+
+  @override
+  String get memoryReviewWrong => 'తప్పు';
+
+  @override
+  String get memoryReviewFix => 'సరిచేయి';
+
+  @override
+  String get memoryReviewConfirmed => 'నిర్ధారించబడింది. దీని ప్రకారం నడుచుకుంటాను.';
+
+  @override
+  String get memoryReviewDropped => 'తొలగించబడింది. ఇలాంటి వాస్తవాలను నివారిస్తాను.';
+
+  @override
+  String get memoryReviewUpdated => 'నవీకరించబడింది.';
+
+  @override
+  String get memoryReviewSaveFailed => 'సేవ్ చేయలేకపోయాం, మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get indentTask => 'ఇండెంట్ చేయి';
+
+  @override
+  String get outdentTask => 'అవుట్‌డెంట్ చేయి';
+
+  @override
+  String get goalDeleted => 'లక్ష్యం తొలగించబడింది';
+
+  @override
+  String get sharedTasksAcceptFailed => 'ఈ పనులను అంగీకరించలేకపోయాం. మీరు ఇప్పటికే ఈ షేర్‌ను అంగీకరించి ఉండవచ్చు.';
+
+  @override
+  String get pausePlayback => 'పాజ్';
+
+  @override
+  String get deleteSample => 'నమూనాను తొలగించు';
+
+  @override
+  String get deletePersonTitle => 'వ్యక్తిని తొలగించాలా?';
+
+  @override
+  String get deletePersonLabel => 'వ్యక్తిని తొలగించు';
+
+  @override
+  String get noPeopleYet => 'ఇంకా వ్యక్తులు లేరు';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count పనులను తొలగించాలా?',
+      one: '1 పనిని తొలగించాలా?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count పనులు',
+      one: '1 పని',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'మీ జాబితాకు $count పనులు జోడించబడ్డాయి',
+      one: 'మీ జాబితాకు 1 పని జోడించబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count పనులను జోడించు',
+      one: '1 పనిని జోడించు',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count పనులను షేర్ చేశారు',
+      one: '1 పనిని షేర్ చేశారు',
+    );
+    return '$name $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platformకు ఎగుమతి చేయబడింది';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'గడువు $date';
+  }
 }

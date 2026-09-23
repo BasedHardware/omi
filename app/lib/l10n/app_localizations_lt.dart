@@ -10181,4 +10181,138 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neišsaugoti pakeitimai bus prarasti.';
+
+  @override
+  String get memoryDetailsTitle => 'Prisiminimas';
+
+  @override
+  String get editMemoryTitle => 'Redaguoti prisiminimą';
+
+  @override
+  String get newMemoryTitle => 'Naujas prisiminimas';
+
+  @override
+  String get memoryReadOnlyHint => 'Šis prisiminimas saugomas kaip istorija ir jo redaguoti negalima.';
+
+  @override
+  String get openConversation => 'Atidaryti pokalbį';
+
+  @override
+  String get memoryGraphTitle => 'Prisiminimų grafas';
+
+  @override
+  String get memoryReviewTitle => 'Ką šiandien sužinojau';
+
+  @override
+  String get memoryReviewRight => 'Teisinga';
+
+  @override
+  String get memoryReviewWrong => 'Neteisinga';
+
+  @override
+  String get memoryReviewFix => 'Pataisyti';
+
+  @override
+  String get memoryReviewConfirmed => 'Patvirtinta. Į tai atsižvelgsiu.';
+
+  @override
+  String get memoryReviewDropped => 'Atmesta. Vengsiu tokių faktų.';
+
+  @override
+  String get memoryReviewUpdated => 'Atnaujinta.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Nepavyko išsaugoti, bandykite dar kartą';
+
+  @override
+  String get indentTask => 'Įtraukti';
+
+  @override
+  String get outdentTask => 'Sumažinti įtrauką';
+
+  @override
+  String get goalDeleted => 'Tikslas ištrintas';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Nepavyko priimti šių užduočių. Galbūt šį bendrinimą jau priėmėte.';
+
+  @override
+  String get pausePlayback => 'Pristabdyti';
+
+  @override
+  String get deleteSample => 'Ištrinti pavyzdį';
+
+  @override
+  String get deletePersonTitle => 'Ištrinti asmenį?';
+
+  @override
+  String get deletePersonLabel => 'Ištrinti asmenį';
+
+  @override
+  String get noPeopleYet => 'Asmenų dar nėra';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinti užduotis ($count)?',
+      one: 'Ištrinti 1 užduotį?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Užduočių: $count',
+      one: '1 užduotis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Į jūsų sąrašą įtraukta užduočių: $count',
+      one: 'Į jūsų sąrašą įtraukta 1 užduotis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pridėti užduotis ($count)',
+      one: 'Pridėti 1 užduotį',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'užduotimis ($count)',
+      one: '1 užduotimi',
+    );
+    return '$name pasidalijo $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Eksportuota į $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Terminas $date';
+  }
 }

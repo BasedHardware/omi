@@ -10233,4 +10233,139 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.';
+
+  @override
+  String get memoryDetailsTitle => 'Ανάμνηση';
+
+  @override
+  String get editMemoryTitle => 'Επεξεργασία ανάμνησης';
+
+  @override
+  String get newMemoryTitle => 'Νέα ανάμνηση';
+
+  @override
+  String get memoryReadOnlyHint => 'Αυτή η ανάμνηση φυλάσσεται ως ιστορικό και δεν μπορεί να επεξεργαστεί.';
+
+  @override
+  String get openConversation => 'Άνοιγμα συνομιλίας';
+
+  @override
+  String get memoryGraphTitle => 'Γράφημα αναμνήσεων';
+
+  @override
+  String get memoryReviewTitle => 'Όσα έμαθα σήμερα';
+
+  @override
+  String get memoryReviewRight => 'Σωστό';
+
+  @override
+  String get memoryReviewWrong => 'Λάθος';
+
+  @override
+  String get memoryReviewFix => 'Διόρθωση';
+
+  @override
+  String get memoryReviewConfirmed => 'Επιβεβαιώθηκε. Θα το λάβω υπόψη.';
+
+  @override
+  String get memoryReviewDropped => 'Απορρίφθηκε. Θα αποφεύγω τέτοια στοιχεία.';
+
+  @override
+  String get memoryReviewUpdated => 'Ενημερώθηκε.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Δεν ήταν δυνατή η αποθήκευση, δοκιμάστε ξανά';
+
+  @override
+  String get indentTask => 'Εσοχή';
+
+  @override
+  String get outdentTask => 'Αφαίρεση εσοχής';
+
+  @override
+  String get goalDeleted => 'Ο στόχος διαγράφηκε';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Δεν ήταν δυνατή η αποδοχή αυτών των εργασιών. Ίσως έχετε ήδη αποδεχτεί αυτήν την κοινοποίηση.';
+
+  @override
+  String get pausePlayback => 'Παύση';
+
+  @override
+  String get deleteSample => 'Διαγραφή δείγματος';
+
+  @override
+  String get deletePersonTitle => 'Διαγραφή ατόμου;';
+
+  @override
+  String get deletePersonLabel => 'Διαγραφή ατόμου';
+
+  @override
+  String get noPeopleYet => 'Δεν υπάρχουν άτομα ακόμη';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγραφή $count εργασιών;',
+      one: 'Διαγραφή 1 εργασίας;',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εργασίες',
+      one: '1 εργασία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Προστέθηκαν $count εργασίες στη λίστα σας',
+      one: 'Προστέθηκε 1 εργασία στη λίστα σας',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Προσθήκη $count εργασιών',
+      one: 'Προσθήκη 1 εργασίας',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εργασίες',
+      one: '1 εργασία',
+    );
+    return 'Ο/Η $name μοιράστηκε $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Εξήχθη στο $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Λήξη: $date';
+  }
 }

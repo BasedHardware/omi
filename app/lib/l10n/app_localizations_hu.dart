@@ -10202,4 +10202,139 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get memoryDetailsTitle => 'Emlék';
+
+  @override
+  String get editMemoryTitle => 'Emlék szerkesztése';
+
+  @override
+  String get newMemoryTitle => 'Új emlék';
+
+  @override
+  String get memoryReadOnlyHint => 'Ez az emlék előzményként van megőrizve, és nem szerkeszthető.';
+
+  @override
+  String get openConversation => 'Beszélgetés megnyitása';
+
+  @override
+  String get memoryGraphTitle => 'Emléktérkép';
+
+  @override
+  String get memoryReviewTitle => 'Amit ma megtudtam';
+
+  @override
+  String get memoryReviewRight => 'Helyes';
+
+  @override
+  String get memoryReviewWrong => 'Helytelen';
+
+  @override
+  String get memoryReviewFix => 'Javítás';
+
+  @override
+  String get memoryReviewConfirmed => 'Megerősítve. Ehhez igazodom.';
+
+  @override
+  String get memoryReviewDropped => 'Elvetve. Kerülni fogom az ilyen tényeket.';
+
+  @override
+  String get memoryReviewUpdated => 'Frissítve.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Nem sikerült menteni, próbáld újra';
+
+  @override
+  String get indentTask => 'Behúzás';
+
+  @override
+  String get outdentTask => 'Behúzás csökkentése';
+
+  @override
+  String get goalDeleted => 'Cél törölve';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Nem sikerült elfogadni a feladatokat. Lehet, hogy már elfogadtad ezt a megosztást.';
+
+  @override
+  String get pausePlayback => 'Szünet';
+
+  @override
+  String get deleteSample => 'Minta törlése';
+
+  @override
+  String get deletePersonTitle => 'Törlöd a személyt?';
+
+  @override
+  String get deletePersonLabel => 'Személy törlése';
+
+  @override
+  String get noPeopleYet => 'Még nincsenek személyek';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Törölsz $count feladatot?',
+      one: 'Törölsz 1 feladatot?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count feladat',
+      one: '1 feladat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count feladat hozzáadva a listádhoz',
+      one: '1 feladat hozzáadva a listádhoz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count feladat hozzáadása',
+      one: '1 feladat hozzáadása',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count feladatot',
+      one: '1 feladatot',
+    );
+    return '$name megosztott $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exportálva ide: $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Határidő: $date';
+  }
 }

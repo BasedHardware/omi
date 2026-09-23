@@ -10162,4 +10162,139 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Endringer som ikke er lagret, går tapt.';
+
+  @override
+  String get memoryDetailsTitle => 'Minne';
+
+  @override
+  String get editMemoryTitle => 'Rediger minne';
+
+  @override
+  String get newMemoryTitle => 'Nytt minne';
+
+  @override
+  String get memoryReadOnlyHint => 'Dette minnet er lagret som historikk og kan ikke redigeres.';
+
+  @override
+  String get openConversation => 'Åpne samtale';
+
+  @override
+  String get memoryGraphTitle => 'Minnegraf';
+
+  @override
+  String get memoryReviewTitle => 'Dette lærte jeg i dag';
+
+  @override
+  String get memoryReviewRight => 'Riktig';
+
+  @override
+  String get memoryReviewWrong => 'Feil';
+
+  @override
+  String get memoryReviewFix => 'Rett';
+
+  @override
+  String get memoryReviewConfirmed => 'Bekreftet. Jeg tar hensyn til dette.';
+
+  @override
+  String get memoryReviewDropped => 'Forkastet. Jeg unngår fakta som dette.';
+
+  @override
+  String get memoryReviewUpdated => 'Oppdatert.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Kunne ikke lagre, prøv igjen';
+
+  @override
+  String get indentTask => 'Rykk inn';
+
+  @override
+  String get outdentTask => 'Rykk ut';
+
+  @override
+  String get goalDeleted => 'Mål slettet';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Kunne ikke godta disse oppgavene. Du har kanskje allerede godtatt denne delingen.';
+
+  @override
+  String get pausePlayback => 'Pause';
+
+  @override
+  String get deleteSample => 'Slett prøve';
+
+  @override
+  String get deletePersonTitle => 'Slette person?';
+
+  @override
+  String get deletePersonLabel => 'Slett person';
+
+  @override
+  String get noPeopleYet => 'Ingen personer ennå';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slette $count oppgaver?',
+      one: 'Slette 1 oppgave?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count oppgaver',
+      one: '1 oppgave',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'La til $count oppgaver i listen din',
+      one: 'La til 1 oppgave i listen din',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Legg til $count oppgaver',
+      one: 'Legg til 1 oppgave',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count oppgaver',
+      one: '1 oppgave',
+    );
+    return '$name delte $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Eksportert til $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Frist $date';
+  }
 }

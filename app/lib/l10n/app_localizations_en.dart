@@ -10153,4 +10153,138 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Your unsaved changes will be lost.';
+
+  @override
+  String get memoryDetailsTitle => 'Memory';
+
+  @override
+  String get editMemoryTitle => 'Edit Memory';
+
+  @override
+  String get newMemoryTitle => 'New Memory';
+
+  @override
+  String get memoryReadOnlyHint => 'This memory is kept as history and can\'t be edited.';
+
+  @override
+  String get openConversation => 'Open conversation';
+
+  @override
+  String get memoryGraphTitle => 'Memory Graph';
+
+  @override
+  String get memoryReviewTitle => 'Things I learned today';
+
+  @override
+  String get memoryReviewRight => 'Right';
+
+  @override
+  String get memoryReviewWrong => 'Wrong';
+
+  @override
+  String get memoryReviewFix => 'Fix';
+
+  @override
+  String get memoryReviewConfirmed => 'Confirmed. I\'ll act on this.';
+
+  @override
+  String get memoryReviewDropped => 'Dropped. I\'ll avoid facts like this.';
+
+  @override
+  String get memoryReviewUpdated => 'Updated.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Couldn\'t save, try again';
+
+  @override
+  String get indentTask => 'Indent';
+
+  @override
+  String get outdentTask => 'Outdent';
+
+  @override
+  String get goalDeleted => 'Goal deleted';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Couldn\'t accept these tasks. You may have already accepted this share.';
+
+  @override
+  String get pausePlayback => 'Pause';
+
+  @override
+  String get deleteSample => 'Delete sample';
+
+  @override
+  String get deletePersonTitle => 'Delete Person?';
+
+  @override
+  String get deletePersonLabel => 'Delete person';
+
+  @override
+  String get noPeopleYet => 'No People Yet';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count Tasks?',
+      one: 'Delete 1 Task?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks',
+      one: '1 task',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Added $count tasks to your list',
+      one: 'Added 1 task to your list',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Add $count Tasks',
+      one: 'Add 1 Task',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks',
+      one: '1 task',
+    );
+    return '$name shared $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exported to $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Due $date';
+  }
 }

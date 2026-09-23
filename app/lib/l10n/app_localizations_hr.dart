@@ -10198,4 +10198,138 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Vaše nespremljene promjene bit će izgubljene.';
+
+  @override
+  String get memoryDetailsTitle => 'Sjećanje';
+
+  @override
+  String get editMemoryTitle => 'Uredi sjećanje';
+
+  @override
+  String get newMemoryTitle => 'Novo sjećanje';
+
+  @override
+  String get memoryReadOnlyHint => 'Ovo sjećanje čuva se kao povijest i ne može se uređivati.';
+
+  @override
+  String get openConversation => 'Otvori razgovor';
+
+  @override
+  String get memoryGraphTitle => 'Graf sjećanja';
+
+  @override
+  String get memoryReviewTitle => 'Što sam danas naučio';
+
+  @override
+  String get memoryReviewRight => 'Točno';
+
+  @override
+  String get memoryReviewWrong => 'Netočno';
+
+  @override
+  String get memoryReviewFix => 'Ispravi';
+
+  @override
+  String get memoryReviewConfirmed => 'Potvrđeno. Uzet ću to u obzir.';
+
+  @override
+  String get memoryReviewDropped => 'Odbačeno. Izbjegavat ću ovakve činjenice.';
+
+  @override
+  String get memoryReviewUpdated => 'Ažurirano.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Spremanje nije uspjelo, pokušajte ponovno';
+
+  @override
+  String get indentTask => 'Uvuci';
+
+  @override
+  String get outdentTask => 'Izvuci';
+
+  @override
+  String get goalDeleted => 'Cilj je izbrisan';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Nije moguće prihvatiti ove zadatke. Možda ste već prihvatili ovo dijeljenje.';
+
+  @override
+  String get pausePlayback => 'Pauza';
+
+  @override
+  String get deleteSample => 'Izbriši uzorak';
+
+  @override
+  String get deletePersonTitle => 'Izbrisati osobu?';
+
+  @override
+  String get deletePersonLabel => 'Izbriši osobu';
+
+  @override
+  String get noPeopleYet => 'Još nema osoba';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izbrisati zadatke ($count)?',
+      one: 'Izbrisati 1 zadatak?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zadataka: $count',
+      one: '1 zadatak',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dodano zadataka na vaš popis: $count',
+      one: 'Dodan je 1 zadatak na vaš popis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dodaj zadatke ($count)',
+      one: 'Dodaj 1 zadatak',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'zadatke ($count)',
+      one: '1 zadatak',
+    );
+    return '$name je podijelio/la $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Izvezeno u $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Rok: $date';
+  }
 }

@@ -9994,4 +9994,138 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '저장하지 않은 변경 사항이 사라집니다.';
+
+  @override
+  String get memoryDetailsTitle => '기억';
+
+  @override
+  String get editMemoryTitle => '기억 편집';
+
+  @override
+  String get newMemoryTitle => '새 기억';
+
+  @override
+  String get memoryReadOnlyHint => '이 기억은 기록으로 보관되며 편집할 수 없습니다.';
+
+  @override
+  String get openConversation => '대화 열기';
+
+  @override
+  String get memoryGraphTitle => '기억 그래프';
+
+  @override
+  String get memoryReviewTitle => '오늘 알게 된 것';
+
+  @override
+  String get memoryReviewRight => '맞아요';
+
+  @override
+  String get memoryReviewWrong => '틀려요';
+
+  @override
+  String get memoryReviewFix => '수정';
+
+  @override
+  String get memoryReviewConfirmed => '확인했어요. 이를 반영할게요.';
+
+  @override
+  String get memoryReviewDropped => '삭제했어요. 이런 정보는 피할게요.';
+
+  @override
+  String get memoryReviewUpdated => '업데이트했어요.';
+
+  @override
+  String get memoryReviewSaveFailed => '저장하지 못했어요. 다시 시도하세요';
+
+  @override
+  String get indentTask => '들여쓰기';
+
+  @override
+  String get outdentTask => '내어쓰기';
+
+  @override
+  String get goalDeleted => '목표를 삭제했어요';
+
+  @override
+  String get sharedTasksAcceptFailed => '이 작업을 받을 수 없어요. 이미 이 공유를 수락했을 수 있어요.';
+
+  @override
+  String get pausePlayback => '일시정지';
+
+  @override
+  String get deleteSample => '샘플 삭제';
+
+  @override
+  String get deletePersonTitle => '사람을 삭제할까요?';
+
+  @override
+  String get deletePersonLabel => '사람 삭제';
+
+  @override
+  String get noPeopleYet => '아직 사람이 없어요';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개를 삭제할까요?',
+      one: '작업 1개를 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개',
+      one: '작업 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '목록에 작업 $count개를 추가했어요',
+      one: '목록에 작업 1개를 추가했어요',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개 추가',
+      one: '작업 1개 추가',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개를 공유했어요',
+      one: '작업 1개를 공유했어요',
+    );
+    return '$name님이 $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platform(으)로 내보냄';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return '마감 $date';
+  }
 }

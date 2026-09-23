@@ -10174,4 +10174,138 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔';
+
+  @override
+  String get memoryDetailsTitle => 'یاد';
+
+  @override
+  String get editMemoryTitle => 'یاد میں ترمیم کریں';
+
+  @override
+  String get newMemoryTitle => 'نئی یاد';
+
+  @override
+  String get memoryReadOnlyHint => 'یہ یاد تاریخ کے طور پر رکھی گئی ہے اور اس میں ترمیم نہیں ہو سکتی۔';
+
+  @override
+  String get openConversation => 'گفتگو کھولیں';
+
+  @override
+  String get memoryGraphTitle => 'یادوں کا گراف';
+
+  @override
+  String get memoryReviewTitle => 'آج میں نے کیا سیکھا';
+
+  @override
+  String get memoryReviewRight => 'درست';
+
+  @override
+  String get memoryReviewWrong => 'غلط';
+
+  @override
+  String get memoryReviewFix => 'درست کریں';
+
+  @override
+  String get memoryReviewConfirmed => 'تصدیق ہو گئی۔ میں اس کے مطابق عمل کروں گا۔';
+
+  @override
+  String get memoryReviewDropped => 'ہٹا دیا گیا۔ میں ایسے حقائق سے گریز کروں گا۔';
+
+  @override
+  String get memoryReviewUpdated => 'اپ ڈیٹ ہو گیا۔';
+
+  @override
+  String get memoryReviewSaveFailed => 'محفوظ نہیں ہو سکا، دوبارہ کوشش کریں';
+
+  @override
+  String get indentTask => 'انڈینٹ کریں';
+
+  @override
+  String get outdentTask => 'آؤٹ ڈینٹ کریں';
+
+  @override
+  String get goalDeleted => 'ہدف حذف کر دیا گیا';
+
+  @override
+  String get sharedTasksAcceptFailed => 'یہ کام قبول نہیں ہو سکے۔ شاید آپ یہ شیئر پہلے ہی قبول کر چکے ہیں۔';
+
+  @override
+  String get pausePlayback => 'روکیں';
+
+  @override
+  String get deleteSample => 'نمونہ حذف کریں';
+
+  @override
+  String get deletePersonTitle => 'شخص حذف کریں؟';
+
+  @override
+  String get deletePersonLabel => 'شخص حذف کریں';
+
+  @override
+  String get noPeopleYet => 'ابھی کوئی شخص نہیں';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کام حذف کریں؟',
+      one: '1 کام حذف کریں؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کام',
+      one: '1 کام',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'آپ کی فہرست میں $count کام شامل کیے گئے',
+      one: 'آپ کی فہرست میں 1 کام شامل کیا گیا',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کام شامل کریں',
+      one: '1 کام شامل کریں',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کام شیئر کیے',
+      one: '1 کام شیئر کیا',
+    );
+    return '$name نے $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platform میں ایکسپورٹ کیا گیا';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'آخری تاریخ $date';
+  }
 }

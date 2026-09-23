@@ -9991,4 +9991,138 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '保存されていない変更は失われます。';
+
+  @override
+  String get memoryDetailsTitle => 'メモリー';
+
+  @override
+  String get editMemoryTitle => 'メモリーを編集';
+
+  @override
+  String get newMemoryTitle => '新しいメモリー';
+
+  @override
+  String get memoryReadOnlyHint => 'このメモリーは履歴として保存されており、編集できません。';
+
+  @override
+  String get openConversation => '会話を開く';
+
+  @override
+  String get memoryGraphTitle => 'メモリーグラフ';
+
+  @override
+  String get memoryReviewTitle => '今日わかったこと';
+
+  @override
+  String get memoryReviewRight => '正しい';
+
+  @override
+  String get memoryReviewWrong => '間違い';
+
+  @override
+  String get memoryReviewFix => '修正';
+
+  @override
+  String get memoryReviewConfirmed => '確認しました。これを踏まえて対応します。';
+
+  @override
+  String get memoryReviewDropped => '削除しました。このような事実は避けます。';
+
+  @override
+  String get memoryReviewUpdated => '更新しました。';
+
+  @override
+  String get memoryReviewSaveFailed => '保存できませんでした。もう一度お試しください';
+
+  @override
+  String get indentTask => 'インデント';
+
+  @override
+  String get outdentTask => 'インデント解除';
+
+  @override
+  String get goalDeleted => '目標を削除しました';
+
+  @override
+  String get sharedTasksAcceptFailed => 'これらのタスクを受け取れませんでした。この共有はすでに受け取っている可能性があります。';
+
+  @override
+  String get pausePlayback => '一時停止';
+
+  @override
+  String get deleteSample => 'サンプルを削除';
+
+  @override
+  String get deletePersonTitle => 'この人を削除しますか？';
+
+  @override
+  String get deletePersonLabel => 'この人を削除';
+
+  @override
+  String get noPeopleYet => 'まだ人がいません';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスクを削除しますか？',
+      one: '1件のタスクを削除しますか？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスク',
+      one: '1件のタスク',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスクをリストに追加しました',
+      one: '1件のタスクをリストに追加しました',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスクを追加',
+      one: '1件のタスクを追加',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスクを共有しました',
+      one: '1件のタスクを共有しました',
+    );
+    return '$nameさんが$_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platformにエクスポート済み';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return '期限：$date';
+  }
 }

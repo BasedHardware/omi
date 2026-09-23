@@ -10220,4 +10220,139 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Le modifiche non salvate andranno perse.';
+
+  @override
+  String get memoryDetailsTitle => 'Ricordo';
+
+  @override
+  String get editMemoryTitle => 'Modifica ricordo';
+
+  @override
+  String get newMemoryTitle => 'Nuovo ricordo';
+
+  @override
+  String get memoryReadOnlyHint => 'Questo ricordo è conservato come cronologia e non può essere modificato.';
+
+  @override
+  String get openConversation => 'Apri conversazione';
+
+  @override
+  String get memoryGraphTitle => 'Grafico dei ricordi';
+
+  @override
+  String get memoryReviewTitle => 'Cosa ho imparato oggi';
+
+  @override
+  String get memoryReviewRight => 'Giusto';
+
+  @override
+  String get memoryReviewWrong => 'Sbagliato';
+
+  @override
+  String get memoryReviewFix => 'Correggi';
+
+  @override
+  String get memoryReviewConfirmed => 'Confermato. Ne terrò conto.';
+
+  @override
+  String get memoryReviewDropped => 'Scartato. Eviterò informazioni come questa.';
+
+  @override
+  String get memoryReviewUpdated => 'Aggiornato.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Impossibile salvare, riprova';
+
+  @override
+  String get indentTask => 'Rientra';
+
+  @override
+  String get outdentTask => 'Riduci rientro';
+
+  @override
+  String get goalDeleted => 'Obiettivo eliminato';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Impossibile accettare queste attività. Forse hai già accettato questa condivisione.';
+
+  @override
+  String get pausePlayback => 'Pausa';
+
+  @override
+  String get deleteSample => 'Elimina campione';
+
+  @override
+  String get deletePersonTitle => 'Eliminare la persona?';
+
+  @override
+  String get deletePersonLabel => 'Elimina persona';
+
+  @override
+  String get noPeopleYet => 'Ancora nessuna persona';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Eliminare $count attività?',
+      one: 'Eliminare 1 attività?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attività',
+      one: '1 attività',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attività aggiunte al tuo elenco',
+      one: '1 attività aggiunta al tuo elenco',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aggiungi $count attività',
+      one: 'Aggiungi 1 attività',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attività',
+      one: '1 attività',
+    );
+    return '$name ha condiviso $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Esportato in $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Scadenza: $date';
+  }
 }

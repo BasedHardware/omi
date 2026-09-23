@@ -10175,4 +10175,138 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Kaydedilmemiş değişiklikleriniz kaybolacak.';
+
+  @override
+  String get memoryDetailsTitle => 'Anı';
+
+  @override
+  String get editMemoryTitle => 'Anıyı Düzenle';
+
+  @override
+  String get newMemoryTitle => 'Yeni Anı';
+
+  @override
+  String get memoryReadOnlyHint => 'Bu anı geçmiş olarak saklanıyor ve düzenlenemez.';
+
+  @override
+  String get openConversation => 'Konuşmayı aç';
+
+  @override
+  String get memoryGraphTitle => 'Anı Grafiği';
+
+  @override
+  String get memoryReviewTitle => 'Bugün öğrendiklerim';
+
+  @override
+  String get memoryReviewRight => 'Doğru';
+
+  @override
+  String get memoryReviewWrong => 'Yanlış';
+
+  @override
+  String get memoryReviewFix => 'Düzelt';
+
+  @override
+  String get memoryReviewConfirmed => 'Onaylandı. Buna göre hareket edeceğim.';
+
+  @override
+  String get memoryReviewDropped => 'Bırakıldı. Bu tür bilgilerden kaçınacağım.';
+
+  @override
+  String get memoryReviewUpdated => 'Güncellendi.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Kaydedilemedi, tekrar deneyin';
+
+  @override
+  String get indentTask => 'Girinti ekle';
+
+  @override
+  String get outdentTask => 'Girintiyi azalt';
+
+  @override
+  String get goalDeleted => 'Hedef silindi';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Bu görevler kabul edilemedi. Bu paylaşımı zaten kabul etmiş olabilirsiniz.';
+
+  @override
+  String get pausePlayback => 'Duraklat';
+
+  @override
+  String get deleteSample => 'Örneği sil';
+
+  @override
+  String get deletePersonTitle => 'Kişi silinsin mi?';
+
+  @override
+  String get deletePersonLabel => 'Kişiyi sil';
+
+  @override
+  String get noPeopleYet => 'Henüz Kişi Yok';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count görev silinsin mi?',
+      one: '1 görev silinsin mi?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count görev',
+      one: '1 görev',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Listenize $count görev eklendi',
+      one: 'Listenize 1 görev eklendi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Görev Ekle',
+      one: '1 Görev Ekle',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count görev paylaştı',
+      one: '1 görev paylaştı',
+    );
+    return '$name $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platform uygulamasına aktarıldı';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Son tarih $date';
+  }
 }

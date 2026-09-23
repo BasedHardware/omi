@@ -10165,4 +10165,138 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Tallentamattomat muutokset menetetään.';
+
+  @override
+  String get memoryDetailsTitle => 'Muisto';
+
+  @override
+  String get editMemoryTitle => 'Muokkaa muistoa';
+
+  @override
+  String get newMemoryTitle => 'Uusi muisto';
+
+  @override
+  String get memoryReadOnlyHint => 'Tämä muisto säilytetään historiana, eikä sitä voi muokata.';
+
+  @override
+  String get openConversation => 'Avaa keskustelu';
+
+  @override
+  String get memoryGraphTitle => 'Muistikartta';
+
+  @override
+  String get memoryReviewTitle => 'Mitä opin tänään';
+
+  @override
+  String get memoryReviewRight => 'Oikein';
+
+  @override
+  String get memoryReviewWrong => 'Väärin';
+
+  @override
+  String get memoryReviewFix => 'Korjaa';
+
+  @override
+  String get memoryReviewConfirmed => 'Vahvistettu. Toimin sen mukaan.';
+
+  @override
+  String get memoryReviewDropped => 'Hylätty. Vältän tällaisia tietoja.';
+
+  @override
+  String get memoryReviewUpdated => 'Päivitetty.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Tallennus epäonnistui, yritä uudelleen';
+
+  @override
+  String get indentTask => 'Sisennä';
+
+  @override
+  String get outdentTask => 'Poista sisennys';
+
+  @override
+  String get goalDeleted => 'Tavoite poistettu';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Tehtäviä ei voitu hyväksyä. Olet ehkä jo hyväksynyt tämän jaon.';
+
+  @override
+  String get pausePlayback => 'Tauko';
+
+  @override
+  String get deleteSample => 'Poista näyte';
+
+  @override
+  String get deletePersonTitle => 'Poistetaanko henkilö?';
+
+  @override
+  String get deletePersonLabel => 'Poista henkilö';
+
+  @override
+  String get noPeopleYet => 'Ei vielä henkilöitä';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistetaanko $count tehtävää?',
+      one: 'Poistetaanko 1 tehtävä?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tehtävää',
+      one: '1 tehtävä',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Luetteloosi lisättiin $count tehtävää',
+      one: 'Luetteloosi lisättiin 1 tehtävä',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Lisää $count tehtävää',
+      one: 'Lisää 1 tehtävä',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tehtävää',
+      one: '1 tehtävän',
+    );
+    return '$name jakoi $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Viety kohteeseen $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Määräpäivä $date';
+  }
 }

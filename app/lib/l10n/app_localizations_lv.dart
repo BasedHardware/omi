@@ -10187,4 +10187,139 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get memoryDetailsTitle => 'Atmiņa';
+
+  @override
+  String get editMemoryTitle => 'Rediģēt atmiņu';
+
+  @override
+  String get newMemoryTitle => 'Jauna atmiņa';
+
+  @override
+  String get memoryReadOnlyHint => 'Šī atmiņa tiek glabāta kā vēsture, un to nevar rediģēt.';
+
+  @override
+  String get openConversation => 'Atvērt sarunu';
+
+  @override
+  String get memoryGraphTitle => 'Atmiņu grafs';
+
+  @override
+  String get memoryReviewTitle => 'Ko es šodien uzzināju';
+
+  @override
+  String get memoryReviewRight => 'Pareizi';
+
+  @override
+  String get memoryReviewWrong => 'Nepareizi';
+
+  @override
+  String get memoryReviewFix => 'Labot';
+
+  @override
+  String get memoryReviewConfirmed => 'Apstiprināts. Es to ņemšu vērā.';
+
+  @override
+  String get memoryReviewDropped => 'Atmests. Izvairīšos no šādiem faktiem.';
+
+  @override
+  String get memoryReviewUpdated => 'Atjaunināts.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Neizdevās saglabāt, mēģiniet vēlreiz';
+
+  @override
+  String get indentTask => 'Atkāpe';
+
+  @override
+  String get outdentTask => 'Samazināt atkāpi';
+
+  @override
+  String get goalDeleted => 'Mērķis izdzēsts';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Neizdevās pieņemt šos uzdevumus. Iespējams, jūs jau esat pieņēmis šo kopīgojumu.';
+
+  @override
+  String get pausePlayback => 'Pauze';
+
+  @override
+  String get deleteSample => 'Dzēst paraugu';
+
+  @override
+  String get deletePersonTitle => 'Dzēst personu?';
+
+  @override
+  String get deletePersonLabel => 'Dzēst personu';
+
+  @override
+  String get noPeopleYet => 'Vēl nav personu';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst uzdevumus ($count)?',
+      one: 'Dzēst 1 uzdevumu?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Uzdevumi: $count',
+      one: '1 uzdevums',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jūsu sarakstam pievienoti uzdevumi: $count',
+      one: 'Jūsu sarakstam pievienots 1 uzdevums',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pievienot uzdevumus ($count)',
+      one: 'Pievienot 1 uzdevumu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'uzdevumus ($count)',
+      one: '1 uzdevumu',
+    );
+    return '$name kopīgoja $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Eksportēts uz $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Termiņš: $date';
+  }
 }

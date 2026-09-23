@@ -10193,4 +10193,139 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Niezapisane zmiany zostaną utracone.';
+
+  @override
+  String get memoryDetailsTitle => 'Wspomnienie';
+
+  @override
+  String get editMemoryTitle => 'Edytuj wspomnienie';
+
+  @override
+  String get newMemoryTitle => 'Nowe wspomnienie';
+
+  @override
+  String get memoryReadOnlyHint => 'To wspomnienie jest przechowywane jako historia i nie można go edytować.';
+
+  @override
+  String get openConversation => 'Otwórz rozmowę';
+
+  @override
+  String get memoryGraphTitle => 'Graf wspomnień';
+
+  @override
+  String get memoryReviewTitle => 'Czego się dziś dowiedziałem';
+
+  @override
+  String get memoryReviewRight => 'Zgadza się';
+
+  @override
+  String get memoryReviewWrong => 'Błędne';
+
+  @override
+  String get memoryReviewFix => 'Popraw';
+
+  @override
+  String get memoryReviewConfirmed => 'Potwierdzone. Będę się tym kierować.';
+
+  @override
+  String get memoryReviewDropped => 'Odrzucono. Będę unikać takich faktów.';
+
+  @override
+  String get memoryReviewUpdated => 'Zaktualizowano.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Nie udało się zapisać, spróbuj ponownie';
+
+  @override
+  String get indentTask => 'Zwiększ wcięcie';
+
+  @override
+  String get outdentTask => 'Zmniejsz wcięcie';
+
+  @override
+  String get goalDeleted => 'Cel usunięty';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Nie udało się przyjąć tych zadań. Być może to udostępnienie zostało już przyjęte.';
+
+  @override
+  String get pausePlayback => 'Wstrzymaj';
+
+  @override
+  String get deleteSample => 'Usuń próbkę';
+
+  @override
+  String get deletePersonTitle => 'Usunąć osobę?';
+
+  @override
+  String get deletePersonLabel => 'Usuń osobę';
+
+  @override
+  String get noPeopleYet => 'Brak osób';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usunąć zadania ($count)?',
+      one: 'Usunąć 1 zadanie?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zadania: $count',
+      one: '1 zadanie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dodano zadania do listy: $count',
+      one: 'Dodano 1 zadanie do listy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dodaj zadania ($count)',
+      one: 'Dodaj 1 zadanie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'zadania ($count)',
+      one: '1 zadanie',
+    );
+    return '$name udostępnia $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Wyeksportowano do $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Termin: $date';
+  }
 }

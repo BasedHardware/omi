@@ -10162,4 +10162,138 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neuložené změny budou ztraceny.';
+
+  @override
+  String get memoryDetailsTitle => 'Vzpomínka';
+
+  @override
+  String get editMemoryTitle => 'Upravit vzpomínku';
+
+  @override
+  String get newMemoryTitle => 'Nová vzpomínka';
+
+  @override
+  String get memoryReadOnlyHint => 'Tato vzpomínka je uchována jako historie a nelze ji upravit.';
+
+  @override
+  String get openConversation => 'Otevřít konverzaci';
+
+  @override
+  String get memoryGraphTitle => 'Graf vzpomínek';
+
+  @override
+  String get memoryReviewTitle => 'Co jsem se dnes dozvěděl';
+
+  @override
+  String get memoryReviewRight => 'Správně';
+
+  @override
+  String get memoryReviewWrong => 'Špatně';
+
+  @override
+  String get memoryReviewFix => 'Opravit';
+
+  @override
+  String get memoryReviewConfirmed => 'Potvrzeno. Budu se tím řídit.';
+
+  @override
+  String get memoryReviewDropped => 'Zahozeno. Budu se takovým faktům vyhýbat.';
+
+  @override
+  String get memoryReviewUpdated => 'Aktualizováno.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Uložení se nezdařilo, zkuste to znovu';
+
+  @override
+  String get indentTask => 'Odsadit';
+
+  @override
+  String get outdentTask => 'Zrušit odsazení';
+
+  @override
+  String get goalDeleted => 'Cíl smazán';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Úkoly se nepodařilo přijmout. Možná jste toto sdílení už přijali.';
+
+  @override
+  String get pausePlayback => 'Pozastavit';
+
+  @override
+  String get deleteSample => 'Smazat vzorek';
+
+  @override
+  String get deletePersonTitle => 'Smazat osobu?';
+
+  @override
+  String get deletePersonLabel => 'Smazat osobu';
+
+  @override
+  String get noPeopleYet => 'Zatím žádné osoby';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat úkoly ($count)?',
+      one: 'Smazat 1 úkol?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Úkolů: $count',
+      one: '1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Do seznamu přibyly úkoly: $count',
+      one: 'Do seznamu přibyl 1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Přidat úkoly ($count)',
+      one: 'Přidat 1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'úkoly ($count)',
+      one: '1 úkol',
+    );
+    return '$name sdílí $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Exportováno do $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Termín: $date';
+  }
 }

@@ -10193,4 +10193,138 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Вашы незахаваныя змены будуць страчаны.';
+
+  @override
+  String get memoryDetailsTitle => 'Успамін';
+
+  @override
+  String get editMemoryTitle => 'Рэдагаваць успамін';
+
+  @override
+  String get newMemoryTitle => 'Новы ўспамін';
+
+  @override
+  String get memoryReadOnlyHint => 'Гэты ўспамін захоўваецца як гісторыя і не можа быць зменены.';
+
+  @override
+  String get openConversation => 'Адкрыць размову';
+
+  @override
+  String get memoryGraphTitle => 'Граф успамінаў';
+
+  @override
+  String get memoryReviewTitle => 'Што я даведаўся сёння';
+
+  @override
+  String get memoryReviewRight => 'Дакладна';
+
+  @override
+  String get memoryReviewWrong => 'Няправільна';
+
+  @override
+  String get memoryReviewFix => 'Выправіць';
+
+  @override
+  String get memoryReviewConfirmed => 'Пацверджана. Я буду гэта ўлічваць.';
+
+  @override
+  String get memoryReviewDropped => 'Адкінута. Я буду пазбягаць падобных фактаў.';
+
+  @override
+  String get memoryReviewUpdated => 'Абноўлена.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Не ўдалося захаваць, паспрабуйце яшчэ раз';
+
+  @override
+  String get indentTask => 'Павялічыць водступ';
+
+  @override
+  String get outdentTask => 'Паменшыць водступ';
+
+  @override
+  String get goalDeleted => 'Мэта выдалена';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Не ўдалося прыняць гэтыя задачы. Магчыма, вы ўжо прынялі гэты доступ.';
+
+  @override
+  String get pausePlayback => 'Паўза';
+
+  @override
+  String get deleteSample => 'Выдаліць узор';
+
+  @override
+  String get deletePersonTitle => 'Выдаліць чалавека?';
+
+  @override
+  String get deletePersonLabel => 'Выдаліць чалавека';
+
+  @override
+  String get noPeopleYet => 'Пакуль няма людзей';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць задачы: $count?',
+      one: 'Выдаліць 1 задачу?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Задач: $count',
+      one: '1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дададзена задач у ваш спіс: $count',
+      one: 'Дададзена 1 задача ў ваш спіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дадаць задачы: $count',
+      one: 'Дадаць 1 задачу',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'задачамі: $count',
+      one: '1 задачай',
+    );
+    return '$name падзяліўся(-лася) $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Экспартавана ў $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Тэрмін: $date';
+  }
 }

@@ -10190,4 +10190,139 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Je niet-opgeslagen wijzigingen gaan verloren.';
+
+  @override
+  String get memoryDetailsTitle => 'Herinnering';
+
+  @override
+  String get editMemoryTitle => 'Herinnering bewerken';
+
+  @override
+  String get newMemoryTitle => 'Nieuwe herinnering';
+
+  @override
+  String get memoryReadOnlyHint => 'Deze herinnering wordt bewaard als geschiedenis en kan niet worden bewerkt.';
+
+  @override
+  String get openConversation => 'Gesprek openen';
+
+  @override
+  String get memoryGraphTitle => 'Herinneringsgrafiek';
+
+  @override
+  String get memoryReviewTitle => 'Wat ik vandaag heb geleerd';
+
+  @override
+  String get memoryReviewRight => 'Klopt';
+
+  @override
+  String get memoryReviewWrong => 'Klopt niet';
+
+  @override
+  String get memoryReviewFix => 'Corrigeren';
+
+  @override
+  String get memoryReviewConfirmed => 'Bevestigd. Ik houd hier rekening mee.';
+
+  @override
+  String get memoryReviewDropped => 'Verworpen. Ik vermijd dit soort feiten.';
+
+  @override
+  String get memoryReviewUpdated => 'Bijgewerkt.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Opslaan mislukt, probeer het opnieuw';
+
+  @override
+  String get indentTask => 'Inspringen';
+
+  @override
+  String get outdentTask => 'Uitspringen';
+
+  @override
+  String get goalDeleted => 'Doel verwijderd';
+
+  @override
+  String get sharedTasksAcceptFailed =>
+      'Deze taken konden niet worden geaccepteerd. Misschien heb je deze deling al geaccepteerd.';
+
+  @override
+  String get pausePlayback => 'Pauzeren';
+
+  @override
+  String get deleteSample => 'Sample verwijderen';
+
+  @override
+  String get deletePersonTitle => 'Persoon verwijderen?';
+
+  @override
+  String get deletePersonLabel => 'Persoon verwijderen';
+
+  @override
+  String get noPeopleYet => 'Nog geen personen';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken verwijderen?',
+      one: '1 taak verwijderen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken',
+      one: '1 taak',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken aan je lijst toegevoegd',
+      one: '1 taak aan je lijst toegevoegd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken toevoegen',
+      one: '1 taak toevoegen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken gedeeld',
+      one: '1 taak gedeeld',
+    );
+    return '$name heeft $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Geëxporteerd naar $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Deadline $date';
+  }
 }
