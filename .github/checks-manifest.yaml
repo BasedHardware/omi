@@ -1415,6 +1415,11 @@ checks:
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14523: resolver URLs with encoded DOI path characters, query strings, or fragments must normalize to one validated DOI before Crossref lookup"
+  - id: crossref-title-and-record-robustness-tests
+    command: ["python3", "plugins/omi-crossref-app/test_title_and_record_robustness.py"]
+    triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Crossref app must preserve string titles without single-letter truncation and handle malformed record dates safely"
   - id: shipbob-create-wro-disambiguation-tests
     command: ["python3", "plugins/omi-shipbob-app/test_create_wro_disambiguation.py"]
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
