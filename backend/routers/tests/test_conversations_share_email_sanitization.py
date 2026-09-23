@@ -64,3 +64,10 @@ class TestConversationsShareEmailSanitization:
         assert raw_msg not in detail
         assert "SECRET_KEY" not in detail
         assert "db.internal" not in detail
+
+    def test_generic_exception_fallback(self):
+        """Default error fallback must remain generic and safe."""
+        err = Exception("unexpected internal crash")
+        detail = _safe_detail_for_exception(err, 500)
+        assert detail == "An error occurred. Please try again."
+        assert "internal crash" not in detail
