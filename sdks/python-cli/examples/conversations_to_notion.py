@@ -1,119 +1,73 @@
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
 
-def make_rich_text(text, bold=False):
-    return [{
-        "type": "text",
-        "text": {"content": text[:2000]},
-        "annotations": {"bold": bold}
-    }]
+
+def create_heading_block(text):
+    return {
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {
+            "rich_text": [{"type": "text", "text": {"content": text[:2000]}}]
+        }
+    }
+
+
+def create_paragraph_block(speaker, text):
+    content = f"{speaker}: {text}" if speaker else text
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [{"type": "text", "text": {"content": content[:2000]}}]
+        }
+    }
+
 
 def convert(source, destination):
     raw = Path(source).read_bytes()
     data = json.loads(raw)
     items = data if isinstance(data, list) else data.get("conversations", data.get("items", []))
     if not isinstance(items, list):
-        raise ValueError("Expected JSON array from omi --json conversation list")
+        raise ValueError("Expected JSON array from 'omi --json conversation list'")
 
     dest = Path(destination)
     if dest.exists():
         raise FileExistsError(f"Destination already exists: {dest}")
 
-    blocks = []
-    for conv in items:
-        if not isinstance(conv, dict):
-            continue
-        title = (
-            conv.get("structured", {}).get("title")
-            if isinstance(conv.get("structured"), dict)
-            else conv.get("title")
-        ) or f"Conversation {conv.get('id', '')}"
-        
-        overview = (
-            conv.get("structured", {}).get("overview")
-            if isinstance(conv.get("structured"), dict)
-            else conv.get("overview")
-        ) or ""
-
-        blocks.append({
-            "object": "block",
-            "type": "heading_1",
-            "heading_1": {"rich_text": make_rich_text(title)}
-        })
-
-        if overview:
-            blocks.append({
-                "object": "block",
-                "type": "callout",
-                "callout": {
-                    "rich_text": make_rich_text(overview),
-                    "icon": {"emoji": "💡"}
-                }
-            })
-
-        action_items = (
-            conv.get("structured", {}).get("action_items")
-            if isinstance(conv.get("structured"), dict)
-            else conv.get("action_items", [])
-        )
-        if isinstance(action_items, list) and action_items:
-            blocks.append({
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {"rich_text": make_rich_text("Action Items")}
-            })
-            for act in action_items:
-                act_text = act.get("description", str(act)) if isinstance(act, dict) else str(act)
-                completed = act.get("completed", False) if isinstance(act, dict) else False
-                blocks.append({
-                    "object": "block",
-                    "type": "to_do",
-                    "to_do": {
-                        "rich_text": make_rich_text(act_text),
-                        "checked": completed
-                    }
-                })
-
-        segments = conv.get("transcript_segments", [])
-        if isinstance(segments, list) and segments:
-            blocks.append({
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {"rich_text": make_rich_text("Transcript")}
-            })
-            for seg in segments:
-                if not isinstance(seg, dict):
-                    continue
-                speaker = seg.get("speaker") or f"Speaker {seg.get('speaker_id', '0')}"
-                stext = seg.get("text", "")
-                blocks.append({
-                    "object": "block",
-                    "type": "bulleted_list_item",
-                    "bulleted_list_item": {
-                        "rich_text": [
-                            {"type": "text", "text": {"content": f"{speaker}: "}, "annotations": {"bold": True}},
-                            {"type": "text", "text": {"content": stext[:1900]}}
-                        ]
-                    }
-                })
-
-        blocks.append({"object": "block", "type": "divider", "divider": {}})
-
-    chunk_size = 100
-    chunks = [blocks[i:i + chunk_size] for i in range(0, len(blocks), chunk_size)]
-    payload = {
-        "version": "2022-06-28",
-        "total_blocks": len(blocks),
-        "batch_count": len(chunks),
-        "batches": chunks,
-    }
-
     tmp = dest.with_suffix(dest.suffix + ".partial")
     try:
+        children = []
+        for conv in items:
+            if not isinstance(conv, dict):
+                continue
+            title = conv.get("title") or conv.get("id") or "Conversation"
+            created_at = (conv.get("started_at") or conv.get("created_at") or "")[:10]
+            heading_text = f"{title} ({created_at})" if created_at else title
+            children.append(create_heading_block(heading_text))
+
+            segments = conv.get("transcript_segments") or []
+            if not segments and conv.get("text"):
+                children.append(create_paragraph_block(None, conv["text"]))
+            else:
+                for seg in segments:
+                    if isinstance(seg, dict):
+                        speaker = seg.get("speaker") or "Speaker"
+                        text = seg.get("text") or ""
+                        if text:
+                            children.append(create_paragraph_block(speaker, text))
+
+        # Output directly formatted as Notion block children payload
+        payload = {
+            "children": children[:100]  # Notion maximum blocks per append request
+        }
+
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+
         os.replace(tmp, dest)
     finally:
         if tmp.exists():
@@ -122,8 +76,29 @@ def convert(source, destination):
             except OSError:
                 pass
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python conversations_to_notion.py <source.json> <destination.json>", file=sys.stderr)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Format Omi conversation transcripts for Notion block children API."
+    )
+    parser.add_argument("source", help="Path to input JSON file from 'omi --json conversation list'.")
+    parser.add_argument("destination", nargs="?", default=None, help="Path to output JSON file.")
+    parser.add_argument("-o", "--output", dest="output_flag", default=None, help="Path to output JSON file.")
+
+    args = parser.parse_args()
+    dest = args.output_flag or args.destination
+    if not dest:
+        parser.error("Destination JSON path must be provided either as a positional argument or via -o/--output flag.")
+
+    try:
+        convert(args.source, dest)
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
