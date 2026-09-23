@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:path_provider/path_provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 
@@ -363,11 +366,11 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_$timerStart.bin";
   }
 
   getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_$timestarts.bin";
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {
@@ -375,11 +378,25 @@ class Wal {
       return null;
     }
 
-    final directory = await getApplicationDocumentsDirectory();
-    if (pathOrName.contains('/')) {
-      final filename = pathOrName.split('/').last;
-      return '${directory.path}/$filename';
+    if (pathOrName.startsWith('/') && File(pathOrName).existsSync()) {
+      return pathOrName;
     }
-    return '${directory.path}/$pathOrName';
+
+    final filename = pathOrName.contains('/') ? pathOrName.split('/').last : pathOrName;
+
+    final custom = SharedPreferencesUtil().customAudioStorageDir;
+    if (custom.isNotEmpty) {
+      final file = File('$custom/$filename');
+      if (file.existsSync()) return file.path;
+    }
+
+    final configured = SharedPreferencesUtil().getString('batchAudioDir');
+    if (configured.isNotEmpty) {
+      final file = File('$configured/$filename');
+      if (file.existsSync()) return file.path;
+    }
+
+    final directory = await getApplicationDocumentsDirectory();
+    return '${directory.path}/$filename';
   }
 }

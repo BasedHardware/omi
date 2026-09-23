@@ -1,3 +1,8 @@
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
 /// Marker stored in [Wal.device] for recordings produced by offline/batch mode.
@@ -152,5 +157,60 @@ class BatchRecordingInfo {
             ? 16100
             : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
+  }
+}
+
+/// Pure resolver for batch audio directory:
+/// Precedence: custom directory (if non-empty) > configured batchAudioDir > default docs directory.
+String resolveBatchAudioDirectoryPath({
+  String? customDir,
+  String? configuredDir,
+  required String defaultDocsDir,
+}) {
+  if (customDir != null && customDir.trim().isNotEmpty) {
+    return customDir.trim();
+  }
+  if (configuredDir != null && configuredDir.trim().isNotEmpty) {
+    return configuredDir.trim();
+  }
+  return defaultDocsDir;
+}
+
+/// Resolves the effective batch audio directory at runtime, honoring user-configured
+/// accessible storage while ensuring fallback to app documents if unconfigured or missing.
+Future<Directory> resolveEffectiveBatchAudioDirectory() async {
+  final custom = SharedPreferencesUtil().customAudioStorageDir;
+  if (custom.isNotEmpty) {
+    final customDir = Directory(custom);
+    if (await customDir.exists()) return customDir;
+  }
+  final configured = SharedPreferencesUtil().getString('batchAudioDir');
+  if (configured.isNotEmpty) {
+    final confDir = Directory(configured);
+    if (await confDir.exists()) return confDir;
+  }
+  return getApplicationDocumentsDirectory();
+}
+
+/// Updates the user's custom audio storage directory preference and synchronizes
+/// `batchAudioDir` to the newly resolved effective directory.
+/// Passing null or an empty string resets to the default app documents storage.
+Future<Directory> setCustomAudioStorageDirectory(String? path) async {
+  final cleanPath = path?.trim() ?? '';
+  SharedPreferencesUtil().customAudioStorageDir = cleanPath;
+  if (cleanPath.isNotEmpty) {
+    final dir = Directory(cleanPath);
+    if (!await dir.exists()) {
+      try {
+        await dir.create(recursive: true);
+      } catch (_) {}
+    }
+    final effectiveDir = await resolveEffectiveBatchAudioDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', effectiveDir.path);
+    return effectiveDir;
+  } else {
+    final defaultDir = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', defaultDir.path);
+    return defaultDir;
   }
 }

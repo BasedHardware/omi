@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
@@ -116,11 +115,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   // ───────────────────────── scanning ─────────────────────────
 
-  Future<Directory?> _dir() async {
-    final configured = SharedPreferencesUtil().getString('batchAudioDir');
-    if (configured.isNotEmpty) return Directory(configured);
-    return getApplicationDocumentsDirectory();
-  }
+  Future<Directory?> _dir() => resolveEffectiveBatchAudioDirectory();
 
   LocalRecordingState _stateFor(String name) {
     if (name == _uploadingName) return LocalRecordingState.uploading;

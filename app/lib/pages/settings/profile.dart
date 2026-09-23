@@ -14,7 +14,10 @@ import 'package:omi/pages/settings/widgets/profile_settings_tile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -273,10 +276,12 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      isScrollControlled: true,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
+            final customDir = SharedPreferencesUtil().customAudioStorageDir;
             Future<void> setEnabled(bool value) async {
               final accepted = await captureProvider.setBatchMode(value);
               if (!accepted && context.mounted) {
@@ -291,7 +296,7 @@ class _ProfilePageState extends State<ProfilePage> {
             }
 
             return SafeArea(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -346,6 +351,108 @@ class _ProfilePageState extends State<ProfilePage> {
                               context.l10n.transcribeLaterNote,
                               style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.folder_outlined, color: Colors.white, size: 18),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Audio Storage Folder',
+                                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            customDir.isNotEmpty
+                                ? customDir
+                                : 'Default App Storage (${PlatformService.isAndroid ? 'Android/data/com.friend.ios' : 'App Sandbox'})',
+                            style: TextStyle(
+                              color: customDir.isNotEmpty ? Colors.white : Colors.grey.shade400,
+                              fontSize: 13,
+                              fontWeight: customDir.isNotEmpty ? FontWeight.w500 : FontWeight.w400,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    try {
+                                      final selectedDir = await FilePicker.platform.getDirectoryPath(
+                                        dialogTitle: 'Select Audio Storage Folder',
+                                      );
+                                      if (selectedDir != null && selectedDir.trim().isNotEmpty) {
+                                        await setCustomAudioStorageDirectory(selectedDir);
+                                        if (context.mounted) {
+                                          context.read<LocalRecordingsProvider?>()?.refresh();
+                                        }
+                                        if (sheetContext.mounted) {
+                                          setSheetState(() {});
+                                        }
+                                        if (mounted) {
+                                          setState(() {});
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        AppSnackbar.showSnackbarError('Failed to select folder: $e');
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.drive_file_move_outlined, size: 16, color: Colors.white),
+                                  label:
+                                      const Text('Change Folder', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: Color(0xFF3C3C43)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  ),
+                                ),
+                              ),
+                              if (customDir.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () async {
+                                    await setCustomAudioStorageDirectory('');
+                                    if (context.mounted) {
+                                      context.read<LocalRecordingsProvider?>()?.refresh();
+                                    }
+                                    if (sheetContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                    if (mounted) {
+                                      setState(() {});
+                                    }
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  ),
+                                  child: Text(
+                                    'Reset',
+                                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
