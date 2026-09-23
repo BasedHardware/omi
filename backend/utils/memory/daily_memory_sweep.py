@@ -40,7 +40,6 @@ import re
 import threading
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
-
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from models.daily_sweep_dispatch import SweepDispatchScope
@@ -98,6 +97,7 @@ from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
 from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.usage_tracker import Features, track_usage
 from utils.observability.fallback import record_fallback
 
@@ -200,7 +200,7 @@ QA_SWEEP_PROJECT = "based-hardware-dev"
 QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 QA_SWEEP_COHORT = "jit-qa-sweep-v1"
-QA_SWEEP_MODEL_NAME = "gpt-6-luna"
+QA_SWEEP_MODEL_NAME = LUNA_MODEL
 QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 # Qualification uses the same completed-day producer with an explicit tighter
@@ -218,7 +218,7 @@ QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
 QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
-# The deployed memories route is gpt-6-luna at $0.10/M input and $0.60/M
+# The deployed memories route is gpt-x-luna at $0.10/M input and $0.60/M
 # output (half of 5.6-luna, David Zhang 2026-09-23). The parser instructions alone are about 9.6K UTF-8 bytes and the
 # profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
 # with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
