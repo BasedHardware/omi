@@ -67,12 +67,19 @@ from models.conversation_enums import (
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
-    ProcessingTrigger,
+    Neighbor,
     RelevanceDecision,
     decide_relevance,
     final_relevance,
+)
+from utils.conversations.relevance_io import (
+    adjacent_conversation,
+    apply_relevance,
+    record_decision,
+    rules_only_relevance,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -94,7 +101,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_conversation_relevance, record_jit_first_open, record_lazy_desktop_deferral
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -392,7 +399,6 @@ def _get_structured(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    force_process: bool = False,
     people: Optional[List[Person]] = None,
     conversation_id: Optional[str] = None,
     *,
@@ -521,7 +527,7 @@ def _get_structured(
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
 
-        def model_discards(on_error: Callable[[Exception], None]) -> bool:
+        def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
                 return should_discard_conversation(
                     discard_transcript,
@@ -529,6 +535,8 @@ def _get_structured(
                     duration_seconds,
                     trusted_wake_word_markers=has_wake_word_marker,
                     on_error=on_error,
+                    neighbor_gap_seconds=neighbor.gap_seconds if neighbor else None,
+                    neighbor_position=neighbor.position if neighbor else None,
                 )
 
         decision = decide_relevance(
@@ -548,6 +556,7 @@ def _get_structured(
             calendar_retains=lambda: _calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
+            neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -590,7 +599,7 @@ def _get_structured(
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            if force_process:
+            if PROCESSING_MODES[trigger].run_now:
                 # Legacy (pre-notes-v2) reprocess prompt; it takes no calendar context.
                 structured = get_reprocess_transcript_structure(
                     transcript_text,
@@ -621,7 +630,7 @@ def _get_structured(
                 tz_str,
                 photos=main_conv.photos,
                 existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
-                calendar_meeting_context=None if force_process else calendar_context,
+                calendar_meeting_context=None if PROCESSING_MODES[trigger].run_now else calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
                 trusted_wake_word_markers=has_wake_word_marker,
@@ -2100,12 +2109,23 @@ def _store_deferred_conversation(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Conversation:
     """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
     is_initial_creation = _is_ingress_create(conversation)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
@@ -2120,6 +2140,7 @@ def _store_deferred_conversation(
     # in-memory snapshot. A None ``processing_state`` is likewise never
     # stamped: merge=True would write the explicit null as a real key.
     payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation:
         persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
     else:
@@ -2206,6 +2227,8 @@ def _store_deterministic_minimum(
     plan: FreeTierProcessingPlan,
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Tuple[Conversation, bool]:
     """Persist a conversation at the no-LLM deterministic minimum, terminally.
 
@@ -2236,6 +2259,15 @@ def _store_deterministic_minimum(
     ingest site, not through this persist.
     """
     is_initial_creation = _is_ingress_create(conversation)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = build_deterministic_minimum_structured(
         conversation,
         tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
@@ -2249,6 +2281,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
     if is_initial_creation:
@@ -2283,6 +2316,8 @@ def _store_projected_conversation(
     plan: FreeTierProcessingPlan,
     *,
     client_projection: ClientProcessing | None = None,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
+    user_kept: bool = False,
 ) -> Tuple[Conversation, bool]:
     """Persist the untrusted display projection plus the deterministic-minimum structured.
 
@@ -2292,7 +2327,9 @@ def _store_projected_conversation(
     ``deferred=False``, ``status=completed``, no managed seams. Shares the
     persist path with ``_store_deterministic_minimum``.
     """
-    return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
+    return _store_deterministic_minimum(
+        uid, conversation, plan, client_projection=client_projection, trigger=trigger, user_kept=user_kept
+    )
 
 
 def _flag_off_identified_basic_deny(
@@ -2507,8 +2544,6 @@ def process_conversation(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    force_process: bool = False,
-    is_reprocess: bool = False,
     app_id: Optional[str] = None,
     explicit_app: Optional[App] = None,
     app_usage_attribution: Optional[AppUsageAttribution] = None,
@@ -2516,18 +2551,20 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
-    bypass_jit_first_open: bool = False,
     derived_effects_disposition_observer: Callable[[DerivedEffectsDisposition], None] | None = None,
     *,
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
 ) -> Conversation:
-    """Process ``conversation``; ``trigger`` says why and selects the relevance policy.
+    """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
+    fixes run-now, reprocess, JIT bypass, and relevance policy together.
 
     ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
     which the wire model does not carry; it outranks every relevance tier.
     """
+    mode = PROCESSING_MODES[trigger]
+    force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
@@ -2636,9 +2673,16 @@ def process_conversation(
             )
         if plan.mode != 'process_normally':
             stored, persisted = (
-                _store_projected_conversation(uid, conversation, plan, client_projection=effective_projection)
+                _store_projected_conversation(
+                    uid,
+                    conversation,
+                    plan,
+                    client_projection=effective_projection,
+                    trigger=trigger,
+                    user_kept=user_kept,
+                )
                 if plan.mode == 'store_projection'
-                else _store_deterministic_minimum(uid, conversation, plan)
+                else _store_deterministic_minimum(uid, conversation, plan, trigger=trigger, user_kept=user_kept)
             )
             report_persistence(
                 persisted,
@@ -2654,13 +2698,12 @@ def process_conversation(
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
     # enrichment (summary, action items, memories, embeddings, app results) is deferred until
-    # they first OPEN the conversation (get_conversation_by_id reprocesses it with
-    # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
-    # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
-    # trigger and manual reprocess — bypass this so the enrichment actually runs.
-    # force_process does not bypass JIT first-open: Flutter create and macOS
-    # finalize need it to still defer folders/apps when rollout admits. Explicit
-    # "run everything now" paths pass bypass_jit_first_open=True.
+    # they first OPEN the conversation (the FIRST_OPEN trigger). Paid desktop plans
+    # (Operator / Architect), BYOK users, and all non-desktop sources are processed
+    # normally here. Every trigger whose mode runs now or reprocesses bypasses this
+    # so the enrichment actually runs. Running now does not bypass JIT first-open:
+    # Flutter create and macOS finalize still defer folders/apps when rollout
+    # admits; only triggers whose mode sets bypass_jit_first_open run everything.
     # Unreachable when FREE_TIER_LOCAL_PROCESSING is on (the branch above already
     # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
     elif (
@@ -2671,7 +2714,9 @@ def process_conversation(
         and not probe_uid
         and should_defer_desktop_processing(uid)
     ):
-        deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
+        deferred = _store_deferred_conversation(
+            uid, conversation, client_projection=client_projection, trigger=trigger, user_kept=user_kept
+        )
         # Flag-off legacy deferral reports False even when the write succeeded.
         # That is deliberate and pre-existing: the conversation is not terminally
         # processed (status=processing, deferred=True; first-open will reprocess).
@@ -2679,7 +2724,7 @@ def process_conversation(
         report_persistence(False)
         return deferred
     # Eager-extraction gate (S14 proactivity half, flag-off): first-open
-    # (force_process) and manual reprocess are the remaining eager managed
+    # (run now) and manual reprocess are the remaining eager managed
     # spend for desktop conversations. Default off
     # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
     # no new terminal marker. When on, an identified-basic deny lands at the
@@ -2695,7 +2740,12 @@ def process_conversation(
         eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
         if eager_basic_deny is not None:
             stored, persisted = _store_deterministic_minimum(
-                uid, conversation, eager_basic_deny, client_projection=client_projection
+                uid,
+                conversation,
+                eager_basic_deny,
+                client_projection=client_projection,
+                trigger=trigger,
+                user_kept=user_kept,
             )
             report_persistence(
                 persisted,
@@ -2755,7 +2805,6 @@ def process_conversation(
         uid,
         language_code,
         conversation,
-        force_process,
         people=people,
         conversation_id=generated_conversation_id,
         trigger=trigger,
@@ -2766,12 +2815,7 @@ def process_conversation(
     _attach_client_projection(conversation, client_projection)
     relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
     if relevance is not None:
-        record_conversation_relevance(
-            trigger=relevance.trigger.value,
-            verdict=relevance.verdict,
-            decided_by=relevance.decided_by,
-            reason=relevance.reason,
-        )
+        record_decision(relevance)
 
     # Persist the completed generation before it can trigger any derived work.
     # A discard or replacement that wins this transaction must not create
