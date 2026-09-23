@@ -13,6 +13,7 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -51,12 +52,18 @@ def _load(module_name, rel_path):
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
+
+
 class BaseTool:
     pass
+
+
 class StructuredTool:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
+
+
 _lc_tools.BaseTool = BaseTool
 _lc_tools.StructuredTool = StructuredTool
 
@@ -97,8 +104,12 @@ for _name, _attrs in {
             setattr(_m, _a, MagicMock())
 
 _executors = sys.modules["utils.executors"]
+
+
 async def _async_run_blocking(executor, fn, *args, **kwargs):
     return fn(*args, **kwargs)
+
+
 _executors.run_blocking = _async_run_blocking
 
 at = _load(
@@ -117,9 +128,9 @@ class TestAppToolsSanitization(unittest.TestCase):
             app_tool.method = "POST"
             app_tool.auth_required = False
 
-            with patch.object(at, "is_app_webhook_disabled", return_value=False), \
-                 patch.object(at, "get_webhook_circuit_breaker") as mock_cb, \
-                 patch("httpx.AsyncClient.request", side_effect=RuntimeError("internal app tool secret leak")):
+            with patch.object(at, "is_app_webhook_disabled", return_value=False), patch.object(
+                at, "get_webhook_circuit_breaker"
+            ) as mock_cb, patch("httpx.AsyncClient.request", side_effect=RuntimeError("internal app tool secret leak")):
                 cb_instance = MagicMock()
                 cb_instance.allow_request.return_value = True
                 mock_cb.return_value = cb_instance
@@ -147,9 +158,11 @@ class TestAppToolsSanitization(unittest.TestCase):
             app_tool.parameters = None
             app_tool.status_message = None
 
-            with patch.object(at, "is_app_webhook_disabled", return_value=False), \
-                 patch.object(at, "get_webhook_circuit_breaker") as mock_cb, \
-                 patch.object(at, "call_mcp_tool", side_effect=RuntimeError("internal mcp client crash with secret")):
+            with patch.object(at, "is_app_webhook_disabled", return_value=False), patch.object(
+                at, "get_webhook_circuit_breaker"
+            ) as mock_cb, patch.object(
+                at, "call_mcp_tool", side_effect=RuntimeError("internal mcp client crash with secret")
+            ):
                 cb_instance = MagicMock()
                 cb_instance.allow_request.return_value = True
                 mock_cb.return_value = cb_instance
