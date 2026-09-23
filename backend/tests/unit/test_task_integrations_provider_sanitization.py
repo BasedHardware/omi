@@ -3,6 +3,7 @@
 Verifies that raw provider exceptions (tokens, hostnames, error details) do not
 leak through the HTTP 500 responses from task-integration workspace/project/team endpoints.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
