@@ -44,7 +44,7 @@ final class CaptureGroupPresentationTests: XCTestCase {
     XCTAssertNil(try Self.conversation("solo").captureGroup)
   }
 
-  func testGroupCollapsesToPrimaryInListOrderAndKeepsMembersReachable() throws {
+  func testGroupCollapsesToPrimaryInListOrder() throws {
     let list = [
       try Self.conversation("pendant-2", group: Self.meeting),
       try Self.conversation("other"),
@@ -52,9 +52,6 @@ final class CaptureGroupPresentationTests: XCTestCase {
       try Self.conversation("pendant-1", group: Self.meeting),
     ]
     XCTAssertEqual(CaptureGroupPresentation.collapse(list).map(\.id), ["other", "desktop"])
-    XCTAssertEqual(
-      CaptureGroupPresentation.otherLoadedMembers(of: list[2], in: list).map(\.id), ["pendant-2", "pendant-1"])
-    XCTAssertEqual(CaptureGroupPresentation.otherLoadedMembers(of: list[1], in: list), [])
   }
 
   func testUnloadedPrimaryFallsBackToFirstLoadedMember() throws {

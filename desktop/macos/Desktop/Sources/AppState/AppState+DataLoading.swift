@@ -190,6 +190,17 @@ extension AppState {
     )) ?? conversation
   }
 
+  /// Loads a conversation by id through the repository, for callers that hold
+  /// only an id (a capture-group member the list has not loaded). Nil on failure.
+  func loadConversation(id: String) async -> ServerConversation? {
+    do {
+      return try await conversationRepository.detail(id: id)
+    } catch {
+      logError("Conversations: Failed to load conversation by id", error: error)
+      return nil
+    }
+  }
+
   func searchConversations(_ query: String) async throws -> [ServerConversation] {
     try await conversationRepository.search(text: query)
   }

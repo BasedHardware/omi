@@ -18,11 +18,6 @@ struct ConversationRowView: View {
   var onToggleSelection: (() -> Void)? = nil
 
   var appState: AppState
-  /// Other loaded recordings of the same event (hidden from the list behind this row).
-  var captureMembers: [ServerConversation] = []
-  var onOpenCaptureMember: ((ServerConversation) -> Void)? = nil
-  /// Called after a separation succeeds, for surfaces (search) the list refresh does not reach.
-  var onCaptureGroupChanged: (() -> Void)? = nil
   @State private var isStarring = false
   @State private var isHovering = false
 
@@ -218,55 +213,14 @@ struct ConversationRowView: View {
   private var captureSourcesBadge: some View {
     HStack(spacing: OmiSpacing.hairline) {
       ForEach(captureSources, id: \.rawValue) { source in
-        Image(systemName: Self.sourceSymbol(source))
+        Image(systemName: source.captureSymbol)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       }
     }
-    .help("Recorded by " + captureSources.map(Self.sourceLabel).joined(separator: " and "))
+    .help("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Recorded by " + captureSources.map(Self.sourceLabel).joined(separator: " and "))
-  }
-
-  private static func sourceSymbol(_ source: ConversationSource) -> String {
-    switch source {
-    case .desktop: return "desktopcomputer"
-    case .omi, .friend, .friendCom, .limitless, .plaud, .bee: return "dot.radiowaves.left.and.right"
-    case .phone: return "iphone"
-    case .appleWatch: return "applewatch"
-    default: return "mic"
-    }
-  }
-
-  private func captureMemberLabel(_ member: ServerConversation) -> String {
-    let source = Self.sourceLabel(member.source ?? .unknown)
-    guard let start = member.startedAt else { return source }
-    return "\(source) · \(Self.timeFormatter.string(from: start))"
-  }
-
-  /// Label for a conversation source
-  private static func sourceLabel(_ source: ConversationSource) -> String {
-    switch source {
-    case .desktop: return "Desktop"
-    case .omi: return "omi"
-    case .phone: return "Phone"
-    case .appleWatch: return "Watch"
-    case .workflow: return "Workflow"
-    case .screenpipe: return "Screenpipe"
-    case .friend, .friendCom: return "Friend"
-    case .openglass: return "OpenGlass"
-    case .frame: return "Frame"
-    case .bee: return "Bee"
-    case .limitless: return "Limitless"
-    case .plaud: return "Plaud"
-    default: return "Unknown"
-    }
-  }
-
-  private func separate(_ conversationId: String) async {
-    if await appState.separateConversationFromCaptureGroup(conversationId) {
-      onCaptureGroupChanged?()
-    }
+    .accessibilityLabel("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
   }
 
   private func toggleStar() async {
@@ -612,26 +566,6 @@ struct ConversationRowView: View {
       }
     }
     .contextMenu {
-      if !captureMembers.isEmpty {
-        Menu {
-          ForEach(captureMembers) { member in
-            Button("Open \(captureMemberLabel(member)) recording") { onOpenCaptureMember?(member) }
-          }
-          Divider()
-          ForEach(captureMembers) { member in
-            Button("Separate \(captureMemberLabel(member)) recording") {
-              Task { await separate(member.id) }
-            }
-          }
-          Button("Separate this recording") {
-            Task { await separate(conversation.id) }
-          }
-        } label: {
-          Label("Captured by \(captureMembers.count + 1) recordings", systemImage: "square.stack")
-        }
-        Divider()
-      }
-
       Button(action: copyTranscript) {
         Label("Copy Transcript", systemImage: "doc.on.doc")
       }
