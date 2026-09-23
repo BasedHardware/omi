@@ -63,7 +63,7 @@ _OPERATION_LANES = {
 }
 _DIRECT_MODELS = {
     "proactive_extraction": "gpt-5-nano",
-    "proactive_reasoning": "gpt-5.6-luna",
+    "proactive_reasoning": "gpt-6-luna",
 }
 # Must match generated_route_overrides.yaml for these features. The direct
 # recovery path previously used medium for reasoning, which let luna spend a

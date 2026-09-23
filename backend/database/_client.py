@@ -86,10 +86,13 @@ _install_query_stream_retry_compat()
 
 
 def _install_document_read_probe() -> None:
-    """Count every Firestore document read by collection pattern and hit/miss.
+    """Count every Firestore read on the SDK classes, for every client in-process.
 
-    Same lazy-import discipline as the query retry shim above: the probe wraps
-    SDK classes that do not exist under the unit-test import stubs.
+    The patch is on the classes, not on one instance, so a later ``firestore.Client()``
+    or ``AsyncClient()`` in this process is covered. A process that never imports
+    this module does not install it. Same lazy-import discipline as the query retry
+    shim above: the probe wraps SDK classes that do not exist under the unit-test
+    import stubs.
     """
     try:
         from database.firestore_document_probe import install_document_read_probe

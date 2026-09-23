@@ -61,7 +61,7 @@ async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
             max_attempts=3,
             max_spend_micro_usd=50_000,
             provider='openai',
-            model='gpt-5.6-luna',
+            model='gpt-6-luna',
             input_tokens=10,
             cached_input_tokens=0,
             output_tokens=20,
@@ -73,7 +73,7 @@ async def test_jit_budget_reserve_and_settle_use_db_executor(monkeypatch):
     assert await executor.settle_jit_attempt(
         reservation,
         provider='openai',
-        model='gpt-5.6-luna',
+        model='gpt-6-luna',
         metadata=None,
         status='failed',
     )
@@ -103,14 +103,14 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     assert result.response['choices'][0]['message']['content'] == '{"answer":"primary"}'
     assert result.selected_route_artifact_id == ACTIVE_ROUTE
     assert result.selected_provider == 'openai'
-    assert result.selected_model == 'gpt-5.6-luna'
+    assert result.selected_model == 'gpt-6-luna'
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert not result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTIVE
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-6-luna'
     assert provider.calls[0].request['stream'] is False
 
 
@@ -129,7 +129,7 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
         ProviderRegistry({'openai': provider}),
     )
 
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-6-luna'
     assert 'response_format' not in provider.calls[0].request
 
 
@@ -174,7 +174,7 @@ def test_chat_agent_personality_preserves_array_system_text():
 
 
 def test_chat_agent_tools_force_reasoning_effort_none_for_luna_chat_completions():
-    """gpt-5.6-luna rejects function tools when reasoning_effort != none on chat/completions."""
+    """Luna chat completions force reasoning_effort=none when function tools are present."""
     config = gateway_config()
     # Mutate the serving route the way a bad override would: medium effort + tools.
     route = config.route_artifacts['route.chat_agent.model_config.001']
@@ -203,7 +203,7 @@ def test_chat_agent_tools_force_reasoning_effort_none_for_luna_chat_completions(
 
     provider_request = provider_request_for(resolved, resolved.active_route.primary)
 
-    assert provider_request['model'] == 'gpt-5.6-luna'
+    assert provider_request['model'] == 'gpt-6-luna'
     assert provider_request['tools']
     assert provider_request.get('reasoning_effort') == 'none'
     assert 'temperature' not in provider_request
@@ -330,7 +330,7 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     )
 
     # Primary tried 3 times (max_attempts), then fallback once
-    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-5.6-luna', 'gpt-4o-mini']
+    assert [call.model for call in provider.calls] == ['gpt-6-luna', 'gpt-6-luna', 'gpt-6-luna', 'gpt-4o-mini']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
 
 
@@ -608,7 +608,7 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     assert result.fallback_to_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
-    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-4o-mini']
+    assert [call.model for call in provider.calls] == ['gpt-6-luna', 'gpt-4o-mini']
 
 
 @pytest.mark.asyncio
@@ -617,7 +617,7 @@ async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
     distinct provider/route failover, and must not be classified as
     ACTUAL_FALLBACK — per the PR behavioral contract that actual fallback
     requires a *subsequent provider/route* success."""
-    identical_ref = ProviderRef(provider='openai', model='gpt-5.6-luna')
+    identical_ref = ProviderRef(provider='openai', model='gpt-6-luna')
     config = config_with_active_route(active_route_with_fallbacks([identical_ref]))
     resolved = resolve_chat_completion_route(config, valid_request())
     provider = FakeChatCompletionProvider(
@@ -633,13 +633,13 @@ async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
         ProviderRegistry({'openai': provider}),
     )
 
-    assert result.selected_model == 'gpt-5.6-luna'
+    assert result.selected_model == 'gpt-6-luna'
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert result.route_serving_class == RouteServingClass.ACTIVE
-    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-6-luna', 'gpt-6-luna']
 
 
 @pytest.mark.asyncio
@@ -691,14 +691,14 @@ async def test_executor_uses_lkg_only_when_active_route_policy_allows():
 
     assert result.response['model'] == LANE_ID
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.6-luna'
+    assert result.selected_model == 'gpt-6-luna'
     assert result.fallback_used
     assert result.fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT
     assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
     assert result.fallback_to_route_artifact_id == LKG_ROUTE
     assert result.used_lkg
     assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
-    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-6-luna', 'gpt-6-luna']
 
 
 @pytest.mark.asyncio
@@ -746,7 +746,7 @@ async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
         )
 
     assert exc_info.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
-    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
+    assert [call.model for call in provider.calls] == ['gpt-6-luna', 'gpt-6-luna']
 
 
 @pytest.mark.asyncio
@@ -836,7 +836,7 @@ async def test_shadow_active_route_serves_lkg_not_active():
     config = config_with_active_route(shadow_route)
     resolved = resolve_chat_completion_route(config, valid_request())
 
-    # Provider should be called with the gateway LKG model (gpt-5.6-luna).
+    # Provider should be called with the gateway LKG model (gpt-6-luna).
     # The gateway route is intentionally independent from legacy chat extraction.
     provider = FakeChatCompletionProvider(
         [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
@@ -849,14 +849,14 @@ async def test_shadow_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.6-luna'
+    assert result.selected_model == 'gpt-6-luna'
     assert result.used_lkg
     assert not result.fallback_used
     assert result.fallback_reason is None
     assert result.fallback_from_route_artifact_id is None
     assert result.fallback_to_route_artifact_id is None
     assert result.route_serving_class == RouteServingClass.LKG
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-6-luna'
     assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
 
@@ -881,7 +881,7 @@ async def test_disabled_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.6-luna'
+    assert result.selected_model == 'gpt-6-luna'
     assert result.used_lkg
 
 

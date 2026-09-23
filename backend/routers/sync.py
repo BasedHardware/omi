@@ -95,7 +95,11 @@ from utils.metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
-from utils.subscription import has_transcription_credits
+from utils.subscription import (
+    TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
+    has_transcription_credits,
+    resolve_transcription_allowance,
+)
 from utils.sync import playback as sync_playback
 from utils.sync.files import (
     decode_files_to_wav,
@@ -583,8 +587,14 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
-    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
+    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock.
+    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
+    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
+    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = False
+    if not has_credits:
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -596,7 +606,7 @@ async def sync_local_files(
     if lane_decision.lane == SyncLane.BACKFILL:
         backfill_slot_token = f'v1-{_uuid.uuid4()}'
         try:
-            if not try_acquire_backfill_slot(uid, backfill_slot_token):
+            if not await run_blocking(db_executor, try_acquire_backfill_slot, uid, backfill_slot_token):
                 return JSONResponse(
                     status_code=429,
                     headers={
@@ -651,7 +661,13 @@ async def sync_local_files(
         )
 
         if lane_decision.lane == SyncLane.BACKFILL:
-            reservation = reserve_backfill_speech(uid, backfill_slot_token or f'v1-{_uuid.uuid4()}', total_speech_ms)
+            reservation = await run_blocking(
+                db_executor,
+                reserve_backfill_speech,
+                uid,
+                backfill_slot_token or f'v1-{_uuid.uuid4()}',
+                total_speech_ms,
+            )
             if not reservation.allowed:
                 return JSONResponse(
                     status_code=429,
@@ -668,11 +684,11 @@ async def sync_local_files(
 
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
-            record_speech_ms(uid, total_speech_ms, source=meter_source)
+            await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source=meter_source)
             if lane_decision.lane == SyncLane.FRESH:
                 fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                 fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                speech_totals = get_rolling_speech_ms(uid)
+                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                 triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
@@ -780,7 +796,7 @@ async def sync_local_files(
             try:
                 dg_ms = int(total_speech_seconds * 1000)
                 if dg_ms > 0:
-                    record_dg_usage_ms(uid, dg_ms)
+                    await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
@@ -836,7 +852,7 @@ async def sync_local_files(
         _cleanup_files(segmented_paths)  # Segmented wav files after processing
         if backfill_slot_token:
             try:
-                release_backfill_slot(uid, backfill_slot_token)
+                await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
             except Exception as e:
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
@@ -974,7 +990,13 @@ async def sync_local_files_v2(
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
 
-    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
+    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
+    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
+    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    should_lock = False
+    if not has_credits:
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])

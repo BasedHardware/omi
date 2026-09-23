@@ -80,7 +80,7 @@ class TestPremiumAllFeatures:
         if _active_profile_name != 'premium':
             pytest.skip("MODEL_QOS is not premium")
         model = get_model('chat_agent')
-        assert model == 'gpt-5.6-luna'
+        assert model == 'gpt-6-luna'
         llm = get_llm('chat_agent')
         response = llm.invoke(SIMPLE_PROMPT)
         text = response.content.strip() if hasattr(response, 'content') else str(response).strip()

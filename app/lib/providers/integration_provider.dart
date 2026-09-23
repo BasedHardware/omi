@@ -4,6 +4,7 @@ import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef IntegrationStatusFetcher = Future<IntegrationResponse?> Function(String appKey);
 typedef IntegrationSaver = Future<bool> Function(String appKey, Map<String, dynamic> details);
@@ -60,13 +61,27 @@ class IntegrationProvider extends ChangeNotifier {
 
   Future<void> _loadFromBackendBody() async {
     final generation = _sessionGeneration;
+    final syncAttempt = ProductTelemetry.instance.start(
+      ProductJourney.integrationSync,
+      surface: ProductSurface.integration,
+    );
+    var syncCompleted = false;
+    void completeSync(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (syncCompleted) return;
+      syncCompleted = true;
+      syncAttempt.complete(outcome, failure: failure);
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
       final keys = trackedAppKeys;
       final responses = await Future.wait(keys.map(_fetchStatus));
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
 
       var allFetched = true;
       for (var i = 0; i < keys.length; i++) {
@@ -79,14 +94,28 @@ class IntegrationProvider extends ChangeNotifier {
         }
         _integrations[key] = response.connected;
         await _persistPref(prefKeyFor(key), response.connected);
-        if (!_isCurrent(generation)) return;
+        if (!_isCurrent(generation)) {
+          completeSync(ProductOutcome.superseded);
+          return;
+        }
       }
 
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
       _hasLoaded = true;
       _needsRetry = !allFetched;
+      completeSync(
+        allFetched ? ProductOutcome.success : ProductOutcome.failure,
+        failure: allFetched ? ProductFailure.none : ProductFailure.network,
+      );
     } catch (e) {
-      if (!_isCurrent(generation)) return;
+      if (!_isCurrent(generation)) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
+      completeSync(ProductOutcome.failure, failure: ProductFailure.network);
       Logger.debug('Error loading integrations from backend: $e');
     } finally {
       if (_isCurrent(generation)) {

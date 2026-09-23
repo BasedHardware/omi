@@ -105,7 +105,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert answer == 'PDF summary'
     assert callback.chunks == ['PDF summary']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == 'gpt-6-luna'
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
     assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}

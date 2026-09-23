@@ -73,6 +73,6 @@ async def test_vision_chat_uses_luna_completion_budget_field(monkeypatch):
     assert answer == 'A test image.'
     assert callback.chunks == ['A test image.']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == 'gpt-6-luna'
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request

@@ -1405,7 +1405,7 @@ environments:
               value: 'true'
             MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
               category: memory_rollout
-              value: gpt-5.6-luna
+              value: gpt-6-luna
             MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
               value: '8'
               category: memory_rollout
@@ -2099,6 +2099,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+              value: '1'
+              category: rollout
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability

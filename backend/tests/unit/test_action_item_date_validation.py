@@ -362,6 +362,13 @@ _load_module_from_file(
     "utils.conversations.summary_selection",
     BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
 )
+# relevance_rules is stdlib-only; load the real module so conversation_processing's
+# module-scope `from utils.conversations.relevance_rules import KEEP_WORD_COUNT`
+# resolves against production's threshold, not a stub package.
+_load_module_from_file(
+    "utils.conversations.relevance_rules",
+    BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
+)
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",

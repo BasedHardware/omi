@@ -292,6 +292,18 @@ def _generated_feature_route_items(
     return lanes, artifacts, bundles
 
 
+def _desktop_overflow_origin_options(anchor: str) -> dict[str, str]:
+    """Origin ceiling for a desktop anchor, omitted entirely when unset.
+
+    An empty dict keeps generated routes byte-identical until a lane declares
+    an origin in LANE_OVERFLOW_ORIGINS.
+    """
+    origin = ptr.lane_overflow_origin(anchor)
+    if not origin:
+        return {}
+    return {ptr.OVERFLOW_ORIGIN_OPTION: origin}
+
+
 def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
     """Company-paid desktop Gemini text lanes, generated from the PT policy.
 
@@ -329,7 +341,7 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
                 'surface': 'openai.chat_completions',
                 'primary': {'provider': 'gemini', 'model': anchor},
                 'fallbacks': [],
-                'provider_options': {},
+                'provider_options': _desktop_overflow_origin_options(anchor),
                 'output_budget': None,
                 'timeouts': {'request_ms': 120000},
                 'retry': {'max_attempts': 1},

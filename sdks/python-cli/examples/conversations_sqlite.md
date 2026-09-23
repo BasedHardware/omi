@@ -35,6 +35,9 @@ python sdks/python-cli/examples/conversations_to_sqlite.py \
 
 Re-running with the same or updated exports is safe: the importer uses
 `INSERT OR REPLACE` keyed on `id`, so rows are updated rather than duplicated.
+The output path (`-o` or the positional fallback) must not contain `..`. If the
+file already exists it must be a SQLite database; a non-SQLite file is refused
+rather than overwritten.
 
 ## Schema
 

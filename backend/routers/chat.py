@@ -368,7 +368,7 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
-def _release_chat_quota_question_best_effort(
+async def _release_chat_quota_question_best_effort(
     uid: str,
     *,
     idempotency_key: str,
@@ -378,7 +378,7 @@ def _release_chat_quota_question_best_effort(
     A release failure must never mask the original stream failure, and a retry
     is idempotent on the same event doc."""
     try:
-        llm_usage_db.release_chat_quota_question(uid, idempotency_key)
+        await run_blocking(db_executor, llm_usage_db.release_chat_quota_question, uid, idempotency_key)
     except Exception:
         logger.exception('Failed to release chat quota question uid=%s', uid)
 
@@ -725,7 +725,7 @@ def send_message(
                         )
                     # The turn produced no answer: release the question charged
                     # up front so the user is not billed for a failed turn.
-                    _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+                    await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,
@@ -741,7 +741,7 @@ def send_message(
             raise
         except Exception:
             journey_attempt.finish('failure')
-            _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+            await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
             raise
         finally:
             reset_usage_context(usage_token)
@@ -2121,6 +2121,8 @@ def rate_message(
     message_id: str,
     data: RateMessageRequest,
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
+    x_app_build: str | None = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
@@ -2131,6 +2133,8 @@ def rate_message(
     platform = (x_app_platform or '').strip().lower()
     if platform not in ('desktop', 'mobile'):
         platform = 'desktop'
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = extract_app_build({'x-app-version': x_app_version or '', 'x-app-build': x_app_build or ''})
     triage = extract_rating_triage_fields(snapshot)
     reason = data.reason.value if data.reason else None
     set_chat_message_rating_score(
@@ -2139,6 +2143,8 @@ def rate_message(
         value,
         reason=reason,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
@@ -2151,6 +2157,8 @@ def rate_message(
         reason=reason,
         comment=data.comment,
         platform=platform,
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
     )
 
     # Try to submit feedback to LangSmith
