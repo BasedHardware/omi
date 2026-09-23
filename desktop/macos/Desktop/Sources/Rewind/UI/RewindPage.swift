@@ -569,21 +569,13 @@ struct RewindPage: View {
   }
 
   private var rewindMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More Rewind actions", accessibilityIdentifier: "rewind-more-actions") {
       Button {
         NotificationCenter.default.post(name: .navigateToRewindSettings, object: nil)
       } label: {
         Label("Rewind settings…", systemImage: "gearshape")
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More Rewind actions")
-    .accessibilityLabel("More Rewind actions")
-    .accessibilityIdentifier("rewind-more-actions")
   }
 
   /// The switch still owns the capture action, but the surrounding control names its state so it

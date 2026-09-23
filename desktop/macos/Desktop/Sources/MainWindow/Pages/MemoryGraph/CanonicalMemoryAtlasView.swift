@@ -707,22 +707,14 @@ private struct CanonicalMemoryAtlasSurface: View {
       // The legacy Brain Map carried a rebuild control; without it a thin or
       // stale server graph has no recovery path from inside the atlas.
       if let onRebuild {
-        Menu {
+        PageMoreMenu(help: "More Brain Map actions", accessibilityIdentifier: "memory_atlas_more_actions") {
           Button(action: onRebuild) {
             Label(
               isRebuilding ? "Rebuilding Brain Map…" : "Rebuild Brain Map…",
               systemImage: "arrow.clockwise")
           }
           .disabled(isRebuilding)
-        } label: {
-          PageQueryActionLabel(icon: "ellipsis", title: "More")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More Brain Map actions")
-        .accessibilityLabel("More Brain Map actions")
-        .accessibilityIdentifier("memory_atlas_more_actions")
       }
     }
     .padding(.horizontal, compact ? 12 : 18)

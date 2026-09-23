@@ -850,7 +850,7 @@ struct ConversationsPage: View {
   }
 
   private var conversationMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More conversation actions", accessibilityIdentifier: "conversations-more-actions") {
       if !appState.conversations.isEmpty {
         Button {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -868,15 +868,7 @@ struct ConversationsPage: View {
           Label("Start Recording", systemImage: "mic.fill")
         }
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More conversation actions")
-    .accessibilityLabel("More conversation actions")
-    .accessibilityIdentifier("conversations-more-actions")
   }
 
   private var activeConversationFilters: [PageActiveFilter] {

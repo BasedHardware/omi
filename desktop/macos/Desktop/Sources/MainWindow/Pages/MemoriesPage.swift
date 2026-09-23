@@ -2406,16 +2406,9 @@ struct MemoriesPage: View {
       actions: {
         HStack(spacing: OmiSpacing.sm) {
           // `[More] [primary]`, the order every page's toolbar uses.
-          Menu {
+          PageMoreMenu(help: "More memory actions", accessibilityIdentifier: "memories-more-actions") {
             managementMenuItems
-          } label: {
-            PageQueryActionLabel(icon: "ellipsis", title: "More")
           }
-          .menuStyle(.borderlessButton)
-          .menuIndicator(.hidden)
-          .fixedSize()
-          .help("More memory actions")
-          .accessibilityIdentifier("memories-more-actions")
 
           Button {
             viewModel.showingAddMemory = true
