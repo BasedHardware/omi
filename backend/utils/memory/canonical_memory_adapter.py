@@ -1493,8 +1493,34 @@ def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     subject_kind = str(raw_subject_kind or "").strip().lower()
     if subject_kind in {"user", "speaker", "person", "entity", "unknown"}:
         source_attribution["subject_kind"] = subject_kind
+    override = _attribution_override_from_payload(data)
+    if override:
+        # Audit/revert record for a capture-time re-attribution; the planner
+        # reads only the three subject fields above (canonical_consolidation).
+        source_attribution["override"] = override
     metadata["source_attribution"] = source_attribution
     return metadata
+
+
+_ATTRIBUTION_OVERRIDE_KEYS = (
+    "source",
+    "question_version",
+    "model",
+    "p_user",
+    "threshold",
+    "pipeline_subject_attribution",
+    "pipeline_subject_entity_id",
+    "pipeline_subject_kind",
+)
+
+
+def _attribution_override_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Bounded provenance for a Jev owner flip (``utils/conversations/owner_jev.py``)."""
+    raw = data.get("attribution_override")
+    if not isinstance(raw, dict) or raw.get("source") != "jev":
+        return {}
+    override = cast(Dict[str, Any], raw)
+    return {key: override[key] for key in _ATTRIBUTION_OVERRIDE_KEYS if key in override}
 
 
 def _relationship_to_user_from_payload(data: Dict[str, Any]) -> str:

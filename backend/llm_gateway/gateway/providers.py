@@ -88,6 +88,17 @@ class EmbeddingProvider(Protocol):
     ) -> 'ProviderResponse': ...
 
 
+class SystemOneProvider(Protocol):
+    async def create_systemone(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> 'ProviderResponse': ...
+
+
 class OpenAICompatibleChatCompletionProvider:
     def __init__(
         self,
@@ -239,6 +250,73 @@ class OpenAICompatibleChatCompletionProvider:
                     prompt_tokens=prompt_tokens,
                     uncached_input_tokens=prompt_tokens,
                     total_tokens=total_tokens,
+                )
+            ),
+        )
+
+    async def create_systemone(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> ProviderResponse:
+        """POST a decision-model request to ``<base_url>/systemone`` (OpenRouter).
+
+        The answer body is typed (``answers.<name>.noul`` / ``choice`` /
+        ``score``); only its shape is checked here. Callers interpret it.
+        """
+        api_key = _resolve_provider_api_key(
+            credentials=credentials,
+            provider_ref=provider_ref,
+            api_key_env=self._api_key_env,
+        )
+        payload = {
+            'model': provider_ref.model,
+            'state': request['state'],
+            'questions': request['questions'],
+        }
+        try:
+            async with self._http_client.stream(
+                'POST',
+                f'{self._base_url}/systemone',
+                json=payload,
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json',
+                    **self._default_headers,
+                },
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                parsed = _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+        answers = parsed.get('answers')
+        if not isinstance(answers, Mapping) or not answers:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        raw_usage = parsed.get('usage')
+        usage_raw = raw_usage if isinstance(raw_usage, Mapping) else {}
+        input_tokens = _nonnegative_int_or_zero(usage_raw.get('input_tokens', usage_raw.get('prompt_tokens')))
+        output_tokens = _nonnegative_int_or_zero(usage_raw.get('output_tokens', usage_raw.get('completion_tokens')))
+        return ProviderResponse(
+            response=parsed,
+            accounting=ProviderResponseMetadata(
+                usage=ProviderUsage(
+                    prompt_tokens=input_tokens,
+                    uncached_input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=input_tokens + output_tokens,
                 )
             ),
         )
