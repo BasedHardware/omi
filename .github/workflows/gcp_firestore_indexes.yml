@@ -61,6 +61,7 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
     permissions:
       contents: 'read'
+      id-token: 'write'
     runs-on: ubuntu-latest
     steps:
       - name: Validate Firestore migration input
@@ -104,7 +105,17 @@ jobs:
           fi
           echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
 
+      # Prod: GitHub WIF as omi-ci-schema-prod@ (index/field config only, no
+      # document access; credential-hygiene WS-C). Development keeps JSON.
+      - name: Google Auth for Firestore schema migration (prod WIF)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
+
       - name: Google Auth for Firestore schema migration
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') != 'prod' }}
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
@@ -231,6 +242,7 @@ jobs:
     environment: prod
     permissions:
       contents: 'read'
+      id-token: 'write'
     runs-on: ubuntu-latest
     steps:
       - name: Validate destructive Firestore field-exemption input
@@ -260,7 +272,9 @@ jobs:
       - name: Google Auth for Firestore field exemptions
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); this job is prod-only.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
