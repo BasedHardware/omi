@@ -1246,7 +1246,9 @@ async def delete_calendar_event_tool(
                                         type(delete_error).__name__,
                                         exc_info=True,
                                     )
-                                    mutation_result.failed.append((event_title_found, "An error occurred during deletion"))
+                                    mutation_result.failed.append(
+                                        (event_title_found, "An error occurred during deletion")
+                                    )
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:

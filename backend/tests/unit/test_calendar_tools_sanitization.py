@@ -52,14 +52,20 @@ def _load(module_name, rel_path):
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
+
+
 def _tool_decorator(fn=None, **kwargs):
     if fn is not None and callable(fn):
         fn.func = fn
         return fn
+
     def dec(func):
         func.func = func
         return func
+
     return dec
+
+
 _lc_tools.tool = _tool_decorator
 
 _lc_runnables = _mod("langchain_core.runnables")
@@ -115,6 +121,7 @@ for _name, _attrs in {
         if not hasattr(_m, _a):
             setattr(_m, _a, MagicMock())
 
+
 class GoogleAPIError(Exception):
     def __init__(self, message="Google API Error", status_code=500, is_auth_error=False, is_permission_error=False):
         super().__init__(message)
@@ -122,6 +129,7 @@ class GoogleAPIError(Exception):
         self.status_code = status_code
         self.is_auth_error = is_auth_error
         self.is_permission_error = is_permission_error
+
 
 sys.modules["utils.retrieval.tools.google_utils"].GoogleAPIError = GoogleAPIError
 
@@ -132,8 +140,12 @@ _telemetry.emit_sync_attempted = MagicMock()
 _telemetry.sync_telemetry_context = MagicMock()
 
 _executors = sys.modules["utils.executors"]
+
+
 async def _async_run_blocking(executor, fn, *args, **kwargs):
     return fn(*args, **kwargs)
+
+
 _executors.run_blocking = _async_run_blocking
 
 _log_sanitizer = sys.modules["utils.log_sanitizer"]
@@ -231,8 +243,11 @@ class TestCalendarToolsSanitization(unittest.TestCase):
     def test_delete_calendar_event_by_id_unexpected_exception(self):
         async def _run():
             config = {"configurable": {"user_id": "u1"}}
-            with patch.object(cal, "prepare_access", return_value=("u1", "integration_123", "tok_123", None)), \
-                 patch.object(cal, "delete_google_calendar_event", side_effect=RuntimeError("sentinel_leak_marker_internal_id_delete")):
+            with patch.object(
+                cal, "prepare_access", return_value=("u1", "integration_123", "tok_123", None)
+            ), patch.object(
+                cal, "delete_google_calendar_event", side_effect=RuntimeError("sentinel_leak_marker_internal_id_delete")
+            ):
                 result = await cal.delete_calendar_event_tool.func(event_id="evt_123", config=config)
                 self.assertEqual("Error deleting calendar event: An unexpected error occurred.", result)
                 self.assertNotIn("sentinel_leak_marker_internal_id_delete", result)
