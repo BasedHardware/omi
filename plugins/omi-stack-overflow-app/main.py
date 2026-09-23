@@ -4,6 +4,8 @@ Stack Overflow Integration App for Omi.
 Provides chat tools for searching Stack Overflow and reading question answers
 through the public Stack Exchange API.
 """
+import logging
+
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -17,6 +19,8 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 STACK_API_BASE_URL = "https://api.stackexchange.com/2.3"
@@ -453,7 +457,11 @@ async def search_questions(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange search failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
+        logger.error("Stack Exchange search failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange search failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Stack Exchange search failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange search failed.")
 
 
 @app.post("/tools/get_question", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -513,7 +521,11 @@ async def get_question(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange question request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
+        logger.error("Stack Exchange question request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange question request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Stack Exchange question request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange question request failed.")
 
 
 @app.post("/tools/get_top_answers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -561,4 +573,8 @@ async def get_top_answers(payload: dict[str, Any]):
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange answers request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
+        logger.error("Stack Exchange answers request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange answers request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Stack Exchange answers request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Stack Exchange answers request failed.")
