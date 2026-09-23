@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: apple-health-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_apple_health_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/apple_health_tools.py", "backend/tests/unit/test_apple_health_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Apple Health retrieval tools must guard access configuration without unhandled assertions, catch internal exceptions, log with exc_info, and return clean static error strings without reflecting raw exception details"
   - id: openfoodfacts-robustness-and-coercion-tests
     command: ["python3", "plugins/omi-openfoodfacts-app/test_robustness_and_coercion.py"]
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]

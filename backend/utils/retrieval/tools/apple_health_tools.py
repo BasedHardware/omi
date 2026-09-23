@@ -35,16 +35,20 @@ def get_apple_health_data(uid: str, data_type: Optional[str] = None) -> Optional
     Returns:
         Health data dict or None if not found
     """
-    integration = users_db.get_integration(uid, 'apple_health')
-    if not integration:
+    try:
+        integration = users_db.get_integration(uid, 'apple_health')
+        if not integration:
+            return None
+
+        health_data: Dict[str, Any] = integration.get('health_data', {})
+
+        if data_type:
+            return health_data.get(data_type)
+
+        return health_data
+    except Exception as e:
+        logger.error("Error getting Apple Health data for user %s: %s", uid, type(e).__name__, exc_info=True)
         return None
-
-    health_data: Dict[str, Any] = integration.get('health_data', {})
-
-    if data_type:
-        return health_data.get(data_type)
-
-    return health_data
 
 
 def prepare_apple_health_access(
@@ -59,7 +63,8 @@ def prepare_apple_health_access(
     uid, uid_err = resolve_config_uid(config)
     if uid_err:
         return None, None, uid_err
-    assert uid is not None
+    if not uid:
+        return None, None, "User ID not found in configuration"
 
     integration, int_err = get_integration_checked(
         uid,
@@ -92,12 +97,13 @@ def get_apple_health_steps_tool(
     Returns:
         Formatted step count data with daily breakdown, averages and totals.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        if not integration:
+            return "No step data found. Make sure Apple Health is synced from your iPhone."
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         steps_data: Dict[str, Any] = health_data.get('steps', {})
 
@@ -138,8 +144,8 @@ def get_apple_health_steps_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_steps_tool: {e}")
-        return f"Error retrieving step data: {str(e)}"
+        logger.error("Error in get_apple_health_steps_tool: %s", type(e).__name__, exc_info=True)
+        return "Error retrieving step data."
 
 
 @tool
@@ -163,12 +169,13 @@ def get_apple_health_sleep_tool(
     Returns:
         Formatted sleep data with daily breakdown, total hours and session details.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        if not integration:
+            return "No sleep data found. Make sure Apple Health is synced from your iPhone."
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         sleep_data: Dict[str, Any] = health_data.get('sleep', {})
 
@@ -204,8 +211,8 @@ def get_apple_health_sleep_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_sleep_tool: {e}")
-        return f"Error retrieving sleep data: {str(e)}"
+        logger.error("Error in get_apple_health_sleep_tool: %s", type(e).__name__, exc_info=True)
+        return "Error retrieving sleep data."
 
 
 @tool
@@ -227,12 +234,13 @@ def get_apple_health_heart_rate_tool(
     Returns:
         Formatted heart rate data with average, min, and max values.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        if not integration:
+            return "No heart rate data found. Make sure Apple Health is synced from your iPhone and you have heart rate data from Apple Watch."
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         heart_data: Dict[str, Any] = health_data.get('heart_rate', {})
 
@@ -264,8 +272,8 @@ def get_apple_health_heart_rate_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}")
-        return f"Error retrieving heart rate data: {str(e)}"
+        logger.error("Error in get_apple_health_heart_rate_tool: %s", type(e).__name__, exc_info=True)
+        return "Error retrieving heart rate data."
 
 
 @tool
@@ -288,13 +296,13 @@ def get_apple_health_workouts_tool(
     Returns:
         Formatted workout data with activity types, duration, and calories.
     """
-    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert uid is not None
-    assert integration is not None
-
     try:
+        uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        if not uid or not integration:
+            return "No workout data found. Make sure Apple Health is synced from your iPhone."
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
 
@@ -346,8 +354,8 @@ def get_apple_health_workouts_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_workouts_tool: {e}")
-        return f"Error retrieving workout data: {str(e)}"
+        logger.error("Error in get_apple_health_workouts_tool: %s", type(e).__name__, exc_info=True)
+        return "Error retrieving workout data."
 
 
 @tool
@@ -369,12 +377,13 @@ def get_apple_health_summary_tool(
     Returns:
         Comprehensive health summary with all available Apple Health data.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        if not integration:
+            return "No health data found. Make sure Apple Health is synced from your iPhone."
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
 
         if not health_data:
@@ -463,5 +472,5 @@ def get_apple_health_summary_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_summary_tool: {e}")
-        return f"Error retrieving health summary: {str(e)}"
+        logger.error("Error in get_apple_health_summary_tool: %s", type(e).__name__, exc_info=True)
+        return "Error retrieving health summary."
