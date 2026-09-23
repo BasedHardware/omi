@@ -465,10 +465,18 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           PINECONE_INDEX_NAME:
             value: memories-backend
@@ -480,10 +488,18 @@ overlay:
             value: 'true'
             category: rollout
       frame-request-retention-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
       daily-memory-sweep-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
@@ -506,12 +522,20 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'false'
       knowledge-ledger-drain-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
           BASE_API_URL:
             value: https://api.omi.me
