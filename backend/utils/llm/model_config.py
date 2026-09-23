@@ -37,6 +37,11 @@ class AutoLaneRouteRef:
 
 RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 
+# Canonical Luna model id. Feature defaults, scripts, and tests import this
+# instead of embedding a versioned string. A bump changes this constant plus
+# the gateway route artifacts and the provider rate card.
+LUNA_MODEL = 'gpt-6-luna'
+
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #
@@ -61,37 +66,37 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 # tier or BYOK route from reintroducing a retired OpenAI text model.
 _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     # OpenAI — default intelligence
-    'conv_action_items': ('gpt-6-luna', 'openai'),
-    'wake_word_adjudication': ('gpt-6-luna', 'openai'),
-    'conv_structure': ('gpt-6-luna', 'openai'),
-    'conv_app_result': ('gpt-6-luna', 'openai'),
-    'daily_summary': ('gpt-6-luna', 'openai'),
-    'external_structure': ('gpt-6-luna', 'openai'),
-    'memories': ('gpt-6-luna', 'openai'),
-    'x_memory_extraction_flex': ('gpt-6-luna', 'openai'),
-    'learnings': ('gpt-6-luna', 'openai'),
-    'memory_conflict': ('gpt-6-luna', 'openai'),
-    'memory_conflict_flex': ('gpt-6-luna', 'openai'),
-    'knowledge_graph': ('gpt-6-luna', 'openai'),
-    'memory_l1': ('gpt-6-luna', 'openai'),
-    'memory_l2': ('gpt-6-luna', 'openai'),
-    'memory_l2_flex': ('gpt-6-luna', 'openai'),
-    'chat_responses': ('gpt-6-luna', 'openai'),
-    'file_chat_vision': ('gpt-6-luna', 'openai'),
-    'file_chat_documents': ('gpt-6-luna', 'openai'),
-    'chat_agent': ('gpt-6-luna', 'openai'),
-    'chat_extraction': ('gpt-6-luna', 'openai'),
-    'chat_graph': ('gpt-6-luna', 'openai'),
-    'goals': ('gpt-6-luna', 'openai'),
-    'goals_advice': ('gpt-6-luna', 'openai'),
-    'notifications': ('gpt-6-luna', 'openai'),
-    'proactive_notification': ('gpt-6-luna', 'openai'),
-    'desktop_proactive_reasoning': ('gpt-6-luna', 'openai'),
-    'what_matters_now': ('gpt-6-luna', 'openai'),
-    'openglass': ('gpt-6-luna', 'openai'),
-    'app_generator': ('gpt-6-luna', 'openai'),
-    'persona_clone': ('gpt-6-luna', 'openai'),
-    'persona_chat_premium': ('gpt-6-luna', 'openai'),
+    'conv_action_items': (LUNA_MODEL, 'openai'),
+    'wake_word_adjudication': (LUNA_MODEL, 'openai'),
+    'conv_structure': (LUNA_MODEL, 'openai'),
+    'conv_app_result': (LUNA_MODEL, 'openai'),
+    'daily_summary': (LUNA_MODEL, 'openai'),
+    'external_structure': (LUNA_MODEL, 'openai'),
+    'memories': (LUNA_MODEL, 'openai'),
+    'x_memory_extraction_flex': (LUNA_MODEL, 'openai'),
+    'learnings': (LUNA_MODEL, 'openai'),
+    'memory_conflict': (LUNA_MODEL, 'openai'),
+    'memory_conflict_flex': (LUNA_MODEL, 'openai'),
+    'knowledge_graph': (LUNA_MODEL, 'openai'),
+    'memory_l1': (LUNA_MODEL, 'openai'),
+    'memory_l2': (LUNA_MODEL, 'openai'),
+    'memory_l2_flex': (LUNA_MODEL, 'openai'),
+    'chat_responses': (LUNA_MODEL, 'openai'),
+    'file_chat_vision': (LUNA_MODEL, 'openai'),
+    'file_chat_documents': (LUNA_MODEL, 'openai'),
+    'chat_agent': (LUNA_MODEL, 'openai'),
+    'chat_extraction': (LUNA_MODEL, 'openai'),
+    'chat_graph': (LUNA_MODEL, 'openai'),
+    'goals': (LUNA_MODEL, 'openai'),
+    'goals_advice': (LUNA_MODEL, 'openai'),
+    'notifications': (LUNA_MODEL, 'openai'),
+    'proactive_notification': (LUNA_MODEL, 'openai'),
+    'desktop_proactive_reasoning': (LUNA_MODEL, 'openai'),
+    'what_matters_now': (LUNA_MODEL, 'openai'),
+    'openglass': (LUNA_MODEL, 'openai'),
+    'app_generator': (LUNA_MODEL, 'openai'),
+    'persona_clone': (LUNA_MODEL, 'openai'),
+    'persona_chat_premium': (LUNA_MODEL, 'openai'),
     # OpenAI — cheapest light/binary work
     'conv_app_select': ('gpt-5-nano', 'openai'),
     'conv_folder': ('gpt-5-nano', 'openai'),
@@ -119,7 +124,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-6-luna').strip() or 'gpt-6-luna', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', LUNA_MODEL).strip() or LUNA_MODEL, 'openai'),
 }
 
 # Resolve active profile once at startup.
@@ -184,14 +189,13 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 # so we detect by family prefix.
 #
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
-#                                  gpt-4o, gpt-5.x and o-series families, and by gpt-6-luna.
+#                                  gpt-4o, gpt-5.x and o-series families, and by gpt-x-luna.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
 #                                  gpt-5.x and o-series families, except gpt-5.6 and
-#                                  gpt-6-luna, which use the explicit prompt_cache_options
+#                                  gpt-x-luna, which use the explicit prompt_cache_options
 #                                  contract instead (see supports_cache_retention).
 _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
-GPT_6_LUNA_MODEL = 'gpt-6-luna'
 
 # Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
 _STRUCTURED_OUTPUT_FEATURES = {
@@ -283,7 +287,7 @@ def get_model(feature: str) -> str:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
 
     Returns:
-        Model name string (e.g. 'gpt-6-luna', 'claude-sonnet-4-6').
+        Model name string (e.g. 'gpt-x-luna', 'claude-sonnet-4-6').
     """
     return _get_model_config(feature)[0]
 
@@ -360,29 +364,30 @@ def get_route_ref(feature: str) -> RouteRef:
     )
 
 
-def model_uses_gpt56_request_contract(model: str) -> bool:
-    """True for the GPT-5.6 family and for gpt-6-luna.
+def uses_explicit_cache_and_chat_sanitizer(model: str) -> bool:
+    """True when a model keeps the explicit-cache fields and the chat-completions sanitizer.
 
-    gpt-5.6-sol and gpt-5.6-terra stay on the family prefix. gpt-6-luna does
-    not, so luna traffic has to be named explicitly to keep the explicit-cache
-    fields and the chat-completions sanitizer.
+    gpt-5.6-sol and gpt-5.6-terra match the family prefix. The canonical Luna
+    id does not, so it is compared exactly. Callers attach prompt_cache_options,
+    keep cache breakpoints, skip legacy prompt_cache_retention, and sanitize
+    chat-completions tool effort and temperature.
     """
-    return bool(model) and (model.startswith('gpt-5.6') or model == GPT_6_LUNA_MODEL)
+    return bool(model) and (model.startswith('gpt-5.6') or model == LUNA_MODEL)
 
 
 def supports_prompt_cache(model: str) -> bool:
     """Whether a model supports OpenAI prompt-cache routing (prompt_cache_key)."""
-    return bool(model) and (model.startswith(_CACHE_KEY_MODEL_PREFIXES) or model == GPT_6_LUNA_MODEL)
+    return bool(model) and (model.startswith(_CACHE_KEY_MODEL_PREFIXES) or model == LUNA_MODEL)
 
 
 def supports_cache_retention(model: str) -> bool:
     """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
-    # GPT-5.6 and gpt-6-luna use the explicit cache contract (prompt_cache_options
+    # GPT-5.6 and gpt-x-luna use the explicit cache contract (prompt_cache_options
     # + a breakpoint) rather than the legacy prompt_cache_retention field. Sending
     # both contracts in the same request is rejected by the provider.
     return (
         bool(model)
-        and not model_uses_gpt56_request_contract(model)
+        and not uses_explicit_cache_and_chat_sanitizer(model)
         and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
     )
 

@@ -11,6 +11,7 @@ import pytest
 
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
 from llm_gateway.gateway import accounting_sink
+from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -108,7 +109,7 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     metadata = openai_usage_from_response(
         {
             'id': 'chatcmpl-flex',
-            'model': 'gpt-6-luna',
+            'model': LUNA_MODEL,
             'service_tier': 'flex',
             'usage': {'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000},
         }
@@ -116,7 +117,7 @@ def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.memory_conflict_flex.model_config.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -162,7 +163,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.conv_action_items.model_config.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -176,7 +177,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     # Long-context tier: 400K * $0.20 + 200K * $0.02 + 1M * $0.90
     # + 400K * $0.25 = $1.084.
     assert event.estimated_cost_micro_usd == 1_084_000
-    assert event.rate_card_id == 'openai.gpt-6-luna.2026-09-22'
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
 
 
 def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
@@ -253,7 +254,7 @@ def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -281,7 +282,7 @@ def test_cache_write_and_read_report_net_cache_savings() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -313,7 +314,7 @@ def test_flex_halves_complete_net_cache_savings_and_total_cost() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.test.001',
         fallback_reason=None,
         retry_ordinal=0,
@@ -392,7 +393,7 @@ def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
     trace = AttemptTrace()
     trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.jit.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -957,7 +958,7 @@ def test_long_context_threshold_is_pinned_and_exclusive() -> None:
     def _priced_cost(prompt_tokens: int) -> int | None:
         attempt = trace.record(
             provider='openai',
-            configured_model='gpt-6-luna',
+            configured_model=LUNA_MODEL,
             route_artifact_id='route.test.001',
             fallback_reason=None,
             retry_ordinal=1,
@@ -1032,7 +1033,7 @@ def test_short_context_luna_request_uses_short_context_rates() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.conv_action_items.model_config.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -1045,7 +1046,7 @@ def test_short_context_luna_request_uses_short_context_rates() -> None:
     # Short-context rates: 60K uncached @ $0.10/M + 30K cached @ $0.01/M +
     # 100K output @ $0.60/M + 60K cache-write @ $0.125/M = $73,800 micro-USD.
     assert event.estimated_cost_micro_usd == 73_800
-    assert event.rate_card_id == 'openai.gpt-6-luna.2026-09-22'
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
 
 
 def _platform_attempt() -> Any:
