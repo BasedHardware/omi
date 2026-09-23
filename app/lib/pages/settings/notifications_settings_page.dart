@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -69,6 +70,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   // Daily Summary settings
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22; // Default to 10 PM
+  bool _isGeneratingSummary = false;
 
   @override
   void initState() {
@@ -184,6 +186,56 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     }
     PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
+
+  Future<void> _showGenerateSummaryDatePicker() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: now.subtract(const Duration(days: 1)),
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now,
+      helpText: 'Select date to backfill summary',
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF6366F1),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1C1C1E),
+              onSurface: Colors.white,
+            ),
+            dialogBackgroundColor: const Color(0xFF1C1C1E),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null && mounted) {
+      setState(() => _isGeneratingSummary = true);
+      final formattedDate =
+          '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+      try {
+        final summaryId = await generateDailySummary(date: formattedDate);
+        if (!mounted) return;
+        if (summaryId != null) {
+          AppSnackbar.showSnackbarSuccess('Daily summary generated for $formattedDate');
+        } else {
+          AppSnackbar.showSnackbarError('Failed to generate summary for $formattedDate');
+        }
+      } catch (e) {
+        if (mounted) {
+          AppSnackbar.showSnackbarError('Error generating summary: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isGeneratingSummary = false);
+        }
+      }
+    }
+  }
+
+
 
   Future<void> _showHourPicker() async {
     if (!_dailySummaryEnabled) return;
@@ -438,6 +490,28 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   ],
                 ),
               ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: Colors.grey.shade800, height: 1),
+          ),
+
+          // Generate / Backfill summary for past date row
+          GestureDetector(
+            onTap: _isGeneratingSummary ? null : _showGenerateSummaryDatePicker,
+            behavior: HitTestBehavior.opaque,
+            child: _buildSettingRow(
+              icon: FontAwesomeIcons.calendar,
+              title: 'Generate Past Summary',
+              trailing: _isGeneratingSummary
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF6366F1)),
+                    )
+                  : Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
             ),
           ),
         ],
