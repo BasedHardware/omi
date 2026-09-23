@@ -141,6 +141,24 @@ class StackOverflowErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(resp.error, "Stack Exchange answers request failed.")
             self.assertNotIn(self.sensitive_leak, str(resp.error))
 
+    async def test_search_questions_sanitizes_value_error(self):
+        with patch.object(app, "_request_json", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.search_questions({"query": "python"})
+            self.assertEqual(resp.error, "Stack Exchange search failed.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_get_question_sanitizes_value_error(self):
+        with patch.object(app, "_request_json", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.get_question({"question_id": 12345})
+            self.assertEqual(resp.error, "Stack Exchange question request failed.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_get_top_answers_sanitizes_value_error(self):
+        with patch.object(app, "_request_json", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.get_top_answers({"question_id": 12345})
+            self.assertEqual(resp.error, "Stack Exchange answers request failed.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
 
 if __name__ == "__main__":
     unittest.main()

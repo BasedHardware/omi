@@ -448,8 +448,6 @@ async def search_questions(payload: dict[str, Any]):
         lines = [f"Stack Exchange results for '{clean_query}' on {site}:"]
         lines.extend(_format_question(item, index, site) for index, item in enumerate(items, start=1))
         return ChatToolResponse(result="\n\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange search failed with status {exc.response.status_code}.")
     except Exception:
@@ -508,8 +506,6 @@ async def get_question(payload: dict[str, Any]):
         if body:
             lines.extend(["", "Question body:", body])
         return ChatToolResponse(result="\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange question request failed with status {exc.response.status_code}.")
     except Exception:
@@ -556,8 +552,6 @@ async def get_top_answers(payload: dict[str, Any]):
         lines = [f"Top answers for question {question_id} on {site}:", _question_url(site, question_id)]
         lines.extend(_format_answer(item, index) for index, item in enumerate(items, start=1))
         return ChatToolResponse(result="\n\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Stack Exchange answers request failed with status {exc.response.status_code}.")
     except Exception:
