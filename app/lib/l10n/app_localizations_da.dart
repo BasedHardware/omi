@@ -2130,7 +2130,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get alwaysInContext => 'Altid i kontekst';
 
   @override
-  String get memoryContentHint => 'Indtast hukommelsesindhold';
+  String get memoryContentHint => 'Jeg foretrækker møder om morgenen.';
 
   @override
   String get failedToSaveMemory => 'Kunne ikke gemme hukommelse';
@@ -10109,4 +10109,25 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Hvad kan du gøre for mig?',
+        'goal': 'Hjælp mig med at sætte et mål',
+        'activity': 'Opsummer mine seneste aktiviteter',
+        'improve': 'Hvordan kan jeg blive bedre?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Næste uge';
+
+  @override
+  String get clearSearch => 'Ryd søgning';
 }

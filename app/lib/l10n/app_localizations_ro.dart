@@ -2157,7 +2157,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get alwaysInContext => 'Mereu în context';
 
   @override
-  String get memoryContentHint => 'Îmi place să mănânc înghețată...';
+  String get memoryContentHint => 'Prefer întâlnirile de dimineață.';
 
   @override
   String get failedToSaveMemory => 'Salvarea a eșuat. Te rugăm să verifici conexiunea.';
@@ -10171,4 +10171,25 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ce poți face pentru mine?',
+        'goal': 'Ajută-mă să stabilesc un obiectiv',
+        'activity': 'Rezumă activitatea mea recentă',
+        'improve': 'Cum mă pot îmbunătăți?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Săptămâna viitoare';
+
+  @override
+  String get clearSearch => 'Șterge căutarea';
 }

@@ -1196,7 +1196,7 @@
     "memoriesCount": "{count} atminčių",
     "memorizingYourVoice": "Įsimenamas jūsų balsas...",
     "memoryClearedSuccess": "Omi atmintis apie jus išvalyta",
-    "memoryContentHint": "Mėgstu valgyti ledus...",
+    "memoryContentHint": "Pirmenybę teikiu rytiniams susitikimams.",
     "memoryDeleted": "Prisiminimas ištrintas.",
     "memoryManagement": "Atminties valdymas",
     "merge": "Sujungti",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Atnaujinti santrauką su naujais vardais",
     "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ką gali dėl manęs padaryti?} goal{Padėk man išsikelti tikslą} activity{Apibendrink mano naujausią veiklą} improve{Kaip galiu tobulėti?} other{}}",
+    "nextWeek": "Kitą savaitę",
+    "clearSearch": "Išvalyti paiešką"
 }

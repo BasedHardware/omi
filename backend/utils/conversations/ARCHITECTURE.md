@@ -23,6 +23,16 @@ and background processing.
   structuring, summary, and memory work (#7690). That gate sits after the
   unpaid desktop on-device / `store_projection` path (#14513) so it cannot
   strip a local summary.
+- `relevance.py` owns the one keep/discard decision. Every caller of
+  `process_conversation` names a `ProcessingTrigger`; `RELEVANCE_POLICY` maps
+  each trigger to assess or keep (keep only for user actions: first open,
+  reprocess, merge). Assessment is tiered: user restore
+  (`sync_relevance_user_kept`), then the stdlib-only rules in
+  `relevance_rules.py`, then the `conv_discard` model for the ambiguous middle;
+  a calendar overlap overrides any discard. `force_process` means "run now" and
+  never skips the decision. The outcome is stored as `relevance_decision`
+  (server-only, outside the wire model) and counted in
+  `conversation_relevance_decision_total`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by

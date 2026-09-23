@@ -2160,7 +2160,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get alwaysInContext => 'Palaging nasa konteksto';
 
   @override
-  String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
+  String get memoryContentHint => 'Mas gusto ko ang mga pulong sa umaga.';
 
   @override
   String get failedToSaveMemory => 'Nabigo ang pagsave. Mangyaring suriin ang iyong koneksyon.';
@@ -10215,4 +10215,25 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ano ang magagawa mo para sa akin?',
+        'goal': 'Tulungan mo akong magtakda ng layunin',
+        'activity': 'Ibuod ang mga kamakailan kong aktibidad',
+        'improve': 'Paano pa ako mapapabuti?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Sa susunod na linggo';
+
+  @override
+  String get clearSearch => 'I-clear ang paghahanap';
 }

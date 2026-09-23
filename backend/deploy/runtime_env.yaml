@@ -2099,6 +2099,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+              value: '1'
+              category: rollout
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability

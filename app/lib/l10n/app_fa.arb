@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "من دوست دارم بستنی بخورم...",
+    "memoryContentHint": "جلسه‌های صبح را ترجیح می‌دهم.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,8 @@
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
     "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{چه کاری می‌توانی برایم انجام دهی؟} goal{کمکم کن هدفی تعیین کنم} activity{فعالیت‌های اخیرم را خلاصه کن} improve{چطور می‌توانم بهتر شوم؟} other{}}",
+    "nextWeek": "هفتهٔ آینده",
+    "clearSearch": "پاک کردن جستجو"
 }

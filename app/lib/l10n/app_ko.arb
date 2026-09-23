@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "모든 기억이 이제 공개입니다",
     "newMemory": "✨ 새 메모리",
     "editMemory": "✏️ 메모리 편집",
-    "memoryContentHint": "아이스크림 먹는 걸 좋아해요...",
+    "memoryContentHint": "오전 회의를 선호해요.",
     "failedToSaveMemory": "저장에 실패했습니다. 연결을 확인하세요.",
     "saveMemory": "기억 저장",
     "retry": "재시도",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "새 이름으로 요약 업데이트",
     "syncStatusUnsupportedAudio": "오디오를 읽을 수 없어 동기화할 수 없습니다",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
+    "nextWeek": "다음 주",
+    "clearSearch": "검색 지우기"
 }

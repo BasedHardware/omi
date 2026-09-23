@@ -12,7 +12,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-DEFAULT_PACE_SECONDS = 6.0
+# Pace is how much NEW audio must accumulate before the next POST, and it is what
+# should decide window size. Left at 6s, window size was instead decided by how fast
+# the GPU answered: audio keeps arriving while a POST is in flight, so the next window
+# spans roughly one POST latency. Measured on dev with identical audio, that produced
+# ~7s windows at WER 0.242, ~9-15s at 0.245, and ~24s (the max-context cap) at 0.155.
+# Accuracy tracks window size, so a busier GPU transcribed better — which is not a
+# property we can ship.
+#
+# 15s makes windows large without reaching the 24s cap on every post, and removes the
+# dependence on server load. It costs first-text latency: the first POST now waits for
+# 15s of audio instead of 6s. The configurations that scored 0.155 were already ~27.5s
+# to first text, so this is not a new cost, but no latency budget has been stated for
+# this leg and that gap is still open.
+DEFAULT_PACE_SECONDS = 15.0
 DEFAULT_MAX_CONTEXT_SECONDS = 24.0
 PACE_MIN_SECONDS = 1.0
 PACE_MAX_SECONDS = 15.0

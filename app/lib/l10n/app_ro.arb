@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Toate amintirile sunt acum publice",
     "newMemory": "✨ Amintire nouă",
     "editMemory": "✏️ Editează amintirea",
-    "memoryContentHint": "Îmi place să mănânc înghețată...",
+    "memoryContentHint": "Prefer întâlnirile de dimineață.",
     "failedToSaveMemory": "Salvarea a eșuat. Te rugăm să verifici conexiunea.",
     "saveMemory": "Salvează amintirea",
     "retry": "Reîncearcă",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Actualizează rezumatul cu numele noi",
     "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ce poți face pentru mine?} goal{Ajută-mă să stabilesc un obiectiv} activity{Rezumă activitatea mea recentă} improve{Cum mă pot îmbunătăți?} other{}}",
+    "nextWeek": "Săptămâna viitoare",
+    "clearSearch": "Șterge căutarea"
 }

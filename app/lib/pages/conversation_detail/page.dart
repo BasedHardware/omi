@@ -832,13 +832,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                       children: [
                         // Ask about this conversation (#4515)
                         Container(
-                          width: 36,
-                          height: 36,
+                          height: 44,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: context.l10n.askAboutThisConversation,
+                          child: TextButton.icon(
+                            key: const Key('conversation_ask_omi'),
+                            style: TextButton.styleFrom(
+                                shape: const StadiumBorder(),
+                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12)),
+                            label: Text(context.l10n.askOmi),
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               final convo = provider.conversation;
@@ -860,9 +863,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         ),
                         // Star button (first) - toggle starred status
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(
                             color: provider.conversation.starred
                                 ? Colors.amber.withValues(alpha: 0.3)
@@ -934,9 +937,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                         // Share button (second) - directly share summary link
                         Container(
                           key: _shareButtonKey,
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
@@ -996,47 +999,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                 : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
-                        // Search button (second) - only show on transcript and summary tabs
-                        if (_controller?.index != 2)
-                          Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: _isSearching
-                                  ? Colors.deepPurple.withValues(alpha: 0.8)
-                                  : Colors.grey.withValues(alpha: 0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              tooltip: context.l10n.search,
-                              onPressed: () {
-                                setState(() {
-                                  _isSearching = !_isSearching;
-                                  if (!_isSearching) {
-                                    _searchQuery = '';
-                                    _searchController.clear();
-                                    _searchFocusNode.unfocus();
-                                  } else {
-                                    _searchFocusNode.requestFocus();
-                                    PlatformManager.instance.analytics.conversationDetailSearchClicked(
-                                      conversationId: provider.conversation.id,
-                                    );
-                                  }
-                                });
-                                HapticFeedback.mediumImpact();
-                              },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                            ),
-                          ),
                         // Developer Tools button (third) - iOS style pull-down menu
                         Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
+                          width: 44,
+                          height: 44,
+                          margin: const EdgeInsets.only(right: 4),
                           child: PullDownButton(
                             itemBuilder: (context) => [
+                              if (_controller?.index != 2)
+                                PullDownMenuItem(
+                                  title: context.l10n.search,
+                                  iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
+                                  onTap: () {
+                                    setState(() {
+                                      _isSearching = !_isSearching;
+                                      if (!_isSearching) {
+                                        _searchQuery = '';
+                                        _searchController.clear();
+                                        _searchFocusNode.unfocus();
+                                      } else {
+                                        _searchFocusNode.requestFocus();
+                                        PlatformManager.instance.analytics.conversationDetailSearchClicked(
+                                          conversationId: provider.conversation.id,
+                                        );
+                                      }
+                                    });
+                                    HapticFeedback.mediumImpact();
+                                  },
+                                ),
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
                                 iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),

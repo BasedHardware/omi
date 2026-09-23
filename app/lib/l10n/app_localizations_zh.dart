@@ -2104,7 +2104,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alwaysInContext => '始终包含在上下文中';
 
   @override
-  String get memoryContentHint => '我喜欢冰淇淋...';
+  String get memoryContentHint => '我更喜欢在上午开会。';
 
   @override
   String get failedToSaveMemory => '保存失败。';
@@ -9935,4 +9935,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '你能为我做些什么？',
+        'goal': '帮我设定一个目标',
+        'activity': '总结我最近的活动',
+        'improve': '我该如何改进？',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '下周';
+
+  @override
+  String get clearSearch => '清除搜索';
 }

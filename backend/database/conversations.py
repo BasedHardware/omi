@@ -99,12 +99,6 @@ _FRAGMENT_VISIBILITY_FIELD_PATHS = (
     'visibility',
     'starred',
     'user_title',
-    # These bounded structured arrays distinguish an enriched review row from
-    # the deterministic minimum. They are stripped before returning the card.
-    'structured.sections',
-    'structured.action_items',
-    'structured.events',
-    'client_processing.schema_version',
 )
 _FRAGMENT_VISIBILITY_INTERNAL_FIELD_PATHS = tuple(
     field for field in _FRAGMENT_VISIBILITY_FIELD_PATHS if field != 'user_title'
@@ -2057,12 +2051,12 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
             # Redirect tombstones reuse discarded=True for the indexed hide.
             # Restoring them would put a merged-away donor back on lists.
             return False
-        updates = {'discarded': False}
+        # A restore is the user's verdict and outranks every later relevance
+        # assessment (sync appends reassess the whole recording). Legacy review
+        # rows are also hidden by the read predicate, so they flip to keep.
+        updates = {'discarded': False, 'sync_relevance_user_kept': True}
         if current.get('sync_relevance') == 'review':
-            # Legacy review rows are hidden by the read predicate even when
-            # their stored discarded flag is false. Persist the user's choice
-            # so future sync appends cannot hide the recording again.
-            updates.update({'sync_relevance': 'keep', 'sync_relevance_user_kept': True})
+            updates['sync_relevance'] = 'keep'
         transaction.update(conversation_ref, updates)
         return True
 
@@ -2090,6 +2084,19 @@ def update_conversation_action_items(uid: str, conversation_id: str, action_item
     update_conversation(uid, conversation_id, {'structured.action_items': action_items})
 
 
+def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
+    """How many of a conversation's action items the flattening below would keep."""
+    kept = 0
+    for item in conversation.get('structured', {}).get('action_items', []):
+        if isinstance(item, dict):
+            if item.get('deleted', False):
+                continue
+            if not include_completed and item.get('completed', False):
+                continue
+        kept += 1
+    return kept
+
+
 def get_action_items(
     uid: str,
     limit: int = 100,
@@ -2113,8 +2120,13 @@ def get_action_items(
     # Sort by created_at descending
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Get all conversations with action items
+    # Read only as far as the requested page needs. The stream is ordered by the
+    # same created_at the flattened items are sorted by, and every item inherits
+    # its conversation's timestamp, so the first offset+limit items collected here
+    # are the ones the slice at the end would have kept anyway.
+    needed = offset + limit
     conversations = []
+    collected = 0
     for doc in conversations_ref.stream():
         conversation_data = doc.to_dict()
         if is_soft_deleted(conversation_data):
@@ -2128,6 +2140,9 @@ def get_action_items(
             # Decrypt conversation data for proper reading
             decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
+            collected += _page_eligible_action_item_count(decrypted_data, include_completed)
+            if needed > 0 and collected >= needed:
+                break
 
     # Extract and flatten action items with metadata
     action_items = []

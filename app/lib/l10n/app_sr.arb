@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Волим да једем сладолед...",
+    "memoryContentHint": "Више волим јутарње састанке.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,8 @@
     "updateSummaryWithNewNames": "Ажурирај резиме са новим именима",
     "syncStatusUnsupportedAudio": "Звук не може да се прочита — синхронизација није могућа",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Шта можеш да урадиш за мене?} goal{Помози ми да поставим циљ} activity{Сажми моје недавне активности} improve{Како могу да напредујем?} other{}}",
+    "nextWeek": "Следеће недеље",
+    "clearSearch": "Обриши претрагу"
 }

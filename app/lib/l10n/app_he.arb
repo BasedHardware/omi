@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "אני אוהב לאכול גלידה...",
+    "memoryContentHint": "אני מעדיף פגישות בבוקר.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,8 @@
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
     "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
+    "nextWeek": "בשבוע הבא",
+    "clearSearch": "ניקוי החיפוש"
 }

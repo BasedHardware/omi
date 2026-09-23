@@ -2148,7 +2148,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get alwaysInContext => 'Заўсёды ў кантэксце';
 
   @override
-  String get memoryContentHint => 'Мне нравіцца есці мароженае...';
+  String get memoryContentHint => 'Я аддаю перавагу ранішнім сустрэчам.';
 
   @override
   String get failedToSaveMemory => 'Не вдалося захаваць. Калі ласка, праверыце вашу злучэнне.';
@@ -10154,4 +10154,25 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Што ты можаш зрабіць для мяне?',
+        'goal': 'Дапамажы мне паставіць мэту',
+        'activity': 'Падсумуй маю нядаўнюю дзейнасць',
+        'improve': 'Як я магу палепшыцца?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'На наступным тыдні';
+
+  @override
+  String get clearSearch => 'Ачысціць пошук';
 }

@@ -2108,7 +2108,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
-  String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
+  String get memoryContentHint => '오전 회의를 선호해요.';
 
   @override
   String get failedToSaveMemory => '저장에 실패했습니다. 연결을 확인하세요.';
@@ -9957,4 +9957,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '나를 위해 무엇을 해줄 수 있어?',
+        'goal': '목표를 세우는 걸 도와줘',
+        'activity': '최근 활동을 요약해 줘',
+        'improve': '어떻게 하면 더 나아질 수 있을까?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '다음 주';
+
+  @override
+  String get clearSearch => '검색 지우기';
 }

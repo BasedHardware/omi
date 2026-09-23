@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "Всі спогади тепер публічні",
     "newMemory": "✨ Нова пам'ять",
     "editMemory": "✏️ Редагувати пам'ять",
-    "memoryContentHint": "Мені подобається їсти морозиво...",
+    "memoryContentHint": "Я віддаю перевагу ранковим зустрічам.",
     "failedToSaveMemory": "Не вдалося зберегти. Будь ласка, перевірте підключення.",
     "saveMemory": "Зберегти спогад",
     "retry": "Повторити",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "Оновити підсумок з новими іменами",
     "syncStatusUnsupportedAudio": "Не вдалося прочитати аудіо — синхронізація неможлива",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Що ти можеш для мене зробити?} goal{Допоможи мені поставити мету} activity{Підсумуй мою нещодавню діяльність} improve{Як я можу покращитися?} other{}}",
+    "nextWeek": "Наступного тижня",
+    "clearSearch": "Очистити пошук"
 }

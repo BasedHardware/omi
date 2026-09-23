@@ -72,7 +72,7 @@ def conversations_db(monkeypatch):
     return conversations
 
 
-def test_low_signal_policy_protects_curated_and_enriched_rows():
+def test_low_signal_policy_protects_only_curated_rows():
     from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 
     assert is_low_signal_sync_fragment(_review())
@@ -86,10 +86,16 @@ def test_low_signal_policy_protects_curated_and_enriched_rows():
         {'folder_user_set': True},
         {'visibility': 'shared'},
         {'sync_relevance_user_kept': True},
-        {'structured': {'overview': 'Generated summary'}},
     ):
         row = _review(**protected)
         assert not is_low_signal_sync_fragment(row), protected
+    # Generated output is not curation: the pipeline writes it for everything.
+    for generated in (
+        {'structured': {'overview': 'Generated summary'}},
+        {'structured': {'sections': [{'heading': 'Context'}]}},
+        {'client_processing': {'schema_version': 1}},
+    ):
+        assert is_low_signal_sync_fragment(_review(**generated)), generated
 
 
 def test_default_list_fills_pages_around_legacy_review_rows(conversations_db):
@@ -240,3 +246,21 @@ def test_typesense_projection_hides_legacy_review_without_changing_schema():
     )
     assert document is not None
     assert document['discarded'] is True
+
+
+def test_restore_of_any_row_persists_the_user_choice(monkeypatch):
+    """A model-discarded sync row is not ``review``; its restore must still stick."""
+    from database import conversations
+
+    row = _review(id='restored', sync_relevance='keep', discarded=True)
+    db = StrictFirestore({('users', 'u', 'conversations', 'restored'): row})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', MagicMock())
+
+    assert conversations.restore_conversation_from_discarded('u', 'restored') is True
+    assert db.transactions[0].updates == [
+        (
+            ('users', 'u', 'conversations', 'restored'),
+            {'discarded': False, 'sync_relevance_user_kept': True},
+        )
+    ]

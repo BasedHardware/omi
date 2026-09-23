@@ -664,6 +664,11 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     persisted.assert_not_called()
 
 
+def _segments_saying(text):
+    """Segments for a mocked conversation: the relevance rules read segment text."""
+    return [MagicMock(text=text, start=0.0, end=5.0)]
+
+
 def test_discard_call_uses_discard_feature_tracking():
     """Verify should_discard_conversation is called within CONVERSATION_DISCARD context."""
     import sys
@@ -678,6 +683,7 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
@@ -724,7 +730,7 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     )
     captured: dict[str, object] = {}
 
-    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, on_error: object = None):
         captured.update(
             transcript=transcript,
             photos=photos,
@@ -824,6 +830,7 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -859,6 +866,7 @@ def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monke
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -899,6 +907,7 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -926,6 +935,7 @@ def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -976,6 +986,7 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1023,6 +1034,7 @@ def test_action_items_tracked_separately_from_structure():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1069,6 +1081,7 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "a transcript with enough words to not be discarded easily"
+    conversation.transcript_segments = _segments_saying("a transcript with enough words to not be discarded easily")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1125,6 +1138,7 @@ def test_action_items_skipped_on_discard():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short"
+    conversation.transcript_segments = _segments_saying("short")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None

@@ -655,7 +655,7 @@
     "allMemoriesPublicResult": "ความทรงจำทั้งหมดเป็นสาธารณะแล้ว",
     "newMemory": "✨ ความทรงจำใหม่",
     "editMemory": "✏️ แก้ไขความทรงจำ",
-    "memoryContentHint": "ฉันชอบกินไอศกรีม...",
+    "memoryContentHint": "ฉันชอบประชุมช่วงเช้า",
     "failedToSaveMemory": "บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ",
     "saveMemory": "บันทึกความทรงจำ",
     "retry": "ลองอีกครั้ง",
@@ -3253,5 +3253,8 @@
     "updateSummaryWithNewNames": "อัปเดตสรุปด้วยชื่อใหม่",
     "syncStatusUnsupportedAudio": "อ่านเสียงไม่ได้ — ซิงค์ไม่ได้",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{คุณช่วยอะไรฉันได้บ้าง?} goal{ช่วยฉันตั้งเป้าหมายหน่อย} activity{สรุปกิจกรรมล่าสุดของฉัน} improve{ฉันจะพัฒนาตัวเองได้อย่างไร?} other{}}",
+    "nextWeek": "สัปดาห์หน้า",
+    "clearSearch": "ล้างการค้นหา"
 }
