@@ -45,11 +45,11 @@ def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
 
     assert route_ref == ExplicitRouteRef(
         feature='fair_use',
-        model='gpt-5.6-luna',
+        model='gpt-6-luna',
         provider='openai',
         options={},
     )
-    assert get_model('fair_use') == 'gpt-5.6-luna'
+    assert get_model('fair_use') == 'gpt-6-luna'
     assert get_provider('fair_use') == 'openai'
 
 

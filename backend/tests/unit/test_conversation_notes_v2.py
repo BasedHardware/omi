@@ -425,9 +425,9 @@ def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatc
         routes = load_gateway_config(prod_mode=True).route_artifacts
         notes = routes['route.conv_structure.model_config.001']
         memory = routes['route.memory_l1.model_config.001']
-        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.primary.model == memory.primary.model == 'gpt-6-luna'
         assert notes.provider_options['reasoning_effort'] == 'low'
-        assert memory.primary.model == 'gpt-5.6-luna'
+        assert memory.primary.model == 'gpt-6-luna'
         assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
     else:
         assert get_model_config('conv_structure') == get_model_config('memory_l1')
