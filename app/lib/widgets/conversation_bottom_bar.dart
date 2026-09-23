@@ -23,6 +23,7 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/format/omi_duration.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
@@ -352,10 +353,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   String _formatDurationRemaining(Duration position) {
     final remaining = _totalDuration - position;
-    if (remaining.isNegative) return '0:00';
-    final minutes = remaining.inMinutes.remainder(60);
-    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+    // OmiDuration.offset keeps the hours: 1h 5m remaining reads 1:05:00, not 5:00.
+    return OmiDuration.offset(remaining.isNegative ? 0 : remaining.inSeconds);
   }
 
   @override
