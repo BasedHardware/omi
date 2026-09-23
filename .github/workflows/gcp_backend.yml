@@ -176,7 +176,9 @@ jobs:
         if: github.event.inputs.environment != 'prod'
         uses: 'google-github-actions/auth@v3'
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -416,10 +418,9 @@ jobs:
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           release_version: ${{ github.event.inputs.release_version }}
           # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).
-          # Development keeps its JSON lane. Never pass both.
-          gcp_credentials: ${{ github.event.inputs.environment != 'prod' && secrets.GCP_CREDENTIALS || '' }}
-          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || '' }}
-          workload_identity_service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || '' }}
+          # Development: GitHub WIF as omi-ci-deployer-dev@ (WS-D). No JSON key.
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           # The known-audio gate runs only for development, where the Firebase
