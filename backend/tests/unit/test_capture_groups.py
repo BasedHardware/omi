@@ -235,7 +235,7 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     monkeypatch.setattr(conversations_db, 'db', fake_db)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a: None)
     conversations_db.delete_conversation(UID, 'desktop')
-    assert calls == [((UID, 'desktop'), {'sticky': False, 'firestore_client': fake_db})]
+    assert calls == [((UID, 'desktop'), {'sticky': False, 'close': True, 'firestore_client': fake_db})]
     fake_ref.delete.assert_called_once()
 
 
@@ -324,10 +324,77 @@ def test_content_checks_are_bounded(store, seam, monkeypatch):
     for i in range(4):
         store.rows[path(f'p{i}')] = row(f'p{i}', 'omi', 0, 600 + i)
     reads = []
-    original = conversations_db.get_conversation
-    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **kw: reads.append(a[1]) or original(*a, **kw))
+    original = conversations_db.get_conversation_for_capture_check
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation_for_capture_check',
+        lambda *a, **kw: reads.append(a[1]) or original(*a, **kw),
+    )
     policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
-    assert len(reads) == 2
+    assert reads[0] == 'desktop' and len(reads) == 3  # own fresh read + two bounded partners
+
+
+def test_transcript_changed_after_confirmation_is_not_grouped(store, seam, monkeypatch):
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    original = groups_db.join_capture_group
+
+    def edit_then_join(*args, **kwargs):
+        store.rows[path('pendant')]['transcript_segments'] = segments(OTHER)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(groups_db, 'join_capture_group', edit_then_join)
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
+    assert all('capture_group' not in r for r in store.rows.values())
+    assert ('capture_group_joined', 'conflict') in seam
+
+
+def test_fingerprint_ignores_membership_but_tracks_transcript():
+    base = row('a', 'omi')
+    grouped = {**base, 'capture_group': {'id': 'g'}, 'external_data': {'x': 1}}
+    assert groups_db.transcript_fingerprint(base) == groups_db.transcript_fingerprint(grouped)
+    assert groups_db.transcript_fingerprint(base) != groups_db.transcript_fingerprint(row('a', 'omi', text=OTHER))
+    assert groups_db.transcript_fingerprint(None) is None
+
+
+def test_closed_capture_leaves_and_can_never_rejoin(store):
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    groups_db.join_capture_group(UID, 'pendant', 'desktop', evidence())
+    assert groups_db.leave_capture_group(UID, 'desktop', sticky=False, close=True)
+    assert store.rows[path('desktop')]['capture_group_closed'] is True
+    assert store.rows[path('pendant')]['capture_group'] is None
+    assert groups_db.join_capture_group(UID, 'pendant', 'desktop', evidence()) is None
+
+
+def test_closing_an_ungrouped_capture_fences_a_racing_join(store):
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    assert groups_db.leave_capture_group(UID, 'desktop', sticky=False, close=True) is False
+    assert store.rows[path('desktop')]['capture_group_closed'] is True
+    assert groups_db.join_capture_group(UID, 'pendant', 'desktop', evidence()) is None
+
+
+@pytest.mark.parametrize('gone', ['soft_deleted', 'hard_deleted', 'departed'])
+def test_stale_members_are_pruned_when_the_group_is_touched_again(store, gone):
+    store.rows.update(
+        {
+            path('frag1'): row('frag1', 'omi', 0, 300),
+            path('desktop'): row('desktop', 'desktop', 0, 600),
+            path('long'): row('long', 'omi', 0, 1800),
+        }
+    )
+    group_id = groups_db.join_capture_group(UID, 'frag1', 'desktop', evidence())
+    groups_db.join_capture_group(UID, 'long', 'desktop', evidence())
+    assert store.rows[path('desktop')]['capture_group']['primary_id'] == 'long'
+    if gone == 'soft_deleted':  # e.g. absorbed by sync, which never calls the delete hook
+        store.rows[path('long')].update(deleted=True, discarded=True)
+    elif gone == 'hard_deleted':
+        del store.rows[path('long')]
+    else:
+        store.rows[path('long')]['capture_group'] = None
+    assert groups_db.join_capture_group(UID, 'frag1', 'desktop', evidence()) == group_id
+    record = store.rows[path('desktop')]['capture_group']
+    assert {m['id'] for m in record['members']} == {'frag1', 'desktop'}
+    assert record['primary_id'] == 'desktop' and record['revision'] == 3
+    assert store.rows[path('frag1')]['capture_group'] == record
 
 
 # --------------------------------------------------------------- route

@@ -21,6 +21,8 @@ struct ConversationRowView: View {
   /// Other loaded recordings of the same event (hidden from the list behind this row).
   var captureMembers: [ServerConversation] = []
   var onOpenCaptureMember: ((ServerConversation) -> Void)? = nil
+  /// Called after a separation succeeds, for surfaces (search) the list refresh does not reach.
+  var onCaptureGroupChanged: (() -> Void)? = nil
   @State private var isStarring = false
   @State private var isHovering = false
 
@@ -258,6 +260,12 @@ struct ConversationRowView: View {
     case .limitless: return "Limitless"
     case .plaud: return "Plaud"
     default: return "Unknown"
+    }
+  }
+
+  private func separate(_ conversationId: String) async {
+    if await appState.separateConversationFromCaptureGroup(conversationId) {
+      onCaptureGroupChanged?()
     }
   }
 
@@ -612,11 +620,11 @@ struct ConversationRowView: View {
           Divider()
           ForEach(captureMembers) { member in
             Button("Separate \(captureMemberLabel(member)) recording") {
-              Task { _ = await appState.separateConversationFromCaptureGroup(member.id) }
+              Task { await separate(member.id) }
             }
           }
           Button("Separate this recording") {
-            Task { _ = await appState.separateConversationFromCaptureGroup(conversation.id) }
+            Task { await separate(conversation.id) }
           }
         } label: {
           Label("Captured by \(captureMembers.count + 1) recordings", systemImage: "square.stack")

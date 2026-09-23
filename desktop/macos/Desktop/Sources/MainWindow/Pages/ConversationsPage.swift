@@ -306,6 +306,11 @@ struct ConversationsPage: View {
         isLiveTranscriptExpanded = false
       }
     }
+    // A row that becomes hidden behind its event's row must not stay selected for
+    // a merge or delete the user can no longer see.
+    .onChange(of: collapsedAwayConversationIds) { _, hidden in
+      selectedConversationIds.subtract(hidden)
+    }
   }
 
   /// Compact workspace chrome followed by the scrolling live card + list.
@@ -416,6 +421,12 @@ struct ConversationsPage: View {
 
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
+  /// Loaded rows hidden behind their capture group's representative.
+  private var collapsedAwayConversationIds: Set<String> {
+    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
+    return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
+  }
+
   private var displayedConversationIds: [String] {
     CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
   }
@@ -611,7 +622,8 @@ struct ConversationsPage: View {
           },
           appState: appState,
           captureMembers: CaptureGroupPresentation.otherLoadedMembers(of: conversation, in: visibleSearchResults),
-          onOpenCaptureMember: { selectedConversation = $0 }
+          onOpenCaptureMember: { selectedConversation = $0 },
+          onCaptureGroupChanged: { performSearch(query: searchQuery) }
         )
       }
     }

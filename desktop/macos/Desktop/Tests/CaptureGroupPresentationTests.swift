@@ -80,6 +80,15 @@ final class CaptureGroupPresentationTests: XCTestCase {
     XCTAssertNil(record.toServerConversation(segments: [])?.captureGroup)
   }
 
+  func testOptimisticMutationKeepsMembership() throws {
+    let grouped = try Self.conversation("desktop", source: "desktop", group: Self.meeting)
+    var mutation = ConversationPendingMutation()
+    mutation.setTitle("Renamed")
+    let mutated = ConversationReconciliationPolicy.apply(mutation: mutation, to: grouped)
+    XCTAssertEqual(mutated.title, "Renamed")
+    XCTAssertEqual(mutated.captureGroup, grouped.captureGroup)
+  }
+
   func testMigrationAddsNullableColumnToLegacyRows() throws {
     let queue = try DatabaseQueue()
     try queue.write { db in

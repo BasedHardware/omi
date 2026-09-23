@@ -133,11 +133,24 @@ def _segments_of(record: Any):
 
 
 def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRecord, matches: list) -> None:
-    """Group window matches that also share speech; never block finalization."""
-    own_segments = _segments_of(conversation)
+    """Group window matches that also share speech; never block finalization.
+
+    Both transcripts are re-read fresh (the in-memory conversation may predate a
+    later edit) together with a fingerprint the join transaction re-checks.
+    """
+    if not matches:
+        return
+    try:
+        own_row, own_fingerprint = conversations_db.get_conversation_for_capture_check(uid, candidate.conversation_id)
+    except Exception:
+        _record_degraded(to_mode='separate_captures')
+        return
+    own_segments = _segments_of(own_row or {})
     for other in matches:
         try:
-            other_row = conversations_db.get_conversation(uid, other.conversation_id)
+            other_row, other_fingerprint = conversations_db.get_conversation_for_capture_check(
+                uid, other.conversation_id
+            )
             shared = measure_shared_speech(own_segments, _segments_of(other_row or {}))
             if not shared.confirms():
                 record_product_event('capture_group_joined', outcome='none')
@@ -149,6 +162,10 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                 shared.evidence(),
                 expected_windows={
                     record.conversation_id: (record.started_at, record.finished_at) for record in (candidate, other)
+                },
+                expected_fingerprints={
+                    candidate.conversation_id: own_fingerprint,
+                    other.conversation_id: other_fingerprint,
                 },
             )
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')

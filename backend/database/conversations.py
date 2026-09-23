@@ -31,7 +31,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group
+from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     MCP_CONVERSATION_CARD_QUERY_SPECS,
@@ -1663,7 +1663,7 @@ def delete_conversation(uid, conversation_id):
     """
     try:
         # A deleted capture must not stay listed as a member of its event.
-        leave_capture_group(uid, conversation_id, sticky=False, firestore_client=db)
+        leave_capture_group(uid, conversation_id, sticky=False, close=True, firestore_client=db)
     except Exception:
         logger.warning('capture group cleanup failed before delete conversation=%s', conversation_id)
     user_ref = db.collection('users').document(uid)
@@ -1958,6 +1958,23 @@ def get_conversations_finished_after(
         if data and not is_soft_deleted(data):
             conversations.append(data)
     return conversations
+
+
+def get_conversation_for_capture_check(uid: str, conversation_id: str, *, firestore_client=None):
+    """Decrypted conversation plus the fingerprint of the stored transcript, from one snapshot.
+
+    Capture grouping confirms shared speech on the decrypted text, then fences
+    its transaction on the fingerprint so a transcript that changed in between
+    cannot be grouped on stale evidence. Returns ``(None, None)`` when absent.
+    """
+    client = firestore_client or get_firestore_client()
+    snapshot = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id).get()
+    )
+    raw = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    if not raw:
+        return None, None
+    return _prepare_conversation_for_read(raw, uid), transcript_fingerprint(raw)
 
 
 def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict, *, firestore_client=None) -> bool:
