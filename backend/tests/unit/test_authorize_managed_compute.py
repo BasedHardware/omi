@@ -593,3 +593,98 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
     }
     assert produced == expected
     assert expected == set(mc.DECISION_REASONS)
+
+
+# --- 13. deny telemetry (structured log line per deny) -------------------------
+
+
+def test_deny_emits_structured_telemetry_log(monkeypatch, mc, caplog) -> None:
+    import logging
+
+    _situate(monkeypatch, mc, plan=PlanType.basic)
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger='utils.managed_compute'):
+        decision = mc.authorize_managed_compute('test_uid', OFF_ALLOWLIST_FEATURE, 'omi')
+
+    assert decision.allowed is False
+    assert decision.reason == 'basic_not_entitled'
+
+    deny_records = [r for r in caplog.records if 'managed_compute_denied' in r.getMessage()]
+    assert len(deny_records) == 1
+    rec = deny_records[0]
+    assert rec.levelno == logging.INFO
+    assert (
+        rec.getMessage()
+        == f'managed_compute_denied uid=test_uid feature={OFF_ALLOWLIST_FEATURE} funding_owner=omi plan=basic plan_resolved=True reason=basic_not_entitled'
+    )
+    assert getattr(rec, 'uid') == 'test_uid'
+    assert getattr(rec, 'feature') == OFF_ALLOWLIST_FEATURE
+    assert getattr(rec, 'funding_owner') == 'omi'
+    assert getattr(rec, 'plan') == 'basic'
+    assert getattr(rec, 'plan_resolved') is True
+    assert getattr(rec, 'reason') == 'basic_not_entitled'
+
+
+def test_allow_emits_no_deny_telemetry_log(monkeypatch, mc, caplog) -> None:
+    import logging
+
+    _situate(monkeypatch, mc, plan=_PAID_PLANS[0])
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger='utils.managed_compute'):
+        decision = mc.authorize_managed_compute('test_uid', OFF_ALLOWLIST_FEATURE, 'omi')
+
+    assert decision.allowed is True
+    deny_records = [r for r in caplog.records if 'managed_compute_denied' in r.getMessage()]
+    assert len(deny_records) == 0
+
+
+def test_authorization_unavailable_emits_deny_telemetry(monkeypatch, mc, caplog) -> None:
+    import logging
+
+    monkeypatch.setattr(mc, 'get_all_configured_features', lambda: (_ for _ in ()).throw(RuntimeError('down')))
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger='utils.managed_compute'):
+        decision = mc.authorize_managed_compute('test_uid', OFF_ALLOWLIST_FEATURE, 'omi')
+
+    assert decision.allowed is False
+    assert decision.reason == 'authorization_unavailable'
+
+    deny_records = [r for r in caplog.records if 'managed_compute_denied' in r.getMessage()]
+    assert len(deny_records) == 1
+    rec = deny_records[0]
+    assert rec.levelno == logging.INFO
+    assert getattr(rec, 'uid') == 'test_uid'
+    assert getattr(rec, 'feature') == OFF_ALLOWLIST_FEATURE
+    assert getattr(rec, 'funding_owner') == 'omi'
+    assert getattr(rec, 'plan') is None
+    assert getattr(rec, 'plan_resolved') is False
+    assert getattr(rec, 'reason') == 'authorization_unavailable'
+
+
+def test_system_and_none_uid_deny_telemetry(monkeypatch, mc, caplog) -> None:
+    import logging
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger='utils.managed_compute'):
+        decision = mc.authorize_managed_compute(None, OFF_ALLOWLIST_FEATURE, 'system')
+
+    assert decision.allowed is False
+    assert decision.reason == 'system_feature_not_free'
+
+    deny_records = [r for r in caplog.records if 'managed_compute_denied' in r.getMessage()]
+    assert len(deny_records) == 1
+    rec = deny_records[0]
+    assert getattr(rec, 'uid') is None
+    assert getattr(rec, 'plan') is None
+    assert getattr(rec, 'plan_resolved') is False
+    assert getattr(rec, 'reason') == 'system_feature_not_free'
+
+
+def test_deny_telemetry_logging_failure_does_not_raise(monkeypatch, mc) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.basic)
+    monkeypatch.setattr(mc, '_log_deny', lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError('logger broken')))
+
+    # Must return Decision and never raise
+    decision = mc.authorize_managed_compute('test_uid', OFF_ALLOWLIST_FEATURE, 'omi')
+    assert decision.allowed is False
+    assert decision.reason == 'basic_not_entitled'

@@ -190,6 +190,27 @@ def _resolve_plan(uid: str, subscription: Any) -> tuple[PlanType, bool]:
     return plan, True
 
 
+def _log_deny(uid: str | None, decision: Decision) -> None:
+    plan_value = decision.plan.value if decision.plan is not None else None
+    logger.info(
+        'managed_compute_denied uid=%s feature=%s funding_owner=%s plan=%s plan_resolved=%s reason=%s',
+        uid,
+        decision.feature,
+        decision.funding_owner,
+        plan_value,
+        decision.plan_resolved,
+        decision.reason,
+        extra={
+            'uid': uid,
+            'feature': decision.feature,
+            'funding_owner': decision.funding_owner,
+            'plan': plan_value,
+            'plan_resolved': decision.plan_resolved,
+            'reason': decision.reason,
+        },
+    )
+
+
 def authorize_managed_compute(
     uid: str | None,
     feature: str,
@@ -205,7 +226,7 @@ def authorize_managed_compute(
     them in so this answer and the caller's snapshot come from the same reads.
     """
     try:
-        return _authorize(
+        decision = _authorize(
             uid,
             feature,
             funding_owner,
@@ -214,7 +235,7 @@ def authorize_managed_compute(
         )
     except Exception as exc:
         logger.warning('managed compute authorization unavailable: %s', type(exc).__name__)
-        return _decision(
+        decision = _decision(
             allowed=False,
             reason='authorization_unavailable',
             feature=feature,
@@ -222,6 +243,12 @@ def authorize_managed_compute(
             plan=None,
             plan_resolved=False,
         )
+    if not decision.allowed:
+        try:
+            _log_deny(uid, decision)
+        except Exception:
+            logger.exception('failed to log managed compute deny telemetry')
+    return decision
 
 
 def _authorize(
