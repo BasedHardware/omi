@@ -12,6 +12,18 @@
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
+* [`agent_quickstart.pcm.md`](agent_quickstart.pcm.md) — how agents go take use
+  omi-cli (Nigerian Pidgin agent guide).
+* [`agent_quickstart.wuu.md`](agent_quickstart.wuu.md) — Agent 用个 omi-cli
+  指南 (Wu Chinese agent guide).
+* [`agent_quickstart.nan.md`](agent_quickstart.nan.md) — 予 Agent 使用个
+  omi-cli 指南 (Min Nan agent guide).
+* [`agent_quickstart.hak.md`](agent_quickstart.hak.md) — 分 Agent 使用个
+  omi-cli 指南 (Hakka agent guide).
+* [`agent_quickstart.za.md`](agent_quickstart.za.md) — aen omi-cli hawj agent
+  (Zhuang agent guide).
+* [`agent_quickstart.ckb.md`](agent_quickstart.ckb.md) — omi-cli بۆ
+  ئەیجەنتەکان (Sorani agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
@@ -163,3 +175,9 @@
 * [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
+* [`quickstart.pcm.md`](quickstart.pcm.md) — how to take start use omi-cli (Nigerian Pidgin Quickstart).
+* [`quickstart.wuu.md`](quickstart.wuu.md) — omi-cli 快速上手（上海闲话）(Wu Chinese Quickstart).
+* [`quickstart.nan.md`](quickstart.nan.md) — omi-cli 快速入門（台語）(Min Nan Quickstart).
+* [`quickstart.hak.md`](quickstart.hak.md) — omi-cli 快速上手（客家話）(Hakka Quickstart).
+* [`quickstart.za.md`](quickstart.za.md) — daj yungh omi-cli (Zhuang Quickstart).
+* [`quickstart.ckb.md`](quickstart.ckb.md) — دەستپێکردنی خێرا بە omi-cli (Sorani Quickstart).
