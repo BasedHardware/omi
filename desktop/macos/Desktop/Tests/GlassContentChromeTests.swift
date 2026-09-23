@@ -121,6 +121,7 @@ final class GlassContentChromeTests: XCTestCase {
     "MainWindow/Components/LiveTranscriptView.swift",
     "MainWindow/Components/SpeakerBubbleView.swift",
     "MainWindow/Components/TranscriptDetailView.swift",
+    "MainWindow/Components/TranscriptFindField.swift",
     "Rewind/UI/RewindPage.swift",
     "Rewind/UI/RewindPlaybackChrome.swift",
     "Rewind/UI/RewindSurfaceLayout.swift",
