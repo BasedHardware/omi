@@ -78,10 +78,10 @@ async def import_limitless_data(
             db_executor,
             import_jobs_db.update_import_job,
             job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
+            {'status': ImportJobStatus.failed.value, 'error': "Failed to save uploaded file."},
         )
         logger.error(f"Failed to save uploaded file: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
 
     # Start background processing
     storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
