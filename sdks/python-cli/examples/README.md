@@ -10,7 +10,7 @@
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
-- [`agent_quickstart.om.md`](agent_quickstart.om.md) — agent quickstart (om)
+* [`agent_quickstart.om.md`](agent_quickstart.om.md) — Oromo (om) agent quickstart guide
   (Oromo (om) agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
