@@ -460,7 +460,7 @@ async def search_questions(payload: dict[str, Any]):
         logger.error("Stack Exchange search failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange search failed due to a network error.")
     except Exception as exc:
-        logger.error("Unexpected error during Stack Exchange search failed: %s", type(exc).__name__, exc_info=True)
+        logger.error("Unexpected error during Stack Exchange search: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange search failed.")
 
 
@@ -524,7 +524,7 @@ async def get_question(payload: dict[str, Any]):
         logger.error("Stack Exchange question request failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange question request failed due to a network error.")
     except Exception as exc:
-        logger.error("Unexpected error during Stack Exchange question request failed: %s", type(exc).__name__, exc_info=True)
+        logger.error("Unexpected error during Stack Exchange question request: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange question request failed.")
 
 
@@ -576,5 +576,5 @@ async def get_top_answers(payload: dict[str, Any]):
         logger.error("Stack Exchange answers request failed: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange answers request failed due to a network error.")
     except Exception as exc:
-        logger.error("Unexpected error during Stack Exchange answers request failed: %s", type(exc).__name__, exc_info=True)
+        logger.error("Unexpected error during Stack Exchange answers request: %s", type(exc).__name__, exc_info=True)
         return ChatToolResponse(error="Stack Exchange answers request failed.")
