@@ -42,9 +42,15 @@ that process is covered, including a later ``firestore.Client()``. A process
 that never imports ``database._client`` is not covered.
 
 Cardinality: collection patterns are an allowlist (anything else is ``other``).
-The caller label is ``module:function`` from the stack, matching a fixed
-grammar, and at most ``MAX_CALLERS`` distinct values; the rest are ``other``.
-No uid, document id, or query text is a label. Recording never raises.
+The caller label is ``module:function`` from the first product frame on the
+stack. Plumbing frames (this probe, ``database._client``, ``database.helpers``,
+``database.read_boundary``, ``utils.other.list_budget``, ``utils.executors``,
+and ``google`` / ``asyncio`` / ``threading`` / ``contextlib`` /
+``concurrent``) are skipped. The label matches a fixed grammar. At most
+``MAX_CALLERS`` distinct values are kept; a later new label is ``other`` and
+``omi_firestore_caller_label_overflow_total`` increments, so a full set is
+visible instead of a silent collapse. No uid, document id, or query text is a
+label. Recording never raises.
 """
 
 from __future__ import annotations
@@ -65,6 +71,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     'FIRESTORE_BILLED_READS',
     'FIRESTORE_BILLED_READS_BY_CALLER',
+    'FIRESTORE_CALLER_LABEL_OVERFLOW',
     'FIRESTORE_DOCUMENT_READS',
     'FIRESTORE_QUERY_OPERATIONS',
     'MAX_CALLERS',
@@ -111,8 +118,18 @@ FIRESTORE_BILLED_READS = Counter(
 FIRESTORE_BILLED_READS_BY_CALLER = Counter(
     'omi_firestore_billed_reads_by_caller_total',
     'Billed-equivalent Firestore reads by collection, kind, and bounded call site. '
-    'caller is module:function or other. At most 128 distinct caller values.',
+    'caller is module:function or other. Distinct caller values are capped; '
+    'overflow increments omi_firestore_caller_label_overflow_total.',
     ['collection', 'kind', 'caller'],
+)
+
+
+# Increments when a well-formed new caller is folded to ``other`` because the
+# cap is full. Invalid labels do not increment it. A non-zero rate means the
+# by-caller counter is no longer naming every product frame.
+FIRESTORE_CALLER_LABEL_OVERFLOW = Counter(
+    'omi_firestore_caller_label_overflow_total',
+    'Firestore read caller labels dropped because the bounded caller set is full.',
 )
 
 
@@ -121,9 +138,25 @@ FIRESTORE_BILLED_READS_BY_CALLER = Counter(
 # index-entry count. See the module docstring for sum/avg.
 _AGGREGATION_INDEX_ENTRIES_PER_READ = 1000
 
-MAX_CALLERS = 128
+# AST scan of backend/database and backend/utils on 2026-09-23 found 921
+# functions whose body calls a Firestore read (stream, get_all, list_documents,
+# collections, get_partitions, on_snapshot, find_nearest, a document-shaped
+# .get(), or .count()). 1536 is that count plus headroom for routers, services,
+# and new call sites. The set is filled on first observation, not pre-created.
+MAX_CALLERS = 1536
 
 _CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')
+_PLUMBING_MODULES = frozenset(
+    {
+        'database._client',
+        'database.read_boundary',
+        'database.helpers',
+        'utils.other.list_budget',
+        'utils.executors',
+    }
+)
+_PLUMBING_PREFIXES = ('google.', 'concurrent.', 'asyncio.', 'threading.', 'contextlib.')
+_PLUMBING_EXACT = frozenset({'asyncio', 'threading', 'contextlib'})
 _known_callers: set[str] = set()
 _caller_lock = threading.Lock()
 
@@ -247,8 +280,19 @@ def collection_pattern(path_parts: Any) -> str:
     return _OTHER
 
 
+def _is_plumbing_module(module: str) -> bool:
+    if not module or module == __name__ or module in _PLUMBING_MODULES or module in _PLUMBING_EXACT:
+        return True
+    return module.startswith(_PLUMBING_PREFIXES)
+
+
 def bound_caller(label: str) -> str:
-    """Accept a ``module:function`` label, or ``other`` once the cap is full."""
+    """Accept a ``module:function`` label, or ``other`` once the cap is full.
+
+    A well-formed label that does not fit increments the overflow counter.
+    A label that fails the grammar is ``other`` and does not, so garbage
+    cannot page the saturation signal.
+    """
     try:
         if not isinstance(label, str) or len(label) > 96 or _CALLER_RE.match(label) is None:
             return _OTHER
@@ -258,6 +302,7 @@ def bound_caller(label: str) -> str:
             if label in _known_callers:
                 return label
             if len(_known_callers) >= MAX_CALLERS:
+                FIRESTORE_CALLER_LABEL_OVERFLOW.inc()
                 return _OTHER
             _known_callers.add(label)
             return label
@@ -266,14 +311,20 @@ def bound_caller(label: str) -> str:
 
 
 def call_site() -> str:
-    """First frame outside this module, as a bounded ``module:function`` label."""
+    """First product frame, as a bounded ``module:function`` label.
+
+    Skips this probe, Firestore plumbing wrappers, and runtime frames so the
+    label names the function that asked for the read.
+    """
     try:
         frame = sys._getframe(1)
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
-            if module and module != __name__ and not module.startswith('google.'):
-                return bound_caller(f'{module}:{frame.f_code.co_name}')
-            frame = frame.f_back
+            name = frame.f_code.co_name
+            if _is_plumbing_module(module) or not name or name.startswith('<'):
+                frame = frame.f_back
+                continue
+            return bound_caller(f'{module}:{name}')
     except Exception:
         return _OTHER
     return _OTHER

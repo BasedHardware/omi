@@ -662,19 +662,101 @@ def test_query_stream_names_the_calling_function():
         install_document_read_probe.__globals__['_installed'] = False
 
 
+def _overflow():
+    import database.firestore_document_probe as probe
+
+    return float(probe.FIRESTORE_CALLER_LABEL_OVERFLOW._value.get() or 0)
+
+
 def test_caller_cardinality_collapses_past_the_cap(monkeypatch):
     import database.firestore_document_probe as probe
 
     saved = set(probe._known_callers)
     monkeypatch.setattr(probe, 'MAX_CALLERS', 1)
     probe._known_callers.clear()
+    before = _overflow()
     try:
         first = probe.bound_caller('database.memories:get_memories')
         second = probe.bound_caller('database.chat:get_messages')
         assert first == 'database.memories:get_memories'
         assert second == 'other'
+        assert _overflow() == before + 1
+        assert probe.bound_caller('database.memories:get_memories') == 'database.memories:get_memories'
+        assert _overflow() == before + 1
         assert probe.bound_caller('not a caller') == 'other'
         assert probe.bound_caller('x' * 97 + ':ok') == 'other'
+        assert _overflow() == before + 1
+        assert len(probe._known_callers) == 1
+    finally:
+        probe._known_callers.clear()
+        probe._known_callers.update(saved)
+
+
+def test_call_site_skips_plumbing_frames(monkeypatch):
+    import database.firestore_document_probe as probe
+
+    class _Frame:
+        def __init__(self, module, name, back):
+            self.f_globals = {'__name__': module}
+            self.f_code = type('Code', (), {'co_name': name})()
+            self.f_back = back
+
+    product = _Frame('database.memories', 'get_memories', None)
+    budget = _Frame('utils.other.list_budget', 'materialize_query', product)
+    executor = _Frame('utils.executors', 'run_blocking', budget)
+    helper = _Frame('database.helpers', 'prepare_for_read', executor)
+    boundary = _Frame('database.read_boundary', 'parse_snapshot', helper)
+    client = _Frame('database._client', 'delete_collection_recursive', boundary)
+    runtime = _Frame('contextlib', '__enter__', client)
+    pooled = _Frame('concurrent.futures.thread', '_worker', runtime)
+    threaded = _Frame('threading', 'run', pooled)
+    loop = _Frame('asyncio.events', '_run', threaded)
+    google = _Frame('google.cloud.firestore_v1.query', 'get', loop)
+    anonymous = _Frame('database.memories', '<lambda>', google)
+    probe_frame = _Frame(probe.__name__, 'stream', anonymous)
+    monkeypatch.setattr(probe.sys, '_getframe', lambda _depth: probe_frame)
+    saved = set(probe._known_callers)
+    try:
+        assert probe.call_site() == 'database.memories:get_memories'
+    finally:
+        probe._known_callers.clear()
+        probe._known_callers.update(saved)
+
+
+def test_caller_cap_covers_the_measured_read_functions():
+    import database.firestore_document_probe as probe
+
+    # 921 functions in backend/database and backend/utils call a Firestore read
+    # (scan on 2026-09-23). The cap must sit above that count and stay bounded.
+    assert probe.MAX_CALLERS >= 921
+    assert probe.MAX_CALLERS <= 4096
+
+
+def test_caller_cap_holds_under_concurrency(monkeypatch):
+    import threading
+
+    import database.firestore_document_probe as probe
+
+    cap = 32
+    attempts = 200
+    monkeypatch.setattr(probe, 'MAX_CALLERS', cap)
+    saved = set(probe._known_callers)
+    probe._known_callers.clear()
+    before = _overflow()
+    barrier = threading.Barrier(attempts)
+
+    def worker(index):
+        barrier.wait()
+        probe.bound_caller('database.memories:fn_%s' % index)
+
+    threads = [threading.Thread(target=worker, args=(index,)) for index in range(attempts)]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert len(probe._known_callers) == cap
+        assert _overflow() == before + (attempts - cap)
     finally:
         probe._known_callers.clear()
         probe._known_callers.update(saved)

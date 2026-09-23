@@ -20,9 +20,23 @@ questions and would double-count.
 | `query` | `QUERY` | documents yielded by a query, the one-read empty minimum, configured `offset` skips, aggregation batches, `list_documents`, `get_partitions`, and one read per `collections()` RPC |
 
 `omi_firestore_billed_reads_by_caller_total` is the same reads with a
-`module:function` caller and no tier label. At most 128 distinct caller values;
-the rest are `other`. Collection patterns are the allowlist in the probe
-(`users/*/memory_items` becomes `users/memory_items`).
+`module:function` caller and no tier label. The frame is the first product
+function on the stack. `database._client`, `database.helpers`,
+`database.read_boundary`, `utils.other.list_budget`, `utils.executors`, this
+probe, and `google` / `asyncio` / `threading` / `contextlib` / `concurrent`
+frames are skipped.
+
+An AST scan of `backend/database` and `backend/utils` on 2026-09-23 found 921
+functions that call a Firestore read. The cap is 1536, that count plus headroom
+for routers, services, and new call sites. The set is not pre-created. A
+well-formed caller that arrives after the cap is full is labeled `other` and
+`omi_firestore_caller_label_overflow_total` increments. A non-zero rate means
+new call sites are no longer named. Collection patterns are the allowlist in
+the probe (`users/*/memory_items` becomes `users/memory_items`).
+
+```promql
+sum(rate(omi_firestore_caller_label_overflow_total[30m]))
+```
 
 ## Coverage PromQL
 
