@@ -226,5 +226,67 @@ class TestPublicHolidaysErrorSanitization(unittest.TestCase):
         asyncio.run(_run())
 
 
+
+def _http_status_error(status_code: int, body: str = "internal error 500") -> Exception:
+    """Build an HTTPStatusError with .response.status_code for handler tests."""
+    err = main.httpx.HTTPStatusError(f"status {status_code}: {body}")
+    err.response = types.SimpleNamespace(status_code=status_code)
+    return err
+
+
+class TestPublicHolidaysHTTPStatusError(unittest.TestCase):
+    """Lock the HTTPStatusError branches that previously leaked / mis-built status lines."""
+
+    def test_get_public_holidays_http_status_error_includes_status_code(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=_http_status_error(503, "upstream 10.0.0.9 unavailable")):
+                req = main.HolidayRequest(country_code="US", year=2026)
+                res = await main.get_public_holidays(req)
+                self.assertIn("status 503", res.error)
+                self.assertIn("holiday lookup failed", res.error)
+                self.assertNotIn("10.0.0.9", res.error)
+                self.assertNotIn("upstream", res.error)
+                self.assertNotIn("HTTPStatusError", res.error)
+                self.assertNotIn("{exc", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_next_public_holidays_http_status_error_includes_status_code(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=_http_status_error(429, "nager rate limit")):
+                req = main.NextHolidayRequest(country_code="US")
+                res = await main.get_next_public_holidays(req)
+                self.assertIn("status 429", res.error)
+                self.assertIn("upcoming holiday lookup failed", res.error)
+                self.assertNotIn("nager", res.error)
+                self.assertNotIn("HTTPStatusError", res.error)
+
+        asyncio.run(_run())
+
+    def test_get_long_weekends_http_status_error_includes_status_code(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=_http_status_error(500, "proxy 192.168.1.50")):
+                req = main.LongWeekendRequest(country_code="US", year=2026)
+                res = await main.get_long_weekends(req)
+                self.assertIn("status 500", res.error)
+                self.assertIn("long-weekend lookup failed", res.error)
+                self.assertNotIn("192.168.1.50", res.error)
+                self.assertNotIn("HTTPStatusError", res.error)
+
+        asyncio.run(_run())
+
+    def test_list_supported_countries_http_status_error_includes_status_code(self):
+        async def _run():
+            with patch.object(main, "_request_json", side_effect=_http_status_error(404, "country endpoint missing")):
+                res = await main.list_supported_countries()
+                self.assertIn("status 404", res.error)
+                self.assertIn("country list request failed", res.error)
+                self.assertNotIn("country endpoint missing", res.error)
+                self.assertNotIn("HTTPStatusError", res.error)
+
+        asyncio.run(_run())
+
+
+
 if __name__ == "__main__":
     unittest.main()
