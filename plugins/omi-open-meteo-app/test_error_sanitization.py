@@ -158,15 +158,13 @@ class TestOpenMeteoErrorSanitization(unittest.TestCase):
 
         asyncio.run(_run())
 
-    def test_get_current_weather_unexpected_exception_sanitized(self):
+    def test_get_current_weather_unexpected_exception_propagates(self):
         async def _run():
             with patch.object(main, "_resolve_location", return_value=({"latitude": 52.52, "longitude": 13.41, "name": "Berlin"}, None)), \
                  patch.object(main, "_request_json", side_effect=RuntimeError("internal secret error")):
                 req = main.CurrentWeatherRequest(location="Berlin")
-                res = await main.get_current_weather(req)
-                self.assertEqual("Open-Meteo request failed.", res.error)
-                self.assertNotIn("internal secret error", res.error)
-                self.assertNotIn("RuntimeError", res.error)
+                with self.assertRaises(RuntimeError):
+                    await main.get_current_weather(req)
 
         asyncio.run(_run())
 
@@ -182,15 +180,13 @@ class TestOpenMeteoErrorSanitization(unittest.TestCase):
 
         asyncio.run(_run())
 
-    def test_get_weather_forecast_unexpected_exception_sanitized(self):
+    def test_get_weather_forecast_unexpected_exception_propagates(self):
         async def _run():
             with patch.object(main, "_resolve_location", return_value=({"latitude": 52.52, "longitude": 13.41, "name": "Berlin"}, None)), \
                  patch.object(main, "_request_json", side_effect=RuntimeError("critical forecast crash")):
                 req = main.ForecastRequest(location="Berlin", days=3)
-                res = await main.get_weather_forecast(req)
-                self.assertEqual("Open-Meteo forecast request failed.", res.error)
-                self.assertNotIn("critical forecast crash", res.error)
-                self.assertNotIn("RuntimeError", res.error)
+                with self.assertRaises(RuntimeError):
+                    await main.get_weather_forecast(req)
 
         asyncio.run(_run())
 
@@ -206,15 +202,13 @@ class TestOpenMeteoErrorSanitization(unittest.TestCase):
 
         asyncio.run(_run())
 
-    def test_get_air_quality_unexpected_exception_sanitized(self):
+    def test_get_air_quality_unexpected_exception_propagates(self):
         async def _run():
             with patch.object(main, "_resolve_location", return_value=({"latitude": 52.52, "longitude": 13.41, "name": "Berlin"}, None)), \
                  patch.object(main, "_request_json", side_effect=RuntimeError("internal air quality secret")):
                 req = main.AirQualityRequest(location="Berlin")
-                res = await main.get_air_quality(req)
-                self.assertEqual("Open-Meteo air-quality request failed.", res.error)
-                self.assertNotIn("internal air quality secret", res.error)
-                self.assertNotIn("RuntimeError", res.error)
+                with self.assertRaises(RuntimeError):
+                    await main.get_air_quality(req)
 
         asyncio.run(_run())
 
