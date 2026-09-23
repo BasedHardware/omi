@@ -54,6 +54,7 @@ def load_app():
         def __getattr__(self, name):
             async def handler(user_id, **kwargs):
                 raise AssertionError(f"placeholder handler {name} called")
+
             return handler
 
     services = _module("services")
@@ -77,8 +78,12 @@ def load_app():
             self.status_code = status_code
 
     stubs = {
-        "fastapi": _module("fastapi", FastAPI=FastAPI, HTTPException=HTTPException, Query=lambda *a, **k: None, Request=object),
-        "fastapi.responses": _module("fastapi.responses", HTMLResponse=HTMLResponseStub, JSONResponse=dict, RedirectResponse=str),
+        "fastapi": _module(
+            "fastapi", FastAPI=FastAPI, HTTPException=HTTPException, Query=lambda *a, **k: None, Request=object
+        ),
+        "fastapi.responses": _module(
+            "fastapi.responses", HTMLResponse=HTMLResponseStub, JSONResponse=dict, RedirectResponse=str
+        ),
         "itsdangerous": _module("itsdangerous", BadSignature=Exception, URLSafeSerializer=Serializer),
         "config": _module("config", get_settings=lambda: settings),
         "services": services,
@@ -133,6 +138,7 @@ class TestMS365ErrorHandlingAndLeakPrevention(unittest.TestCase):
 
     def test_tool_dispatch_bad_arguments_does_not_leak_typeerror_trace(self):
         """tool_dispatch must not leak internal argument inspection details on TypeError."""
+
         async def failing_handler(user_id, **kwargs):
             raise TypeError(f"internal type failure at {SENSITIVE_HOST} path /etc/passwd")
 
@@ -147,6 +153,7 @@ class TestMS365ErrorHandlingAndLeakPrevention(unittest.TestCase):
 
     def test_tool_dispatch_graph_4xx_error_does_not_leak_payload(self):
         """Graph 4xx errors should preserve status without leaking payload details."""
+
         class MockGraphError(Exception):
             def __init__(self):
                 super().__init__(f"Graph 404: {SENSITIVE_DETAIL}")
@@ -167,6 +174,7 @@ class TestMS365ErrorHandlingAndLeakPrevention(unittest.TestCase):
 
     def test_tool_dispatch_unexpected_exception_does_not_leak_stack(self):
         """Unexpected internal exceptions in tools return generic 502 without leaking details."""
+
         async def failing_handler(user_id, **kwargs):
             raise RuntimeError(f"Database connection pool exhausted: {SENSITIVE_DETAIL}")
 
@@ -177,7 +185,9 @@ class TestMS365ErrorHandlingAndLeakPrevention(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 502)
             self.assertNotIn(SENSITIVE_HOST, ctx.exception.detail)
             self.assertNotIn(SENSITIVE_SECRET, ctx.exception.detail)
-            self.assertEqual(ctx.exception.detail, "Failed to execute list_recent_emails due to an upstream service error.")
+            self.assertEqual(
+                ctx.exception.detail, "Failed to execute list_recent_emails due to an upstream service error."
+            )
 
 
 if __name__ == "__main__":
