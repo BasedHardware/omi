@@ -409,7 +409,7 @@ async def auth_dropbox(uid: str = Query(...)):
         auth_url = f"{DROPBOX_AUTH_URL}?{urlencode(params)}"
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        print(f"[AUTH] OAuth initialization failed: {e}")
+        print(f"[AUTH] OAuth initialization failed: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
@@ -509,7 +509,7 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        print(f"[AUTH] Error during authorization: {e}")
+        print(f"[AUTH] Error during authorization: {type(e).__name__}")
         return HTMLResponse("Error during authorization", status_code=500)
 
 
@@ -759,7 +759,7 @@ async def tool_search_dropbox(request: Request):
         results, error = client.search_files(query, max_results=10)
 
         if error:
-            print(f"[TOOLS] Search failed: {error}")
+            print("[TOOLS] Search failed")
             return {"error": "Failed to search files."}
 
         if not results:
@@ -783,7 +783,7 @@ async def tool_search_dropbox(request: Request):
         return {"result": output}
 
     except Exception as e:
-        print(f"[TOOLS] Search error: {e}")
+        print(f"[TOOLS] Search error: {type(e).__name__}")
         return {"error": "Failed to search files due to an internal error."}
 
 
@@ -819,7 +819,7 @@ async def tool_list_dropbox(request: Request):
         results, error = client.list_folder(folder, limit=20)
 
         if error:
-            print(f"[TOOLS] Could not list folder: {error}")
+            print("[TOOLS] Could not list folder")
             return {"error": "Failed to list folder contents."}
 
         if not results:
@@ -842,7 +842,7 @@ async def tool_list_dropbox(request: Request):
         return {"result": output}
 
     except Exception as e:
-        print(f"[TOOLS] List error: {e}")
+        print(f"[TOOLS] List error: {type(e).__name__}")
         return {"error": "Failed to list folder contents due to an internal error."}
 
 
@@ -873,7 +873,7 @@ async def tool_read_dropbox_file(request: Request):
         file_bytes, error = client.download_file(path)
 
         if error:
-            print(f"[TOOLS] Could not download file: {error}")
+            print("[TOOLS] Could not download file")
             return {"error": "Failed to download file."}
 
         if not file_bytes:
@@ -904,7 +904,7 @@ async def tool_read_dropbox_file(request: Request):
             except ImportError:
                 return {"error": "PDF reading is not available. Please contact support."}
             except Exception as e:
-                print(f"[TOOLS] Error reading PDF: {e}")
+                print(f"[TOOLS] Error reading PDF: {type(e).__name__}")
                 return {"error": "Failed to extract text from PDF."}
 
         elif file_ext in [
@@ -964,7 +964,7 @@ async def tool_read_dropbox_file(request: Request):
         return {"result": output}
 
     except Exception as e:
-        print(f"[TOOLS] Read error: {e}")
+        print(f"[TOOLS] Read error: {type(e).__name__}")
         return {"error": "Failed to read file due to an internal error."}
 
 
@@ -991,7 +991,7 @@ async def receive_audio(
 
         return {"status": "ok"}
     except Exception as e:
-        print(f"[AUDIO] Error receiving audio: {e}")
+        print(f"[AUDIO] Error receiving audio: {type(e).__name__}")
         return {"status": "error", "message": "Failed to process audio"}
 
 
