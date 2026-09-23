@@ -11,17 +11,17 @@ import pytest
 from routers import users as users_routes
 
 
-def test_set_daily_summary_masks_value_error_detail(monkeypatch):
-    """Ensure set_daily_summary_notification raises sanitized 400 without internal schema details."""
+def test_update_daily_summary_settings_masks_value_error_detail(monkeypatch):
+    """Ensure update_daily_summary_settings raises sanitized 400 without internal schema details."""
     mock_db = MagicMock()
     mock_db.set_daily_summary_hour_local.side_effect = ValueError(
         "Column 'hour' must be in range [0, 23]; got -5 (check: notification_hour_range)"
     )
     monkeypatch.setattr(users_routes, 'notification_db', mock_db)
 
-    req = users_routes.DailySummaryNotificationRequest(hour=-5)
+    req = users_routes.DailySummarySettingsUpdate(hour=12)
     with pytest.raises(HTTPException) as exc_info:
-        users_routes.set_daily_summary_notification(req, uid="test-uid-123")
+        users_routes.update_daily_summary_settings(req, uid="test-uid-123")
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid hour value. Must be between 0 and 23."
@@ -29,19 +29,19 @@ def test_set_daily_summary_masks_value_error_detail(monkeypatch):
     assert "notification_hour_range" not in exc_info.value.detail
 
 
-def test_set_mentor_frequency_masks_value_error_detail(monkeypatch):
-    """Ensure set_mentor_notification_frequency raises sanitized 400 without internal enum values."""
+def test_update_mentor_notification_settings_masks_value_error_detail(monkeypatch):
+    """Ensure update_mentor_notification_settings raises sanitized 400 without internal enum values."""
     mock_db = MagicMock()
     mock_db.set_mentor_notification_frequency.side_effect = ValueError(
-        "mentor_frequency must be one of: ['never', 'daily', 'weekly']; received: 'hourly'"
+        "mentor_frequency must be in range [0, 5]; received: 99 (constraint: chk_mentor_freq)"
     )
     monkeypatch.setattr(users_routes, 'notification_db', mock_db)
 
-    req = users_routes.MentorNotificationFrequencyRequest(frequency="hourly")
+    req = users_routes.MentorNotificationSettingsUpdate(frequency=3)
     with pytest.raises(HTTPException) as exc_info:
-        users_routes.set_mentor_notification_frequency(req, uid="test-uid-123")
+        users_routes.update_mentor_notification_settings(req, uid="test-uid-123")
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid notification frequency value."
-    assert "mentor_frequency" not in exc_info.value.detail
-    assert "['never', 'daily', 'weekly']" not in exc_info.value.detail
+    assert "chk_mentor_freq" not in exc_info.value.detail
+    assert "constraint" not in exc_info.value.detail
