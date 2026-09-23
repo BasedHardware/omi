@@ -1,12 +1,12 @@
-"""Test file for desktop_chat router exception detail masking.
+"""Unit tests for desktop_chat router exception detail masking.
 
 Verifies that ValueError and RuntimeError raised in the desktop_chat
 endpoint handlers are sanitized and do not leak internal details.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from fastapi import HTTPException
+import pytest
 
 import routers.desktop_chat as dc_routes
 
@@ -19,12 +19,13 @@ async def test_jit_header_value_error_is_masked(monkeypatch):
     def _raiser(*args, **kwargs):
         raise ValueError(leak_text)
 
-    monkeypatch.setattr(dc_routes, '_jit_headers_for_forward', _raiser)
+    monkeypatch.setattr(dc_routes, "_jit_headers_for_forward", _raiser)
 
     with pytest.raises(HTTPException) as exc_info:
         await dc_routes._chat_completions_unobserved(
             body={"model": "gpt-4"},
             uid="test-user-001",
+            x_omi_chat_contract_version="1",
             x_omi_jit_contract_version="1",
         )
 
@@ -39,10 +40,10 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
     """RuntimeError in the request preparation path must return static 503 without internal details."""
     leak_text = "upstream redis cluster connection refused host=prod-cache-01:6379"
 
-    monkeypatch.setattr(dc_routes, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(dc_routes, "llm_stub_enabled", lambda: False)
     monkeypatch.setattr(
         dc_routes,
-        'enforce_desktop_chat_quota',
+        "enforce_desktop_chat_quota",
         MagicMock(side_effect=RuntimeError(leak_text)),
     )
 
@@ -50,6 +51,7 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
         await dc_routes._chat_completions_unobserved(
             body={"model": "gpt-4"},
             uid="test-user-002",
+            x_omi_chat_contract_version="1",
         )
 
     assert exc_info.value.status_code == 503
@@ -63,10 +65,10 @@ async def test_quota_value_error_is_masked(monkeypatch):
     """ValueError in the request preparation path must return static 400 without internal details."""
     leak_text = "invalid user tier configuration in metadata column user_tiers.active"
 
-    monkeypatch.setattr(dc_routes, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(dc_routes, "llm_stub_enabled", lambda: False)
     monkeypatch.setattr(
         dc_routes,
-        'enforce_desktop_chat_quota',
+        "enforce_desktop_chat_quota",
         MagicMock(side_effect=ValueError(leak_text)),
     )
 
@@ -74,6 +76,7 @@ async def test_quota_value_error_is_masked(monkeypatch):
         await dc_routes._chat_completions_unobserved(
             body={"model": "gpt-4"},
             uid="test-user-003",
+            x_omi_chat_contract_version="1",
         )
 
     assert exc_info.value.status_code == 400
