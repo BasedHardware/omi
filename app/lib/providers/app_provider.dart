@@ -737,7 +737,7 @@ class AppProvider extends BaseProvider {
 
   Future<void> refreshAppsAfterChange() async {
     try {
-      Logger.debug('Refreshing apps after installation/change...');
+      Logger.debug('Refreshing apps after installation/change…');
       // Fetch grouped apps and user's enabled app IDs in parallel
       final results = await Future.wait([
         retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
