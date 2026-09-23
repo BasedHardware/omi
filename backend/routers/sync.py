@@ -847,7 +847,9 @@ async def sync_local_files(
         return result
     finally:
         # Clean up any remaining temporary files
-        await run_blocking(sync_executor, _cleanup_files, paths)  # .bin files (in case decode_files_to_wav didn't finish)
+        await run_blocking(
+            sync_executor, _cleanup_files, paths
+        )  # .bin files (in case decode_files_to_wav didn't finish)
         await run_blocking(sync_executor, _cleanup_files, wav_paths)  # Original wav files (if VAD didn't complete)
         await run_blocking(sync_executor, _cleanup_files, segmented_paths)  # Segmented wav files after processing
         if backfill_slot_token:
@@ -1424,7 +1426,7 @@ async def sync_local_files_v2(
             detail='Sync upload could not be accepted; local audio remains available.',
         )
     finally:
-        await run_blocking(sync_executor, _cleanup_files, paths)
+        _cleanup_files(paths)
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
