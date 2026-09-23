@@ -47,6 +47,7 @@ STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
 NON_REST_RESPONSE_DECODER_FUNCTIONS = frozenset(
     {
         (APP_API_DIR / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse'),
+        (APP_API_DIR / 'conversations.dart', 'separateConversationFromCaptureGroup'),
         (APP_API_DIR / 'speech_profile.dart', '_errorDetail'),
     }
 )

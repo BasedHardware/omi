@@ -112,3 +112,62 @@ def test_available_apps_still_returns_every_well_formed_record(monkeypatch, from
     apps = _available(monkeypatch, [_valid_app('a1'), _valid_app('a2')], from_cache=from_cache)
 
     assert sorted(app.id for app in apps) == ['a1', 'a2']
+
+
+def test_invalidate_approved_apps_cache_clears_raw_and_review_memory_cache_keys(monkeypatch):
+    deleted_memory_keys = []
+    published_batches = []
+    deleted_redis_keys = []
+
+    class _RecordingMemoryCache:
+        def delete(self, key):
+            deleted_memory_keys.append(key)
+
+    class _RecordingPubSub:
+        def publish_invalidation(self, keys):
+            published_batches.append(list(keys))
+
+    monkeypatch.setattr(apps_utils, 'get_memory_cache', _RecordingMemoryCache)
+    monkeypatch.setattr(apps_utils, 'get_pubsub_manager', _RecordingPubSub)
+    monkeypatch.setattr(apps_utils, 'delete_generic_cache', lambda key: deleted_redis_keys.append(key))
+
+    apps_utils.invalidate_approved_apps_cache()
+
+    expected_keys = [
+        apps_utils.PUBLIC_APPROVED_APPS_CACHE_KEY,
+        f'{apps_utils.PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews=0',
+        f'{apps_utils.PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews=1',
+    ]
+    assert deleted_memory_keys == expected_keys
+    assert published_batches == [expected_keys]
+    assert deleted_redis_keys == [apps_utils.PUBLIC_APPROVED_APPS_CACHE_KEY]
+
+
+def test_available_apps_deduplicates_tester_and_owner_unapproved_app(monkeypatch):
+    _patch_public_set(monkeypatch, [_valid_app('public-1')], from_cache=True)
+    unapproved_owned = {**_valid_app('unapproved-1'), 'approved': False, 'private': False, 'uid': 'uid-1'}
+    monkeypatch.setattr(apps_utils, 'is_tester', lambda uid: True)
+    monkeypatch.setattr(apps_utils, 'get_private_apps', lambda uid: [])
+    monkeypatch.setattr(apps_utils, 'get_public_unapproved_apps', lambda uid: [dict(unapproved_owned)])
+    monkeypatch.setattr(apps_utils, 'get_apps_for_tester_db', lambda uid: [dict(unapproved_owned)])
+    monkeypatch.setattr(apps_utils, 'get_enabled_apps', lambda uid: [])
+
+    apps = apps_utils.get_available_apps('uid-1')
+
+    assert [app.id for app in apps] == ['public-1', 'unapproved-1']
+
+
+def test_available_apps_prefers_public_approved_over_stale_private_slice(monkeypatch):
+    fresh_public = {**_valid_app('toggled-1'), 'approved': True, 'private': False, 'uid': 'uid-1'}
+    stale_private = {**_valid_app('toggled-1'), 'approved': True, 'private': True, 'uid': 'uid-1'}
+    _patch_public_set(monkeypatch, [fresh_public], from_cache=True)
+    monkeypatch.setattr(apps_utils, 'is_tester', lambda uid: False)
+    monkeypatch.setattr(apps_utils, 'get_private_apps', lambda uid: [stale_private])
+    monkeypatch.setattr(apps_utils, 'get_public_unapproved_apps', lambda uid: [])
+    monkeypatch.setattr(apps_utils, 'get_apps_for_tester_db', lambda uid: [])
+    monkeypatch.setattr(apps_utils, 'get_enabled_apps', lambda uid: [])
+
+    apps = apps_utils.get_available_apps('uid-1')
+
+    assert [app.id for app in apps] == ['toggled-1']
+    assert apps[0].private is False
