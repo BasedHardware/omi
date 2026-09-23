@@ -546,7 +546,7 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
         "uid",
         "en",
         input_conversation,
-        is_reprocess=True,
+        trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
         app_id="selected-app",
         explicit_app=SimpleNamespace(id="selected-app"),
     )
@@ -1745,7 +1745,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert written.get('suggested_summarization_apps') == ['app-1']
 
 
-def test_force_process_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
+def test_running_now_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
     completed_conversation = Conversation(
         id='conversation-jit',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
@@ -1793,7 +1793,9 @@ def test_force_process_still_defers_folders_and_apps_when_jit_admits(monkeypatch
         process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
     )
 
-    process_conversation.process_conversation('uid', 'en', input_conversation, force_process=True)
+    process_conversation.process_conversation(
+        'uid', 'en', input_conversation, trigger=process_conversation.ProcessingTrigger.CLIENT_FINALIZE
+    )
 
     assert claims == ['uid:conversation-jit']
 

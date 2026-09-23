@@ -9,11 +9,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance import (
-    RELEVANCE_POLICY,
-    ProcessingTrigger,
     RelevanceDecision,
-    RelevancePolicy,
     decide_relevance,
     final_relevance,
     sync_intake_decision,
@@ -51,12 +49,12 @@ def _decide(
     return decision, model, calendar
 
 
-def test_every_trigger_has_a_policy():
-    assert set(RELEVANCE_POLICY) == set(ProcessingTrigger)
+def test_every_trigger_has_a_mode():
+    assert set(PROCESSING_MODES) == set(ProcessingTrigger)
 
 
 def test_only_user_actions_skip_assessment():
-    keep = {trigger for trigger, policy in RELEVANCE_POLICY.items() if policy is RelevancePolicy.KEEP}
+    keep = {trigger for trigger, mode in PROCESSING_MODES.items() if mode.relevance is RelevancePolicy.KEEP}
     assert keep == {ProcessingTrigger.FIRST_OPEN, ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.MERGE}
 
 

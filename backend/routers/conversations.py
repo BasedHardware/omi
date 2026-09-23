@@ -40,7 +40,7 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.relevance import ProcessingTrigger
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
@@ -210,8 +210,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     uid,
                     conv_obj.language or 'en',
                     conv_obj,
-                    force_process=True,
-                    is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                     trigger=ProcessingTrigger.FIRST_OPEN,
                 )
@@ -571,7 +569,6 @@ def process_in_progress_conversation(
             uid,
             conversation.language,
             conversation,
-            force_process=True,
             persistence_observer=record_persistence,
             derived_effects_disposition_observer=record_derived_effects_disposition,
             client_projection=client_projection,
@@ -660,7 +657,7 @@ def finalize_conversation(
             uid,
             conversation.id,
             has_byok_keys=False,
-            force_process=True,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
@@ -765,10 +762,7 @@ def reprocess_conversation(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
         trigger=ProcessingTrigger.USER_REPROCESS,
-        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(

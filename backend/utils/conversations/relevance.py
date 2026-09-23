@@ -1,7 +1,7 @@
 """The one relevance decision every processed conversation passes through.
 
-Callers say *why* they are processing (a ``ProcessingTrigger``); the policy
-table below says whether that trigger assesses relevance at all. Assessment
+Callers say *why* they are processing (a ``ProcessingTrigger``); its row in
+``processing_trigger.PROCESSING_MODES`` says whether relevance is assessed. Assessment
 runs cheap deterministic rules first and asks the model only about the
 ambiguous middle. Every outcome is a ``RelevanceDecision`` that is stored on
 the conversation and counted, so a path that silently skips the gate shows up
@@ -14,47 +14,13 @@ recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping, Optional, Sequence
+from typing import Any, Callable, Literal, Optional, Sequence
 
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
-
-class ProcessingTrigger(str, Enum):
-    """Why a conversation is being processed."""
-
-    CAPTURE_END = 'capture_end'  # listen finalization, developer/import create
-    CLIENT_FINALIZE = 'client_finalize'  # a client ends the conversation
-    SYNC_UPDATE = 'sync_update'  # offline sync created or appended to it
-    FIRST_OPEN = 'first_open'  # deferred enrichment when the user opens it
-    USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
-    MERGE = 'merge'  # the user merged conversations into it
-
-
-class RelevancePolicy(str, Enum):
-    ASSESS = 'assess'
-    KEEP = 'keep'
-
-
-# Every trigger must appear here; tests enforce exhaustiveness. KEEP is only
-# for triggers that are themselves a user action on this conversation.
-RELEVANCE_POLICY: Mapping[ProcessingTrigger, RelevancePolicy] = MappingProxyType(
-    {
-        ProcessingTrigger.CAPTURE_END: RelevancePolicy.ASSESS,
-        # Ending a capture is not a judgment about its content; a discard here
-        # stays one tap from restore.
-        ProcessingTrigger.CLIENT_FINALIZE: RelevancePolicy.ASSESS,
-        # Reassessed over the whole merged transcript on every append, so a
-        # fragment that later gains real speech is promoted automatically.
-        ProcessingTrigger.SYNC_UPDATE: RelevancePolicy.ASSESS,
-        ProcessingTrigger.FIRST_OPEN: RelevancePolicy.KEEP,
-        ProcessingTrigger.USER_REPROCESS: RelevancePolicy.KEEP,
-        ProcessingTrigger.MERGE: RelevancePolicy.KEEP,
-    }
-)
 
 DecidedBy = Literal['policy', 'user', 'rule', 'model', 'override']
 
@@ -108,7 +74,7 @@ def decide_relevance(
             return keep('override', 'calendar_overlap')
         return RelevanceDecision('discard', decided_by, reason, trigger)
 
-    if RELEVANCE_POLICY[trigger] is RelevancePolicy.KEEP:
+    if PROCESSING_MODES[trigger].relevance is RelevancePolicy.KEEP:
         return keep('policy', trigger.value)
     if exempt:
         return keep('policy', 'exempt')

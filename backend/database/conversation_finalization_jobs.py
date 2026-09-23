@@ -23,6 +23,7 @@ from database.firestore_index_registry import (
     MEETING_RECEIPTS_DUE_QUERY,
 )
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -350,7 +351,7 @@ def _create_or_get_finalization_intent_txn(
     now: datetime,
     *,
     projection_collection: Any | None = None,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
@@ -426,10 +427,12 @@ def _create_or_get_finalization_intent_txn(
             'status': status,
             'requires_byok': requires_byok,
             'client_platform': loaded.get('client_platform'),
-            # REST finalization has historically forced enrichment while the listen
-            # pipeline retains its existing default. Persist the choice with the
-            # immutable finalization generation so a replay cannot change it.
-            'force_process': force_process,
+            # Persist why this generation is processed with the immutable
+            # finalization generation so a replay cannot change it.
+            'processing_trigger': trigger.value,
+            # Legacy mirror so a worker from before processing_trigger (a
+            # rollback) still runs the same mode; drop after one release.
+            'force_process': PROCESSING_MODES[trigger].run_now,
             'fanout_key': admission['fanout_key'],
             'fanout_status': 'pending',
             'dispatch_generation': 1,
@@ -501,7 +504,7 @@ def create_or_get_finalization_intent(
     *,
     requires_byok: bool,
     finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     firestore_client: Any = None,
 ) -> FinalizationIntent:
@@ -525,7 +528,7 @@ def create_or_get_finalization_intent(
             finalization_admission,
             _now(),
             projection_collection=projection_collection,
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
         )
 
@@ -1157,6 +1160,7 @@ def _record_meeting_receipt_txn(
                 'finalization_revision': revision,
                 'status': 'completed',
                 'requires_byok': False,
+                'processing_trigger': ProcessingTrigger.CAPTURE_END.value,
                 'force_process': False,
                 'fanout_key': f'conversation:{conversation_id}:finalization',
                 'fanout_status': 'completed',

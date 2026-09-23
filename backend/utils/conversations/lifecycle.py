@@ -32,6 +32,7 @@ from utils.conversations.finalization_decision import (
     LifecyclePhase,
     decide_finalization,
 )
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -788,7 +789,7 @@ def request_finalization(
     conversation_id: str,
     *,
     has_byok_keys: bool,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
     client_kind: object = 'unknown',
@@ -808,7 +809,7 @@ def request_finalization(
             conversation_id,
             requires_byok=has_byok_keys,
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
             firestore_client=firestore_client,
         )
