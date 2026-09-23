@@ -877,6 +877,17 @@ def get_action_items(
     return action_items[:effective_limit]
 
 
+def iter_all_action_items(uid: str, *, firestore_client: Any = None) -> Iterable[Dict[str, Any]]:
+    client = firestore_client or get_firestore_client()
+    query = client.collection('users').document(uid).collection(action_items_collection).order_by('__name__')
+    for doc in _iter_query_pages(query):
+        data = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        data['id'] = doc.id
+        yield _prepare_action_item_for_read(data)
+
+
 def _normalize_description(desc: Optional[str]) -> str:
     """Normalize a task description for case-insensitive duplicate matching.
 

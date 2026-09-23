@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 from io import StringIO
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -36,7 +36,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[{"id": "person1"}]))
     monkeypatch.setattr(
         data_export,
-        "get_standalone_action_items",
+        "iter_all_action_items",
         MagicMock(return_value=[{"id": "task1"}]),
     )
     monkeypatch.setattr(
@@ -87,7 +87,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         "chat_messages": [{"id": "msg1", "created_at": "2026-01-02T03:04:05+00:00"}],
     }
     memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
-    data_export.get_standalone_action_items.assert_called_once_with("uid1", limit=1000, offset=0)
+    data_export.iter_all_action_items.assert_called_once_with("uid1")
     data_export.conversations_db.iter_all_conversations.assert_called_once_with("uid1", include_discarded=True)
     data_export.chat_db.iter_all_messages.assert_called_once_with("uid1")
 
@@ -100,7 +100,7 @@ def test_iter_user_data_export_includes_all_jit_history_collections(monkeypatch)
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -123,7 +123,7 @@ def test_iter_user_data_export_includes_review_and_correction_history(monkeypatc
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -150,7 +150,7 @@ def test_iter_user_data_export_includes_retained_ledger_history(monkeypatch):
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -175,7 +175,7 @@ def test_iter_user_data_export_uses_empty_profile_object(monkeypatch):
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export, "_iter_user_subcollection", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
         data_export.conversations_db,
@@ -197,7 +197,7 @@ def test_iter_user_data_export_includes_frame_metadata_and_photo_bytes(monkeypat
         MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export,
         "_iter_user_subcollection",
@@ -350,7 +350,7 @@ def test_referenced_image_failure_is_raised_before_export_stream_is_returned(mon
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -381,7 +381,7 @@ def test_retained_frame_without_storage_reference_fails_before_stream(monkeypatc
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -406,7 +406,7 @@ def test_terminal_frame_with_converged_cleanup_exports_metadata_despite_audit_st
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([])))
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
     monkeypatch.setattr(
@@ -449,7 +449,7 @@ def test_iter_user_data_export_includes_legacy_photo_subcollection_without_marke
         MagicMock(return_value=MagicMock(iter_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db,
         "iter_all_conversations",
@@ -479,7 +479,7 @@ def test_iter_user_data_export_preflights_heavy_reads_before_streaming(monkeypat
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db,
         "iter_all_conversations",
@@ -533,7 +533,7 @@ def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
     """Large-account export must use the portability stream, not list materialization."""
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db,
         "iter_all_conversations",
@@ -590,7 +590,7 @@ def test_iter_user_data_export_skips_none_conversations_and_formats_arrays(monke
         MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
     )
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db,
         "iter_all_conversations",
@@ -612,7 +612,7 @@ def test_iter_user_data_export_skips_none_conversations_and_formats_arrays(monke
 def test_iter_user_data_export_does_not_emit_partial_memories_on_iteration_failure(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db,
         "iter_all_conversations",
@@ -705,7 +705,7 @@ def test_frame_export_pulls_incrementally_instead_of_materializing_collection(mo
 def test_conversation_photo_manifest_spills_to_disk_instead_of_accumulating(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", MagicMock(return_value={}))
     monkeypatch.setattr(data_export, "get_people", MagicMock(return_value=[]))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, "iter_all_action_items", MagicMock(return_value=[]))
     monkeypatch.setattr(
         data_export.conversations_db, "iter_all_conversations", MagicMock(return_value=iter([{"id": "conv-1"}]))
     )
@@ -757,14 +757,11 @@ def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", MagicMock(return_value=iter([])))
 
     exported_memories = [MagicMock(model_dump=MagicMock(return_value={"id": f"mem-{i}"})) for i in range(1001)]
-    action_item_pages = [
-        [{"id": f"task-{i}"} for i in range(1000)],
-        [{"id": "task-1000"}],
-    ]
+    exported_action_items = [{"id": f"task-{i}"} for i in range(1001)]
     memory_service = MagicMock(iter_portability_export_memories=MagicMock(return_value=iter(exported_memories)))
-    get_action_items = MagicMock(side_effect=action_item_pages)
+    iter_all_action_items = MagicMock(return_value=iter(exported_action_items))
     monkeypatch.setattr(data_export, "MemoryService", MagicMock(return_value=memory_service))
-    monkeypatch.setattr(data_export, "get_standalone_action_items", get_action_items)
+    monkeypatch.setattr(data_export, "iter_all_action_items", iter_all_action_items)
 
     payload = json.loads("".join(data_export.iter_user_data_export("uid1")))
 
@@ -773,10 +770,7 @@ def test_iter_user_data_export_paginates_complete_collections(monkeypatch):
     assert len(payload["action_items"]) == 1001
     assert payload["action_items"][-1] == {"id": "task-1000"}
     memory_service.iter_portability_export_memories.assert_called_once_with("uid1", include_archive=True)
-    assert get_action_items.call_args_list == [
-        call("uid1", limit=1000, offset=0),
-        call("uid1", limit=1000, offset=1000),
-    ]
+    iter_all_action_items.assert_called_once_with("uid1")
 
 
 def test_legacy_conversation_photo_without_any_bytes_reference_exports_metadata():

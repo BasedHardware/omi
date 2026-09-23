@@ -5,12 +5,12 @@ import base64
 import tempfile
 from datetime import datetime
 from itertools import chain
-from typing import IO, Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
+from typing import IO, Any, Iterable, Iterator, Mapping, Sequence, cast
 
 from database import chat as chat_db
 from database import conversations as conversations_db
 from database import _client as database_client
-from database.action_items import get_action_items as get_standalone_action_items
+from database.action_items import iter_all_action_items
 from utils.retrieval.frame_request_storage import download_frame_request_pixels
 from database.users import get_people, get_user_profile
 from utils.memory.memory_service import MemoryService
@@ -128,20 +128,6 @@ def _dump(obj: object, fp: IO[str], **kwargs: Any) -> None:
         raise PortabilityExportIncomplete(
             "retained record contains a non-finite numeric value (NaN/Infinity) that cannot be exported as JSON"
         ) from exc
-
-
-def _iter_paginated(
-    fetch_page: Callable[[int, int], Sequence[Mapping[str, Any]]], *, batch_size: int = 1000
-) -> Iterator[Mapping[str, Any]]:
-    offset = 0
-    while True:
-        page = fetch_page(batch_size, offset)
-        if not page:
-            break
-        yield from page
-        if len(page) < batch_size:
-            break
-        offset += batch_size
 
 
 def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
@@ -397,14 +383,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     yield '  "people": ' + _dumps(people, indent=2) + ",\n"
 
     yield '  "action_items": '
-    yield from _yield_json_array(
-        _iter_paginated(
-            lambda limit, offset: cast(
-                Sequence[Mapping[str, Any]],
-                get_standalone_action_items(uid, limit=limit, offset=offset),
-            )
-        )
-    )
+    yield from _yield_json_array(iter_all_action_items(uid))
     yield ",\n"
 
     yield '  "task_data": {\n'

@@ -1104,7 +1104,7 @@ class TestUsersLockEnforcement:
         with patch("services.users.data_export.get_user_profile", return_value={"name": "Test"}):
             with patch("services.users.data_export.get_people", return_value=[]):
                 with patch(
-                    "services.users.data_export.get_standalone_action_items",
+                    "services.users.data_export.iter_all_action_items",
                     return_value=[],
                 ):
                     with patch("services.users.data_export._iter_user_subcollection", return_value=iter(())):
