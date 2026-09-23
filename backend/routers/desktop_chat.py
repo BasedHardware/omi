@@ -1813,7 +1813,7 @@ async def _chat_completions_unobserved(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid request parameters.") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
