@@ -3,6 +3,7 @@
 Verifies that ValueError and RuntimeError raised in the desktop_chat
 endpoint handlers are sanitized and do not leak internal details.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
@@ -14,7 +15,7 @@ import routers.desktop_chat as dc_routes
 async def test_jit_header_value_error_is_masked(monkeypatch):
     """ValueError from _jit_headers_for_forward must not leak in HTTP 400 detail."""
     leak_text = "jit_max_spend_micro_usd must be positive integer; got: -99 (caller=desktop_chat)"
-    
+
     def _raiser(*args, **kwargs):
         raise ValueError(leak_text)
 
@@ -40,7 +41,8 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
 
     monkeypatch.setattr(dc_routes, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(
-        dc_routes, 'enforce_desktop_chat_quota',
+        dc_routes,
+        'enforce_desktop_chat_quota',
         MagicMock(side_effect=RuntimeError(leak_text)),
     )
 
@@ -63,7 +65,8 @@ async def test_quota_value_error_is_masked(monkeypatch):
 
     monkeypatch.setattr(dc_routes, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(
-        dc_routes, 'enforce_desktop_chat_quota',
+        dc_routes,
+        'enforce_desktop_chat_quota',
         MagicMock(side_effect=ValueError(leak_text)),
     )
 
