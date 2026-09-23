@@ -1,10 +1,13 @@
 # OMI Python CLI Examples
 
-This directory contains example guides for using the OMI Python CLI.
+This directory contains example guides for using the `omi-cli` tool. Each guide demonstrates a specific workflow or feature.
 
 - [Agent Quickstart (English)](agent_quickstart.md)
-- [Agent Quickstart (Welsh – cy)](agent_quickstart.cy.md) <!-- New Welsh guide -->
-- [Streaming Example](streaming_example.md)
-- [Tool Integration Example](tool_integration_example.md)
+- [Agent Quickstart (Welsh / Cymraeg)](agent_quickstart.cy.md)
 
-Each guide demonstrates a specific workflow and includes the necessary commands and configuration snippets.
+## Additional Examples
+
+- [Streaming Completion Example](streaming_completion.md)
+- [Function Calling Example](function_calling.md)
+
+Feel free to contribute more examples in other languages or for other use‑cases!
