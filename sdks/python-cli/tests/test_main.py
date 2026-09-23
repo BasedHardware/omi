@@ -35,6 +35,36 @@ def test_login_prompt_interruption_exits_cleanly(config_path, monkeypatch, capsy
     assert "unexpected error" not in stderr
 
 
+def test_click_usage_error_honors_json_error_contract(config_path, monkeypatch, capsys) -> None:
+    """Issue #15981: Click parser / usage errors with --json must emit JSON error to stderr."""
+    from omi_cli.main import main
+
+    monkeypatch.setattr("sys.argv", ["omi", "--json", "ask"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert "error" in payload
+    assert "Missing argument" in payload["error"]
+
+
+def test_click_unknown_option_honors_json_error_contract(config_path, monkeypatch, capsys) -> None:
+    """Issue #15981: Click unknown options with --json must emit JSON error to stderr."""
+    from omi_cli.main import main
+
+    monkeypatch.setattr("sys.argv", ["omi", "--json", "version", "--unknown-flag"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert "error" in payload
+    assert "No such option" in payload["error"]
+
+
 def test_version_flag(cli_runner) -> None:
     result = cli_runner.invoke(app, ["--version"])
     assert result.exit_code == 0

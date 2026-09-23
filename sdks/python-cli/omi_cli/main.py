@@ -219,8 +219,9 @@ def main() -> None:
       to render via the active Renderer; just call ``show()`` and exit with its
       ``exit_code``.
     * Other :class:`click.ClickException` (e.g. ``NoSuchOption`` for a typo'd
-      flag) — let Click's default ``show()`` print the friendly usage message,
-      then exit with its built-in ``exit_code`` (typically 2 for Click usage).
+      flag) — let Click's default ``show()`` print the friendly usage message
+      (or emit JSON error payload to stderr in ``--json`` mode), then exit with its
+      built-in ``exit_code`` (typically 2 for Click usage).
     * :class:`typer.Exit` — Typer's "clean exit at this code", e.g. from
       ``--version``. Pass through.
     * KeyboardInterrupt / EOFError — Ctrl-C / Ctrl-D. Conventional 130.
@@ -241,8 +242,15 @@ def main() -> None:
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
         # Click's own usage errors (unknown flag, missing argument, etc.).
-        # Let Click format it the way users expect; honor its exit_code.
-        exc.show()
+        # In --json mode, emit the machine-readable error payload to stderr
+        # so caller JSON contracts survive parser errors (#15981).
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        if renderer.json_mode:
+            renderer.error(exc.format_message())
+        else:
+            exc.show()
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
