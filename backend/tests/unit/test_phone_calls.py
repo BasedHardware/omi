@@ -306,3 +306,42 @@ def test_twiml_free_tier_rejects_when_atomic_quota_reservation_fails(
     reserve.assert_called_once_with(TEST_UID)
     assert 'Monthly phone call limit reached' in resp.text
     assert '<Dial' not in resp.text
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.delete_caller_id')
+def test_remove_phone_number_keeps_the_record_when_twilio_keeps_the_caller_id(mock_delete, mock_db, client):
+    mock_db.get_phone_number.return_value = {'id': 'pn1', 'phone_number': '+15551234567', 'twilio_sid': 'PN123'}
+    mock_delete.return_value = False
+
+    resp = client.delete('/v1/phone/numbers/pn1')
+
+    assert resp.status_code == 503
+    mock_delete.assert_called_once_with('PN123')
+    mock_db.delete_phone_number.assert_not_called()
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.delete_caller_id')
+def test_remove_phone_number_deletes_the_record_once_twilio_releases_it(mock_delete, mock_db, client):
+    mock_db.get_phone_number.return_value = {'id': 'pn1', 'phone_number': '+15551234567', 'twilio_sid': 'PN123'}
+    mock_delete.return_value = True
+
+    resp = client.delete('/v1/phone/numbers/pn1')
+
+    assert resp.status_code == 200
+    assert resp.json() == {'success': True}
+    mock_db.delete_phone_number.assert_called_once_with(TEST_UID, 'pn1')
+
+
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.delete_caller_id')
+def test_remove_phone_number_without_a_twilio_sid_skips_twilio(mock_delete, mock_db, client):
+    mock_db.get_phone_number.return_value = {'id': 'pn1', 'phone_number': '+15551234567'}
+    mock_delete.return_value = False
+
+    resp = client.delete('/v1/phone/numbers/pn1')
+
+    assert resp.status_code == 200
+    mock_delete.assert_not_called()
+    mock_db.delete_phone_number.assert_called_once_with(TEST_UID, 'pn1')
