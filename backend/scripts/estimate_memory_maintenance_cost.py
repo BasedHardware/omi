@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uid-pending-consolidation", type=int, default=15)
     args = parser.parse_args(argv)
 
-    print("model=gpt-5.6-luna lanes=omi:auto:memory-l2-flex,omi:auto:memory-conflict-flex service_tier=flex")
+    print("model=gpt-6-luna lanes=omi:auto:memory-l2-flex,omi:auto:memory-conflict-flex service_tier=flex")
     print("rates=short-context $0.20/M in $1.20/M out * 50% Flex; consolidation batch=20; job L2 folded")
     print(_render("average_user", args.average_pending_l2, args.average_pending_consolidation, flex=args.flex))
     sample = args.uid or "sample_uid"

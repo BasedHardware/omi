@@ -1,8 +1,9 @@
 """Lab-local token pricing. Copied rates, not a production import.
 
 Uses the same Luna short-context list prices as the maintenance planner
-(``openai.gpt-5.6-luna.2026-07-30``) so harness cost notes stay comparable
-to other backend planning estimates without pulling production modules.
+(``openai.gpt-6-luna.2026-09-22``, carried over unverified pending official
+gpt-6-luna rates) so harness cost notes stay comparable to other backend
+planning estimates without pulling production modules.
 """
 
 from __future__ import annotations

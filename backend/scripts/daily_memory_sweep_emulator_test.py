@@ -725,7 +725,7 @@ def main() -> int:
                         max_attempts=1,
                         max_spend_micro_usd=50_000,
                         provider="openai",
-                        model="gpt-5.6-luna",
+                        model="gpt-6-luna",
                         input_tokens=100,
                         cached_input_tokens=0,
                         output_tokens=10,

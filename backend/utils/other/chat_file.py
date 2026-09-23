@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 # In gateway feature mode both are omi:auto:file-chat-* lanes, so the model call
 # lands in the gateway ledger; OpenAI Files upload/download stays direct
 # (file bytes/file_id lifecycle, no model tokens).
-_FILE_CHAT_VISION_MODEL = "gpt-5.6-luna"
-_FILE_CHAT_DOCUMENT_MODEL = "gpt-5.6-luna"
+_FILE_CHAT_VISION_MODEL = "gpt-6-luna"
+_FILE_CHAT_DOCUMENT_MODEL = "gpt-6-luna"
 _FILE_CHAT_COMPLETION_TOKENS = 2048
 
 

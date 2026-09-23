@@ -200,7 +200,7 @@ QA_SWEEP_PROJECT = "based-hardware-dev"
 QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 QA_SWEEP_COHORT = "jit-qa-sweep-v1"
-QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
+QA_SWEEP_MODEL_NAME = "gpt-6-luna"
 QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 # Qualification uses the same completed-day producer with an explicit tighter
@@ -218,7 +218,7 @@ QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
 QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
-# The deployed memories route is gpt-5.6-luna at $0.20/M input and $1.20/M
+# The deployed memories route is gpt-6-luna at $0.20/M input and $1.20/M
 # output.  The parser instructions alone are about 9.6K UTF-8 bytes and the
 # profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
 # with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
