@@ -57,7 +57,7 @@ async def test_oauth_token_masks_generic_verification_exception(monkeypatch):
         )
 
     assert exc_info.value.status_code == 401
-    assert exc_info.value.detail == "Error verifying Firebase ID token."
+    assert exc_info.value.detail == "Error verifying Firebase ID token. Please re-authenticate."
     assert "googleapis.com" not in exc_info.value.detail
     assert "Errno 110" not in exc_info.value.detail
     assert "Connection timed out" not in exc_info.value.detail
