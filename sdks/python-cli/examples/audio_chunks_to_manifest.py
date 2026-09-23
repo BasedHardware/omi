@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import json
 import os
@@ -36,7 +37,7 @@ def convert(source_dir, destination):
                     "size_bytes": stat.st_size,
                     "modified_at": int(stat.st_mtime),
                     "sha256": hash_file(p),
-                    "format": p.suffix.lower().lstrip("."),
+                    "format": p.suffix.lstrip(".").lower()
                 })
 
         output = {
@@ -58,8 +59,42 @@ def convert(source_dir, destination):
                 pass
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python audio_chunks_to_manifest.py <audio_directory> <destination.json>", file=sys.stderr)
+def main():
+    parser = argparse.ArgumentParser(
+        description="Index raw audio chunk directories into a verified SHA-256 JSON manifest."
+    )
+    parser.add_argument(
+        "source_dir",
+        help="Path to directory containing audio recordings."
+    )
+    parser.add_argument(
+        "destination",
+        nargs="?",
+        default=None,
+        help="Path to output JSON manifest file."
+    )
+    parser.add_argument(
+        "-o", "--output",
+        dest="output_flag",
+        default=None,
+        help="Path to output JSON manifest file (alternative to positional argument)."
+    )
+
+    args = parser.parse_args()
+
+    dest = args.output_flag or args.destination
+    if not dest:
+        parser.error("Destination JSON path must be provided either as a positional argument or via -o/--output flag.")
+
+    try:
+        convert(args.source_dir, dest)
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    convert(sys.argv[1], sys.argv[2])
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
