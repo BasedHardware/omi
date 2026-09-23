@@ -19,12 +19,18 @@ struct TranscriptFindField: View {
   let onClose: () -> Void
 
   var body: some View {
-    if isOpen {
-      openField
-    } else {
-      OmiIconButton("magnifyingglass", help: "Find in transcript (⌘F)", action: onOpen)
-        .keyboardShortcut("f", modifiers: .command)
-        .accessibilityIdentifier("conversation-detail-transcript-find")
+    Group {
+      if isOpen {
+        openField
+      } else {
+        OmiIconButton("magnifyingglass", help: "Find in transcript (⌘F)", action: onOpen)
+          .accessibilityIdentifier("conversation-detail-transcript-find")
+      }
+    }
+    // ⌘F goes through the shared router at detail priority, so it beats any page search field in the
+    // same window instead of racing it through a key equivalent.
+    .onFindCommand(priority: .detail) {
+      if isOpen { isFocused.wrappedValue = true } else { onOpen() }
     }
   }
 
@@ -39,7 +45,6 @@ struct TranscriptFindField: View {
           .foregroundStyle(Ink.secondary)
       }
       .buttonStyle(.plain)
-      .keyboardShortcut("f", modifiers: .command)
       .help("Find in transcript (⌘F)")
       .accessibilityHidden(true)
 
