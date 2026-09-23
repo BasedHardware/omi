@@ -360,10 +360,10 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.overview" in selected_fields
     assert "transcript_segments" not in selected_fields
     assert "photos" not in selected_fields
-    assert "structured.action_items" in selected_fields
-    assert "structured.sections" in selected_fields
-    assert "structured.events" in selected_fields
-    assert not result[0]["structured"].get("action_items")
+    # Visibility needs only user-owned metadata; generated arrays are never read.
+    assert "structured.action_items" not in selected_fields
+    assert "structured.sections" not in selected_fields
+    assert "structured.events" not in selected_fields
     expected_fields = tuple(
         dict.fromkeys(module._MCP_CONVERSATION_CARD_FIELD_PATHS + module._FRAGMENT_VISIBILITY_FIELD_PATHS)
     )
@@ -374,7 +374,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.action_items" not in transcript_fields
 
 
-def test_hosted_mcp_list_protects_sections_only_enriched_review(conversations_db):
+def test_hosted_mcp_list_hides_review_row_despite_generated_sections(conversations_db):
     module, firestore = conversations_db
     firestore.rows = [
         {
@@ -392,6 +392,5 @@ def test_hosted_mcp_list_protects_sections_only_enriched_review(conversations_db
 
     result = module.get_mcp_conversation_cards("user-1", 20, 0, firestore_client=firestore)
 
-    assert [row["id"] for row in result] == ["sections-review"]
-    assert result[0]["discarded"] is False
-    assert "sections" not in result[0]["structured"]
+    # A generated summary is not a user action, so it does not protect a review row.
+    assert [row["id"] for row in result] == []

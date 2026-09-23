@@ -99,12 +99,6 @@ _FRAGMENT_VISIBILITY_FIELD_PATHS = (
     'visibility',
     'starred',
     'user_title',
-    # These bounded structured arrays distinguish an enriched review row from
-    # the deterministic minimum. They are stripped before returning the card.
-    'structured.sections',
-    'structured.action_items',
-    'structured.events',
-    'client_processing.schema_version',
 )
 _FRAGMENT_VISIBILITY_INTERNAL_FIELD_PATHS = tuple(
     field for field in _FRAGMENT_VISIBILITY_FIELD_PATHS if field != 'user_title'
@@ -2057,12 +2051,12 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
             # Redirect tombstones reuse discarded=True for the indexed hide.
             # Restoring them would put a merged-away donor back on lists.
             return False
-        updates = {'discarded': False}
+        # A restore is the user's verdict and outranks every later relevance
+        # assessment (sync appends reassess the whole recording). Legacy review
+        # rows are also hidden by the read predicate, so they flip to keep.
+        updates = {'discarded': False, 'sync_relevance_user_kept': True}
         if current.get('sync_relevance') == 'review':
-            # Legacy review rows are hidden by the read predicate even when
-            # their stored discarded flag is false. Persist the user's choice
-            # so future sync appends cannot hide the recording again.
-            updates.update({'sync_relevance': 'keep', 'sync_relevance_user_kept': True})
+            updates['sync_relevance'] = 'keep'
         transaction.update(conversation_ref, updates)
         return True
 
