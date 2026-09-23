@@ -84,9 +84,7 @@ def load_arxiv_module():
             Field=lambda default=None, **k: default,
         ),
     }
-    spec = importlib.util.spec_from_file_location(
-        "arxiv_error_test", Path(__file__).with_name("main.py")
-    )
+    spec = importlib.util.spec_from_file_location("arxiv_error_test", Path(__file__).with_name("main.py"))
     module = importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules, stubs):
         spec.loader.exec_module(module)
