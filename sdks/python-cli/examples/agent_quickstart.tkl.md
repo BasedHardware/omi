@@ -1,6 +1,6 @@
 # omi-cli mo e aoga kautolu
 
-> Tau tuhi fakatonuga mo e aoga LLM (Claude Code, Cursor, do do kautolu).
+> Tau tuhi fakatonuga mo e aoga LLM (Claude Code, Cursor, mo e kautolu).
 
 ## A ātaga aoga CLI ma e kautolu
 
@@ -81,8 +81,7 @@ omi --json local task delete task_123 --yes
 
 `omi local screenshot SCREENSHOT_ID --output PATH` tohi screenshot ki a faili
 a ʻia fakafofou JSON ki a stdout mo e ʻī script. Screenshot ID ʻia
-`local search-screen` pe SQL ʻia tabele `screenshots`. ʻA Omi Desktop ʻia fakafofou ha fakaʻeahia mea
-mea `screenshot_pending`, `screenshot_file_missing`,
+`local search-screen` pe SQL ʻia tabele `screenshots`. ʻA Omi Desktop ʻia fakafofou ha fakaʻeahia mea `screenshot_pending`, `screenshot_file_missing`,
 pe `screenshot_chunk_corrupted`, ʻia JSON mode ʻia monumo fields `reason`, `hint`, pe
 `screenshot_id` ki a stderr kia ʻe kautolu ʻia fakafofou ha ID
 tō pe ʻia fakatonuga ha mea monumo. Taukī ha output monumo `file PATH` kuaʻakiʻaki
