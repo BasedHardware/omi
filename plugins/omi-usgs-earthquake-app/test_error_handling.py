@@ -22,7 +22,9 @@ import main  # noqa: E402
 
 SENSITIVE_HOST = "192.168.1.42"
 SENSITIVE_TOKEN = "sec_token_999888777"
-SENSITIVE_DETAIL = f"ConnectionRefusedError: failed to connect to http://{SENSITIVE_HOST}:8080/fdsnws?auth={SENSITIVE_TOKEN}"
+SENSITIVE_DETAIL = (
+    f"ConnectionRefusedError: failed to connect to http://{SENSITIVE_HOST}:8080/fdsnws?auth={SENSITIVE_TOKEN}"
+)
 
 
 class TestUSGSErrorHandlingAndLeakPrevention(unittest.TestCase):
@@ -32,6 +34,7 @@ class TestUSGSErrorHandlingAndLeakPrevention(unittest.TestCase):
     def test_usgs_get_http_status_error_does_not_leak_sensitive_details(self):
         """HTTPStatusError should log status, return generic failure without internal URL/token."""
         import httpx
+
         req = object()
         resp = types.SimpleNamespace(status_code=502)
         exc = getattr(httpx, "HTTPStatusError", Exception)(SENSITIVE_DETAIL, request=req, response=resp)
@@ -52,6 +55,7 @@ class TestUSGSErrorHandlingAndLeakPrevention(unittest.TestCase):
     def test_usgs_get_network_error_does_not_leak_sensitive_details(self):
         """Network/transport HTTPError should not leak raw connection details or internal IPs."""
         import httpx
+
         exc = getattr(httpx, "HTTPError", Exception)(SENSITIVE_DETAIL)
 
         mock_client = AsyncMock()

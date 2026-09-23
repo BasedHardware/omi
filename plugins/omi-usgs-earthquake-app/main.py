@@ -60,9 +60,7 @@ except ImportError:
             event_id: str
 
 
-USGS_QUERY_URL = os.getenv(
-    "USGS_QUERY_URL", "https://earthquake.usgs.gov/fdsnws/event/1/query"
-).strip()
+USGS_QUERY_URL = os.getenv("USGS_QUERY_URL", "https://earthquake.usgs.gov/fdsnws/event/1/query").strip()
 USGS_USER_AGENT = os.getenv(
     "USGS_USER_AGENT",
     "OmiUsgsEarthquakeApp/1.0 (https://github.com/BasedHardware/omi)",
@@ -474,9 +472,7 @@ async def tool_nearby_earthquakes(request: Request):
             {
                 "latitude": latitude,
                 "longitude": longitude,
-                "maxradiuskm": _safe_float(
-                    body.get("radius_km"), default=250.0, minimum=1.0, maximum=2000.0
-                ),
+                "maxradiuskm": _safe_float(body.get("radius_km"), default=250.0, minimum=1.0, maximum=2000.0),
             }
         )
         result = await _list_earthquakes(params)
@@ -516,7 +512,11 @@ async def tool_earthquake_details(request: Request):
         payload = await _usgs_get({"format": "geojson", "eventid": event_id})
         if "error" in payload:
             return ChatToolResponse(success=False, message=payload["error"], data=payload)
-        if not isinstance(payload, dict) or payload.get("type") != "Feature" or not isinstance(payload.get("properties"), dict):
+        if (
+            not isinstance(payload, dict)
+            or payload.get("type") != "Feature"
+            or not isinstance(payload.get("properties"), dict)
+        ):
             return ChatToolResponse(
                 success=False,
                 message=f"No USGS earthquake event found for {event_id}.",
