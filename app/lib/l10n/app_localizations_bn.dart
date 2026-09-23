@@ -27,8 +27,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deleteConversationTitle => 'কথোপকথন মুছে ফেলুন?';
 
   @override
-  String get deleteConversationMessage =>
-      'এটি সম্পর্কিত স্মৃতি, কাজ এবং অডিও ফাইলগুলিও মুছে ফেলবে। এই পদক্ষেপটি আনডু করা যাবে না।';
+  String get deleteConversationMessage => 'এটি সম্পর্কিত স্মৃতি, কাজ এবং অডিও ফাইলগুলিও মুছে ফেলবে।';
 
   @override
   String get confirm => 'নিশ্চিত করুন';
@@ -7424,7 +7423,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'নতুন 🚀';
+  String get conversationNewIndicator => 'নতুন';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10167,4 +10166,97 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।';
+
+  @override
+  String get pause => 'বিরতি';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কথোপকথন মুছবেন?',
+      one: '১টি কথোপকথন মুছবেন?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'এটি সেগুলোর স্মৃতি, কাজ এবং অডিও ফাইলও মুছে ফেলবে।';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কথোপকথন মুছে ফেলা হয়েছে',
+      one: '১টি কথোপকথন মুছে ফেলা হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কথোপকথন সরানো হয়েছে',
+      one: '১টি কথোপকথন সরানো হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'কথোপকথনগুলো সরানো যায়নি';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'বাতিল · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে + চাপুন।';
+
+  @override
+  String get conversationMap => 'কথোপকথনের মানচিত্র';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কথোপকথন',
+      one: '১টি কথোপকথন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কাজ',
+      one: '১টি কাজ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '১০ সেকেন্ড পিছনে';
+
+  @override
+  String get skipForward10Seconds => '১০ সেকেন্ড সামনে';
+
+  @override
+  String get failedToShareRecap => 'সারসংক্ষেপ শেয়ার করা যায়নি';
+
+  @override
+  String get captureOfflineBuffering => 'অফলাইন, বাফার হচ্ছে';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'অফলাইন, বাফার হচ্ছে · $minutes মিনিট';
+  }
 }

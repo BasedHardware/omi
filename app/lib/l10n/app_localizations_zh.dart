@@ -27,7 +27,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteConversationTitle => '删除对话？';
 
   @override
-  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。此操作无法撤消。';
+  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。';
 
   @override
   String get confirm => '确认';
@@ -7282,7 +7282,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => '新的 🚀';
+  String get conversationNewIndicator => '新的';
 
   @override
   String conversationPhotosCount(int count) {
@@ -9972,4 +9972,96 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '未保存的更改将会丢失。';
+
+  @override
+  String get pause => '暂停';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个对话？',
+      one: '删除 1 个对话？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => '这也会删除它们的记忆、任务和音频文件。';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 个对话',
+      one: '已删除 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已移动 $count 个对话',
+      one: '已移动 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => '无法移动对话';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return '已舍弃 · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按 + 录制第一个对话。';
+
+  @override
+  String get conversationMap => '对话地图';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个对话',
+      one: '1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '后退 10 秒';
+
+  @override
+  String get skipForward10Seconds => '前进 10 秒';
+
+  @override
+  String get failedToShareRecap => '无法分享回顾';
+
+  @override
+  String get captureOfflineBuffering => '离线，正在缓冲';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return '离线，正在缓冲 · $minutes 分钟';
+  }
 }

@@ -27,8 +27,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteConversationTitle => 'Dzēst sarunu?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus. Šo darbību nevar atsaukt.';
+  String get deleteConversationMessage => 'Tas arī izdzēsīs saistītās atmiņas, uzdevumus un audio failus.';
 
   @override
   String get confirm => 'Apstiprināt';
@@ -7434,7 +7433,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Jauns 🚀';
+  String get conversationNewIndicator => 'Jauns';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10187,4 +10186,97 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get pause => 'Pauze';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst sarunas ($count)?',
+      one: 'Dzēst 1 sarunu?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Tiks izdzēstas arī to atmiņas, uzdevumi un audio faili.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izdzēstas sarunas: $count',
+      one: 'Izdzēsta 1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pārvietotas sarunas: $count',
+      one: 'Pārvietota 1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Neizdevās pārvietot sarunas';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Atmesta · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Šeit parādās jūsu ierakstītās sarunas. Lai ierakstītu pirmo, sākumlapā pieskarieties +.';
+
+  @override
+  String get conversationMap => 'Sarunu karte';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarunas: $count',
+      one: '1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Uzdevumi: $count',
+      one: '1 uzdevums',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Atpakaļ 10 sekundes';
+
+  @override
+  String get skipForward10Seconds => 'Uz priekšu 10 sekundes';
+
+  @override
+  String get failedToShareRecap => 'Neizdevās kopīgot kopsavilkumu';
+
+  @override
+  String get captureOfflineBuffering => 'Bezsaistē, buferizē';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Bezsaistē, buferizē · $minutes min';
+  }
 }

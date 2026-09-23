@@ -1,0 +1,237 @@
+import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+
+// The conversation actions every surface shares (docs/ux-contract.md §4, D5): one delete path for a
+// swiped row, the row's context menu, the selection bar and the detail page, and the row menu itself.
+
+/// Asks before deleting one conversation. The "Don't ask again" row is allowed because every
+/// conversation delete is backed by an Undo toast; once ticked, this returns `true` without asking.
+/// Offline it explains why the delete cannot happen and returns `false`.
+Future<bool> confirmConversationDelete(BuildContext context) async {
+  final l10n = context.l10n;
+  if (!context.read<ConnectivityProvider>().isConnected) {
+    await showOmiAlert(
+      context,
+      title: l10n.unableToDeleteConversation,
+      message: l10n.pleaseCheckInternetConnectionAndTryAgain,
+    );
+    return false;
+  }
+  final prefs = SharedPreferencesUtil();
+  if (!prefs.showConversationDeleteConfirmation) return true;
+  final result = await showOmiConfirmWithOptOut(
+    context,
+    title: l10n.deleteConversationTitle,
+    message: l10n.deleteConversationMessage,
+    confirmLabel: l10n.delete,
+    destructive: true,
+  );
+  if (result.confirmed && result.dontAskAgain) prefs.showConversationDeleteConfirmation = false;
+  return result.confirmed;
+}
+
+/// Removes [conversations] from the list now, offers Undo for 5 s, and sends the server DELETE when
+/// the toast closes without Undo (or when the provider's pending window runs out first).
+///
+/// [context] only needs a `ScaffoldMessenger` and the providers above it; after a page pops, pass a
+/// context that outlives it (for example `Navigator.of(context).context`).
+Future<void> deleteConversationsWithUndo(BuildContext context, List<ServerConversation> conversations) async {
+  if (conversations.isEmpty) return;
+  final provider = context.read<ConversationProvider>();
+  final l10n = context.l10n;
+  for (final conversation in conversations) {
+    provider.deleteConversationLocally(conversation);
+  }
+  final undone = await OmiFeedback.undo(
+    context,
+    conversations.length == 1 ? l10n.conversationDeleted : l10n.conversationsDeletedCount(conversations.length),
+    onUndo: () {
+      for (final conversation in conversations) {
+        provider.undoDeletedConversation(conversation);
+      }
+    },
+  );
+  if (undone) return;
+  for (final conversation in conversations) {
+    provider.commitPendingDelete(conversation.id);
+  }
+}
+
+/// Deletes the selected conversations after one confirmation. A bulk delete is always confirmed
+/// (never "Don't ask again"); it is still backed by Undo.
+Future<void> confirmAndDeleteSelectedConversations(BuildContext context) async {
+  final provider = context.read<ConversationProvider>();
+  final selected = provider.selectedConversations;
+  if (selected.isEmpty) return;
+  final l10n = context.l10n;
+  if (!context.read<ConnectivityProvider>().isConnected) {
+    await showOmiAlert(
+      context,
+      title: l10n.unableToDeleteConversation,
+      message: l10n.pleaseCheckInternetConnectionAndTryAgain,
+    );
+    return;
+  }
+  final confirmed = await showOmiConfirm(
+    context,
+    title: l10n.deleteConversationsTitle(selected.length),
+    message: l10n.deleteConversationsMessage,
+    confirmLabel: l10n.delete,
+    destructive: true,
+  );
+  if (!confirmed || !context.mounted) return;
+  provider.exitSelectionMode();
+  await deleteConversationsWithUndo(context, selected);
+}
+
+/// Moves the selected conversations into a folder the reader picks, then leaves selection mode.
+Future<void> moveSelectedConversationsToFolder(BuildContext context) async {
+  final provider = context.read<ConversationProvider>();
+  final folderProvider = context.read<FolderProvider>();
+  final selected = provider.selectedConversations;
+  if (selected.isEmpty) return;
+  if (folderProvider.folders.isEmpty) await folderProvider.loadFolders();
+  if (!context.mounted) return;
+  final folderId = await showMoveConversationsToFolderSheet(context, count: selected.length);
+  if (folderId == null || !context.mounted) return;
+  final l10n = context.l10n;
+  provider.exitSelectionMode();
+  final moved = await folderProvider.bulkMoveConversations([for (final c in selected) c.id], folderId);
+  if (!context.mounted) return;
+  if (moved <= 0) {
+    OmiFeedback.error(context, l10n.failedToMoveConversations);
+    return;
+  }
+  for (final conversation in selected) {
+    conversation.folderId = folderId;
+    PlatformManager.instance.analytics.conversationMovedToFolder(
+      conversationId: conversation.id,
+      toFolderId: folderId,
+      source: 'list_selection_bar',
+    );
+  }
+  provider.groupConversationsByDate();
+  OmiFeedback.confirm(context, l10n.conversationsMovedCount(moved));
+}
+
+/// Stars or unstars [conversation] and updates the list.
+Future<void> toggleConversationStarred(BuildContext context, ServerConversation conversation, {String? source}) async {
+  final provider = context.read<ConversationProvider>();
+  final l10n = context.l10n;
+  final starred = !conversation.starred;
+  final ok = await setConversationStarred(conversation.id, starred);
+  if (!context.mounted) return;
+  if (!ok) {
+    OmiFeedback.error(context, l10n.failedToUpdateStarred);
+    return;
+  }
+  conversation.starred = starred;
+  provider.updateConversationInSortedList(conversation);
+  PlatformManager.instance.analytics.conversationStarToggled(
+    conversation: conversation,
+    starred: starred,
+    source: source ?? 'list_context_menu',
+  );
+}
+
+/// Makes [conversation] shareable and opens the system share sheet with its link.
+Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
+  final l10n = context.l10n;
+  final ok = await setConversationVisibility(conversation.id);
+  if (!context.mounted) return;
+  if (!ok) {
+    OmiFeedback.error(context, l10n.conversationUrlNotShared);
+    return;
+  }
+  conversation.visibility = ConversationVisibility.shared;
+  PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
+  final box = context.findRenderObject() as RenderBox?;
+  shareConversationLink(
+    conversation,
+    sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+  );
+}
+
+/// Moves one conversation into a folder the reader picks.
+Future<void> moveConversationToFolder(BuildContext context, ServerConversation conversation) async {
+  final provider = context.read<ConversationProvider>();
+  final folderProvider = context.read<FolderProvider>();
+  if (folderProvider.folders.isEmpty) await folderProvider.loadFolders();
+  if (!context.mounted) return;
+  final previousFolderId = conversation.folderId;
+  final folderId = await showMoveToFolderSheet(
+    context,
+    conversationId: conversation.id,
+    currentFolderId: previousFolderId,
+  );
+  if (folderId == null) return;
+  conversation.folderId = folderId;
+  provider.groupConversationsByDate();
+  PlatformManager.instance.analytics.conversationMovedToFolder(
+    conversationId: conversation.id,
+    fromFolderId: previousFolderId,
+    toFolderId: folderId,
+    source: 'list_context_menu',
+  );
+}
+
+/// The actions a conversation row's long-press offers.
+enum ConversationRowAction { open, star, move, share, select, delete }
+
+/// Long-press menu of a conversation row: Open, Star / Unstar, Move to Folder, Share, Select
+/// (enters multi-select) and Delete. Resolves the chosen action, or null when dismissed.
+Future<ConversationRowAction?> showConversationActionsSheet(
+  BuildContext context,
+  ServerConversation conversation, {
+  bool canSelect = true,
+}) {
+  final l10n = context.l10n;
+  final title = conversation.structured.title.trim();
+  return showOmiSheet<ConversationRowAction>(
+    context: context,
+    title: title.isEmpty ? l10n.untitledConversation : title,
+    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
+    builder: (sheetContext) {
+      Widget row(ConversationRowAction action, IconData icon, String label, {bool destructive = false}) {
+        return OmiSettingsRow(
+          key: ValueKey('conversation_action_${action.name}'),
+          leading: Icon(icon),
+          title: label,
+          showChevron: false,
+          isDestructive: destructive,
+          onTap: () => Navigator.of(sheetContext).pop(action),
+        );
+      }
+
+      return SingleChildScrollView(
+        child: OmiSettingsGroup(
+          children: [
+            row(ConversationRowAction.open, Icons.open_in_new_rounded, l10n.open),
+            row(
+              ConversationRowAction.star,
+              conversation.starred ? Icons.star_rounded : Icons.star_outline_rounded,
+              conversation.starred ? l10n.unstarConversation : l10n.starConversation,
+            ),
+            row(ConversationRowAction.move, Icons.folder_outlined, l10n.moveToFolder),
+            row(ConversationRowAction.share, Icons.ios_share_rounded, l10n.share),
+            if (canSelect) row(ConversationRowAction.select, Icons.check_circle_outline_rounded, l10n.selectOption),
+            row(ConversationRowAction.delete, Icons.delete_outline_rounded, l10n.delete, destructive: true),
+          ],
+        ),
+      );
+    },
+  );
+}

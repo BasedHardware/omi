@@ -27,8 +27,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteConversationTitle => 'Beszélgetés törlése?';
 
   @override
-  String get deleteConversationMessage =>
-      'Ez törli a kapcsolódó emlékeket, feladatokat és hangfájlokat is. Ez a művelet nem vonható vissza.';
+  String get deleteConversationMessage => 'Ez törli a kapcsolódó emlékeket, feladatokat és hangfájlokat is.';
 
   @override
   String get confirm => 'Megerősítés';
@@ -7450,7 +7449,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Új 🚀';
+  String get conversationNewIndicator => 'Új';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10202,4 +10201,97 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get pause => 'Szünet';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Törlöd a(z) $count beszélgetést?',
+      one: 'Törlöd az 1 beszélgetést?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Ez a hozzájuk tartozó emlékeket, feladatokat és hangfájlokat is törli.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés törölve',
+      one: '1 beszélgetés törölve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés áthelyezve',
+      one: '1 beszélgetés áthelyezve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Nem sikerült áthelyezni a beszélgetéseket';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Elvetve · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'A rögzített beszélgetések itt jelennek meg. Az elsőhöz koppints a + gombra a Kezdőlapon.';
+
+  @override
+  String get conversationMap => 'Beszélgetéstérkép';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés',
+      one: '1 beszélgetés',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count feladat',
+      one: '1 feladat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Vissza 10 másodpercet';
+
+  @override
+  String get skipForward10Seconds => 'Előre 10 másodpercet';
+
+  @override
+  String get failedToShareRecap => 'Nem sikerült megosztani az összefoglalót';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, pufferelés';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, pufferelés · $minutes perc';
+  }
 }

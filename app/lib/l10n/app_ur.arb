@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "یہ منسلکہ یادیں، ٹاسک، اور آڈیو فائلیں بھی حذف کر دے گا۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+    "deleteConversationMessage": "یہ منسلکہ یادیں، ٹاسک، اور آڈیو فائلیں بھی حذف کر دے گا۔",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "نیا 🚀",
+    "conversationNewIndicator": "نیا",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "رد کریں",
     "keepEditing": "ترمیم جاری رکھیں",
     "discardChangesTitle": "تبدیلیاں رد کریں؟",
-    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔"
+    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔",
+    "pause": "روکیں",
+    "deleteConversationsTitle": "{count, plural, =1{1 گفتگو حذف کریں؟} other{{count} گفتگوئیں حذف کریں؟}}",
+    "deleteConversationsMessage": "اس سے ان کی یادیں، ٹاسک اور آڈیو فائلیں بھی حذف ہو جائیں گی۔",
+    "conversationsDeletedCount": "{count, plural, =1{1 گفتگو حذف ہو گئی} other{{count} گفتگوئیں حذف ہو گئیں}}",
+    "conversationsMovedCount": "{count, plural, =1{1 گفتگو منتقل ہو گئی} other{{count} گفتگوئیں منتقل ہو گئیں}}",
+    "failedToMoveConversations": "گفتگوئیں منتقل نہیں ہو سکیں",
+    "discardedConversationTitle": "مسترد · {duration}",
+    "noConversationsHeroMessage": "آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر + دبائیں۔",
+    "conversationMap": "گفتگو کا نقشہ",
+    "conversationCount": "{count, plural, =1{1 گفتگو} other{{count} گفتگوئیں}}",
+    "taskCount": "{count, plural, =1{1 ٹاسک} other{{count} ٹاسک}}",
+    "skipBack10Seconds": "10 سیکنڈ پیچھے",
+    "skipForward10Seconds": "10 سیکنڈ آگے",
+    "failedToShareRecap": "خلاصہ شیئر نہیں ہو سکا",
+    "captureOfflineBuffering": "آف لائن، بفر ہو رہا ہے",
+    "captureOfflineBufferingFor": "آف لائن، بفر ہو رہا ہے · {minutes} منٹ"
 }

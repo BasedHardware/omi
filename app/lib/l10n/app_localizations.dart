@@ -228,7 +228,7 @@ abstract class AppLocalizations {
   /// Message for delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'This will also delete associated memories, tasks, and audio files. This action cannot be undone.'**
+  /// **'This also deletes its memories, tasks, and audio files.'**
   String get deleteConversationMessage;
 
   /// Confirm button label
@@ -13914,7 +13914,7 @@ abstract class AppLocalizations {
   /// Indicator shown when a conversation is newly created
   ///
   /// In en, this message translates to:
-  /// **'New 🚀'**
+  /// **'New'**
   String get conversationNewIndicator;
 
   /// Count of photos in a conversation
@@ -18770,6 +18770,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your unsaved changes will be lost.'**
   String get discardChangesMessage;
+
+  /// Button label that pauses audio playback
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pause;
+
+  /// Title of the confirm dialog for deleting several selected conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Conversation?} other{Delete {count} Conversations?}}'**
+  String deleteConversationsTitle(int count);
+
+  /// Message of the confirm dialog for deleting several selected conversations
+  ///
+  /// In en, this message translates to:
+  /// **'This also deletes their memories, tasks, and audio files.'**
+  String get deleteConversationsMessage;
+
+  /// Undo toast after deleting several conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation deleted} other{{count} conversations deleted}}'**
+  String conversationsDeletedCount(int count);
+
+  /// Confirmation after moving selected conversations into a folder
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Moved 1 conversation} other{Moved {count} conversations}}'**
+  String conversationsMovedCount(int count);
+
+  /// Error toast when moving selected conversations into a folder fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t move the conversations'**
+  String get failedToMoveConversations;
+
+  /// Row title for a discarded conversation, with its length (e.g. 'Discarded · 12s')
+  ///
+  /// In en, this message translates to:
+  /// **'Discarded · {duration}'**
+  String discardedConversationTitle(String duration);
+
+  /// Empty state message on the Conversations tab for a new user
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations you record show up here. Tap + on Home to record your first one.'**
+  String get noConversationsHeroMessage;
+
+  /// Title of the page (and the button label) that shows conversations on a map
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Map'**
+  String get conversationMap;
+
+  /// A count of conversations (recap cards, map places)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String conversationCount(int count);
+
+  /// A count of tasks (recap cards)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 task} other{{count} tasks}}'**
+  String taskCount(int count);
+
+  /// Accessibility label of the playback control that jumps back 10 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get skipBack10Seconds;
+
+  /// Accessibility label of the playback control that jumps forward 10 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get skipForward10Seconds;
+
+  /// Error toast when sharing a daily recap fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share the recap'**
+  String get failedToShareRecap;
+
+  /// Live capture status: the speech endpoint is unreachable and audio is kept on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Offline, buffering'**
+  String get captureOfflineBuffering;
+
+  /// Live capture status with how many minutes audio has been kept on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Offline, buffering · {minutes} min'**
+  String captureOfflineBufferingFor(int minutes);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

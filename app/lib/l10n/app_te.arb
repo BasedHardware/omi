@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "ఇది సంబంధిత జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది. ఈ చర్య రద్దు చేయబడదు.",
+    "deleteConversationMessage": "ఇది సంబంధిత జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "కొత్త 🚀",
+    "conversationNewIndicator": "కొత్త",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "విస్మరించు",
     "keepEditing": "సవరణ కొనసాగించు",
     "discardChangesTitle": "మార్పులను విస్మరించాలా?",
-    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు."
+    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.",
+    "pause": "పాజ్",
+    "deleteConversationsTitle": "{count, plural, =1{1 సంభాషణను తొలగించాలా?} other{{count} సంభాషణలను తొలగించాలా?}}",
+    "deleteConversationsMessage": "ఇది వాటి జ్ఞాపకాలు, పనులు మరియు ఆడియో ఫైల్‌లను కూడా తొలగిస్తుంది.",
+    "conversationsDeletedCount": "{count, plural, =1{1 సంభాషణ తొలగించబడింది} other{{count} సంభాషణలు తొలగించబడ్డాయి}}",
+    "conversationsMovedCount": "{count, plural, =1{1 సంభాషణ తరలించబడింది} other{{count} సంభాషణలు తరలించబడ్డాయి}}",
+    "failedToMoveConversations": "సంభాషణలను తరలించలేకపోయాము",
+    "discardedConversationTitle": "విస్మరించబడింది · {duration}",
+    "noConversationsHeroMessage": "మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో + నొక్కండి.",
+    "conversationMap": "సంభాషణల మ్యాప్",
+    "conversationCount": "{count, plural, =1{1 సంభాషణ} other{{count} సంభాషణలు}}",
+    "taskCount": "{count, plural, =1{1 పని} other{{count} పనులు}}",
+    "skipBack10Seconds": "10 సెకన్లు వెనక్కి",
+    "skipForward10Seconds": "10 సెకన్లు ముందుకు",
+    "failedToShareRecap": "సారాంశాన్ని షేర్ చేయలేకపోయాము",
+    "captureOfflineBuffering": "ఆఫ్‌లైన్, బఫర్ చేస్తోంది",
+    "captureOfflineBufferingFor": "ఆఫ్‌లైన్, బఫర్ చేస్తోంది · {minutes} ని"
 }

@@ -27,7 +27,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteConversationTitle => '대화를 삭제하시겠습니까?';
 
   @override
-  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.';
+  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다.';
 
   @override
   String get confirm => '확인';
@@ -7293,7 +7293,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => '새로운 🚀';
+  String get conversationNewIndicator => '새로운';
 
   @override
   String conversationPhotosCount(int count) {
@@ -9994,4 +9994,96 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '저장하지 않은 변경 사항이 사라집니다.';
+
+  @override
+  String get pause => '일시정지';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개를 삭제할까요?',
+      one: '대화 1개를 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => '해당 기억, 작업 및 오디오 파일도 삭제됩니다.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 삭제됨',
+      one: '대화 1개 삭제됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 이동됨',
+      one: '대화 1개 이동됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => '대화를 이동하지 못했습니다';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return '삭제 대기 · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 +를 눌러 첫 대화를 녹음하세요.';
+
+  @override
+  String get conversationMap => '대화 지도';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개',
+      one: '작업 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10초 뒤로';
+
+  @override
+  String get skipForward10Seconds => '10초 앞으로';
+
+  @override
+  String get failedToShareRecap => '요약을 공유하지 못했습니다';
+
+  @override
+  String get captureOfflineBuffering => '오프라인, 버퍼링 중';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return '오프라인, 버퍼링 중 · $minutes분';
+  }
 }

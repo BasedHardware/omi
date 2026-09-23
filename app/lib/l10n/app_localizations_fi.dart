@@ -27,8 +27,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteConversationTitle => 'Poista keskustelu?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tämä poistaa myös liittyvät muistot, tehtävät ja äänitiedostot. Tätä toimintoa ei voi kumota.';
+  String get deleteConversationMessage => 'Tämä poistaa myös liittyvät muistot, tehtävät ja äänitiedostot.';
 
   @override
   String get confirm => 'Vahvista';
@@ -7416,7 +7415,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Uusi 🚀';
+  String get conversationNewIndicator => 'Uusi';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10165,4 +10164,97 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Tallentamattomat muutokset menetetään.';
+
+  @override
+  String get pause => 'Tauko';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistetaanko $count keskustelua?',
+      one: 'Poistetaanko 1 keskustelu?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Tämä poistaa myös niiden muistot, tehtävät ja äänitiedostot.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua poistettu',
+      one: '1 keskustelu poistettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua siirretty',
+      one: '1 keskustelu siirretty',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Keskusteluja ei voitu siirtää';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Hylätty · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Tallentamasi keskustelut näkyvät täällä. Tallenna ensimmäinen napauttamalla + Koti-välilehdellä.';
+
+  @override
+  String get conversationMap => 'Keskustelukartta';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua',
+      one: '1 keskustelu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tehtävää',
+      one: '1 tehtävä',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 sekuntia taaksepäin';
+
+  @override
+  String get skipForward10Seconds => '10 sekuntia eteenpäin';
+
+  @override
+  String get failedToShareRecap => 'Yhteenvetoa ei voitu jakaa';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, puskuroidaan';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, puskuroidaan · $minutes min';
+  }
 }

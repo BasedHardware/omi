@@ -27,8 +27,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deleteConversationTitle => 'बातचीत हटाएं?';
 
   @override
-  String get deleteConversationMessage =>
-      'इससे संबंधित यादें, कार्य और ऑडियो फ़ाइलें भी हटा दी जाएंगी। यह क्रिया पूर्ववत नहीं की जा सकती।';
+  String get deleteConversationMessage => 'इससे संबंधित यादें, कार्य और ऑडियो फ़ाइलें भी हटा दी जाएंगी।';
 
   @override
   String get confirm => 'पुष्टि करें';
@@ -7395,7 +7394,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'नया 🚀';
+  String get conversationNewIndicator => 'नया';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10143,4 +10142,97 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'आपके बिना सहेजे गए बदलाव खो जाएंगे।';
+
+  @override
+  String get pause => 'रोकें';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत हटाएं?',
+      one: '1 बातचीत हटाएं?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'इससे उनकी यादें, कार्य और ऑडियो फ़ाइलें भी हट जाएंगी।';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत हटाई गईं',
+      one: '1 बातचीत हटाई गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत ले जाई गईं',
+      one: '1 बातचीत ले जाई गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'बातचीत को ले जाया नहीं जा सका';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'खारिज · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'आपकी रिकॉर्ड की गई बातचीत यहाँ दिखती हैं। पहली रिकॉर्ड करने के लिए होम पर + टैप करें।';
+
+  @override
+  String get conversationMap => 'बातचीत मानचित्र';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत',
+      one: '1 बातचीत',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count कार्य',
+      one: '1 कार्य',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 सेकंड पीछे';
+
+  @override
+  String get skipForward10Seconds => '10 सेकंड आगे';
+
+  @override
+  String get failedToShareRecap => 'सारांश साझा नहीं किया जा सका';
+
+  @override
+  String get captureOfflineBuffering => 'ऑफ़लाइन, बफ़र हो रहा है';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'ऑफ़लाइन, बफ़र हो रहा है · $minutes मिनट';
+  }
 }

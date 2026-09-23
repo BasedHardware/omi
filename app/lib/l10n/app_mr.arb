@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "यामुळे संबंधित स्मृती, कार्य आणि ऑडिओ फाइल देखील हटवल्या जातील. ही कारवाई पूर्ववत केली जाऊ शकत नाही.",
+    "deleteConversationMessage": "यामुळे संबंधित स्मृती, कार्य आणि ऑडिओ फाइल देखील हटवल्या जातील.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "नवीन 🚀",
+    "conversationNewIndicator": "नवीन",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "टाकून द्या",
     "keepEditing": "संपादन सुरू ठेवा",
     "discardChangesTitle": "बदल टाकून द्यायचे?",
-    "discardChangesMessage": "तुमचे जतन न केलेले बदल गमावले जातील."
+    "discardChangesMessage": "तुमचे जतन न केलेले बदल गमावले जातील.",
+    "pause": "थांबवा",
+    "deleteConversationsTitle": "{count, plural, =1{1 संभाषण हटवायचे?} other{{count} संभाषणे हटवायची?}}",
+    "deleteConversationsMessage": "यामुळे त्यांच्या स्मृती, कार्ये आणि ऑडिओ फाइल्सही हटवल्या जातील.",
+    "conversationsDeletedCount": "{count, plural, =1{1 संभाषण हटवले} other{{count} संभाषणे हटवली}}",
+    "conversationsMovedCount": "{count, plural, =1{1 संभाषण हलवले} other{{count} संभाषणे हलवली}}",
+    "failedToMoveConversations": "संभाषणे हलवता आली नाहीत",
+    "discardedConversationTitle": "टाकून दिलेले · {duration}",
+    "noConversationsHeroMessage": "तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर + टॅप करा.",
+    "conversationMap": "संभाषण नकाशा",
+    "conversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
+    "taskCount": "{count, plural, =1{1 कार्य} other{{count} कार्ये}}",
+    "skipBack10Seconds": "10 सेकंद मागे",
+    "skipForward10Seconds": "10 सेकंद पुढे",
+    "failedToShareRecap": "सारांश शेअर करता आला नाही",
+    "captureOfflineBuffering": "ऑफलाइन, बफर होत आहे",
+    "captureOfflineBufferingFor": "ऑफलाइन, बफर होत आहे · {minutes} मिनिटे"
 }

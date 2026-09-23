@@ -27,8 +27,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteConversationTitle => 'ลบบทสนทนา?';
 
   @override
-  String get deleteConversationMessage =>
-      'การดำเนินการนี้จะลบความทรงจำ งาน และไฟล์เสียงที่เกี่ยวข้องด้วย การดำเนินการนี้ไม่สามารถย้อนกลับได้';
+  String get deleteConversationMessage => 'การดำเนินการนี้จะลบความทรงจำ งาน และไฟล์เสียงที่เกี่ยวข้องด้วย';
 
   @override
   String get confirm => 'ยืนยัน';
@@ -7378,7 +7377,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'ใหม่ 🚀';
+  String get conversationNewIndicator => 'ใหม่';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10104,4 +10103,96 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป';
+
+  @override
+  String get pause => 'หยุดชั่วคราว';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบการสนทนา $count รายการใช่ไหม',
+      one: 'ลบการสนทนา 1 รายการใช่ไหม',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'การดำเนินการนี้จะลบความทรงจำ งาน และไฟล์เสียงของรายการเหล่านั้นด้วย';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบการสนทนา $count รายการแล้ว',
+      one: 'ลบการสนทนา 1 รายการแล้ว',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ย้ายการสนทนา $count รายการแล้ว',
+      one: 'ย้ายการสนทนา 1 รายการแล้ว',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'ย้ายการสนทนาไม่สำเร็จ';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'ทิ้งแล้ว · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => 'การสนทนาที่คุณบันทึกจะแสดงที่นี่ แตะ + ที่หน้าหลักเพื่อบันทึกรายการแรก';
+
+  @override
+  String get conversationMap => 'แผนที่การสนทนา';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การสนทนา $count รายการ',
+      one: 'การสนทนา 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'งาน $count รายการ',
+      one: 'งาน 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'ย้อนกลับ 10 วินาที';
+
+  @override
+  String get skipForward10Seconds => 'ข้ามไป 10 วินาที';
+
+  @override
+  String get failedToShareRecap => 'แชร์สรุปไม่สำเร็จ';
+
+  @override
+  String get captureOfflineBuffering => 'ออฟไลน์ กำลังบัฟเฟอร์';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'ออฟไลน์ กำลังบัฟเฟอร์ · $minutes นาที';
+  }
 }

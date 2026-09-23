@@ -27,8 +27,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deleteConversationTitle => 'Apagar conversa?';
 
   @override
-  String get deleteConversationMessage =>
-      'Isso também excluirá as memórias, tarefas e arquivos de áudio associados. Esta ação não pode ser desfeita.';
+  String get deleteConversationMessage => 'Isso também excluirá as memórias, tarefas e arquivos de áudio associados.';
 
   @override
   String get confirm => 'Confirmar';
@@ -7418,7 +7417,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Novo 🚀';
+  String get conversationNewIndicator => 'Novo';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10173,4 +10172,97 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Suas alterações não salvas serão perdidas.';
+
+  @override
+  String get pause => 'Pausar';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Excluir $count conversas?',
+      one: 'Excluir 1 conversa?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Isso também exclui as memórias, tarefas e arquivos de áudio delas.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas excluídas',
+      one: '1 conversa excluída',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas movidas',
+      one: '1 conversa movida',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Não foi possível mover as conversas';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Descartada · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'As conversas que você grava aparecem aqui. Toque em + no Início para gravar a primeira.';
+
+  @override
+  String get conversationMap => 'Mapa de conversas';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas',
+      one: '1 conversa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tarefas',
+      one: '1 tarefa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Voltar 10 segundos';
+
+  @override
+  String get skipForward10Seconds => 'Avançar 10 segundos';
+
+  @override
+  String get failedToShareRecap => 'Não foi possível compartilhar o resumo';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, armazenando';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, armazenando · $minutes min';
+  }
 }

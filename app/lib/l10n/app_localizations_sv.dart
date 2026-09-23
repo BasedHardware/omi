@@ -27,8 +27,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deleteConversationTitle => 'Ta bort konversation?';
 
   @override
-  String get deleteConversationMessage =>
-      'Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler. Denna åtgärd kan inte ångras.';
+  String get deleteConversationMessage => 'Detta kommer också att radera tillhörande minnen, uppgifter och ljudfiler.';
 
   @override
   String get confirm => 'Bekräfta';
@@ -7422,7 +7421,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Ny 🚀';
+  String get conversationNewIndicator => 'Ny';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10168,4 +10167,97 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Dina osparade ändringar går förlorade.';
+
+  @override
+  String get pause => 'Pausa';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Radera $count konversationer?',
+      one: 'Radera 1 konversation?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Detta raderar även deras minnen, uppgifter och ljudfiler.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konversationer raderade',
+      one: '1 konversation raderad',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konversationer flyttade',
+      one: '1 konversation flyttad',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Det gick inte att flytta konversationerna';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Kasserad · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Konversationer du spelar in visas här. Tryck på + på Hem för att spela in den första.';
+
+  @override
+  String get conversationMap => 'Konversationskarta';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konversationer',
+      one: '1 konversation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count uppgifter',
+      one: '1 uppgift',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 sekunder bakåt';
+
+  @override
+  String get skipForward10Seconds => '10 sekunder framåt';
+
+  @override
+  String get failedToShareRecap => 'Det gick inte att dela sammanfattningen';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, buffrar';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, buffrar · $minutes min';
+  }
 }

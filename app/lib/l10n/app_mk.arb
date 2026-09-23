@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Ова ќе избрише и поврзаните спомени, задачи и аудио датотеки. Оваа акција не може да се отповика.",
+    "deleteConversationMessage": "Ова ќе избрише и поврзаните спомени, задачи и аудио датотеки.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Ново 🚀",
+    "conversationNewIndicator": "Ново",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "Отфрли",
     "keepEditing": "Продолжи со уредување",
     "discardChangesTitle": "Да се отфрлат промените?",
-    "discardChangesMessage": "Вашите незачувани промени ќе бидат изгубени."
+    "discardChangesMessage": "Вашите незачувани промени ќе бидат изгубени.",
+    "pause": "Пауза",
+    "deleteConversationsTitle": "{count, plural, =1{Да се избрише 1 разговор?} other{Да се избришат {count} разговори?}}",
+    "deleteConversationsMessage": "Ова ќе ги избрише и нивните спомени, задачи и аудио датотеки.",
+    "conversationsDeletedCount": "{count, plural, =1{Избришан е 1 разговор} other{Избришани се {count} разговори}}",
+    "conversationsMovedCount": "{count, plural, =1{Преместен е 1 разговор} other{Преместени се {count} разговори}}",
+    "failedToMoveConversations": "Разговорите не можеа да се преместат",
+    "discardedConversationTitle": "Отфрлено · {duration}",
+    "noConversationsHeroMessage": "Разговорите што ги снимате се појавуваат тука. Допрете + на почетната за да го снимите првиот.",
+    "conversationMap": "Мапа на разговори",
+    "conversationCount": "{count, plural, =1{1 разговор} other{{count} разговори}}",
+    "taskCount": "{count, plural, =1{1 задача} other{{count} задачи}}",
+    "skipBack10Seconds": "Назад 10 секунди",
+    "skipForward10Seconds": "Напред 10 секунди",
+    "failedToShareRecap": "Резимето не можеше да се сподели",
+    "captureOfflineBuffering": "Офлајн, баферирање",
+    "captureOfflineBufferingFor": "Офлајн, баферирање · {minutes} мин"
 }

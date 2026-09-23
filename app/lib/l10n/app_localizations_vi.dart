@@ -27,8 +27,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteConversationTitle => 'Xóa cuộc trò chuyện?';
 
   @override
-  String get deleteConversationMessage =>
-      'Thao tác này cũng sẽ xóa các kỷ niệm, nhiệm vụ và tệp âm thanh liên quan. Hành động này không thể hoàn tác.';
+  String get deleteConversationMessage => 'Thao tác này cũng sẽ xóa các kỷ niệm, nhiệm vụ và tệp âm thanh liên quan.';
 
   @override
   String get confirm => 'Xác nhận';
@@ -10158,4 +10157,97 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Các thay đổi chưa lưu của bạn sẽ bị mất.';
+
+  @override
+  String get pause => 'Tạm dừng';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count cuộc trò chuyện?',
+      one: 'Xóa 1 cuộc trò chuyện?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Thao tác này cũng xóa kỷ niệm, nhiệm vụ và tệp âm thanh của chúng.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã xóa $count cuộc trò chuyện',
+      one: 'Đã xóa 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã chuyển $count cuộc trò chuyện',
+      one: 'Đã chuyển 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Không thể chuyển các cuộc trò chuyện';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Đã loại bỏ · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Các cuộc trò chuyện bạn ghi âm sẽ hiển thị ở đây. Nhấn + trên Trang chủ để ghi cuộc đầu tiên.';
+
+  @override
+  String get conversationMap => 'Bản đồ cuộc trò chuyện';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện',
+      one: '1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nhiệm vụ',
+      one: '1 nhiệm vụ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Lùi 10 giây';
+
+  @override
+  String get skipForward10Seconds => 'Tiến 10 giây';
+
+  @override
+  String get failedToShareRecap => 'Không thể chia sẻ bản tóm tắt';
+
+  @override
+  String get captureOfflineBuffering => 'Ngoại tuyến, đang lưu tạm';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Ngoại tuyến, đang lưu tạm · $minutes phút';
+  }
 }

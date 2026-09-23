@@ -21,6 +21,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -37,7 +38,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -569,40 +569,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     );
   }
 
-  void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
+  /// One delete path with the list (D5): confirm unless opted out, close the page, then the list
+  /// shows Undo while the provider holds the server delete back.
+  Future<void> _handleDelete(BuildContext context, ConversationDetailProvider provider) async {
     HapticFeedback.mediumImpact();
-    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-    if (connectivityProvider.isConnected) {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () {
-            final convoProvider = context.read<ConversationProvider>();
-            convoProvider.deleteConversation(provider.conversation);
-            Navigator.pop(context); // Close dialog
-            Navigator.pop(context, {'deleted': true}); // Close detail page
-          },
-          context.l10n.deleteConversationTitle,
-          context.l10n.deleteConversationMessage,
-          okButtonText: context.l10n.confirm,
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () => Navigator.pop(context),
-          context.l10n.unableToDeleteConversation,
-          context.l10n.noInternetConnection,
-          singleButton: true,
-          okButtonText: context.l10n.ok,
-        ),
-      );
-    }
+    if (!await confirmConversationDelete(context) || !context.mounted) return;
+    final conversation = provider.conversation;
+    final listContext = Navigator.of(context).context;
+    Navigator.pop(context, {'deleted': true}); // Close detail page
+    unawaited(deleteConversationsWithUndo(listContext, [conversation]));
   }
 
   void _copyContent(BuildContext context, String content) {

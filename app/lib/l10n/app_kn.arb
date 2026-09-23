@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "ಇದು ಸಂಬಂಧಿತ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ. ಈ ಕ್ರಿಯೆಯನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಲಾಗುವುದಿಲ್ಲ.",
+    "deleteConversationMessage": "ಇದು ಸಂಬಂಧಿತ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "ಹೊಸ 🚀",
+    "conversationNewIndicator": "ಹೊಸ",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "ತ್ಯಜಿಸಿ",
     "keepEditing": "ಸಂಪಾದನೆ ಮುಂದುವರಿಸಿ",
     "discardChangesTitle": "ಬದಲಾವಣೆಗಳನ್ನು ತ್ಯಜಿಸುವುದೇ?",
-    "discardChangesMessage": "ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ."
+    "discardChangesMessage": "ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ.",
+    "pause": "ವಿರಾಮ",
+    "deleteConversationsTitle": "{count, plural, =1{1 ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸುವುದೇ?} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸುವುದೇ?}}",
+    "deleteConversationsMessage": "ಇದು ಅವುಗಳ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ.",
+    "conversationsDeletedCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಅಳಿಸಲಾಗಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸಲಾಗಿದೆ}}",
+    "conversationsMovedCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಸರಿಸಲಾಗಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ}}",
+    "failedToMoveConversations": "ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "discardedConversationTitle": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ · {duration}",
+    "noConversationsHeroMessage": "ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ + ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "conversationMap": "ಸಂಭಾಷಣೆ ನಕ್ಷೆ",
+    "conversationCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ} other{{count} ಸಂಭಾಷಣೆಗಳು}}",
+    "taskCount": "{count, plural, =1{1 ಕಾರ್ಯ} other{{count} ಕಾರ್ಯಗಳು}}",
+    "skipBack10Seconds": "10 ಸೆಕೆಂಡ್ ಹಿಂದೆ",
+    "skipForward10Seconds": "10 ಸೆಕೆಂಡ್ ಮುಂದೆ",
+    "failedToShareRecap": "ಸಾರಾಂಶವನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "captureOfflineBuffering": "ಆಫ್‌ಲೈನ್, ಬಫರ್ ಆಗುತ್ತಿದೆ",
+    "captureOfflineBufferingFor": "ಆಫ್‌ಲೈನ್, ಬಫರ್ ಆಗುತ್ತಿದೆ · {minutes} ನಿಮಿಷ"
 }

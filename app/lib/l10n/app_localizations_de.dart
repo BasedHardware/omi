@@ -28,7 +28,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Dadurch werden auch zugehörige Erinnerungen, Aufgaben und Audiodateien gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.';
+      'Dadurch werden auch zugehörige Erinnerungen, Aufgaben und Audiodateien gelöscht.';
 
   @override
   String get confirm => 'Bestätigen';
@@ -7477,7 +7477,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Neu 🚀';
+  String get conversationNewIndicator => 'Neu';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10245,4 +10245,97 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Ihre nicht gespeicherten Änderungen gehen verloren.';
+
+  @override
+  String get pause => 'Pause';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Unterhaltungen löschen?',
+      one: '1 Unterhaltung löschen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Dadurch werden auch ihre Erinnerungen, Aufgaben und Audiodateien gelöscht.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Unterhaltungen gelöscht',
+      one: '1 Unterhaltung gelöscht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Unterhaltungen verschoben',
+      one: '1 Unterhaltung verschoben',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Unterhaltungen konnten nicht verschoben werden';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Verworfen · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Aufgenommene Unterhaltungen erscheinen hier. Tippe auf der Startseite auf +, um deine erste aufzunehmen.';
+
+  @override
+  String get conversationMap => 'Unterhaltungskarte';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Unterhaltungen',
+      one: '1 Unterhaltung',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufgaben',
+      one: '1 Aufgabe',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 Sekunden zurück';
+
+  @override
+  String get skipForward10Seconds => '10 Sekunden vor';
+
+  @override
+  String get failedToShareRecap => 'Zusammenfassung konnte nicht geteilt werden';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, wird zwischengespeichert';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, wird zwischengespeichert · $minutes Min.';
+  }
 }

@@ -27,8 +27,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteConversationTitle => 'Ștergi conversația?';
 
   @override
-  String get deleteConversationMessage =>
-      'Aceasta va șterge și amintirile, sarcinile și fișierele audio asociate. Această acțiune nu poate fi anulată.';
+  String get deleteConversationMessage => 'Aceasta va șterge și amintirile, sarcinile și fișierele audio asociate.';
 
   @override
   String get confirm => 'Confirmă';
@@ -7452,7 +7451,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Nou 🚀';
+  String get conversationNewIndicator => 'Nou';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10210,4 +10209,97 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Modificările nesalvate se vor pierde.';
+
+  @override
+  String get pause => 'Pauză';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi conversațiile ($count)?',
+      one: 'Ștergi 1 conversație?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Se vor șterge și amintirile, sarcinile și fișierele audio ale acestora.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Conversații șterse: $count',
+      one: '1 conversație ștearsă',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Conversații mutate: $count',
+      one: '1 conversație mutată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Conversațiile nu au putut fi mutate';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Respinsă · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Conversațiile pe care le înregistrezi apar aici. Atinge + pe Acasă pentru a o înregistra pe prima.';
+
+  @override
+  String get conversationMap => 'Harta conversațiilor';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Conversații: $count',
+      one: '1 conversație',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarcini: $count',
+      one: '1 sarcină',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Înapoi 10 secunde';
+
+  @override
+  String get skipForward10Seconds => 'Înainte 10 secunde';
+
+  @override
+  String get failedToShareRecap => 'Rezumatul nu a putut fi distribuit';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, se memorează';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, se memorează · $minutes min';
+  }
 }

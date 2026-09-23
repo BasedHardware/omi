@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "این عمل باعث حذف یادداشت‌های، وظایف و فایل‌های صوتی مرتبط نیز می‌شود. این عمل قابل بازگشت نیست.",
+    "deleteConversationMessage": "این عمل باعث حذف یادداشت‌های، وظایف و فایل‌های صوتی مرتبط نیز می‌شود.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "جدید 🚀",
+    "conversationNewIndicator": "جدید",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "دور انداختن",
     "keepEditing": "ادامه ویرایش",
     "discardChangesTitle": "تغییرات دور انداخته شود؟",
-    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت."
+    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت.",
+    "pause": "توقف",
+    "deleteConversationsTitle": "{count, plural, =1{۱ گفتگو حذف شود؟} other{{count} گفتگو حذف شود؟}}",
+    "deleteConversationsMessage": "این کار یادها، وظایف و فایل‌های صوتی آن‌ها را هم حذف می‌کند.",
+    "conversationsDeletedCount": "{count, plural, =1{۱ گفتگو حذف شد} other{{count} گفتگو حذف شد}}",
+    "conversationsMovedCount": "{count, plural, =1{۱ گفتگو منتقل شد} other{{count} گفتگو منتقل شد}}",
+    "failedToMoveConversations": "انتقال گفتگوها ممکن نشد",
+    "discardedConversationTitle": "کنارگذاشته · {duration}",
+    "noConversationsHeroMessage": "گفتگوهایی که ضبط می‌کنید اینجا نمایش داده می‌شوند. برای ضبط اولین گفتگو در خانه روی + بزنید.",
+    "conversationMap": "نقشه گفتگوها",
+    "conversationCount": "{count, plural, =1{۱ گفتگو} other{{count} گفتگو}}",
+    "taskCount": "{count, plural, =1{۱ وظیفه} other{{count} وظیفه}}",
+    "skipBack10Seconds": "۱۰ ثانیه عقب",
+    "skipForward10Seconds": "۱۰ ثانیه جلو",
+    "failedToShareRecap": "اشتراک‌گذاری خلاصه ممکن نشد",
+    "captureOfflineBuffering": "آفلاین، در حال ذخیره موقت",
+    "captureOfflineBufferingFor": "آفلاین، در حال ذخیره موقت · {minutes} دقیقه"
 }
