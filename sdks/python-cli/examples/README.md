@@ -1,11 +1,8 @@
-# Python SDK Quickstart Guides
+# Python CLI Examples
 
-Below are the available quickstart guides for the OMI Python SDK:
+These examples demonstrate how to use the OMI Python CLI.
 
-- `quickstart.md` – English
-- `quickstart.es.md` – Spanish
-- `quickstart.fr.md` – French
-- `quickstart.de.md` – German
-- `quickstart.bn.md` – Bengali
+## Quickstart Guides
 
-Feel free to open the guide that matches your preferred language.
+- [quickstart.md](quickstart.md)
+- [quickstart.bn.md](quickstart.bn.md)
