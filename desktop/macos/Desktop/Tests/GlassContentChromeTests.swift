@@ -115,7 +115,6 @@ final class GlassContentChromeTests: XCTestCase {
     "MainWindow/Pages/MemoryGraph/MemoryAtlasTerritoryLabels.swift",
     "MainWindow/Components/ConversationListView.swift",
     "MainWindow/Components/GlassPageStates.swift",
-    "MainWindow/Components/ChatSessionsSidebar.swift",
     "MainWindow/Pages/AppsPage.swift",
     "MainWindow/ChatFirst/ChatFirstGoalsPage.swift",
     "MainWindow/Components/LiveTranscriptView.swift",

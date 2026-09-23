@@ -329,10 +329,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard",
       settingId: "floatingbar.pttsounds"),
     SettingsSearchItem(
-      name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
-      keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",
-      settingId: "advanced.preferences.multichat"),
-    SettingsSearchItem(
       name: "Launch at Login", subtitle: "Start Omi automatically when you log in",
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),

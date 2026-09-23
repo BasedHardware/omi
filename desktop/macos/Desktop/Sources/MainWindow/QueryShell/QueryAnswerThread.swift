@@ -37,8 +37,7 @@ struct QueryAnswerThread: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
         messages: chatProvider.messages,
-        conversationIdentity: chatProvider.currentSessionId
-          ?? ChatConversationIdentity.mainChatDefault,
+        conversationIdentity: ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
