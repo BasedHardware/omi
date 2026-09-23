@@ -426,7 +426,10 @@ def get_conversations(
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+        logger.warning(f"Invalid conversation category {e}")
+        raise HTTPException(
+            status_code=400, detail="Invalid conversation category. Please provide valid category names."
+        )
 
     conversations = conversations_db.get_conversations(
         uid,
@@ -601,8 +604,7 @@ def search_action_items(
     try:
         return mcp_action_items.search_action_items(uid, query, limit=limit)
     except ValueError as e:
-        logger.warning(f"search_action_items ValueError: {e}")
-        raise HTTPException(status_code=422, detail="Invalid action item search parameters")
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
@@ -614,8 +616,7 @@ def create_action_item(
     try:
         return mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed)
     except ValueError as e:
-        logger.warning(f"create_action_item ValueError: {e}")
-        raise HTTPException(status_code=422, detail="Invalid action item payload")
+        raise HTTPException(status_code=422, detail=str(e))
     except mcp_action_items.ActionItemError as e:
         raise _action_item_write_error(e)
 
@@ -645,8 +646,7 @@ def update_action_item(
             uid, action_item_id, description=body.description, due_at=body.due_at
         )
     except ValueError as e:
-        logger.warning(f"update_action_item ValueError: {e}")
-        raise HTTPException(status_code=422, detail="Invalid action item update payload")
+        raise HTTPException(status_code=422, detail=str(e))
     except mcp_action_items.ActionItemError as e:
         raise _action_item_write_error(e)
 
