@@ -52,7 +52,7 @@ def _source(row: Mapping[str, Any]) -> Optional[str]:
 
 
 def _member(conversation_id: str, row: Mapping[str, Any], evidence: Optional[dict] = None) -> dict:
-    member = {
+    member: dict[str, Any] = {
         'id': conversation_id,
         'source': _source(row),
         'started_at': _aware(row.get('started_at')),
@@ -85,7 +85,7 @@ def _live(row: Optional[Mapping[str, Any]]) -> bool:
 
 
 def _joinable(row: Optional[Mapping[str, Any]]) -> bool:
-    return _live(row) and not row.get('discarded') and row.get('status') == 'completed'
+    return row is not None and _live(row) and not row.get('discarded') and row.get('status') == 'completed'
 
 
 def transcript_fingerprint(row: Optional[Mapping[str, Any]]) -> Optional[str]:
@@ -157,11 +157,13 @@ def join_capture_group(
             rows[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         # Deleted, closed, or departed members (e.g. absorbed by sync, or regrouped
         # by a race with deletion) are pruned rather than advertised.
-        live = {
+        existing_id = (existing or {}).get('id')
+        live: dict[str, Mapping[str, Any]] = {
             cid: row
             for cid, row in rows.items()
-            if _live(row)
-            and (cid in (first_id, second_id) or (row.get(CAPTURE_GROUP_FIELD) or {}).get('id') == existing['id'])
+            if row is not None
+            and _live(row)
+            and (cid in (first_id, second_id) or (row.get(CAPTURE_GROUP_FIELD) or {}).get('id') == existing_id)
         }
         if existing and set(live) == {m.get('id') for m in existing.get('members', [])}:
             return existing['id']  # already grouped together; nothing to prune
