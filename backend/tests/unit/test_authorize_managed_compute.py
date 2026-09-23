@@ -8,6 +8,7 @@ known feature (Target 3); every other dependency failure denies.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -593,3 +594,147 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
     }
     assert produced == expected
     assert expected == set(mc.DECISION_REASONS)
+
+
+# --- 11. one structured decision log per authorization -----------------------------------------
+
+
+_PRIVATE_UID = 'user-should-not-appear-9f3a'
+
+
+def _decision_lines(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [record for record in caplog.records if record.message.startswith('managed_compute_decision ')]
+
+
+def _expected_decision_line(
+    *,
+    feature: str,
+    funding_owner: str,
+    outcome: str,
+    reason: str,
+    plan: str,
+    plan_resolved: str,
+) -> str:
+    return (
+        f'managed_compute_decision request_id=none feature={feature} funding_owner={funding_owner} '
+        f'outcome={outcome} reason={reason} plan={plan} plan_resolved={plan_resolved}'
+    )
+
+
+# red-proof: log only on deny, or log once per return site (a second line appears)
+def test_allow_paid_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        True,
+        'plan_paid',
+        PlanType.plus,
+        True,
+    )
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='allowed',
+        reason='plan_paid',
+        plan='plus',
+        plan_resolved='true',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: silent basic deny (the prod gap) — zero decision lines
+def test_deny_basic_not_entitled_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.basic)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan) == (False, 'basic_not_entitled', PlanType.basic)
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='basic_not_entitled',
+        plan='basic',
+        plan_resolved='true',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: unknown-feature deny returns before the log
+def test_deny_unknown_feature_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, UNKNOWN_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        False,
+        'unknown_feature',
+        None,
+        False,
+    )
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=UNKNOWN_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='unknown_feature',
+        plan='none',
+        plan_resolved='false',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: exception path logs the WARNING and skips the decision line, or logs it at WARNING
+def test_authorization_unavailable_keeps_warning_and_emits_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('dependency unavailable')
+
+    monkeypatch.setattr(mc, 'get_all_configured_features', boom)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        False,
+        'authorization_unavailable',
+        None,
+        False,
+    )
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+        and record.message == 'managed compute authorization unavailable: RuntimeError'
+    ]
+    assert len(warnings) == 1
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='authorization_unavailable',
+        plan='none',
+        plan_resolved='false',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: a logging fault inside the authorize try becomes authorization_unavailable
+def test_decision_log_failure_does_not_change_the_answer(monkeypatch, mc) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('log sink down')
+
+    monkeypatch.setattr(mc.logger, 'info', boom)
+    decision = _authorize(mc, OFF_ALLOWLIST_FEATURE)
+    assert (decision.allowed, decision.reason, decision.plan) == (True, 'plan_paid', PlanType.plus)
