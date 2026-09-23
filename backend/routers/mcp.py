@@ -350,7 +350,7 @@ def get_memories(
     memories = result["memories"]
     for memory in memories:
         if memory.get('is_locked', False):
-            content = memory.get('content', '')
+            content = memory.get('content') or ''
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
     return memories
 

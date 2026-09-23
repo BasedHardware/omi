@@ -1039,7 +1039,7 @@ def execute_tool(
         # Apply locked content truncation
         for memory in result["memories"]:
             if memory.get('is_locked', False):
-                content = memory.get('content', '')
+                content = memory.get('content') or ''
                 memory['content'] = (content[:70] + '...') if len(content) > 70 else content
 
         return result

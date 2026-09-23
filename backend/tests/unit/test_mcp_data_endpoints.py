@@ -1089,3 +1089,40 @@ def test_rest_allowed_empty_account_returns_empty_without_error(run_surface):
 @pytest.mark.parametrize('run_surface', _SSE_SURFACES)
 def test_sse_allowed_empty_account_returns_empty_without_error(run_surface):
     assert run_surface(_allowed_empty_result())["memories"] == []
+
+
+def _locked_memories_result():
+    return {
+        'memories': [
+            {'id': 'null', 'is_locked': True, 'content': None},
+            {'id': 'long', 'is_locked': True, 'content': 'x' * 75},
+            {'id': 'open', 'is_locked': False, 'content': None},
+        ]
+    }
+
+
+def test_rest_locked_memory_with_null_content_truncates_instead_of_500():
+    """A locked memory stored with content=None must not 500 the REST list.
+
+    get_memories reads memory.get('content', ''); the default only applies to an
+    ABSENT key, so an explicit null reaches len(None) and fails the endpoint. The
+    locked truncation now coerces the null to '' first.
+    """
+    with patch.object(
+        rest, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
+    ), patch.object(rest, 'collect_filtered_memories', return_value=_locked_memories_result()):
+        out = rest.get_memories(auth_context=SimpleNamespace(uid=UID))
+    assert [m['id'] for m in out] == ['null', 'long', 'open']
+    assert out[0]['content'] == ''
+    assert out[1]['content'] == 'x' * 70 + '...'
+
+
+def test_sse_locked_memory_with_null_content_truncates_instead_of_500():
+    """Same defect through the get_memories MCP tool dispatch."""
+    with patch.object(
+        sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
+    ), patch.object(sse, 'collect_filtered_memories', return_value=_locked_memories_result()):
+        out = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+    assert [m['id'] for m in out['memories']] == ['null', 'long', 'open']
+    assert out['memories'][0]['content'] == ''
+    assert out['memories'][1]['content'] == 'x' * 70 + '...'

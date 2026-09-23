@@ -159,3 +159,50 @@ def test_search_skips_malformed_not_500():
     ):
         resp = ai_mod.search_action_items(query='meeting', limit=10, uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']
+
+
+def test_locked_item_with_null_description_is_truncated_not_500():
+    """A locked item stored with description=None must not 500 the whole list.
+
+    router code reads item.get('description', ''); dict.get only applies its
+    default to an ABSENT key, so a stored explicit null reaches len(None) and
+    raises TypeError for the entire page. The locked-description truncation now
+    coerces the null to '' before slicing.
+    """
+    item = {'id': 'a1', 'description': None, 'completed': False, 'is_locked': True}
+    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=[item]), patch.object(
+        ai_mod, 'list_cache_ttl_seconds', return_value=0
+    ), patch.object(ai_mod, 'enforce_hot_client_list_ceiling', return_value=None):
+        resp = ai_mod.get_action_items(
+            limit=50,
+            offset=0,
+            completed=None,
+            conversation_id=None,
+            start_date=None,
+            end_date=None,
+            due_start_date=None,
+            due_end_date=None,
+            uid='uid1',
+        )
+    assert [i.id for i in resp['action_items']] == ['a1']
+    assert resp['action_items'][0].description == ''
+
+
+def test_locked_item_with_long_description_is_still_truncated():
+    """Guard the truncation the null-coercion sits in front of."""
+    item = {'id': 'a1', 'description': 'x' * 75, 'completed': False, 'is_locked': True}
+    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=[item]), patch.object(
+        ai_mod, 'list_cache_ttl_seconds', return_value=0
+    ), patch.object(ai_mod, 'enforce_hot_client_list_ceiling', return_value=None):
+        resp = ai_mod.get_action_items(
+            limit=50,
+            offset=0,
+            completed=None,
+            conversation_id=None,
+            start_date=None,
+            end_date=None,
+            due_start_date=None,
+            due_end_date=None,
+            uid='uid1',
+        )
+    assert resp['action_items'][0].description == 'x' * 70 + '...'
