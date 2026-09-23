@@ -1,15 +1,14 @@
-# Python CLI Examples
+# Primjeri za Python CLI SDK
 
-This directory contains example projects and quickstart guides for using the Omi Python CLI.
+Ovdje se nalaze različiti primjeri koji demonstriraju kako koristiti `omi-cli` za izgradnju LLM aplikacija i agenata.
 
-## Quickstart Guides
+## Dostupni primjeri
 
-- [English](agent_quickstart.md)
-- [Croatian](agent_quickstart.hr.md)
-- [Spanish](agent_quickstart.es.md)
-- [German](agent_quickstart.de.md)
+- **agent_quickstart.md** – Brzi početak agenta (engleski)
+- **agent_quickstart.hr.md** – Brzi početak agenta (hrvatski) ← **novi**
+- **tool_integration.md** – Kako integrirati prilagođene alate
+- **streaming_output.md** – Korištenje streaming odgovora
+- **multi_agent_workflow.md** – Radni tok s više agenata
 
-## Other Examples
-
-- `agent_quickstart.py`: A minimal agent script.
-- `agent_config.yaml`: Sample configuration file.
+Svaki primjer sadrži detaljne upute, kodne blokove i preporučene naredbe.  
+Odaberite jezik koji vam najviše odgovara i započnite s eksperimentiranjem!
