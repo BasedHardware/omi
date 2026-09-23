@@ -1,6 +1,6 @@
 """Unit tests for imports router exception sanitization.
 
-Verifies that file streaming and I/O errors during archive upload in import_limitless
+Verifies that file streaming and I/O errors during archive upload in import_limitless_data
 are logged server-side and masked in HTTP 500 response bodies without exposing
 internal filesystem paths or OS errno details.
 """
@@ -14,7 +14,7 @@ from routers import imports as imports_routes
 
 @pytest.mark.asyncio
 async def test_import_limitless_masks_io_error_detail(monkeypatch):
-    """Ensure import_limitless raises sanitized 500 without internal paths or errno strings."""
+    """Ensure import_limitless_data raises sanitized 500 without internal paths or errno strings."""
     mock_job = MagicMock(id="job-uuid-1234")
     monkeypatch.setattr(imports_routes, "create_import_job", MagicMock(return_value=mock_job))
 
@@ -37,7 +37,7 @@ async def test_import_limitless_masks_io_error_detail(monkeypatch):
     mock_upload.read = AsyncMock(return_value=b"data")
 
     with pytest.raises(HTTPException) as exc_info:
-        await imports_routes.import_limitless(
+        await imports_routes.import_limitless_data(
             file=mock_upload,
             language="en",
             uid="test-user-999",
