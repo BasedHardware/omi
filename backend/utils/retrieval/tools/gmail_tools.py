@@ -3,7 +3,6 @@ Tools for accessing Gmail messages.
 """
 
 import base64
-import traceback
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -198,31 +197,30 @@ async def get_gmail_messages_tool(
     Returns:
         Formatted list of emails with their details.
     """
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Gmail',
-        'Gmail is not connected. Please connect your Google account from settings to view your emails.',
-        'Gmail access token not found. Please reconnect your Google account from settings.',
-        'Error checking Gmail connection',
-    )
-    if access_err:
-        return access_err
-    assert uid is not None
-    assert integration is not None
-    assert access_token is not None
-
-    # A Google grant created before Gmail was requested carries no Gmail scope; calling
-    # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
-    if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
-        return (
-            'Gmail access has not been granted for this Google account. '
-            'Please reconnect Gmail from settings and approve email access.'
-        )
-
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Gmail',
+            'Gmail is not connected. Please connect your Google account from settings to view your emails.',
+            'Gmail access token not found. Please reconnect your Google account from settings.',
+            'Error checking Gmail connection',
+        )
+        if access_err:
+            return access_err
+        if not uid or not integration or not access_token:
+            return "Gmail is not connected. Please connect your Google account from settings to view your emails."
+
+        # A Google grant created before Gmail was requested carries no Gmail scope; calling
+        # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
+        if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
+            return (
+                'Gmail access has not been granted for this Google account. '
+                'Please reconnect Gmail from settings and approve email access.'
+            )
+
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
 
         # Build label_ids if label is provided
@@ -286,6 +284,5 @@ async def get_gmail_messages_tool(
 
         return result.strip()
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
-        traceback.print_exc()
-        return f"Unexpected error fetching Gmail messages: {str(e)}"
+        logger.error("Error in get_gmail_messages_tool: %s", type(e).__name__, exc_info=True)
+        return "Unexpected error fetching Gmail messages."
