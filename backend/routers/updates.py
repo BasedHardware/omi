@@ -732,8 +732,8 @@ def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
 
     html = "<ul>"
     for change in changes:
-        change_type = change.get('type', 'improvement')
-        message = change.get('message', '')
+        change_type = change.get('type') or 'improvement'
+        message = str(change.get('message') or '')
         icon = {'feature': '&#10024;', 'fix': '&#128027;', 'improvement': '&#9889;', 'breaking': '&#9888;'}.get(
             change_type, '&#8226;'
         )
@@ -759,13 +759,13 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
     ]
 
     for release_item in items:
-        version = release_item['version']
-        short_version = release_item['shortVersion']
-        changes_html = _format_changelog_html(release_item.get('changes', []))
-        pub_date = release_item.get('date', '')
-        url = release_item.get('url', '')
-        ed_signature = release_item.get('edSignature', '').strip()
-        channel = release_item.get('channel', 'beta')
+        version = str(release_item.get('version') or '')
+        short_version = str(release_item.get('shortVersion') or '')
+        changes_html = _format_changelog_html(release_item.get('changes') or [])
+        pub_date = str(release_item.get('date') or '')
+        url = str(release_item.get('url') or '')
+        ed_signature = str(release_item.get('edSignature') or '').strip()
+        channel = release_item.get('channel') or 'beta'
 
         if not url:
             continue
@@ -842,11 +842,11 @@ async def get_desktop_appcast_xml(
             version_info = entry["version_info"]
             kv = entry["metadata"]
 
-            changelog = kv.get("changelog", [])
-            mandatory = kv.get("mandatory", "false").lower() == "true"
-            ed_signature = kv.get("edSignature", "")
+            changelog = kv.get("changelog") or []
+            mandatory = str(kv.get("mandatory") or "false").lower() == "true"
+            ed_signature = kv.get("edSignature") or ""
 
-            changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
+            changes = _parse_changelog_to_changes(changelog, release.get("body") or "")
             if identity == "beta":
                 beta_enclosure = await _resolve_beta_identity_enclosure(entry)
                 if beta_enclosure is None:
