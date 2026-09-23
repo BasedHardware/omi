@@ -39,6 +39,7 @@ from utils.memory.belief_model import (
     temporal_view_allows_record,
     memory_use_suppressed,
 )
+from database.document_ids import document_id_from_seed
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -1772,16 +1773,21 @@ def _existing_identical_add_row(
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
-    if item.status != MemoryItemStatus.active:
+    if not _is_live_identical_row(item, data.get("content")):
         return None
+    return item
+
+
+def _is_live_identical_row(item: MemoryItem, content: Any) -> bool:
+    """Whether a resend of ``content`` is already satisfied by ``item``."""
+    if item.status != MemoryItemStatus.active:
+        return False
     if (item.promotion or {}).get("user_review") is False:
         # A rejected row remains active for audit/history, but it is not a
         # successful retry target.  Reusing it would silently resurrect a
         # user-rejected statement under the old content-derived identity.
-        return None
-    if (item.content or "").strip() != (data.get("content") or "").strip():
-        return None
-    return item
+        return False
+    return (item.content or "").strip() == str(content or "").strip()
 
 
 _DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.15, 0.3)
@@ -1936,6 +1942,43 @@ def write_canonical_extraction_memory(
 
 
 _EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
+_EXTERNAL_MEMORY_ID_REISSUE_LIMIT = 25
+
+
+def _is_content_derived_memory_id(memory_id: Any, content: Any) -> bool:
+    # Only an id derived from this exact text may move. A caller-supplied id
+    # reused for different text is a genuine conflict and keeps failing.
+    text = str(content or "")
+    return bool(memory_id) and memory_id in {document_id_from_seed(text), document_id_from_seed(text.strip())}
+
+
+def _available_external_memory_id(uid: str, memory_id: str, content: Any, *, db_client: Any) -> str:
+    """Return the row id an external create should write, given rows that already hold its identity.
+
+    External memory ids are derived from the submitted text, but a row keeps its
+    id when it is edited, superseded, or rejected. A resend of the original text
+    would then collide with a row that no longer holds it and fail the add on
+    every retry (#17296). The user does not have that text any more, so the
+    resend is a new memory and gets a fresh identity, as a re-add after delete
+    does. The reissued id is deterministic, so retrying the same resend still
+    lands on one row, and a row that does hold the text is reused.
+    """
+    collections = MemoryCollections(uid=uid)
+    candidate = memory_id
+    for attempt in range(1, _EXTERNAL_MEMORY_ID_REISSUE_LIMIT + 1):
+        snapshot = db_client.document(f"{collections.memory_items}/{candidate}").get()
+        if not getattr(snapshot, "exists", False):
+            return candidate
+        if _is_live_identical_row(MemoryItem(**_snapshot_payload(snapshot)), content):
+            return candidate
+        candidate = (
+            "mem_"
+            + deterministic_contract_id(
+                "canonical-external-memory-occupied-reissue",
+                {"uid": uid, "memory_id": memory_id, "attempt": attempt},
+            )[:32]
+        )
+    raise RuntimeError("canonical external write exhausted memory identity reissues")
 
 
 def _reissued_external_evidence(
@@ -2032,6 +2075,8 @@ def write_canonical_external_memory(
                     },
                 )[:32]
             )
+    if _is_content_derived_memory_id(payload.get("id"), payload.get("content")):
+        payload["id"] = _available_external_memory_id(uid, str(payload["id"]), payload.get("content"), db_client=client)
     memory_id = write_canonical_extraction_memory(
         uid,
         payload,
