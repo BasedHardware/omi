@@ -4,7 +4,7 @@
 existing transcript. This helper is the missing audio→transcript step: merge
 the conversation's stored chunks, run the same prerecorded STT path the sync
 pipeline uses, and return replacement segments. The route then hands those
-segments to ``process_conversation(..., is_reprocess=True)``.
+segments to ``process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)``.
 """
 
 from __future__ import annotations

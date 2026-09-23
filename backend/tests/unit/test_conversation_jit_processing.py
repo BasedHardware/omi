@@ -865,9 +865,7 @@ def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
     assert _attribute_name(reprocess_kwargs.get("trigger")) == "USER_REPROCESS"
 
     transcription_kwargs = _call_keywords(conversations, "reprocess_conversation_transcription", "process_conversation")
-    assert _constant_bool(transcription_kwargs.get("force_process")) is True
-    assert _constant_bool(transcription_kwargs.get("is_reprocess")) is True
-    assert _constant_bool(transcription_kwargs.get("bypass_jit_first_open")) is True
+    assert _attribute_name(transcription_kwargs.get("trigger")) == "USER_REPROCESS"
 
     finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")
     assert _attribute_name(finalize_kwargs.get("trigger")) == "CLIENT_FINALIZE"
@@ -877,7 +875,7 @@ def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
     assert PROCESSING_MODES[ProcessingTrigger.USER_REPROCESS].bypass_jit_first_open
 
     # Mode lives in one table: no call site may pass a mode flag directly.
-    for kwargs in (create_kwargs, reprocess_kwargs, finalize_kwargs):
+    for kwargs in (create_kwargs, reprocess_kwargs, transcription_kwargs, finalize_kwargs):
         assert not {"force_process", "is_reprocess", "bypass_jit_first_open"} & set(kwargs)
 
     finalizer_source = (BACKEND_DIR / "utils/conversations/finalizer.py").read_text(encoding="utf-8")

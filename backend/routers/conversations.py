@@ -806,7 +806,7 @@ def reprocess_conversation_transcription(
 
     Unlike ``POST .../reprocess``, which only regenerates the summary from the
     current transcript, this replaces transcript segments from stored audio and
-    then calls ``process_conversation`` with the same reprocess flags.
+    then calls ``process_conversation`` with the same ``USER_REPROCESS`` trigger.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     if conversations_db.is_soft_deleted(conversation):
@@ -828,9 +828,7 @@ def reprocess_conversation_transcription(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=ProcessingTrigger.USER_REPROCESS,
         app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
     )
 

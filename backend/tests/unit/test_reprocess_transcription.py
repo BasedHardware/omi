@@ -2,8 +2,8 @@
 
 ``POST /v1/conversations/{id}/reprocess`` only regenerates the summary from the
 existing transcript. This path must replace segments from stored audio and then
-reuse ``process_conversation(..., is_reprocess=True)``. Soft-deleted tombstones
-stay rejected; discarded conversations stay revivable.
+reuse ``process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)``.
+Soft-deleted tombstones stay rejected; discarded conversations stay revivable.
 """
 
 from types import SimpleNamespace
@@ -15,6 +15,7 @@ from fastapi import HTTPException
 import routers.conversations as conv_router
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import AppUsageAttribution
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_transcription import (
     StoredAudioEmptyTranscriptError,
     StoredAudioTranscriptionFailedError,
@@ -187,7 +188,6 @@ class TestReprocessTranscriptionRoute:
             result = conv_router.reprocess_conversation_transcription(conversation_id='c1', uid='u1')
         assert result is model
         assert model.transcript_segments is new_segments
-        assert process.call_args.kwargs['force_process'] is True
-        assert process.call_args.kwargs['is_reprocess'] is True
-        assert process.call_args.kwargs['bypass_jit_first_open'] is True
+        assert process.call_args.kwargs['trigger'] is ProcessingTrigger.USER_REPROCESS
         assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+        assert not {'force_process', 'is_reprocess', 'bypass_jit_first_open'} & set(process.call_args.kwargs)

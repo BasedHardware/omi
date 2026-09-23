@@ -104,7 +104,7 @@ and background processing.
   one conversation (`POST /v1/conversations/{id}/reprocess-transcription`).
   It merges stored chunks and runs the same prerecorded STT helper the sync
   pipeline uses, then the route hands the new segments to
-  `process_conversation(..., is_reprocess=True)`. It is not a processing-queue
+  `process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)`. It is not a processing-queue
   UI and does not revive the removed orphaned-WAV post-processing router.
 - The old orphaned WAV retranscription util (`postprocess_conversation.py`) was
   removed: the historical Flutter upload (`memoryPostProcessing`) and
