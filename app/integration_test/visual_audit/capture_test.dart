@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +23,7 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -93,23 +93,8 @@ Future<void> _pump(WidgetTester tester, Widget page, {List<SingleChildWidget> pr
           navigatorKey: globalNavigatorKey,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
-          // Matches main.dart's theme; Android font metrics (Roboto).
-          theme: ThemeData(
-            useMaterial3: false,
-            colorScheme:
-                const ColorScheme.dark(primary: Colors.black, secondary: Color(0xFF35343B), surface: Colors.black38),
-            snackBarTheme: const SnackBarThemeData(
-                backgroundColor: Color(0xFF1F1F25),
-                contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500)),
-            textTheme: TextTheme(
-                titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200)),
-            textSelectionTheme: const TextSelectionThemeData(
-                cursorColor: Colors.white, selectionColor: Colors.white24, selectionHandleColor: Colors.white),
-            cupertinoOverrideTheme: const CupertinoThemeData(primaryColor: Colors.white),
-          ),
+          // The production theme itself (lib/ui/omi_theme.dart); Android font metrics (Roboto).
+          theme: buildOmiTheme(),
           home: page,
         )),
   ));

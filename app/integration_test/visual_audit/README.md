@@ -27,8 +27,8 @@ new-user and existing-data starters/editable selection/draft/reply/copy; recordi
 neutral host; their surrounding home navigation is outside this capture lane.
 
 Constraints: 390×844 logical pixels, Android/Roboto theme metrics, 2× PNGs,
-English dark theme. The theme mirrors `main.dart`; keep it synchronized when
-changing that theme. Backend, authentication, storage and platform boundaries
+English dark theme. The theme is the production one: both `main.dart` and
+this harness call `buildOmiTheme()` (`lib/ui/omi_theme.dart`). Backend, authentication, storage and platform boundaries
 are synthetic. HTTP is restricted to `127.0.0.1` before a connection is made.
 The existing fixture backend app-search response logs a missing `hasNext`
 warning; marketplace results and installed-app selection are not audited.
