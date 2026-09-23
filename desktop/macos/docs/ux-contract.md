@@ -96,6 +96,14 @@ A row inside a day group shows only the time. Group rows by the same date the ro
 and every copied transcript. "You", then the assigned person's name, then "Speaker N" (1-based,
 matching mobile). Raw diarization labels (`SPEAKER_00`) never reach the UI.
 
+A transcript turn is drawn by `SpeakerBubbleView`, live or saved: name · time in the name row, the
+user's bubble in `Ink.rowFillHover`, other speakers in `PageGlass.speakerTints`. A capture must not
+change its look when it is saved.
+
+Find inside a transcript is `TranscriptFindField` over `TranscriptSearchModel`: ⌘F opens it, ⌘G /
+⇧⌘G (Return / ⇧Return) step with wraparound, "N of M" counts, and Esc (`.editing`) clears and closes
+it before the pane's own Esc.
+
 ## 7. Typography, radius, spacing
 
 - Type: `.scaledFont(size: OmiType.<rung>)` — micro 10, caption 11, body 13, subheading 15, heading 20,

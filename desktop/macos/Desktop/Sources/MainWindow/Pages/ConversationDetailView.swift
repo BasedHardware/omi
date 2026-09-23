@@ -105,6 +105,9 @@ struct ConversationDetailView: View {
   // Transcript presentation state. Summary and transcript are exclusive panes so neither one is
   // compressed into an unreadable split view at the minimum window width.
   @State private var showTranscriptDrawer = false
+  @State private var transcriptSearch = TranscriptSearchModel()
+  @State private var isTranscriptSearchOpen = false
+  @FocusState private var isTranscriptSearchFocused: Bool
 
   // Entry animation
   @State private var hasAppeared = false
@@ -915,6 +918,14 @@ struct ConversationDetailView: View {
 
         Spacer()
 
+        TranscriptFindField(
+          isOpen: isTranscriptSearchOpen,
+          query: Binding(get: { transcriptSearch.query }, set: { runTranscriptSearch($0) }),
+          countLabel: transcriptSearch.countLabel, hasMatches: transcriptSearch.currentMatch != nil,
+          isFocused: $isTranscriptSearchFocused, onOpen: openTranscriptSearch,
+          onStep: { forward in forward ? transcriptSearch.next() : transcriptSearch.previous() },
+          onClose: closeTranscriptSearch)
+
         // Refresh: re-fetch the transcript and rebuild the audio player from
         // fresh signed URLs, so a stale detail or an expired link recovers
         // without leaving and reopening the conversation.
@@ -1007,9 +1018,40 @@ struct ConversationDetailView: View {
           .onChange(of: activeCaptureTranscriptSegmentID) { _, segmentID in
             followCapturePlayback(using: proxy, segmentID: segmentID)
           }
+          .onChange(of: transcriptSearch.revealRequest) { _, _ in
+            guard let segmentID = transcriptSearch.currentMatch?.segmentID else { return }
+            proxy.scrollTo(segmentID, anchor: .center)
+          }
         }
       }
     }
+    // Esc clears and closes find before the pane's own Esc leaves the transcript.
+    .onEscapeKey(priority: .editing) {
+      guard isTranscriptSearchOpen else { return false }
+      closeTranscriptSearch()
+      return true
+    }
+    .onChange(of: displayConversation.transcriptSegments.count) { _, _ in
+      if transcriptSearch.isActive { runTranscriptSearch(transcriptSearch.query) }
+    }
+    .onDisappear { closeTranscriptSearch() }
+  }
+
+  private func openTranscriptSearch() {
+    isTranscriptSearchOpen = true
+    DispatchQueue.main.async { isTranscriptSearchFocused = true }
+  }
+
+  private func closeTranscriptSearch() {
+    runTranscriptSearch("")
+    isTranscriptSearchOpen = false
+    isTranscriptSearchFocused = false
+  }
+
+  private func runTranscriptSearch(_ query: String) {
+    transcriptSearch.update(
+      query: query,
+      segments: displayConversation.transcriptSegments.map { (id: $0.backendId ?? $0.id, text: $0.text) })
   }
 
   // MARK: - Transcript Bubbles (shared)
@@ -1036,7 +1078,9 @@ struct ConversationDetailView: View {
             Task { await capturePlayback.playFromMoment(wallOffset: segment.start) }
           }
           : nil,
-        isMomentPlayable: canSeekCaptureMoment(segment)
+        isMomentPlayable: canSeekCaptureMoment(segment),
+        searchHighlights: transcriptSearch.ranges(inSegment: segmentID),
+        currentSearchHighlight: transcriptSearch.currentRange(inSegment: segmentID)
       )
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.xs)
