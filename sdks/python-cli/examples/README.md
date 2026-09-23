@@ -14,6 +14,10 @@
   (Portuguese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
+  calendar: JSON export to an iCalendar (.ics) file.
+* [`action_items_ics.md`](action_items_ics.md) — put open action items with due
+  dates on a calendar: JSON export to an iCalendar (.ics) file.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
   report of conversations: one section per day, printable, no scripts.
