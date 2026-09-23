@@ -664,6 +664,33 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     persisted.assert_not_called()
 
 
+def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
+    """Free-tier desktop never reaches the model, but the rules still run."""
+    from models.transcript_segment import TranscriptSegment
+
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[TranscriptSegment(text='Mm-hmm.', speaker='SPEAKER_00', is_user=False, start=0, end=1)],
+        source=ConversationSource.desktop,
+    )
+    deferred_conversation = MagicMock()
+    deferred_conversation.id = 'deferred-filler'
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    created = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
+    monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+
+    process_conversation._store_deferred_conversation('uid', new_request)
+
+    payload = created.call_args.args[1]
+    assert payload['discarded'] is True
+    assert deferred_conversation.discarded is True
+    assert payload[process_conversation.RELEVANCE_DECISION_FIELD]['reason'] == 'filler_only'
+
+
 def _segments_saying(text):
     """Segments for a mocked conversation: the relevance rules read segment text."""
     return [MagicMock(text=text, start=0.0, end=5.0)]

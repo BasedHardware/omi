@@ -55,13 +55,15 @@ def decide_relevance(
     user_kept: bool,
     exempt: bool,
     trusted_wake_word: bool,
-    model_discards: Callable[[Callable[[Exception], None]], bool],
+    model_discards: Optional[Callable[[Callable[[Exception], None]], bool]],
     calendar_retains: Callable[[], bool],
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
     ``model_discards`` receives an error callback; the model tier fails open to
-    keep, and the callback lets the decision record say so.
+    keep, and the callback lets the decision record say so. ``None`` means the
+    plan withholds the model (free-tier desktop): the rules still run, and what
+    they cannot settle is kept.
     ``calendar_retains`` is consulted only for a discard verdict: a scrap
     recorded inside a booked meeting is evidence, never noise (SCA-381).
     """
@@ -90,6 +92,9 @@ def decide_relevance(
             return keep('rule', rule)
         if verdict == 'discard':
             return discard_unless_calendar('rule', rule)
+
+    if model_discards is None:
+        return keep('policy', 'model_withheld')
 
     model_failed = False
 

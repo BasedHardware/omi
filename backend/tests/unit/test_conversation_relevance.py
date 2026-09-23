@@ -170,3 +170,32 @@ def test_stored_decision_reports_the_structuring_models_empty_title():
         'discard', 'model', 'empty_title', ProcessingTrigger.USER_REPROCESS
     )
     assert final_relevance(None, discarded=True) is None
+
+
+def test_withheld_model_keeps_what_the_rules_cannot_settle():
+    """Free-tier desktop: the rules still run; the ambiguous middle is kept."""
+    decision = decide_relevance(
+        trigger=ProcessingTrigger.CAPTURE_END,
+        texts=['Coming over there in a second.'],
+        speech_seconds=None,
+        has_photos=False,
+        user_kept=False,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=None,
+        calendar_retains=MagicMock(return_value=False),
+    )
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
+
+    filler = decide_relevance(
+        trigger=ProcessingTrigger.CAPTURE_END,
+        texts=['Mm-hmm.'],
+        speech_seconds=None,
+        has_photos=False,
+        user_kept=False,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=None,
+        calendar_retains=MagicMock(return_value=False),
+    )
+    assert (filler.verdict, filler.decided_by, filler.reason) == ('discard', 'rule', 'filler_only')
