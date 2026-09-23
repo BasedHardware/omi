@@ -111,14 +111,15 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     }
     let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
-      // Only summon the shell when Omi already holds the foreground. Most of
-      // these warnings come from capture the owner never asked for — the
-      // sleep-wake restart, the preferred-microphone reconnect, and the
-      // silent-mic watchdog all arm capture on their own and alert when it
-      // fails — so revealing would take the screen away from whatever the
-      // owner is working in, for a failure they did not trigger. The alert
-      // keeps its place in the queue and `applicationDidBecomeActive` drains
-      // it the moment they come back to Omi.
+      // Only summon the shell when Omi already holds the foreground. Warnings
+      // still reach here from work the owner never started:
+      // `MicrophoneCaptureAuthorizationPolicy.action(for:userInitiated:)`
+      // abandons an automatic start before the pre-capture permission alert,
+      // but the exhausted silent-mic watchdog's terminal alert and a failed
+      // automatic `startTranscription` both raise one afterwards. Revealing
+      // for those takes the screen away from whatever the owner is working in,
+      // for a failure they did not trigger. The alert keeps its place in the
+      // queue and `applicationDidBecomeActive` drains it when they come back.
       if isAppActive() {
         revealMainWindowIfNeeded()
       }
