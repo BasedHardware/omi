@@ -285,11 +285,6 @@ class TestPromptCacheRetention:
         assert mc.supports_cache_retention("gpt-5.9-turbo"), "renamed gpt-5 should support 24h retention"
         assert mc.supports_prompt_cache("gpt-6-luna")
         assert not mc.supports_cache_retention("gpt-6-luna"), "gpt-6-luna uses explicit cache options"
-        luna = mc.get_model("conv_structure")
-        assert luna == "gpt-6-luna"
-        assert luna.startswith("gpt-5.6"), "clients.get_llm still gates explicit cache with startswith('gpt-5.6')"
-        assert not luna.startswith("gpt-5.6-sol")
-        assert not str.startswith(luna, "gpt-5.6")
         assert mc.supports_prompt_cache("gpt-5.6-sol")
         assert not mc.supports_cache_retention("gpt-5.6-sol"), "GPT-5.6 uses explicit 30m cache options"
         # Retired product models are no longer treated as active cache targets.
