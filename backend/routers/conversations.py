@@ -1,9 +1,13 @@
 import asyncio
 import hashlib
+from io import BytesIO
+import math
+import os
+import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timedelta, timezone
 
 import database.conversations as conversations_db
 import database._client as db_client_module
@@ -24,6 +28,7 @@ from models.conversation import (
     ConversationAnalytics,
     ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
+    CreateConversation,
     CreateConversationResponse,
     DeleteActionItemRequest,
     MergeConversationsRequest,
@@ -48,7 +53,7 @@ from utils.conversations.mcp_transcript_search import (
     merge_typesense_page_with_transcript_hits,
     search_transcript_conversation_ids,
 )
-from models.conversation_enums import ConversationStatus, ConversationVisibility
+from models.conversation_enums import ConversationSource, ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
@@ -72,7 +77,14 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
-from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import (
+    db_executor,
+    llm_executor,
+    postprocess_executor,
+    run_blocking,
+    submit_with_context,
+    sync_executor,
+)
 from utils.memory.memory_service import MemoryService
 from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -117,6 +129,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+ALLOWED_AUDIO_EXTENSIONS = {'.mp3', '.m4a', '.wav', '.aac', '.ogg', '.flac'}
+AUDIO_IMPORT_MAX_BYTES = 200_000_000  # 200MB
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
@@ -2131,3 +2146,130 @@ def merge_conversations(
         warning=warning_message,
         conversation_ids=request.conversation_ids,
     )
+
+
+@router.post(
+    "/v1/conversations/upload-audio",
+    response_model=CreateConversationResponse,
+    tags=['conversations'],
+)
+async def upload_audio_to_conversation(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """
+    Import an external audio file to create a conversation.
+    Transcribes with diarization, generates title/summary/action items/memories,
+    and returns CreateConversationResponse.
+    """
+    from pydub import AudioSegment
+    from utils.stt.pre_recorded import postprocess_words, prerecorded_from_bytes
+
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format '{ext}'. Supported formats: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}",
+        )
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+
+    if len(raw_bytes) > AUDIO_IMPORT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum allowed size of {AUDIO_IMPORT_MAX_BYTES // 1_000_000}MB",
+        )
+
+    # Decode and normalize to 16kHz mono WAV for reliable STT transcription across providers
+    format_hint = ext.lstrip('.').lower()
+    try:
+
+        def _decode_and_resample(data: bytes, fmt: str) -> Tuple[bytes, float]:
+            audio_seg = AudioSegment.from_file(BytesIO(data), format=fmt if fmt else None)
+            duration_s = float(audio_seg.duration_seconds)
+            if duration_s <= 0:
+                raise ValueError("Audio duration must be greater than zero")
+            audio_seg = audio_seg.set_frame_rate(16000).set_channels(1)
+            wav_out = BytesIO()
+            audio_seg.export(wav_out, format="wav")
+            return wav_out.getvalue(), duration_s
+
+        wav_bytes, duration = await run_blocking(sync_executor, _decode_and_resample, raw_bytes, format_hint)
+    except Exception as e:
+        logger.warning(f"Failed to decode audio file {filename}: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not decode audio file: {e}")
+
+    # Transcribe audio using pre-recorded STT with speaker diarization
+    try:
+        words = await run_blocking(
+            sync_executor,
+            prerecorded_from_bytes,
+            wav_bytes,
+            sample_rate=16000,
+            diarize=True,
+            language=language,
+        )
+    except Exception as e:
+        logger.error(f"Failed to transcribe uploaded audio {filename}: {e}")
+        raise HTTPException(status_code=502, detail="Audio transcription service failed")
+
+    if not words:
+        raise HTTPException(status_code=400, detail="No speech detected in audio file")
+
+    # Post-process words into transcript segments
+    duration_int = int(math.ceil(duration))
+    segments = postprocess_words(words, duration=duration_int, skip_n_seconds=0)
+    if not segments:
+        raise HTTPException(status_code=400, detail="No speech segments could be extracted from audio file")
+
+    # Compute timestamps
+    now = datetime.now(timezone.utc)
+    audio_dur_td = timedelta(seconds=max(duration, max(s.end for s in segments) if segments else 0))
+    started_at = now - audio_dur_td
+    finished_at = now
+
+    create_data = CreateConversation(
+        started_at=started_at,
+        finished_at=finished_at,
+        transcript_segments=segments,
+        source=ConversationSource.phone,
+        language=language,
+        imported=True,
+    )
+
+    # Process conversation: generates title, overview, action items, memories, and persists to Firestore
+    persisted = False
+    derived_effects_disposition = DerivedEffectsDisposition.RUN
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    def record_derived_effects_disposition(current: DerivedEffectsDisposition) -> None:
+        nonlocal derived_effects_disposition
+        derived_effects_disposition = current
+
+    processed_conversation = await run_blocking(
+        postprocess_executor,
+        process_conversation,
+        uid,
+        language or 'en',
+        create_data,
+        persistence_observer=record_persistence,
+        derived_effects_disposition_observer=record_derived_effects_disposition,
+        trigger=ProcessingTrigger.CLIENT_FINALIZE,
+    )
+
+    if not persisted:
+        latest = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, processed_conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    if derived_effects_disposition == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS:
+        return CreateConversationResponse(conversation=processed_conversation, messages=[])
+
+    messages = await trigger_external_integrations(uid, processed_conversation)
+    return CreateConversationResponse(conversation=processed_conversation, messages=messages)

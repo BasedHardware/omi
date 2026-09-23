@@ -4848,6 +4848,31 @@
         "title": "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post",
         "type": "object"
       },
+      "Body_upload_audio_to_conversation_v1_conversations_upload_audio_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_audio_to_conversation_v1_conversations_upload_audio_post",
+        "type": "object"
+      },
       "Body_upload_file_chat_v2_files_post": {
         "properties": {
           "files": {
@@ -39431,6 +39456,94 @@
           }
         ],
         "summary": "Generate Conversation Topic Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/upload-audio": {
+      "post": {
+        "description": "Import an external audio file to create a conversation.\nTranscribes with diarization, generates title/summary/action items/memories,\nand returns CreateConversationResponse.",
+        "operationId": "upload_audio_to_conversation_v1_conversations_upload_audio_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_audio_to_conversation_v1_conversations_upload_audio_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateConversationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Audio To Conversation",
         "tags": [
           "conversations"
         ]

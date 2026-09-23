@@ -49,6 +49,42 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   return null;
 }
 
+Future<CreateConversationResponse?> uploadAudioConversation(
+  File audioFile, {
+  String? language,
+  UploadProgressCallback? onUploadProgress,
+}) async {
+  try {
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/conversations/upload-audio',
+      files: [audioFile],
+      fileFieldName: 'file',
+      fields: {
+        if (language != null) 'language': language,
+      },
+      onUploadProgress: onUploadProgress,
+    );
+    if (response.statusCode == 200) {
+      return CreateConversationResponse.fromGeneratedWireJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    } else {
+      Logger.error('Failed to upload audio conversation: ${response.statusCode} ${response.body}');
+      return null;
+    }
+  } catch (e, stackTrace) {
+    Logger.error('uploadAudioConversation exception: $e');
+    if (!isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(
+        e,
+        stackTrace,
+        userAttributes: {'action': 'uploadAudioConversation'},
+      );
+    }
+    return null;
+  }
+}
+
 Future<List<ServerConversation>> getConversations({
   int limit = 50,
   int offset = 0,

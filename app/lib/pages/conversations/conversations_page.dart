@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -26,6 +28,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -278,6 +281,93 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   // Public method to trigger goal creation from outside
   void addGoal() {
     _goalsWidgetKey.currentState?.addGoal();
+  }
+
+  Future<void> _pickAndImportAudio(BuildContext context) async {
+    try {
+      final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg', 'flac'],
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final filePath = result.files.single.path;
+      if (filePath == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotAccessFile), backgroundColor: Colors.red.shade700),
+          );
+        }
+        return;
+      }
+
+      final file = File(filePath);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                  width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+              const SizedBox(width: 12),
+              Expanded(child: Text(context.l10n.importStarted)),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+      final conversation = await convoProvider.importAudioFile(file);
+      if (!context.mounted) return;
+
+      if (conversation != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Imported "${conversation.structured.title.isNotEmpty ? conversation.structured.title : 'Audio conversation'}"',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(convoProvider.audioImportError ?? context.l10n.failedToStartImport),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } on PlatformException catch (e) {
+      Logger.debug('FilePicker PlatformException: ${e.code} - ${e.message}');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.importErrorOpeningFilePicker(e.message ?? '')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      Logger.debug('Audio import error: $e\n$stackTrace');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.importErrorGeneric(readableError(e))),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -535,6 +625,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
             ),
           ),
+          const SizedBox(height: 20),
+          TextButton.icon(
+            key: const Key('empty_import_audio_button'),
+            onPressed: () => _pickAndImportAudio(context),
+            icon: const Icon(Icons.audio_file_outlined, color: Colors.white70, size: 18),
+            label: const Text('Import Audio File', style: TextStyle(color: Colors.white70, fontSize: 14)),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+          ),
         ],
       ),
     );
@@ -710,16 +812,27 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                           if (!convoProvider.showDailySummaries)
-                            IconButton(
-                              key: const Key('conversation_map_button'),
-                              tooltip: '${context.l10n.conversations} · ${context.l10n.location}',
-                              icon: const Icon(Icons.map_outlined, color: Colors.white),
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ConversationMapPage(conversations: convoProvider.displayedConversations),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  key: const Key('import_audio_button'),
+                                  tooltip: 'Import Audio',
+                                  icon: const Icon(Icons.audio_file_outlined, color: Colors.white),
+                                  onPressed: () => _pickAndImportAudio(context),
                                 ),
-                              ),
+                                IconButton(
+                                  key: const Key('conversation_map_button'),
+                                  tooltip: '${context.l10n.conversations} · ${context.l10n.location}',
+                                  icon: const Icon(Icons.map_outlined, color: Colors.white),
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ConversationMapPage(conversations: convoProvider.displayedConversations),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                         ],
                       ),

@@ -751,6 +751,11 @@ export interface Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post {
   file: string;
 }
 
+export interface Body_upload_audio_to_conversation_v1_conversations_upload_audio_post {
+  file: string;
+  language?: string | null;
+}
+
 export interface Body_upload_file_chat_v2_files_post {
   files: Array<string>;
 }
@@ -5073,6 +5078,7 @@ export interface OmiApiSchemas {
   "Body_sync_local_files_v2_v2_sync_local_files_post": Body_sync_local_files_v2_v2_sync_local_files_post;
   "Body_update_app_v1_apps__app_id__patch": Body_update_app_v1_apps__app_id__patch;
   "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post": Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post;
+  "Body_upload_audio_to_conversation_v1_conversations_upload_audio_post": Body_upload_audio_to_conversation_v1_conversations_upload_audio_post;
   "Body_upload_file_chat_v2_files_post": Body_upload_file_chat_v2_files_post;
   "Body_upload_frame_request_v1_frame_requests__request_id__upload_post": Body_upload_frame_request_v1_frame_requests__request_id__upload_post;
   "Body_upload_profile_v3_upload_audio_post": Body_upload_profile_v3_upload_audio_post;
@@ -6632,6 +6638,16 @@ export interface OmiApiPaths {
       operationId: "generate_conversation_topic_endpoint_v1_conversations_topic_post";
       responses: {
         "200": ConversationTopicResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/upload-audio": {
+    post: {
+      operationId: "upload_audio_to_conversation_v1_conversations_upload_audio_post";
+      responses: {
+        "200": CreateConversationResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12103,6 +12119,26 @@ export async function generate_conversation_topic_endpoint_v1_conversations_topi
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function upload_audio_to_conversation_v1_conversations_upload_audio_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<CreateConversationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/upload-audio`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18912,4 +18948,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 443 client methods generated.
+// Total: 444 client methods generated.
