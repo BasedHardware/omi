@@ -1475,7 +1475,11 @@ async def test_cap_cut_next_post_starts_at_emitted_sentence_end(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_empty_at_cap_slides_pace_and_later_post_recovers(monkeypatch):
+@pytest.mark.parametrize('pace', ['6', '15'])
+async def test_empty_at_cap_slides_six_seconds_and_later_post_recovers(monkeypatch, pace):
+    # The slide is fixed, not the pace: at a 15 s pace, sliding by pace would
+    # discard 15 s of speech the model returned nothing for.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', pace)
     posted = []
     monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
     empty, later = b'\x01\x00' * 16000 * 24, b'\x02\x00' * 16000 * 6
@@ -1557,5 +1561,60 @@ async def test_idle_remainder_posts_without_close(monkeypatch):
         sock._wake.set()
         await _REAL_SLEEP(0)
     assert len(client.requests) == n_posts
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def _head_socket(monkeypatch, payloads):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = SeqClient(payloads)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    return sock, client
+
+
+def _job(sock, seconds: float) -> window._WindowJob:
+    pcm = b'\x01\x00' * int(16000 * seconds)
+    return window._WindowJob(pcm, 0.0, seconds, 0, len(pcm), False, False)
+
+
+@pytest.mark.asyncio
+async def test_skipped_leading_speech_is_reposted_and_prepended(monkeypatch):
+    later = window.RawSegment('Later sentence.', 15.1, 23.8)
+    sock, client = _head_socket(monkeypatch, [{'segments': [{'text': 'Skipped head.', 'start': 1.5, 'end': 14.8}]}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    before = window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get()
+    out = await sock._recover_skipped_head(job, [later])
+    assert [s.text for s in out] == ['Skipped head.', 'Later sentence.']
+    body = _posted_pcm(client.requests[0][1])
+    assert len(body) == sock._to_bytes(15.1)
+    assert window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get() == before + 1
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_normal_lead_in_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    first = window.RawSegment('Starts on time.', 1.2, 9.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_late_first_segment_after_nonspeech_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    # The VAD saw only 1 s of speech before the first segment: that gap is a pause.
+    sock._speech_spans.append((sock._to_bytes(9.0), sock._to_bytes(10.0)))
+    sock._speech_spans.append((sock._to_bytes(12.0), len(job.pcm)))
+    first = window.RawSegment('After a pause.', 12.1, 20.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
