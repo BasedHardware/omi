@@ -1,12 +1,16 @@
-# Flýtileiðbeiningar fyrir LLM/Agent með `omi-cli` (Íslenska)
+# Flýtileiðbeiningar fyrir LLM/Agent (Icelandic)
 
-Þessi leiðbeining sýnir hvernig á að setja upp og keyra **agent‑drifna** vinnuflæði með `omi-cli` í Python umhverfi. Allir kóðablokkir, skipanir og breytur eru óbreyttir – aðeins lýsingarnar eru þýddar á íslensku.
+Þessi leiðbeining er ætlað þeim sem vilja nota **omi-cli** til að búa til og keyra LLM/Agent verkflæði í Python umhverfi. Hún er í samræmi við upprunalegu `agent_quickstart.md` og inniheldur sömu kóða- og skipanalínur, en öll lýsingar og skýringar eru á íslensku.
 
-## 1. Forsendur
+---
 
-- **Python 3.9+** er uppsett.
-- `omi-cli` er sett upp í kerfinu (sjá [Installation Guide](../installation.md)).
-- LLM API lykill (t.d. OpenAI, Anthropic) er stilltur í umhverfisbreytum eða í `~/.omi/config.yaml`.
+## Forspurningar
 
-## 2. Setja upp umhverfið
+- **Python 3.9+** (mælt er með 3.11)
+- **omi-cli** uppsett (sjá [Installation](#uppsetning))
+- LLM API lykill (OpenAI, Anthropic, o.s.frv.) ef þú ætlar að nota fjarlæga LLM
+
+---
+
+## Uppsetning
 

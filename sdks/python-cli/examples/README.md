@@ -1,13 +1,24 @@
-# Python‑CLI Examples
+# OMI Python‑CLI Examples
 
-Welcome to the collection of example projects for the Omi Python CLI SDK. Each example demonstrates a specific use‑case or workflow.
+This directory contains example projects and quick‑start guides for using the **omi‑cli** tool with the Python SDK.
 
-## Available Guides
+## Quick‑start Guides
 
-- [Agent Quickstart (English)](agent_quickstart.md)
-- [Agent Quickstart (Icelandic)](agent_quickstart.is.md) <!-- New Icelandic translation -->
-- [Streaming Chat Example](streaming_chat.md)
-- [Tool Use Example](tool_use.md)
-- [Function Calling Example](function_calling.md)
+- **English** – [`agent_quickstart.md`](agent_quickstart.md) – Basic LLM/Agent workflow.
+- **Spanish** – [`agent_quickstart.es.md`](agent_quickstart.es.md) – Guía rápida en español.
+- **German** – [`agent_quickstart.de.md`](agent_quickstart.de.md) – Schnellstart auf Deutsch.
+- **French** – [`agent_quickstart.fr.md`](agent_quickstart.fr.md) – Guide de démarrage rapide en français.
+- **Icelandic** – [`agent_quickstart.is.md`](agent_quickstart.is.md) – Flýtileiðbeiningar á íslensku.  <!-- New entry -->
 
-> **Tip:** All code blocks are ready to copy‑paste. Follow the steps in the guide for your preferred language.
+## Example Projects
+
+- **my‑agent/** – A minimal agent project generated with `omi agent create my-agent`.
+- **data‑pipeline/** – Demonstrates a multi‑step data processing pipeline using OMI components.
+
+## How to Use
+
+1. Pick the language guide that matches your preference.
+2. Follow the steps in the guide to create, configure, and run an agent.
+3. Explore the example projects for more advanced use‑cases.
+
+For further documentation, visit the [official OMI docs](https://github.com/basedhardware/omi/tree/main/docs).
