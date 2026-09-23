@@ -35,6 +35,12 @@ enum ConversationDetailMeta {
     return "\(dayText) · \(interval.string(from: start, to: end))"
   }
 
+  /// "You, Speaker 1 +2": the first names that fit a metadata line, then how many more.
+  static func peopleSummary(_ names: [String], limit: Int = 2) -> String {
+    guard names.count > limit else { return names.joined(separator: ", ") }
+    return names.prefix(limit).joined(separator: ", ") + " +\(names.count - limit)"
+  }
+
   /// Who spoke, by the names the transcript shows: "You", a named person, or "Speaker N".
   /// First appearance order, with the reader first.
   static func participants(in segments: [TranscriptSegment], people: [Person]) -> [String] {
@@ -55,27 +61,33 @@ enum ConversationDetailMeta {
 
 // MARK: - Header
 
-/// Title block and page actions for one conversation, shared by the summary and transcript panes
+/// Title bar and page actions for one conversation, shared by the summary and transcript panes
 /// so switching panes never loses the title, the way back, or the actions.
 ///
-/// Hierarchy, top to bottom: what it is (emoji, title, status), when and how (date, time,
-/// duration, device, category, folder), who and where, and — only for an event more than one
-/// device recorded — the other recordings. Destructive and rarely used actions live in the
-/// overflow menu so the one red thing on the page is not permanently on screen.
-struct ConversationDetailHeader<BannerInset: View, Recordings: View>: View {
+/// Two rows and nothing else. Row one is identity and control: back, emoji, title, the pane
+/// switch, and the three actions a reader reaches for (star, share, more). Row two is one
+/// secondary line of facts — when, how long, who, what, where it is filed — ending in the
+/// device stack when more than one device recorded the event. Anything rarer lives in the
+/// overflow menu, which keeps the one red action off the page until it is asked for.
+struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: View>: View {
   let conversation: ServerConversation
   let folders: [Folder]
   let people: [Person]
+  let pane: ConversationDetailPane
   let canCopyTranscript: Bool
   let isGroupedEvent: Bool
   let onBack: () -> Void
+  let onSelectPane: (ConversationDetailPane) -> Void
   let onToggleStar: () -> Void
   let onRename: () -> Void
   let onMoveToFolder: ((String?) -> Void)?
   let onCopyTranscript: () -> Void
+  let onDiscussInChat: (() -> Void)?
   let onDelete: () -> Void
   @ViewBuilder let bannerInset: () -> BannerInset
   @ViewBuilder let recordings: () -> Recordings
+  /// The pane's own tool at the end of the metadata line (transcript re-sync).
+  @ViewBuilder let trailing: () -> Trailing
 
   private var folderName: String? {
     guard let id = conversation.folderId else { return nil }
@@ -88,102 +100,108 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View>: View {
   }
 
   var body: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      backButton
-
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-          Text(conversation.structured.emoji.isEmpty ? "\u{1F4AC}" : conversation.structured.emoji)
-            .scaledFont(size: OmiType.heading)
-          Text(conversation.displayTitle)
-            .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(titleColor)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .help(conversation.displayTitle)
-          ConversationStatusBadge(state: conversation.displayState)
+        titleRow
+        HStack(spacing: OmiSpacing.sm) {
+          // Indented to the title, past the back button and the emoji.
+          metaLine
+            .padding(.leading, 28 + OmiSpacing.sm)
+          Spacer(minLength: OmiSpacing.sm)
+          trailing()
         }
-
-        metaLine
-        peopleLine
-        recordings()
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-
       bannerInset()
+    }
+  }
 
+  // MARK: Row one
+
+  private var titleRow: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Button(action: onBack) {
+        DetailIconLabel(systemImage: "chevron.left", color: Ink.primary)
+      }
+      .buttonStyle(.plain)
+      .help("Back to conversations")
+      .accessibilityLabel("Back")
+
+      Text(conversation.structured.emoji.isEmpty ? "\u{1F4AC}" : conversation.structured.emoji)
+        .scaledFont(size: OmiType.heading)
+      Text(conversation.displayTitle)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(titleColor)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .help(conversation.displayTitle)
+        .layoutPriority(-1)
+      ConversationStatusBadge(state: conversation.displayState)
+
+      Spacer(minLength: OmiSpacing.md)
+
+      ConversationDetailPaneSwitch(
+        pane: pane, transcriptCount: conversation.transcriptSegments.count, onSelect: onSelectPane)
       actions
     }
   }
 
-  // MARK: Pieces
+  // MARK: Row two
 
-  private var backButton: some View {
-    // A stadium chip, not blue text: Back is already a button, and a blue word beside a black
-    // headline is the loudest thing on the panel.
-    Button(action: onBack) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: "chevron.left")
-        Text("Back")
-      }
-      .scaledFont(size: OmiType.caption, weight: .semibold)
-      .foregroundColor(Ink.primary)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(height: 28)
-      .glassChip()
+  /// One line of facts. When it is short of room the category goes first, then people and place;
+  /// both stay in their tooltips and the transcript.
+  private var metaLine: some View {
+    ViewThatFits(in: .horizontal) {
+      metaItems(includeCategory: true, includeSecondary: true)
+      metaItems(includeCategory: false, includeSecondary: true)
+      metaItems(includeCategory: false, includeSecondary: false)
     }
-    .buttonStyle(.plain)
-    .help("Back to conversations")
   }
 
-  private var metaLine: some View {
+  private func metaItems(includeCategory: Bool, includeSecondary: Bool) -> some View {
     let start = conversation.startedAt ?? conversation.createdAt
+    let participants = ConversationDetailMeta.participants(in: conversation.transcriptSegments, people: people)
+    let address = conversation.geolocation?.address.flatMap { $0.isEmpty ? nil : $0 }
+    let category = conversation.structured.category
     return HStack(spacing: OmiSpacing.xs) {
       metaText(ConversationDetailMeta.when(start: start, end: conversation.finishedAt))
-      separatorDot
+      dot
       metaText(conversation.formattedDuration)
-      // A grouped event names its devices in the recordings row below; saying one of them here
-      // would single out whichever recording happens to be open.
+      // A grouped event names its devices in the stack at the end; naming one here would single
+      // out whichever recording happens to be open.
       if !isGroupedEvent, let source = conversation.source, source != .unknown {
-        separatorDot
+        dot
         Label(source.captureLabel, systemImage: source.captureSymbol)
           .labelStyle(DetailMetaLabelStyle())
       }
-      let category = conversation.structured.category
-      if !category.isEmpty && category != "other" {
-        separatorDot
+      if includeSecondary, !participants.isEmpty {
+        dot
+        Label(ConversationDetailMeta.peopleSummary(participants), systemImage: "person.2")
+          .labelStyle(DetailMetaLabelStyle())
+          .help(participants.joined(separator: ", "))
+      }
+      if includeCategory, !category.isEmpty, category != "other" {
+        dot
         metaText(category.capitalized)
       }
       if let folderName {
-        separatorDot
+        dot
         Label(folderName, systemImage: "folder")
           .labelStyle(DetailMetaLabelStyle())
       }
+      if includeSecondary, let address {
+        dot
+        Label(address, systemImage: "mappin.and.ellipse")
+          .labelStyle(DetailMetaLabelStyle())
+          .help(address)
+      }
+      recordings()
+        .padding(.leading, OmiSpacing.xxs)
     }
     .lineLimit(1)
+    .fixedSize(horizontal: true, vertical: false)
   }
 
-  @ViewBuilder
-  private var peopleLine: some View {
-    let participants = ConversationDetailMeta.participants(in: conversation.transcriptSegments, people: people)
-    let address = conversation.geolocation?.address.flatMap { $0.isEmpty ? nil : $0 }
-    if !participants.isEmpty || address != nil {
-      HStack(spacing: OmiSpacing.md) {
-        if !participants.isEmpty {
-          Label(participants.joined(separator: ", "), systemImage: "person.2")
-            .labelStyle(DetailMetaLabelStyle())
-        }
-        if let address {
-          Label(address, systemImage: "mappin.and.ellipse")
-            .labelStyle(DetailMetaLabelStyle())
-        }
-      }
-      .lineLimit(1)
-      .truncationMode(.tail)
-    }
-  }
-
-  private var separatorDot: some View {
+  private var dot: some View {
     metaText("·")
   }
 
@@ -195,6 +213,17 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View>: View {
 
   private var actions: some View {
     HStack(spacing: OmiSpacing.xs) {
+      if let onDiscussInChat {
+        Button(action: onDiscussInChat) {
+          DetailIconLabel(systemImage: "bubble.left.and.bubble.right")
+        }
+        .buttonStyle(.plain)
+        .help("Discuss in Chat")
+        .accessibilityLabel("Discuss this conversation in Chat")
+        // Preserve the capture archive's automation contract.
+        .accessibilityIdentifier("chat-first-capture-discuss-\(conversation.id)")
+      }
+
       Button(action: onToggleStar) {
         DetailIconLabel(
           systemImage: conversation.starred ? "star.fill" : "star",
@@ -214,19 +243,16 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View>: View {
         }
       )
 
-      Button(action: onCopyTranscript) {
-        DetailIconLabel(systemImage: "doc.on.doc")
-      }
-      .buttonStyle(.plain)
-      .disabled(!canCopyTranscript)
-      .help("Copy transcript")
-
       moreMenu
     }
   }
 
   private var moreMenu: some View {
     Menu {
+      Button(action: onCopyTranscript) {
+        Label("Copy Transcript", systemImage: "doc.on.doc")
+      }
+      .disabled(!canCopyTranscript)
       Button(action: onRename) {
         Label("Rename…", systemImage: "pencil")
       }
@@ -274,34 +300,30 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View>: View {
   }
 }
 
-// MARK: - Pane bar
+// MARK: - Pane switch
 
-/// Summary / Transcript switch, with the pane's own tools on the trailing edge.
-struct ConversationDetailPaneBar<Trailing: View>: View {
+/// Summary / Transcript as one segmented capsule, sized to sit in the title row.
+struct ConversationDetailPaneSwitch: View {
   let pane: ConversationDetailPane
   let transcriptCount: Int
   let onSelect: (ConversationDetailPane) -> Void
-  @ViewBuilder let trailing: () -> Trailing
 
   var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      tab(.summary, title: "Summary", systemImage: "text.alignleft", count: nil)
-      tab(.transcript, title: "Transcript", systemImage: "text.quote", count: transcriptCount)
-      Spacer(minLength: OmiSpacing.md)
-      trailing()
+    HStack(spacing: OmiSpacing.hairline) {
+      segment(.summary, title: "Summary", count: nil)
+      segment(.transcript, title: "Transcript", count: transcriptCount)
     }
+    .padding(OmiSpacing.hairline)
+    .glassChip()
+    .fixedSize()
   }
 
-  private func tab(_ target: ConversationDetailPane, title: String, systemImage: String, count: Int?)
-    -> some View
-  {
+  private func segment(_ target: ConversationDetailPane, title: String, count: Int?) -> some View {
     let isActive = pane == target
     return Button {
       onSelect(target)
     } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: systemImage)
-          .scaledFont(size: OmiType.caption)
+      HStack(spacing: OmiSpacing.xxs) {
         Text(title)
           .scaledFont(size: OmiType.caption, weight: isActive ? .semibold : .medium)
         if let count, count > 0 {
@@ -313,33 +335,13 @@ struct ConversationDetailPaneBar<Trailing: View>: View {
       }
       .foregroundColor(isActive ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
-      .frame(height: 28)
-      .glassChip(isActive: isActive)
+      .frame(height: 24)
+      .background(Capsule(style: .continuous).fill(isActive ? PageGlass.chipFill(isActive: true) : .clear))
+      .contentShape(Capsule(style: .continuous))
     }
     .buttonStyle(.plain)
     .accessibilityAddTraits(isActive ? .isSelected : [])
     .accessibilityIdentifier("conversation-detail-pane-\(target == .summary ? "summary" : "transcript")")
-  }
-}
-
-/// A text-and-icon action in the pane bar ("Discuss in Chat").
-struct DetailPillLabel: View {
-  let title: String
-  let systemImage: String
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      Image(systemName: systemImage)
-        .scaledFont(size: OmiType.caption)
-      Text(title)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .lineLimit(1)
-        .fixedSize()
-    }
-    .foregroundColor(Ink.primary)
-    .padding(.horizontal, OmiSpacing.md)
-    .frame(height: 28)
-    .glassChip()
   }
 }
 

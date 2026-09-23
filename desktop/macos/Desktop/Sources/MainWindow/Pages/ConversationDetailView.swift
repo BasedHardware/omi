@@ -92,10 +92,11 @@ struct ConversationDetailView: View {
   /// Constructing it is free — the initialiser only captures closures — and it starts no work
   /// until `MeetingNoteScreenshotStrip`'s task calls `load()`, which the gate below still governs.
   @StateObject private var screenshotsStore = MeetingScreenshotsStore()
-  /// Separating a recording from this event (see `ConversationCaptureRecordingsStrip`).
+  /// This event's recordings panel, and separating one of them (`CaptureRecordingsPanelHost`).
   @StateObject private var separation = CaptureGroupSeparationController { id in
     await AppState.current?.separateConversationFromCaptureGroup(id) ?? false
   }
+  @State private var showRecordings = false
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
@@ -198,6 +199,11 @@ struct ConversationDetailView: View {
           .transition(.opacity)
       }
     }
+    .modifier(
+      CaptureRecordingsPanelHost(
+        isOpen: $showRecordings, recordings: captureRecordings, phase: separation.phase,
+        onOpen: openRecording, onSeparate: separateRecording)
+    )
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     .onAppear {
@@ -227,6 +233,7 @@ struct ConversationDetailView: View {
         transcriptOnMediaClock = false
         serverClockConversation = nil
         separation.reset()
+        showRecordings = false
       }
     }
     .onDisappear {
@@ -322,14 +329,16 @@ struct ConversationDetailView: View {
       NotificationCenter.default.publisher(for: .desktopAutomationConversationRecordingRequested)
     ) { notification in
       guard notification.userInfo?["conversationId"] as? String == displayConversation.id,
-        let recordingId = notification.userInfo?["recordingId"] as? String,
-        let recording = captureRecordings.first(where: { $0.id == recordingId })
+        let action = notification.userInfo?["action"] as? String
       else { return }
-      if notification.userInfo?["action"] as? String == "separate" {
-        separateRecording(recording)
-      } else {
-        openRecording(recording)
+      if action == "show" || action == "hide" {
+        showRecordings = action == "show" && !captureRecordings.isEmpty
+        return
       }
+      guard
+        let recording = captureRecordings.first(where: { $0.id == notification.userInfo?["recordingId"] as? String })
+      else { return }
+      if action == "separate" { separateRecording(recording) } else { openRecording(recording) }
     }
     .dismissableSheet(isPresented: $showAppSelector) {
       AppSelectorSheet(
@@ -386,51 +395,40 @@ struct ConversationDetailView: View {
   // MARK: - Header
 
   private var pageHeader: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      ConversationDetailHeader(
-        conversation: displayConversation,
-        folders: folders,
-        people: people,
-        canCopyTranscript: canCopyTranscript,
-        isGroupedEvent: !captureRecordings.isEmpty,
-        onBack: onBack,
-        onToggleStar: toggleStar,
-        onRename: {
-          editedTitle = displayConversation.title
-          showEditDialog = true
-        },
-        onMoveToFolder: onMoveToFolder.map { move in { folderId in moveToFolder(folderId, using: move) } },
-        onCopyTranscript: copyTranscript,
-        onDelete: { showDeleteConfirmation = true },
-        bannerInset: { headerBannerInset },
-        recordings: { recordingsStrip }
-      )
-
-      ConversationDetailPaneBar(
-        pane: Self.visiblePane(transcriptOpen: showTranscriptDrawer),
-        transcriptCount: displayConversation.transcriptSegments.count,
-        onSelect: { pane in
-          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-            showTranscriptDrawer = pane == .transcript
+    ConversationDetailHeader(
+      conversation: displayConversation,
+      folders: folders,
+      people: people,
+      pane: Self.visiblePane(transcriptOpen: showTranscriptDrawer),
+      canCopyTranscript: canCopyTranscript,
+      isGroupedEvent: !captureRecordings.isEmpty,
+      onBack: onBack,
+      onSelectPane: { pane in
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) { showTranscriptDrawer = pane == .transcript }
+      },
+      onToggleStar: toggleStar,
+      onRename: {
+        editedTitle = displayConversation.title
+        showEditDialog = true
+      },
+      onMoveToFolder: onMoveToFolder.map { move in { folderId in moveToFolder(folderId, using: move) } },
+      onCopyTranscript: copyTranscript,
+      onDiscussInChat: onDiscussInChat,
+      onDelete: { showDeleteConfirmation = true },
+      bannerInset: { headerBannerInset },
+      recordings: {
+        if !captureRecordings.isEmpty {
+          CaptureRecordingsStackButton(recordings: captureRecordings, isOpen: showRecordings) {
+            OmiMotion.withGated(.easeOut(duration: 0.15)) { showRecordings.toggle() }
           }
         }
-      ) {
-        if showTranscriptDrawer {
-          refreshTranscriptButton
-        }
-        if let onDiscussInChat {
-          Button(action: onDiscussInChat) {
-            DetailPillLabel(title: "Discuss in Chat", systemImage: "bubble.left.and.bubble.right")
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Discuss this conversation in Chat")
-          // Preserve the capture archive's automation contract.
-          .accessibilityIdentifier("chat-first-capture-discuss-\(conversation.id)")
-        }
+      },
+      trailing: {
+        if showTranscriptDrawer { refreshTranscriptButton }
       }
-    }
+    )
     .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, OmiSpacing.md)
     .padding(.bottom, OmiSpacing.md)
     // The banner, as this header's ground rather than as a slot below it. It draws no text and is
     // absent when the note has no approved frame, which leaves the ordinary header as it was.
@@ -484,20 +482,6 @@ struct ConversationDetailView: View {
 
   private var captureRecordings: [CaptureGroupRecording] {
     CaptureGroupPresentation.recordings(of: displayConversation)
-  }
-
-  @ViewBuilder
-  private var recordingsStrip: some View {
-    let recordings = captureRecordings
-    if !recordings.isEmpty {
-      ConversationCaptureRecordingsStrip(
-        recordings: recordings,
-        phase: separation.phase,
-        onOpen: openRecording,
-        onSeparate: separateRecording
-      )
-      .padding(.top, OmiSpacing.xxs)
-    }
   }
 
   /// A member the loaded list does not hold is fetched by id rather than assumed present.
@@ -870,7 +854,7 @@ struct ConversationDetailView: View {
           isBusy ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
           value: isBusy
         )
-        .frame(width: 28, height: 28)
+        .frame(width: 24, height: 24)
         .background(Circle().fill(Ink.rowFillHover))
     }
     .buttonStyle(.plain)

@@ -2,8 +2,9 @@
 //  DesktopAutomationConversationRecordingActions.swift — drive the conversation detail's
 //  "Recorded on" row without the cursor.
 //
-//  `list` reads the open conversation's event membership from the server. `open` and `separate`
-//  post the notification the open detail observes, which calls the same handlers its chips and its
+//  `list` reads the open conversation's event membership from the server. `show` / `hide` toggle
+//  the recordings panel under the header's device stack. `open` and `separate` post the
+//  notification the open detail observes, which calls the same handlers the panel's rows and its
 //  confirmation call: a second caller of production code, never a second implementation of it.
 //
 
@@ -14,7 +15,7 @@ extension DesktopAutomationActionRegistry {
   func registerConversationRecordingActions() {
     register(
       name: "conversation_detail_recording",
-      summary: "List, open, or separate the recordings of the open conversation's event",
+      summary: "List, show/hide, open, or separate the recordings of the open conversation's event",
       params: ["action", "recordingId"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -32,9 +33,10 @@ extension DesktopAutomationActionRegistry {
           "member_ids": (conversation.captureGroup?.members.map(\.id) ?? []).joined(separator: ","),
         ]
       }
-      guard ["open", "separate"].contains(action), let recordingId = params["recordingId"], !recordingId.isEmpty
+      let recordingId = params["recordingId"] ?? ""
+      guard ["show", "hide"].contains(action) || (["open", "separate"].contains(action) && !recordingId.isEmpty)
       else {
-        return ["error": "action must be list, open, or separate; open and separate need recordingId"]
+        return ["error": "action must be list, show, hide, open, or separate; open and separate need recordingId"]
       }
       NotificationCenter.default.post(
         name: .desktopAutomationConversationRecordingRequested, object: nil,

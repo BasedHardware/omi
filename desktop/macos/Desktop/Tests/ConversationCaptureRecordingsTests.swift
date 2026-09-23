@@ -95,6 +95,16 @@ final class ConversationCaptureRecordingsTests: XCTestCase {
     XCTAssertEqual(CaptureGroupPresentation.label(of: undated), "Apple Watch")
   }
 
+  func testDeviceStackDrawsUpToThreeRecordingsInStartOrderAndCountsThemAll() throws {
+    let recordings = CaptureGroupPresentation.recordings(
+      of: try Self.conversation(
+        "desktop",
+        members: Self.meeting + [Self.member("phone", .phone, start: 40, end: 50)]))
+    XCTAssertEqual(CaptureGroupPresentation.stackSources(of: recordings), [.desktop, .omi, .omi])
+    XCTAssertEqual(CaptureGroupPresentation.countLabel(recordings.count), "4 recordings")
+    XCTAssertEqual(CaptureGroupPresentation.countLabel(1), "1 recording")
+  }
+
   // MARK: - Opening another recording
 
   @MainActor
@@ -203,6 +213,12 @@ final class ConversationCaptureRecordingsTests: XCTestCase {
     XCTAssertEqual(ConversationDetailMeta.participants(in: [], people: []), [])
   }
 
+  func testPeopleSummaryNamesTheFirstTwoThenCountsTheRest() {
+    XCTAssertEqual(ConversationDetailMeta.peopleSummary(["You"]), "You")
+    XCTAssertEqual(ConversationDetailMeta.peopleSummary(["You", "Dana"]), "You, Dana")
+    XCTAssertEqual(ConversationDetailMeta.peopleSummary(["You", "Dana", "Speaker 2", "Speaker 3"]), "You, Dana +2")
+  }
+
   func testWhenLineOmitsTheYearOnlyForThisYear() {
     let end = Self.base.addingTimeInterval(62 * 60)
     let thisYear = Self.plain(
@@ -227,7 +243,7 @@ private actor SeparationGate {
 
   func wait() async {
     entered = true
-    enteredWaiters.forEach { $0.resume() }
+    for waiter in enteredWaiters { waiter.resume() }
     enteredWaiters.removeAll()
     guard !isOpen else { return }
     await withCheckedContinuation { release = $0 }

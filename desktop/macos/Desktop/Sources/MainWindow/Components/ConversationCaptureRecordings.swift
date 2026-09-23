@@ -111,6 +111,15 @@ extension CaptureGroupPresentation {
     return "\(source) · \(window)"
   }
 
+  /// The devices drawn in the header's stack: one per recording, in start order, at most three.
+  static func stackSources(of recordings: [CaptureGroupRecording], limit: Int = 3) -> [ConversationSource] {
+    Array(recordings.prefix(limit).map(\.source))
+  }
+
+  static func countLabel(_ count: Int) -> String {
+    count == 1 ? "1 recording" : "\(count) recordings"
+  }
+
   /// Opens a member by id: the loaded row when the list has it, otherwise a fetch.
   @MainActor
   static func resolveMember(
@@ -174,12 +183,177 @@ final class CaptureGroupSeparationController: ObservableObject {
   }
 }
 
-// MARK: - Header strip
+// MARK: - Header device stack
 
-/// "Recorded on" row in the conversation header: one chip per device that recorded the event.
-/// Clicking another device's chip opens its recording; separating lives one level down, in a
-/// quiet menu at the end of the row and in each chip's context menu, behind a confirmation.
-struct ConversationCaptureRecordingsStrip: View {
+/// Where the device stack sits, so the recordings panel can hang from it without the header
+/// having to make room for it.
+struct CaptureRecordingsAnchorKey: PreferenceKey {
+  static var defaultValue: Anchor<CGRect>? { nil }
+  static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+    value = value ?? nextValue()
+  }
+}
+
+/// The end of the header's metadata line for an event more than one device recorded: the
+/// devices as a small overlapping stack plus a count. It opens `CaptureRecordingsPanel`.
+struct CaptureRecordingsStackButton: View {
+  let recordings: [CaptureGroupRecording]
+  let isOpen: Bool
+  let onToggle: () -> Void
+
+  var body: some View {
+    Button(action: onToggle) {
+      HStack(spacing: OmiSpacing.xs) {
+        HStack(spacing: -5) {
+          ForEach(Array(CaptureGroupPresentation.stackSources(of: recordings).enumerated()), id: \.offset) {
+            index, source in
+            Image(systemName: source.captureSymbol)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.primary)
+              .frame(width: 20, height: 20)
+              .background(Circle().fill(Ink.surface))
+              .overlay(Circle().strokeBorder(Ink.separator, lineWidth: 1))
+              .zIndex(Double(-index))
+          }
+        }
+        Text(CaptureGroupPresentation.countLabel(recordings.count))
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .fixedSize()
+        Image(systemName: "chevron.down")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .rotationEffect(.degrees(isOpen ? 180 : 0))
+      }
+      .foregroundColor(isOpen ? Ink.primary : Ink.secondary)
+      .padding(.leading, OmiSpacing.hairline)
+      .padding(.trailing, OmiSpacing.sm)
+      .frame(height: 24)
+      .glassChip(isActive: isOpen)
+    }
+    .buttonStyle(.plain)
+    .anchorPreference(key: CaptureRecordingsAnchorKey.self, value: .bounds) { $0 }
+    .help("Recorded by " + recordings.map(\.source.captureLabel).joined(separator: ", "))
+    .accessibilityLabel("\(CaptureGroupPresentation.countLabel(recordings.count)) of this conversation")
+    .accessibilityIdentifier("conversation-detail-recordings")
+  }
+}
+
+/// Each recording of the event: device, time range, the one on screen checked. A row opens its
+/// recording; Separate… splits it out behind the host's confirmation.
+struct CaptureRecordingsPanel: View {
+  static let width: CGFloat = 340
+
+  let recordings: [CaptureGroupRecording]
+  let phase: CaptureGroupSeparationController.Phase
+  let onOpen: (CaptureGroupRecording) -> Void
+  let onSeparate: (CaptureGroupRecording) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text("Recordings of this conversation")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.top, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.xs)
+
+      ForEach(Array(recordings.enumerated()), id: \.element.id) { index, recording in
+        if index > 0 {
+          GlassSeparator().padding(.leading, 40)
+        }
+        row(recording)
+      }
+
+      if case .failed = phase {
+        Label("Couldn’t separate. Try again.", systemImage: "exclamationmark.circle")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(PageGlass.warning)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.top, OmiSpacing.xs)
+      }
+    }
+    .padding(.bottom, OmiSpacing.xs)
+    .frame(width: Self.width, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous).fill(Ink.surface))
+    .overlay(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous).strokeBorder(Ink.separator))
+    .shadow(
+      color: .black.opacity(Double(InkGlassShadow.ambient.opacity)), radius: InkGlassShadow.ambient.radius, y: 4
+    )
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("conversation-detail-recordings-panel")
+  }
+
+  private func row(_ recording: CaptureGroupRecording) -> some View {
+    let isSeparating = phase == .separating(recordingID: recording.id)
+    return HStack(spacing: OmiSpacing.sm) {
+      Button {
+        onOpen(recording)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Group {
+            if isSeparating {
+              ProgressView().controlSize(.small)
+            } else {
+              Image(systemName: recording.source.captureSymbol)
+                .scaledFont(size: OmiType.body)
+            }
+          }
+          .foregroundColor(Ink.secondary)
+          .frame(width: 20)
+          VStack(alignment: .leading, spacing: 0) {
+            Text(recording.source.captureLabel)
+              .scaledFont(size: OmiType.body, weight: recording.isCurrent ? .semibold : .medium)
+              .foregroundColor(Ink.primary)
+            if let window = CaptureGroupPresentation.timeWindow(of: recording) {
+              Text(window)
+                .scaledFont(size: OmiType.caption)
+                .monospacedDigit()
+                .foregroundColor(Ink.secondary)
+            }
+          }
+          Spacer(minLength: OmiSpacing.sm)
+          if recording.isCurrent {
+            Image(systemName: "checkmark")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.primary)
+              .help("You’re viewing this recording")
+          }
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      // The open recording stays at full ink with its check; it is simply not a link.
+      .allowsHitTesting(!recording.isCurrent && !isSeparating)
+      .accessibilityLabel(
+        recording.isCurrent
+          ? "\(CaptureGroupPresentation.label(of: recording)), current recording"
+          : "Open \(CaptureGroupPresentation.label(of: recording)) recording"
+      )
+      .accessibilityIdentifier("conversation-detail-recording-\(recording.id)")
+
+      Button {
+        onSeparate(recording)
+      } label: {
+        Text("Separate…")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+          .padding(.horizontal, OmiSpacing.xs)
+          .frame(height: 22)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .disabled(phase.isSeparating)
+      .help("Show this recording as its own conversation")
+      .accessibilityIdentifier("conversation-detail-recording-separate-\(recording.id)")
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+  }
+}
+
+/// Hangs `CaptureRecordingsPanel` from the header's device stack and owns the separation
+/// confirmation, so the page composes one modifier instead of three pieces of state.
+struct CaptureRecordingsPanelHost: ViewModifier {
+  @Binding var isOpen: Bool
   let recordings: [CaptureGroupRecording]
   let phase: CaptureGroupSeparationController.Phase
   let onOpen: (CaptureGroupRecording) -> Void
@@ -187,120 +361,51 @@ struct ConversationCaptureRecordingsStrip: View {
 
   @State private var pendingSeparation: CaptureGroupRecording?
 
-  var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      Text("Recorded on")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-        .fixedSize()
-
-      ForEach(recordings) { recording in
-        chip(recording)
-      }
-
-      separateMenu
-
-      if case .failed = phase {
-        Label("Couldn’t separate. Try again.", systemImage: "exclamationmark.circle")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(PageGlass.warning)
-          .lineLimit(1)
-      }
-    }
-    .accessibilityElement(children: .contain)
-    .accessibilityIdentifier("conversation-detail-recordings")
-    .alert(
-      "Separate this recording?",
-      isPresented: Binding(get: { pendingSeparation != nil }, set: { if !$0 { pendingSeparation = nil } }),
-      presenting: pendingSeparation
-    ) { recording in
-      Button("Cancel", role: .cancel) {}
-      Button("Separate") { onSeparate(recording) }
-    } message: { recording in
-      Text(
-        "\(CaptureGroupPresentation.label(of: recording)) will show as its own conversation and won’t be grouped with this event again."
-      )
-    }
-  }
-
-  @ViewBuilder
-  private func chip(_ recording: CaptureGroupRecording) -> some View {
-    let isSeparating = phase == .separating(recordingID: recording.id)
-    let label = HStack(spacing: OmiSpacing.xxs) {
-      if isSeparating {
-        ProgressView().controlSize(.mini)
-      } else {
-        Image(systemName: recording.source.captureSymbol)
-          .scaledFont(size: OmiType.micro, weight: .medium)
-      }
-      Text(recording.source.captureLabel)
-        .scaledFont(size: OmiType.caption, weight: recording.isCurrent ? .semibold : .medium)
-      if let window = CaptureGroupPresentation.timeWindow(of: recording) {
-        Text(window)
-          .scaledFont(size: OmiType.caption)
-          .monospacedDigit()
-      }
-    }
-    .foregroundColor(recording.isCurrent ? Ink.primary : Ink.secondary)
-    .lineLimit(1)
-    .fixedSize()
-    .padding(.horizontal, OmiSpacing.sm)
-    .frame(height: 22)
-    .glassChip(isActive: recording.isCurrent)
-
-    if recording.isCurrent {
-      label
-        .help("You’re viewing this recording")
-        .accessibilityLabel("\(CaptureGroupPresentation.label(of: recording)), current recording")
-        .contextMenu { separateButton(recording) }
-    } else {
-      Button {
-        onOpen(recording)
-      } label: {
-        label
-      }
-      .buttonStyle(.plain)
-      .help("Open the \(recording.source.captureLabel) recording")
-      .accessibilityLabel("Open \(CaptureGroupPresentation.label(of: recording)) recording")
-      .accessibilityIdentifier("conversation-detail-recording-\(recording.id)")
-      .contextMenu {
-        Button("Open Recording") { onOpen(recording) }
-        separateButton(recording)
-      }
-      .disabled(isSeparating)
-    }
-  }
-
-  private func separateButton(_ recording: CaptureGroupRecording) -> some View {
-    Button(recording.isCurrent ? "Separate This Recording…" : "Separate Recording…") {
-      pendingSeparation = recording
-    }
-    .disabled(phase.isSeparating)
-  }
-
-  private var separateMenu: some View {
-    Menu {
-      ForEach(recordings) { recording in
-        Button(
-          recording.isCurrent
-            ? "This recording (\(CaptureGroupPresentation.label(of: recording)))"
-            : CaptureGroupPresentation.label(of: recording)
-        ) {
-          pendingSeparation = recording
+  func body(content: Content) -> some View {
+    content
+      .overlayPreferenceValue(CaptureRecordingsAnchorKey.self) { anchor in
+        GeometryReader { proxy in
+          if isOpen, let anchor, !recordings.isEmpty {
+            let origin = proxy[anchor]
+            ZStack(alignment: .topLeading) {
+              // A click anywhere else closes the panel, like a menu.
+              Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { isOpen = false }
+              CaptureRecordingsPanel(
+                recordings: recordings,
+                phase: phase,
+                onOpen: { recording in
+                  isOpen = false
+                  onOpen(recording)
+                },
+                onSeparate: { recording in
+                  isOpen = false
+                  pendingSeparation = recording
+                }
+              )
+              .offset(
+                x: max(0, min(origin.minX, proxy.size.width - CaptureRecordingsPanel.width - OmiSpacing.xxl)),
+                y: origin.maxY + OmiSpacing.xs
+              )
+              .transition(.opacity)
+            }
+          }
         }
       }
-    } label: {
-      Text("Separate…")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-    }
-    .menuStyle(.button)
-    .buttonStyle(.plain)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .disabled(phase.isSeparating)
-    .help("Split a recording out of this event")
-    .accessibilityIdentifier("conversation-detail-recordings-separate")
+      .onExitCommand { isOpen = false }
+      .alert(
+        "Separate this recording?",
+        isPresented: Binding(get: { pendingSeparation != nil }, set: { if !$0 { pendingSeparation = nil } }),
+        presenting: pendingSeparation
+      ) { recording in
+        Button("Cancel", role: .cancel) {}
+        Button("Separate") { onSeparate(recording) }
+      } message: { recording in
+        Text(
+          "\(CaptureGroupPresentation.label(of: recording)) will show as its own conversation and won’t be grouped with this event again."
+        )
+      }
   }
 }
 
