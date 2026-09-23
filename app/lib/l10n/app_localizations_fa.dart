@@ -10163,4 +10163,164 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'تغییرات ذخیره‌نشده شما از بین خواهد رفت.';
+
+  @override
+  String get view => 'مشاهده';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'به $appName دسترسی داده شود؟';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName گفتگوها، خاطرات و ضبط‌های شما را روی سرور توسعه‌دهنده‌اش دریافت می‌کند. Omi مسئول نحوه استفاده از این داده‌ها در آنجا نیست.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName غیرفعال شد';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count امتیاز',
+      one: '۱ امتیاز',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'نماگرفت $index از $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'گفتگو با $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'تنظیمات $appName';
+  }
+
+  @override
+  String get appOptions => 'گزینه‌های برنامه';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'تا پایان دوره صورتحساب فعلی دسترسی شما حفظ می‌شود.';
+
+  @override
+  String get keepSubscription => 'حفظ اشتراک';
+
+  @override
+  String get chatSendMessage => 'ارسال پیام';
+
+  @override
+  String get chatAddAttachment => 'افزودن پیوست';
+
+  @override
+  String get removeAttachment => 'حذف پیوست';
+
+  @override
+  String get chatRemoveSelectedText => 'حذف متن نقل‌قول‌شده';
+
+  @override
+  String get chatOfflineHint => 'آفلاین هستید. برای ارسال پیام دوباره وصل شوید.';
+
+  @override
+  String get chatReplyFailed => 'Omi نتوانست پاسخ دهد. اتصال خود را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'غیرفعال کردن $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'چه مشکلی پیش آمد؟';
+
+  @override
+  String get selectAReason => 'یک دلیل انتخاب کنید';
+
+  @override
+  String get submit => 'ارسال';
+
+  @override
+  String get feedbackReasonTooVerbose => 'بیش از حد طولانی';
+
+  @override
+  String get feedbackReasonIncorrect => 'نادرست یا ساختگی';
+
+  @override
+  String get feedbackReasonNotHelpful => 'بی‌فایده یا نامرتبط';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'دستورالعمل‌ها را رعایت نکرد';
+
+  @override
+  String get additionalFeedbackOptional => 'بازخورد بیشتر (اختیاری)';
+
+  @override
+  String get helpful => 'مفید';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'خلاصه روز · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'دیروز چه کار کردم؟';
+
+  @override
+  String get chatStarterDoDifferently => 'امروز چه کاری را می‌توانم متفاوت انجام دهم؟';
+
+  @override
+  String get chatStarterTeachMe => 'می‌توانی چیز جدیدی به من یاد بدهی؟';
+
+  @override
+  String get thinking => 'در حال فکر';
+
+  @override
+  String get couldNotLoadWhatsNew => 'بارگیری تازه‌ها ممکن نشد';
+
+  @override
+  String get couldNotLoadPage => 'این صفحه بارگیری نشد';
+
+  @override
+  String get githubRepositoryUrl => 'نشانی مخزن GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'پیوند مخزن کد منبع برنامه شما';
+
+  @override
+  String get triggerEvents => 'رویدادهای راه‌انداز';
+
+  @override
+  String get noAppsInCategoryYet => 'هنوز برنامه‌ای در این دسته نیست';
+
+  @override
+  String get scopes => 'دامنه‌ها';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'با یک ضربه با هوش مصنوعی برنامه بسازید';
+
+  @override
+  String get refreshManifest => 'به‌روزرسانی مانیفست';
+
+  @override
+  String versionLabel(String version) {
+    return 'نسخه $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ کاربر';
+  }
+
+  @override
+  String get discovery => 'کشف';
 }

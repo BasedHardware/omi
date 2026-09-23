@@ -10245,4 +10245,165 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Ihre nicht gespeicherten Änderungen gehen verloren.';
+
+  @override
+  String get view => 'Ansehen';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName Zugriff erlauben?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName erhält deine Gespräche, Erinnerungen und Aufnahmen auf dem Server seines Entwicklers. Omi ist nicht dafür verantwortlich, wie diese Daten dort verwendet werden.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName deaktiviert';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Bewertungen',
+      one: '1 Bewertung',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index von $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Mit $appName chatten';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName-Einstellungen';
+  }
+
+  @override
+  String get appOptions => 'App-Optionen';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Du behältst den Zugriff bis zum Ende des aktuellen Abrechnungszeitraums.';
+
+  @override
+  String get keepSubscription => 'Abo behalten';
+
+  @override
+  String get chatSendMessage => 'Nachricht senden';
+
+  @override
+  String get chatAddAttachment => 'Anhang hinzufügen';
+
+  @override
+  String get removeAttachment => 'Anhang entfernen';
+
+  @override
+  String get chatRemoveSelectedText => 'Zitierten Text entfernen';
+
+  @override
+  String get chatOfflineHint => 'Du bist offline. Stelle die Verbindung wieder her, um Nachrichten zu senden.';
+
+  @override
+  String get chatReplyFailed => 'Omi konnte nicht antworten. Prüfe deine Verbindung und versuche es erneut.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName deaktivieren';
+  }
+
+  @override
+  String get whatWentWrong => 'Was lief schief?';
+
+  @override
+  String get selectAReason => 'Wähle einen Grund';
+
+  @override
+  String get submit => 'Senden';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Zu ausführlich';
+
+  @override
+  String get feedbackReasonIncorrect => 'Falsch oder erfunden';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Nicht hilfreich oder irrelevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Anweisungen nicht befolgt';
+
+  @override
+  String get additionalFeedbackOptional => 'Weiteres Feedback (optional)';
+
+  @override
+  String get helpful => 'Hilfreich';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Tageszusammenfassung · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Was habe ich gestern gemacht?';
+
+  @override
+  String get chatStarterDoDifferently => 'Was könnte ich heute anders machen?';
+
+  @override
+  String get chatStarterTeachMe => 'Kannst du mir etwas Neues beibringen?';
+
+  @override
+  String get thinking => 'Denkt nach';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Neuigkeiten konnten nicht geladen werden';
+
+  @override
+  String get couldNotLoadPage => 'Diese Seite konnte nicht geladen werden';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub-Repository-URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link zum Quellcode-Repository deiner App';
+
+  @override
+  String get triggerEvents => 'Auslösende Ereignisse';
+
+  @override
+  String get noAppsInCategoryYet => 'Noch keine Apps in dieser Kategorie';
+
+  @override
+  String get scopes => 'Berechtigungen';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Erstelle mit einem Tippen eine App mit KI';
+
+  @override
+  String get refreshManifest => 'Manifest aktualisieren';
+
+  @override
+  String versionLabel(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ Nutzer';
+  }
+
+  @override
+  String get discovery => 'Entdeckung';
 }

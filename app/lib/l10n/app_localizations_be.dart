@@ -10193,4 +10193,164 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Вашы незахаваныя змены будуць страчаны.';
+
+  @override
+  String get view => 'Прагляд';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Дазволіць доступ $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName атрымае вашы размовы, успаміны і запісы на сервер свайго распрацоўшчыка. Omi не адказвае за тое, як там выкарыстоўваюцца гэтыя даныя.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName адключана';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ацэнак: $count',
+      one: '1 ацэнка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Здымак экрана $index з $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Чат з $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Налады $appName';
+  }
+
+  @override
+  String get appOptions => 'Параметры праграмы';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Доступ захаваецца да канца бягучага разліковага перыяду.';
+
+  @override
+  String get keepSubscription => 'Захаваць падпіску';
+
+  @override
+  String get chatSendMessage => 'Адправіць паведамленне';
+
+  @override
+  String get chatAddAttachment => 'Дадаць укладанне';
+
+  @override
+  String get removeAttachment => 'Выдаліць укладанне';
+
+  @override
+  String get chatRemoveSelectedText => 'Выдаліць цытату';
+
+  @override
+  String get chatOfflineHint => 'Вы па-за сеткай. Падключыцеся, каб адпраўляць паведамленні.';
+
+  @override
+  String get chatReplyFailed => 'Omi не змог адказаць. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Адключыць $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Што пайшло не так?';
+
+  @override
+  String get selectAReason => 'Выберыце прычыну';
+
+  @override
+  String get submit => 'Адправіць';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Занадта шматслоўна';
+
+  @override
+  String get feedbackReasonIncorrect => 'Памылкова або выдумана';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Бескарысна або недарэчна';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не выканаў інструкцыі';
+
+  @override
+  String get additionalFeedbackOptional => 'Дадатковы водгук (неабавязкова)';
+
+  @override
+  String get helpful => 'Карысна';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Вынікі дня · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Што я рабіў учора?';
+
+  @override
+  String get chatStarterDoDifferently => 'Што я магу зрабіць інакш сёння?';
+
+  @override
+  String get chatStarterTeachMe => 'Можаш навучыць мяне чамусьці новаму?';
+
+  @override
+  String get thinking => 'Думаю';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Не ўдалося загрузіць навінкі';
+
+  @override
+  String get couldNotLoadPage => 'Не ўдалося загрузіць старонку';
+
+  @override
+  String get githubRepositoryUrl => 'URL рэпазіторыя GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Спасылка на рэпазіторый зыходнага кода праграмы';
+
+  @override
+  String get triggerEvents => 'Падзеі запуску';
+
+  @override
+  String get noAppsInCategoryYet => 'У гэтай катэгорыі пакуль няма праграм';
+
+  @override
+  String get scopes => 'Вобласці доступу';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Стварыце праграму з ШІ адным дотыкам';
+
+  @override
+  String get refreshManifest => 'Абнавіць маніфест';
+
+  @override
+  String versionLabel(String version) {
+    return 'Версія $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ карыстальнікаў';
+  }
+
+  @override
+  String get discovery => 'Адкрыццё';
 }

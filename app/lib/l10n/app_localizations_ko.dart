@@ -9994,4 +9994,164 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '저장하지 않은 변경 사항이 사라집니다.';
+
+  @override
+  String get view => '보기';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName에 접근을 허용할까요?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName은(는) 개발자 서버에서 대화, 메모리, 녹음을 받게 됩니다. 그곳에서 데이터가 어떻게 사용되는지에 대해 Omi는 책임지지 않습니다.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName 비활성화됨';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '평가 $count개',
+      one: '평가 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return '스크린샷 $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName와(과) 채팅';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName 설정';
+  }
+
+  @override
+  String get appOptions => '앱 옵션';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => '현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.';
+
+  @override
+  String get keepSubscription => '구독 유지';
+
+  @override
+  String get chatSendMessage => '메시지 보내기';
+
+  @override
+  String get chatAddAttachment => '첨부 파일 추가';
+
+  @override
+  String get removeAttachment => '첨부 파일 제거';
+
+  @override
+  String get chatRemoveSelectedText => '인용한 텍스트 제거';
+
+  @override
+  String get chatOfflineHint => '오프라인 상태입니다. 메시지를 보내려면 다시 연결하세요.';
+
+  @override
+  String get chatReplyFailed => 'Omi가 답장하지 못했습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName 비활성화';
+  }
+
+  @override
+  String get whatWentWrong => '무엇이 문제였나요?';
+
+  @override
+  String get selectAReason => '이유를 선택하세요';
+
+  @override
+  String get submit => '제출';
+
+  @override
+  String get feedbackReasonTooVerbose => '너무 장황함';
+
+  @override
+  String get feedbackReasonIncorrect => '틀리거나 지어낸 내용';
+
+  @override
+  String get feedbackReasonNotHelpful => '도움이 안 되거나 관련 없음';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => '지시를 따르지 않음';
+
+  @override
+  String get additionalFeedbackOptional => '추가 의견(선택 사항)';
+
+  @override
+  String get helpful => '도움이 됨';
+
+  @override
+  String daySummaryForDate(String date) {
+    return '하루 요약 · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => '어제 나는 무엇을 했나요?';
+
+  @override
+  String get chatStarterDoDifferently => '오늘은 무엇을 다르게 할 수 있을까요?';
+
+  @override
+  String get chatStarterTeachMe => '새로운 것을 가르쳐 줄 수 있나요?';
+
+  @override
+  String get thinking => '생각 중';
+
+  @override
+  String get couldNotLoadWhatsNew => '새로운 기능을 불러오지 못했습니다';
+
+  @override
+  String get couldNotLoadPage => '이 페이지를 불러오지 못했습니다';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub 저장소 URL';
+
+  @override
+  String get githubRepositoryUrlHint => '앱 소스 코드 저장소 링크';
+
+  @override
+  String get triggerEvents => '트리거 이벤트';
+
+  @override
+  String get noAppsInCategoryYet => '이 카테고리에 아직 앱이 없습니다';
+
+  @override
+  String get scopes => '범위';
+
+  @override
+  String get aiAppGeneratorBannerTitle => '탭 한 번으로 AI로 앱 만들기';
+
+  @override
+  String get refreshManifest => '매니페스트 새로 고침';
+
+  @override
+  String versionLabel(String version) {
+    return '버전 $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '사용자 $count명 이상';
+  }
+
+  @override
+  String get discovery => '발견';
 }

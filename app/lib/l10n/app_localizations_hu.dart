@@ -10202,4 +10202,164 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get view => 'Megtekintés';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Engedélyezed a hozzáférést a(z) $appName számára?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return 'A(z) $appName a fejlesztője szerverén megkapja a beszélgetéseidet, emlékeidet és felvételeidet. Az Omi nem felel azért, hogyan használják ott ezeket az adatokat.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName letiltva';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count értékelés',
+      one: '1 értékelés',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return '$index. képernyőkép / $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Csevegés: $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName beállításai';
+  }
+
+  @override
+  String get appOptions => 'Alkalmazásbeállítások';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'A hozzáférés a jelenlegi számlázási időszak végéig megmarad.';
+
+  @override
+  String get keepSubscription => 'Előfizetés megtartása';
+
+  @override
+  String get chatSendMessage => 'Üzenet küldése';
+
+  @override
+  String get chatAddAttachment => 'Melléklet hozzáadása';
+
+  @override
+  String get removeAttachment => 'Melléklet eltávolítása';
+
+  @override
+  String get chatRemoveSelectedText => 'Idézett szöveg eltávolítása';
+
+  @override
+  String get chatOfflineHint => 'Offline vagy. Üzenetek küldéséhez csatlakozz újra.';
+
+  @override
+  String get chatReplyFailed => 'Az Omi nem tudott válaszolni. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName letiltása';
+  }
+
+  @override
+  String get whatWentWrong => 'Mi volt a gond?';
+
+  @override
+  String get selectAReason => 'Válassz okot';
+
+  @override
+  String get submit => 'Küldés';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Túl bőbeszédű';
+
+  @override
+  String get feedbackReasonIncorrect => 'Hibás vagy kitalált';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Nem hasznos vagy nem releváns';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nem követte az utasításokat';
+
+  @override
+  String get additionalFeedbackOptional => 'További visszajelzés (nem kötelező)';
+
+  @override
+  String get helpful => 'Hasznos';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Napi összefoglaló · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Mit csináltam tegnap?';
+
+  @override
+  String get chatStarterDoDifferently => 'Mit csinálhatnék ma másképp?';
+
+  @override
+  String get chatStarterTeachMe => 'Tudnál tanítani valami újat?';
+
+  @override
+  String get thinking => 'Gondolkodik';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Nem sikerült betölteni az újdonságokat';
+
+  @override
+  String get couldNotLoadPage => 'Nem sikerült betölteni az oldalt';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub-tároló URL-je';
+
+  @override
+  String get githubRepositoryUrlHint => 'Hivatkozás az alkalmazás forráskód-tárolójára';
+
+  @override
+  String get triggerEvents => 'Kiváltó események';
+
+  @override
+  String get noAppsInCategoryYet => 'Ebben a kategóriában még nincs alkalmazás';
+
+  @override
+  String get scopes => 'Hatókörök';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Készíts alkalmazást MI-vel egyetlen koppintással';
+
+  @override
+  String get refreshManifest => 'Manifest frissítése';
+
+  @override
+  String versionLabel(String version) {
+    return '$version verzió';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ felhasználó';
+  }
+
+  @override
+  String get discovery => 'Felfedezés';
 }

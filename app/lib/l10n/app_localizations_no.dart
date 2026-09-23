@@ -10162,4 +10162,165 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Endringer som ikke er lagret, går tapt.';
+
+  @override
+  String get view => 'Vis';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Gi $appName tilgang?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName mottar samtalene, minnene og opptakene dine på utviklerens server. Omi er ikke ansvarlig for hvordan dataene brukes der.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName er deaktivert';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vurderinger',
+      one: '1 vurdering',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Skjermbilde $index av $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chat med $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Innstillinger for $appName';
+  }
+
+  @override
+  String get appOptions => 'Appalternativer';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Du beholder tilgangen til slutten av gjeldende faktureringsperiode.';
+
+  @override
+  String get keepSubscription => 'Behold abonnement';
+
+  @override
+  String get chatSendMessage => 'Send melding';
+
+  @override
+  String get chatAddAttachment => 'Legg til vedlegg';
+
+  @override
+  String get removeAttachment => 'Fjern vedlegg';
+
+  @override
+  String get chatRemoveSelectedText => 'Fjern sitert tekst';
+
+  @override
+  String get chatOfflineHint => 'Du er frakoblet. Koble til igjen for å sende meldinger.';
+
+  @override
+  String get chatReplyFailed => 'Omi kunne ikke svare. Sjekk tilkoblingen og prøv igjen.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Deaktiver $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Hva gikk galt?';
+
+  @override
+  String get selectAReason => 'Velg en årsak';
+
+  @override
+  String get submit => 'Send';
+
+  @override
+  String get feedbackReasonTooVerbose => 'For ordrikt';
+
+  @override
+  String get feedbackReasonIncorrect => 'Feil eller oppdiktet';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Ikke nyttig eller irrelevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Fulgte ikke instruksjonene';
+
+  @override
+  String get additionalFeedbackOptional => 'Ytterligere tilbakemelding (valgfritt)';
+
+  @override
+  String get helpful => 'Nyttig';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dagsoppsummering · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Hva gjorde jeg i går?';
+
+  @override
+  String get chatStarterDoDifferently => 'Hva kan jeg gjøre annerledes i dag?';
+
+  @override
+  String get chatStarterTeachMe => 'Kan du lære meg noe nytt?';
+
+  @override
+  String get thinking => 'Tenker';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Kunne ikke laste inn nyhetene';
+
+  @override
+  String get couldNotLoadPage => 'Kunne ikke laste inn siden';
+
+  @override
+  String get githubRepositoryUrl => 'URL til GitHub-repo';
+
+  @override
+  String get githubRepositoryUrlHint => 'Lenke til appens kildekode-repo';
+
+  @override
+  String get triggerEvents => 'Utløsende hendelser';
+
+  @override
+  String get noAppsInCategoryYet => 'Ingen apper i denne kategorien ennå';
+
+  @override
+  String get scopes => 'Omfang';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Lag en app med KI med ett trykk';
+
+  @override
+  String get refreshManifest => 'Oppdater manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versjon $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ brukere';
+  }
+
+  @override
+  String get discovery => 'Oppdagelse';
 }

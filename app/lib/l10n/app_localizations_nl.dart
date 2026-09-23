@@ -10190,4 +10190,164 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Je niet-opgeslagen wijzigingen gaan verloren.';
+
+  @override
+  String get view => 'Bekijken';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName toegang geven?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName ontvangt je gesprekken, herinneringen en opnames op de server van de ontwikkelaar. Omi is niet verantwoordelijk voor hoe die gegevens daar worden gebruikt.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName uitgeschakeld';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beoordelingen',
+      one: '1 beoordeling',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index van $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatten met $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Instellingen van $appName';
+  }
+
+  @override
+  String get appOptions => 'App-opties';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Je houdt toegang tot het einde van de huidige factuurperiode.';
+
+  @override
+  String get keepSubscription => 'Abonnement behouden';
+
+  @override
+  String get chatSendMessage => 'Bericht versturen';
+
+  @override
+  String get chatAddAttachment => 'Bijlage toevoegen';
+
+  @override
+  String get removeAttachment => 'Bijlage verwijderen';
+
+  @override
+  String get chatRemoveSelectedText => 'Geciteerde tekst verwijderen';
+
+  @override
+  String get chatOfflineHint => 'Je bent offline. Maak opnieuw verbinding om berichten te versturen.';
+
+  @override
+  String get chatReplyFailed => 'Omi kon niet antwoorden. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName uitschakelen';
+  }
+
+  @override
+  String get whatWentWrong => 'Wat ging er mis?';
+
+  @override
+  String get selectAReason => 'Kies een reden';
+
+  @override
+  String get submit => 'Versturen';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Te langdradig';
+
+  @override
+  String get feedbackReasonIncorrect => 'Onjuist of verzonnen';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Niet nuttig of niet relevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Volgde de instructies niet';
+
+  @override
+  String get additionalFeedbackOptional => 'Aanvullende feedback (optioneel)';
+
+  @override
+  String get helpful => 'Nuttig';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dagoverzicht · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Wat heb ik gisteren gedaan?';
+
+  @override
+  String get chatStarterDoDifferently => 'Wat kan ik vandaag anders doen?';
+
+  @override
+  String get chatStarterTeachMe => 'Kun je me iets nieuws leren?';
+
+  @override
+  String get thinking => 'Aan het nadenken';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Kan de nieuwe functies niet laden';
+
+  @override
+  String get couldNotLoadPage => 'Kan deze pagina niet laden';
+
+  @override
+  String get githubRepositoryUrl => 'URL van GitHub-repository';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link naar de broncode-repository van je app';
+
+  @override
+  String get triggerEvents => 'Triggergebeurtenissen';
+
+  @override
+  String get noAppsInCategoryYet => 'Nog geen apps in deze categorie';
+
+  @override
+  String get scopes => 'Scopes';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Maak met één tik een app met AI';
+
+  @override
+  String get refreshManifest => 'Manifest vernieuwen';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versie $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ gebruikers';
+  }
+
+  @override
+  String get discovery => 'Ontdekking';
 }

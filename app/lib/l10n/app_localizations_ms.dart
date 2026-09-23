@@ -10190,4 +10190,164 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Perubahan anda yang belum disimpan akan hilang.';
+
+  @override
+  String get view => 'Lihat';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Benarkan akses $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName akan menerima perbualan, memori dan rakaman anda di pelayan pembangunnya. Omi tidak bertanggungjawab atas cara data itu digunakan di sana.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName dinyahdayakan';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count penilaian',
+      one: '1 penilaian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Tangkapan skrin $index daripada $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Sembang dengan $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Tetapan $appName';
+  }
+
+  @override
+  String get appOptions => 'Pilihan apl';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Anda kekal mempunyai akses sehingga akhir tempoh bil semasa.';
+
+  @override
+  String get keepSubscription => 'Kekalkan Langganan';
+
+  @override
+  String get chatSendMessage => 'Hantar mesej';
+
+  @override
+  String get chatAddAttachment => 'Tambah lampiran';
+
+  @override
+  String get removeAttachment => 'Alih keluar lampiran';
+
+  @override
+  String get chatRemoveSelectedText => 'Alih keluar teks petikan';
+
+  @override
+  String get chatOfflineHint => 'Anda di luar talian. Sambung semula untuk menghantar mesej.';
+
+  @override
+  String get chatReplyFailed => 'Omi tidak dapat membalas. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Nyahdayakan $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Apa yang tidak kena?';
+
+  @override
+  String get selectAReason => 'Pilih sebab';
+
+  @override
+  String get submit => 'Hantar';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Terlalu panjang lebar';
+
+  @override
+  String get feedbackReasonIncorrect => 'Salah atau direka';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Tidak membantu atau tidak berkaitan';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Tidak mengikut arahan';
+
+  @override
+  String get additionalFeedbackOptional => 'Maklum balas tambahan (pilihan)';
+
+  @override
+  String get helpful => 'Membantu';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Ringkasan Hari · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Apa yang saya buat semalam?';
+
+  @override
+  String get chatStarterDoDifferently => 'Apa yang boleh saya lakukan secara berbeza hari ini?';
+
+  @override
+  String get chatStarterTeachMe => 'Boleh ajar saya sesuatu yang baharu?';
+
+  @override
+  String get thinking => 'Sedang berfikir';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Tidak dapat memuatkan yang baharu';
+
+  @override
+  String get couldNotLoadPage => 'Tidak dapat memuatkan halaman ini';
+
+  @override
+  String get githubRepositoryUrl => 'URL Repositori GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Pautan ke repositori kod sumber apl anda';
+
+  @override
+  String get triggerEvents => 'Peristiwa Pencetus';
+
+  @override
+  String get noAppsInCategoryYet => 'Belum Ada Apl dalam Kategori Ini';
+
+  @override
+  String get scopes => 'Skop';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Bina apl dengan AI dalam satu ketikan';
+
+  @override
+  String get refreshManifest => 'Muat semula manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versi $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ pengguna';
+  }
+
+  @override
+  String get discovery => 'Penemuan';
 }

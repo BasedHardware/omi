@@ -10200,4 +10200,164 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Незаписаните промени ще бъдат загубени.';
+
+  @override
+  String get view => 'Преглед';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Да се разреши ли достъп на $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName ще получава вашите разговори, спомени и записи на сървъра на разработчика си. Omi не носи отговорност как се използват тези данни там.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName е деактивирано';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count оценки',
+      one: '1 оценка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Екранна снимка $index от $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Чат с $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Настройки на $appName';
+  }
+
+  @override
+  String get appOptions => 'Опции на приложението';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Ще запазите достъпа до края на текущия период на плащане.';
+
+  @override
+  String get keepSubscription => 'Запази абонамента';
+
+  @override
+  String get chatSendMessage => 'Изпрати съобщение';
+
+  @override
+  String get chatAddAttachment => 'Добави прикачен файл';
+
+  @override
+  String get removeAttachment => 'Премахни прикачения файл';
+
+  @override
+  String get chatRemoveSelectedText => 'Премахни цитирания текст';
+
+  @override
+  String get chatOfflineHint => 'Нямате връзка. Свържете се отново, за да изпращате съобщения.';
+
+  @override
+  String get chatReplyFailed => 'Omi не успя да отговори. Проверете връзката си и опитайте отново.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Деактивирай $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Какво се обърка?';
+
+  @override
+  String get selectAReason => 'Изберете причина';
+
+  @override
+  String get submit => 'Изпрати';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Твърде многословно';
+
+  @override
+  String get feedbackReasonIncorrect => 'Грешно или измислено';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Безполезно или неуместно';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не следва инструкциите';
+
+  @override
+  String get additionalFeedbackOptional => 'Допълнителна обратна връзка (по избор)';
+
+  @override
+  String get helpful => 'Полезно';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Обобщение на деня · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Какво правих вчера?';
+
+  @override
+  String get chatStarterDoDifferently => 'Какво мога да направя различно днес?';
+
+  @override
+  String get chatStarterTeachMe => 'Можеш ли да ме научиш на нещо ново?';
+
+  @override
+  String get thinking => 'Мисля';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Новостите не можаха да се заредят';
+
+  @override
+  String get couldNotLoadPage => 'Страницата не можа да се зареди';
+
+  @override
+  String get githubRepositoryUrl => 'URL на хранилище в GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Връзка към хранилището с изходния код на приложението';
+
+  @override
+  String get triggerEvents => 'Задействащи събития';
+
+  @override
+  String get noAppsInCategoryYet => 'Все още няма приложения в тази категория';
+
+  @override
+  String get scopes => 'Обхвати';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Създайте приложение с ИИ с едно докосване';
+
+  @override
+  String get refreshManifest => 'Опресни манифеста';
+
+  @override
+  String versionLabel(String version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ потребители';
+  }
+
+  @override
+  String get discovery => 'Открытие';
 }

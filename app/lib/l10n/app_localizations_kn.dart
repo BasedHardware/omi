@@ -10196,4 +10196,164 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ.';
+
+  @override
+  String get view => 'ವೀಕ್ಷಿಸಿ';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName ಗೆ ಪ್ರವೇಶ ನೀಡುವುದೇ?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ನೆನಪುಗಳು ಮತ್ತು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ತನ್ನ ಡೆವಲಪರ್‌ನ ಸರ್ವರ್‌ನಲ್ಲಿ ಪಡೆಯುತ್ತದೆ. ಅಲ್ಲಿ ಆ ಡೇಟಾವನ್ನು ಹೇಗೆ ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದಕ್ಕೆ Omi ಜವಾಬ್ದಾರವಲ್ಲ.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೇಟಿಂಗ್‌ಗಳು',
+      one: '1 ರೇಟಿಂಗ್',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName ಜೊತೆ ಚಾಟ್';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
+  }
+
+  @override
+  String get appOptions => 'ಆ್ಯಪ್ ಆಯ್ಕೆಗಳು';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'ಪ್ರಸ್ತುತ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಕೊನೆಯವರೆಗೆ ನಿಮ್ಮ ಪ್ರವೇಶ ಉಳಿಯುತ್ತದೆ.';
+
+  @override
+  String get keepSubscription => 'ಚಂದಾದಾರಿಕೆ ಉಳಿಸಿಕೊಳ್ಳಿ';
+
+  @override
+  String get chatSendMessage => 'ಸಂದೇಶ ಕಳುಹಿಸಿ';
+
+  @override
+  String get chatAddAttachment => 'ಲಗತ್ತು ಸೇರಿಸಿ';
+
+  @override
+  String get removeAttachment => 'ಲಗತ್ತು ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get chatRemoveSelectedText => 'ಉಲ್ಲೇಖಿತ ಪಠ್ಯ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get chatOfflineHint => 'ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ. ಸಂದೇಶ ಕಳುಹಿಸಲು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get chatReplyFailed => 'Omi ಉತ್ತರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ';
+  }
+
+  @override
+  String get whatWentWrong => 'ಏನು ತಪ್ಪಾಯಿತು?';
+
+  @override
+  String get selectAReason => 'ಕಾರಣವನ್ನು ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get submit => 'ಸಲ್ಲಿಸಿ';
+
+  @override
+  String get feedbackReasonTooVerbose => 'ತುಂಬಾ ಉದ್ದವಾಗಿದೆ';
+
+  @override
+  String get feedbackReasonIncorrect => 'ತಪ್ಪು ಅಥವಾ ಕಲ್ಪಿತ';
+
+  @override
+  String get feedbackReasonNotHelpful => 'ಉಪಯುಕ್ತವಲ್ಲ ಅಥವಾ ಅಸಂಬದ್ಧ';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'ಸೂಚನೆಗಳನ್ನು ಪಾಲಿಸಲಿಲ್ಲ';
+
+  @override
+  String get additionalFeedbackOptional => 'ಹೆಚ್ಚುವರಿ ಪ್ರತಿಕ್ರಿಯೆ (ಐಚ್ಛಿಕ)';
+
+  @override
+  String get helpful => 'ಉಪಯುಕ್ತ';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'ದಿನದ ಸಾರಾಂಶ · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'ನಾನು ನಿನ್ನೆ ಏನು ಮಾಡಿದೆ?';
+
+  @override
+  String get chatStarterDoDifferently => 'ಇಂದು ನಾನು ಏನನ್ನು ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಮಾಡಬಹುದು?';
+
+  @override
+  String get chatStarterTeachMe => 'ನನಗೆ ಹೊಸದನ್ನು ಕಲಿಸಬಹುದೇ?';
+
+  @override
+  String get thinking => 'ಯೋಚಿಸುತ್ತಿದೆ';
+
+  @override
+  String get couldNotLoadWhatsNew => 'ಹೊಸದನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get couldNotLoadPage => 'ಈ ಪುಟವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub ರೆಪೊಸಿಟರಿ URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'ನಿಮ್ಮ ಆ್ಯಪ್‌ನ ಸೋರ್ಸ್ ಕೋಡ್ ರೆಪೊಸಿಟರಿಗೆ ಲಿಂಕ್';
+
+  @override
+  String get triggerEvents => 'ಟ್ರಿಗರ್ ಈವೆಂಟ್‌ಗಳು';
+
+  @override
+  String get noAppsInCategoryYet => 'ಈ ವರ್ಗದಲ್ಲಿ ಇನ್ನೂ ಆ್ಯಪ್‌ಗಳಿಲ್ಲ';
+
+  @override
+  String get scopes => 'ವ್ಯಾಪ್ತಿಗಳು';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ AI ಮೂಲಕ ಆ್ಯಪ್ ನಿರ್ಮಿಸಿ';
+
+  @override
+  String get refreshManifest => 'ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಿ';
+
+  @override
+  String versionLabel(String version) {
+    return 'ಆವೃತ್ತಿ $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ ಬಳಕೆದಾರರು';
+  }
+
+  @override
+  String get discovery => 'ಅನ್ವೇಷಣೆ';
 }

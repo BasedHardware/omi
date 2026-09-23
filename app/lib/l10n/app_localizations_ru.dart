@@ -10200,4 +10200,164 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Несохранённые изменения будут потеряны.';
+
+  @override
+  String get view => 'Открыть';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Разрешить доступ приложению $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName будет получать ваши разговоры, воспоминания и записи на сервер своего разработчика. Omi не отвечает за то, как там используются эти данные.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName отключено';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Оценок: $count',
+      one: '1 оценка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Снимок экрана $index из $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Чат с $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Настройки $appName';
+  }
+
+  @override
+  String get appOptions => 'Параметры приложения';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Доступ сохранится до конца текущего расчётного периода.';
+
+  @override
+  String get keepSubscription => 'Сохранить подписку';
+
+  @override
+  String get chatSendMessage => 'Отправить сообщение';
+
+  @override
+  String get chatAddAttachment => 'Добавить вложение';
+
+  @override
+  String get removeAttachment => 'Удалить вложение';
+
+  @override
+  String get chatRemoveSelectedText => 'Удалить цитату';
+
+  @override
+  String get chatOfflineHint => 'Нет подключения. Подключитесь, чтобы отправлять сообщения.';
+
+  @override
+  String get chatReplyFailed => 'Omi не смог ответить. Проверьте подключение и повторите попытку.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Отключить $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Что пошло не так?';
+
+  @override
+  String get selectAReason => 'Выберите причину';
+
+  @override
+  String get submit => 'Отправить';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Слишком многословно';
+
+  @override
+  String get feedbackReasonIncorrect => 'Неверно или выдумано';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Бесполезно или не по теме';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не выполнил инструкции';
+
+  @override
+  String get additionalFeedbackOptional => 'Дополнительный отзыв (необязательно)';
+
+  @override
+  String get helpful => 'Полезно';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Итоги дня · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Что я делал вчера?';
+
+  @override
+  String get chatStarterDoDifferently => 'Что я могу сделать сегодня по-другому?';
+
+  @override
+  String get chatStarterTeachMe => 'Можешь научить меня чему-то новому?';
+
+  @override
+  String get thinking => 'Думаю';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Не удалось загрузить новинки';
+
+  @override
+  String get couldNotLoadPage => 'Не удалось загрузить страницу';
+
+  @override
+  String get githubRepositoryUrl => 'URL репозитория GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Ссылка на репозиторий исходного кода приложения';
+
+  @override
+  String get triggerEvents => 'События запуска';
+
+  @override
+  String get noAppsInCategoryYet => 'В этой категории пока нет приложений';
+
+  @override
+  String get scopes => 'Области доступа';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Создайте приложение с ИИ в одно касание';
+
+  @override
+  String get refreshManifest => 'Обновить манифест';
+
+  @override
+  String versionLabel(String version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ пользователей';
+  }
+
+  @override
+  String get discovery => 'Открытие';
 }

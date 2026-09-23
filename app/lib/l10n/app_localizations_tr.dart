@@ -10175,4 +10175,164 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Kaydedilmemiş değişiklikleriniz kaybolacak.';
+
+  @override
+  String get view => 'Görüntüle';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName erişimine izin verilsin mi?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName, konuşmalarını, anılarını ve kayıtlarını geliştiricisinin sunucusunda alacak. Omi, bu verilerin orada nasıl kullanıldığından sorumlu değildir.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName devre dışı bırakıldı';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puan',
+      one: '1 puan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ekran görüntüsü $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName ile sohbet et';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName ayarları';
+  }
+
+  @override
+  String get appOptions => 'Uygulama seçenekleri';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Mevcut fatura döneminin sonuna kadar erişimin devam eder.';
+
+  @override
+  String get keepSubscription => 'Aboneliği Koru';
+
+  @override
+  String get chatSendMessage => 'Mesajı gönder';
+
+  @override
+  String get chatAddAttachment => 'Ek ekle';
+
+  @override
+  String get removeAttachment => 'Eki kaldır';
+
+  @override
+  String get chatRemoveSelectedText => 'Alıntılanan metni kaldır';
+
+  @override
+  String get chatOfflineHint => 'Çevrimdışısın. Mesaj göndermek için yeniden bağlan.';
+
+  @override
+  String get chatReplyFailed => 'Omi yanıt veremedi. Bağlantını kontrol edip tekrar dene.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName uygulamasını devre dışı bırak';
+  }
+
+  @override
+  String get whatWentWrong => 'Ne ters gitti?';
+
+  @override
+  String get selectAReason => 'Bir neden seç';
+
+  @override
+  String get submit => 'Gönder';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Fazla uzun';
+
+  @override
+  String get feedbackReasonIncorrect => 'Yanlış veya uydurma';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Faydasız veya alakasız';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Talimatlara uymadı';
+
+  @override
+  String get additionalFeedbackOptional => 'Ek geri bildirim (isteğe bağlı)';
+
+  @override
+  String get helpful => 'Yararlı';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Gün Özeti · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Dün ne yaptım?';
+
+  @override
+  String get chatStarterDoDifferently => 'Bugün neyi farklı yapabilirim?';
+
+  @override
+  String get chatStarterTeachMe => 'Bana yeni bir şey öğretebilir misin?';
+
+  @override
+  String get thinking => 'Düşünüyor';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Yenilikler yüklenemedi';
+
+  @override
+  String get couldNotLoadPage => 'Bu sayfa yüklenemedi';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub Depo URL\'si';
+
+  @override
+  String get githubRepositoryUrlHint => 'Uygulamanın kaynak kod deposunun bağlantısı';
+
+  @override
+  String get triggerEvents => 'Tetikleyici Olaylar';
+
+  @override
+  String get noAppsInCategoryYet => 'Bu Kategoride Henüz Uygulama Yok';
+
+  @override
+  String get scopes => 'Kapsamlar';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Tek dokunuşla yapay zekâyla uygulama oluştur';
+
+  @override
+  String get refreshManifest => 'Manifesti yenile';
+
+  @override
+  String versionLabel(String version) {
+    return 'Sürüm $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ kullanıcı';
+  }
+
+  @override
+  String get discovery => 'Keşif';
 }

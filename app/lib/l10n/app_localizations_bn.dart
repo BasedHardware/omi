@@ -10167,4 +10167,164 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।';
+
+  @override
+  String get view => 'দেখুন';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName-কে অ্যাক্সেস দেবেন?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName আপনার কথোপকথন, স্মৃতি ও রেকর্ডিং এর ডেভেলপারের সার্ভারে পাবে। সেখানে এই ডেটা কীভাবে ব্যবহৃত হয় তার জন্য Omi দায়ী নয়।';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName নিষ্ক্রিয় করা হয়েছে';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেটিং',
+      one: '১টি রেটিং',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'স্ক্রিনশট $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName-এর সাথে চ্যাট';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName সেটিংস';
+  }
+
+  @override
+  String get appOptions => 'অ্যাপ বিকল্প';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'বর্তমান বিলিং সময়কালের শেষ পর্যন্ত আপনার অ্যাক্সেস থাকবে।';
+
+  @override
+  String get keepSubscription => 'সাবস্ক্রিপশন রাখুন';
+
+  @override
+  String get chatSendMessage => 'বার্তা পাঠান';
+
+  @override
+  String get chatAddAttachment => 'সংযুক্তি যোগ করুন';
+
+  @override
+  String get removeAttachment => 'সংযুক্তি সরান';
+
+  @override
+  String get chatRemoveSelectedText => 'উদ্ধৃত লেখা সরান';
+
+  @override
+  String get chatOfflineHint => 'আপনি অফলাইন। বার্তা পাঠাতে আবার সংযোগ করুন।';
+
+  @override
+  String get chatReplyFailed => 'Omi উত্তর দিতে পারেনি। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName নিষ্ক্রিয় করুন';
+  }
+
+  @override
+  String get whatWentWrong => 'কী ভুল হয়েছে?';
+
+  @override
+  String get selectAReason => 'একটি কারণ বেছে নিন';
+
+  @override
+  String get submit => 'জমা দিন';
+
+  @override
+  String get feedbackReasonTooVerbose => 'অতিরিক্ত দীর্ঘ';
+
+  @override
+  String get feedbackReasonIncorrect => 'ভুল বা বানানো';
+
+  @override
+  String get feedbackReasonNotHelpful => 'অসহায়ক বা অপ্রাসঙ্গিক';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'নির্দেশনা মানেনি';
+
+  @override
+  String get additionalFeedbackOptional => 'অতিরিক্ত মতামত (ঐচ্ছিক)';
+
+  @override
+  String get helpful => 'সহায়ক';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'দিনের সারাংশ · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'আমি গতকাল কী করেছিলাম?';
+
+  @override
+  String get chatStarterDoDifferently => 'আজ আমি কী ভিন্নভাবে করতে পারি?';
+
+  @override
+  String get chatStarterTeachMe => 'আমাকে নতুন কিছু শেখাতে পারবে?';
+
+  @override
+  String get thinking => 'ভাবছে';
+
+  @override
+  String get couldNotLoadWhatsNew => 'নতুন কী আছে তা লোড করা যায়নি';
+
+  @override
+  String get couldNotLoadPage => 'এই পৃষ্ঠাটি লোড করা যায়নি';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub রিপোজিটরি URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'আপনার অ্যাপের সোর্স কোড রিপোজিটরির লিংক';
+
+  @override
+  String get triggerEvents => 'ট্রিগার ইভেন্ট';
+
+  @override
+  String get noAppsInCategoryYet => 'এই বিভাগে এখনও কোনো অ্যাপ নেই';
+
+  @override
+  String get scopes => 'স্কোপ';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'এক ট্যাপে AI দিয়ে অ্যাপ তৈরি করুন';
+
+  @override
+  String get refreshManifest => 'ম্যানিফেস্ট রিফ্রেশ করুন';
+
+  @override
+  String versionLabel(String version) {
+    return 'সংস্করণ $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ ব্যবহারকারী';
+  }
+
+  @override
+  String get discovery => 'আবিষ্কার';
 }

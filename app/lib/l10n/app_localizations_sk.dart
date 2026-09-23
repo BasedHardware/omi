@@ -10153,4 +10153,164 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neuložené zmeny sa stratia.';
+
+  @override
+  String get view => 'Zobraziť';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Povoliť prístup aplikácii $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName bude dostávať vaše konverzácie, spomienky a nahrávky na server svojho vývojára. Omi nezodpovedá za to, ako sa tam s týmito údajmi zaobchádza.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName je vypnutá';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hodnotenia: $count',
+      one: '1 hodnotenie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Snímka obrazovky $index z $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatovať s $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Nastavenia $appName';
+  }
+
+  @override
+  String get appOptions => 'Možnosti aplikácie';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Prístup vám zostane do konca aktuálneho zúčtovacieho obdobia.';
+
+  @override
+  String get keepSubscription => 'Ponechať predplatné';
+
+  @override
+  String get chatSendMessage => 'Odoslať správu';
+
+  @override
+  String get chatAddAttachment => 'Pridať prílohu';
+
+  @override
+  String get removeAttachment => 'Odstrániť prílohu';
+
+  @override
+  String get chatRemoveSelectedText => 'Odstrániť citovaný text';
+
+  @override
+  String get chatOfflineHint => 'Ste offline. Na odosielanie správ sa znova pripojte.';
+
+  @override
+  String get chatReplyFailed => 'Omi nemohol odpovedať. Skontrolujte pripojenie a skúste to znova.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Vypnúť $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Čo sa nepodarilo?';
+
+  @override
+  String get selectAReason => 'Vyberte dôvod';
+
+  @override
+  String get submit => 'Odoslať';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Príliš rozvláčne';
+
+  @override
+  String get feedbackReasonIncorrect => 'Nesprávne alebo vymyslené';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Neužitočné alebo mimo témy';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nedodržal pokyny';
+
+  @override
+  String get additionalFeedbackOptional => 'Ďalšia spätná väzba (voliteľné)';
+
+  @override
+  String get helpful => 'Užitočné';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Zhrnutie dňa · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Čo som robil včera?';
+
+  @override
+  String get chatStarterDoDifferently => 'Čo by som dnes mohol urobiť inak?';
+
+  @override
+  String get chatStarterTeachMe => 'Môžeš ma naučiť niečo nové?';
+
+  @override
+  String get thinking => 'Premýšľam';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Novinky sa nepodarilo načítať';
+
+  @override
+  String get couldNotLoadPage => 'Stránku sa nepodarilo načítať';
+
+  @override
+  String get githubRepositoryUrl => 'URL repozitára na GitHube';
+
+  @override
+  String get githubRepositoryUrlHint => 'Odkaz na repozitár so zdrojovým kódom aplikácie';
+
+  @override
+  String get triggerEvents => 'Spúšťacie udalosti';
+
+  @override
+  String get noAppsInCategoryYet => 'V tejto kategórii zatiaľ nie sú žiadne aplikácie';
+
+  @override
+  String get scopes => 'Rozsahy';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Vytvorte aplikáciu pomocou AI jedným ťuknutím';
+
+  @override
+  String get refreshManifest => 'Obnoviť manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Verzia $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ používateľov';
+  }
+
+  @override
+  String get discovery => 'Objav';
 }

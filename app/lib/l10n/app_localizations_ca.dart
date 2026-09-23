@@ -10220,4 +10220,165 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Es perdran els canvis no desats.';
+
+  @override
+  String get view => 'Mostra';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Vols permetre l\'accés a $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName rebrà les teves converses, records i enregistraments al servidor del seu desenvolupador. Omi no es fa responsable de com s\'hi utilitzen aquestes dades.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName s\'ha desactivat';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count valoracions',
+      one: '1 valoració',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Captura $index de $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Xateja amb $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Configuració de $appName';
+  }
+
+  @override
+  String get appOptions => 'Opcions de l\'app';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Mantindràs l\'accés fins al final del període de facturació actual.';
+
+  @override
+  String get keepSubscription => 'Mantén la subscripció';
+
+  @override
+  String get chatSendMessage => 'Envia el missatge';
+
+  @override
+  String get chatAddAttachment => 'Afegeix un fitxer adjunt';
+
+  @override
+  String get removeAttachment => 'Elimina el fitxer adjunt';
+
+  @override
+  String get chatRemoveSelectedText => 'Elimina el text citat';
+
+  @override
+  String get chatOfflineHint => 'No tens connexió. Torna\'t a connectar per enviar missatges.';
+
+  @override
+  String get chatReplyFailed => 'Omi no ha pogut respondre. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Desactiva $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Què ha fallat?';
+
+  @override
+  String get selectAReason => 'Tria un motiu';
+
+  @override
+  String get submit => 'Envia';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Massa llarg';
+
+  @override
+  String get feedbackReasonIncorrect => 'Incorrecte o inventat';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Poc útil o irrellevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'No ha seguit les instruccions';
+
+  @override
+  String get additionalFeedbackOptional => 'Comentaris addicionals (opcional)';
+
+  @override
+  String get helpful => 'Útil';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Resum del dia · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Què vaig fer ahir?';
+
+  @override
+  String get chatStarterDoDifferently => 'Què podria fer diferent avui?';
+
+  @override
+  String get chatStarterTeachMe => 'Em pots ensenyar alguna cosa nova?';
+
+  @override
+  String get thinking => 'Pensant';
+
+  @override
+  String get couldNotLoadWhatsNew => 'No s\'han pogut carregar les novetats';
+
+  @override
+  String get couldNotLoadPage => 'No s\'ha pogut carregar aquesta pàgina';
+
+  @override
+  String get githubRepositoryUrl => 'URL del repositori de GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Enllaç al repositori del codi font de l\'app';
+
+  @override
+  String get triggerEvents => 'Esdeveniments d\'activació';
+
+  @override
+  String get noAppsInCategoryYet => 'Encara no hi ha apps en aquesta categoria';
+
+  @override
+  String get scopes => 'Àmbits';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Crea una app amb IA amb un toc';
+
+  @override
+  String get refreshManifest => 'Actualitza el manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versió $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ usuaris';
+  }
+
+  @override
+  String get discovery => 'Descobriment';
 }

@@ -10187,4 +10187,164 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get view => 'Skatīt';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Atļaut $appName piekļuvi?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName saņems jūsu sarunas, atmiņas un ierakstus sava izstrādātāja serverī. Omi neatbild par to, kā šie dati tur tiek izmantoti.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName atspējota';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vērtējumi',
+      one: '1 vērtējums',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ekrānuzņēmums $index no $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Tērzēt ar $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName iestatījumi';
+  }
+
+  @override
+  String get appOptions => 'Lietotnes opcijas';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Piekļuve saglabāsies līdz pašreizējā norēķinu perioda beigām.';
+
+  @override
+  String get keepSubscription => 'Paturēt abonementu';
+
+  @override
+  String get chatSendMessage => 'Sūtīt ziņu';
+
+  @override
+  String get chatAddAttachment => 'Pievienot pielikumu';
+
+  @override
+  String get removeAttachment => 'Noņemt pielikumu';
+
+  @override
+  String get chatRemoveSelectedText => 'Noņemt citēto tekstu';
+
+  @override
+  String get chatOfflineHint => 'Jūs esat bezsaistē. Lai sūtītu ziņas, izveidojiet savienojumu.';
+
+  @override
+  String get chatReplyFailed => 'Omi nevarēja atbildēt. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Atspējot $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Kas nogāja greizi?';
+
+  @override
+  String get selectAReason => 'Izvēlieties iemeslu';
+
+  @override
+  String get submit => 'Iesniegt';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Pārāk daudzvārdīgi';
+
+  @override
+  String get feedbackReasonIncorrect => 'Nepareizi vai izdomāti';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Nederīgi vai neatbilstoši';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Neievēroja norādījumus';
+
+  @override
+  String get additionalFeedbackOptional => 'Papildu atsauksmes (neobligāti)';
+
+  @override
+  String get helpful => 'Noderīgi';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dienas kopsavilkums · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Ko es darīju vakar?';
+
+  @override
+  String get chatStarterDoDifferently => 'Ko es šodien varētu darīt citādi?';
+
+  @override
+  String get chatStarterTeachMe => 'Vai vari man iemācīt kaut ko jaunu?';
+
+  @override
+  String get thinking => 'Domā';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Neizdevās ielādēt jaunumus';
+
+  @override
+  String get couldNotLoadPage => 'Neizdevās ielādēt šo lapu';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub repozitorija URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Saite uz lietotnes pirmkoda repozitoriju';
+
+  @override
+  String get triggerEvents => 'Aktivizēšanas notikumi';
+
+  @override
+  String get noAppsInCategoryYet => 'Šajā kategorijā vēl nav lietotņu';
+
+  @override
+  String get scopes => 'Tvērumi';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Izveidojiet lietotni ar MI vienā pieskārienā';
+
+  @override
+  String get refreshManifest => 'Atsvaidzināt manifestu';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versija $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ lietotāji';
+  }
+
+  @override
+  String get discovery => 'Atklājums';
 }

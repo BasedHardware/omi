@@ -10165,4 +10165,164 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Tallentamattomat muutokset menetetään.';
+
+  @override
+  String get view => 'Näytä';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Sallitaanko $appName-sovelluksen käyttöoikeus?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName vastaanottaa keskustelusi, muistosi ja tallenteesi kehittäjänsä palvelimelle. Omi ei vastaa siitä, miten tietoja siellä käytetään.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName poistettu käytöstä';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count arviota',
+      one: '1 arvio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Kuvakaappaus $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Keskustele: $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName-asetukset';
+  }
+
+  @override
+  String get appOptions => 'Sovelluksen valinnat';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Käyttöoikeus säilyy nykyisen laskutuskauden loppuun.';
+
+  @override
+  String get keepSubscription => 'Säilytä tilaus';
+
+  @override
+  String get chatSendMessage => 'Lähetä viesti';
+
+  @override
+  String get chatAddAttachment => 'Lisää liite';
+
+  @override
+  String get removeAttachment => 'Poista liite';
+
+  @override
+  String get chatRemoveSelectedText => 'Poista lainattu teksti';
+
+  @override
+  String get chatOfflineHint => 'Olet offline-tilassa. Muodosta yhteys lähettääksesi viestejä.';
+
+  @override
+  String get chatReplyFailed => 'Omi ei voinut vastata. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Poista $appName käytöstä';
+  }
+
+  @override
+  String get whatWentWrong => 'Mikä meni pieleen?';
+
+  @override
+  String get selectAReason => 'Valitse syy';
+
+  @override
+  String get submit => 'Lähetä';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Liian monisanainen';
+
+  @override
+  String get feedbackReasonIncorrect => 'Virheellinen tai keksitty';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Ei hyödyllinen tai asiaankuulumaton';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Ei noudattanut ohjeita';
+
+  @override
+  String get additionalFeedbackOptional => 'Lisäpalaute (valinnainen)';
+
+  @override
+  String get helpful => 'Hyödyllinen';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Päivän yhteenveto · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Mitä tein eilen?';
+
+  @override
+  String get chatStarterDoDifferently => 'Mitä voisin tehdä tänään toisin?';
+
+  @override
+  String get chatStarterTeachMe => 'Voitko opettaa minulle jotain uutta?';
+
+  @override
+  String get thinking => 'Mietitään';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Uutuuksia ei voitu ladata';
+
+  @override
+  String get couldNotLoadPage => 'Sivua ei voitu ladata';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub-repositorion URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Linkki sovelluksesi lähdekoodin repositorioon';
+
+  @override
+  String get triggerEvents => 'Käynnistävät tapahtumat';
+
+  @override
+  String get noAppsInCategoryYet => 'Tässä luokassa ei ole vielä sovelluksia';
+
+  @override
+  String get scopes => 'Käyttöalueet';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Luo sovellus tekoälyllä yhdellä napautuksella';
+
+  @override
+  String get refreshManifest => 'Päivitä manifesti';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versio $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ käyttäjää';
+  }
+
+  @override
+  String get discovery => 'Löydös';
 }

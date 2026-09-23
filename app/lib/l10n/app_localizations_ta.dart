@@ -10233,4 +10233,164 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்.';
+
+  @override
+  String get view => 'காண்க';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName-க்கு அணுகலை அனுமதிக்கவா?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName உங்கள் உரையாடல்கள், நினைவுகள் மற்றும் பதிவுகளை அதன் டெவலப்பரின் சேவையகத்தில் பெறும். அங்கு அந்த தரவு எவ்வாறு பயன்படுத்தப்படுகிறது என்பதற்கு Omi பொறுப்பல்ல.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName முடக்கப்பட்டது';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மதிப்பீடுகள்',
+      one: '1 மதிப்பீடு',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'திரைப்பிடிப்பு $index / $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName உடன் அரட்டை';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName அமைப்புகள்';
+  }
+
+  @override
+  String get appOptions => 'ஆப் விருப்பங்கள்';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'தற்போதைய பில்லிங் காலம் முடியும் வரை உங்கள் அணுகல் தொடரும்.';
+
+  @override
+  String get keepSubscription => 'சந்தாவை வைத்திருக்கவும்';
+
+  @override
+  String get chatSendMessage => 'செய்தியை அனுப்பு';
+
+  @override
+  String get chatAddAttachment => 'இணைப்பைச் சேர்';
+
+  @override
+  String get removeAttachment => 'இணைப்பை அகற்று';
+
+  @override
+  String get chatRemoveSelectedText => 'மேற்கோள் உரையை அகற்று';
+
+  @override
+  String get chatOfflineHint => 'நீங்கள் ஆஃப்லைனில் உள்ளீர்கள். செய்திகளை அனுப்ப மீண்டும் இணைக்கவும்.';
+
+  @override
+  String get chatReplyFailed => 'Omi பதிலளிக்க முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName ஐ முடக்கு';
+  }
+
+  @override
+  String get whatWentWrong => 'என்ன தவறு நடந்தது?';
+
+  @override
+  String get selectAReason => 'ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get submit => 'சமர்ப்பி';
+
+  @override
+  String get feedbackReasonTooVerbose => 'மிக நீளமானது';
+
+  @override
+  String get feedbackReasonIncorrect => 'தவறானது அல்லது புனையப்பட்டது';
+
+  @override
+  String get feedbackReasonNotHelpful => 'உதவியற்றது அல்லது பொருத்தமற்றது';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'அறிவுறுத்தல்களைப் பின்பற்றவில்லை';
+
+  @override
+  String get additionalFeedbackOptional => 'கூடுதல் கருத்து (விருப்பத்தேர்வு)';
+
+  @override
+  String get helpful => 'உதவியானது';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'நாள் சுருக்கம் · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'நேற்று நான் என்ன செய்தேன்?';
+
+  @override
+  String get chatStarterDoDifferently => 'இன்று நான் என்ன வித்தியாசமாகச் செய்யலாம்?';
+
+  @override
+  String get chatStarterTeachMe => 'எனக்கு ஏதாவது புதியதைக் கற்றுத் தர முடியுமா?';
+
+  @override
+  String get thinking => 'யோசிக்கிறது';
+
+  @override
+  String get couldNotLoadWhatsNew => 'புதியவற்றை ஏற்ற முடியவில்லை';
+
+  @override
+  String get couldNotLoadPage => 'இந்தப் பக்கத்தை ஏற்ற முடியவில்லை';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub களஞ்சிய URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'உங்கள் ஆப்பின் மூலக் குறியீட்டுக் களஞ்சியத்துக்கான இணைப்பு';
+
+  @override
+  String get triggerEvents => 'தூண்டல் நிகழ்வுகள்';
+
+  @override
+  String get noAppsInCategoryYet => 'இந்த வகையில் இன்னும் ஆப்கள் இல்லை';
+
+  @override
+  String get scopes => 'நோக்கெல்லைகள்';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'ஒரே தட்டலில் AI மூலம் ஆப் உருவாக்குங்கள்';
+
+  @override
+  String get refreshManifest => 'மேனிஃபெஸ்டைப் புதுப்பி';
+
+  @override
+  String versionLabel(String version) {
+    return 'பதிப்பு $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ பயனர்கள்';
+  }
+
+  @override
+  String get discovery => 'கண்டுபிடிப்பு';
 }

@@ -9972,4 +9972,164 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '未保存的更改将会丢失。';
+
+  @override
+  String get view => '查看';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '允许 $appName 访问？';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName 将在其开发者的服务器上接收你的对话、记忆和录音。Omi 不对这些数据在那里如何被使用负责。';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '已停用 $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条评分',
+      one: '1 条评分',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return '截图 $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '与 $appName 聊天';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName 设置';
+  }
+
+  @override
+  String get appOptions => '应用选项';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => '在当前计费周期结束前，你仍可继续使用。';
+
+  @override
+  String get keepSubscription => '保留订阅';
+
+  @override
+  String get chatSendMessage => '发送消息';
+
+  @override
+  String get chatAddAttachment => '添加附件';
+
+  @override
+  String get removeAttachment => '移除附件';
+
+  @override
+  String get chatRemoveSelectedText => '移除引用的文字';
+
+  @override
+  String get chatOfflineHint => '你已离线。请重新连接以发送消息。';
+
+  @override
+  String get chatReplyFailed => 'Omi 无法回复。请检查网络连接后重试。';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '停用 $appName';
+  }
+
+  @override
+  String get whatWentWrong => '哪里出了问题？';
+
+  @override
+  String get selectAReason => '选择原因';
+
+  @override
+  String get submit => '提交';
+
+  @override
+  String get feedbackReasonTooVerbose => '太啰嗦';
+
+  @override
+  String get feedbackReasonIncorrect => '错误或编造';
+
+  @override
+  String get feedbackReasonNotHelpful => '没帮助或不相关';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => '没有按指示回答';
+
+  @override
+  String get additionalFeedbackOptional => '补充反馈（可选）';
+
+  @override
+  String get helpful => '有帮助';
+
+  @override
+  String daySummaryForDate(String date) {
+    return '每日总结 · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => '我昨天做了什么？';
+
+  @override
+  String get chatStarterDoDifferently => '今天我可以做些什么不同的事？';
+
+  @override
+  String get chatStarterTeachMe => '你能教我一些新东西吗？';
+
+  @override
+  String get thinking => '思考中';
+
+  @override
+  String get couldNotLoadWhatsNew => '无法加载新功能介绍';
+
+  @override
+  String get couldNotLoadPage => '无法加载此页面';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub 仓库 URL';
+
+  @override
+  String get githubRepositoryUrlHint => '你的应用源代码仓库链接';
+
+  @override
+  String get triggerEvents => '触发事件';
+
+  @override
+  String get noAppsInCategoryYet => '此类别中还没有应用';
+
+  @override
+  String get scopes => '权限范围';
+
+  @override
+  String get aiAppGeneratorBannerTitle => '一键用 AI 创建应用';
+
+  @override
+  String get refreshManifest => '刷新清单';
+
+  @override
+  String versionLabel(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ 位用户';
+  }
+
+  @override
+  String get discovery => '发现';
 }

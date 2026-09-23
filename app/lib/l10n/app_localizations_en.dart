@@ -10153,4 +10153,164 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Your unsaved changes will be lost.';
+
+  @override
+  String get view => 'View';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Allow $appName Access?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName will receive your conversations, memories and recordings on its developer\'s server. Omi isn\'t responsible for how that data is used there.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName disabled';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ratings',
+      one: '1 rating',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index of $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chat with $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName settings';
+  }
+
+  @override
+  String get appOptions => 'App options';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'You\'ll keep access until the end of your current billing period.';
+
+  @override
+  String get keepSubscription => 'Keep Subscription';
+
+  @override
+  String get chatSendMessage => 'Send message';
+
+  @override
+  String get chatAddAttachment => 'Add attachment';
+
+  @override
+  String get removeAttachment => 'Remove attachment';
+
+  @override
+  String get chatRemoveSelectedText => 'Remove quoted text';
+
+  @override
+  String get chatOfflineHint => 'You\'re offline. Reconnect to send messages.';
+
+  @override
+  String get chatReplyFailed => 'Omi couldn\'t reply. Check your connection and try again.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Disable $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'What Went Wrong?';
+
+  @override
+  String get selectAReason => 'Select a reason';
+
+  @override
+  String get submit => 'Submit';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Too verbose';
+
+  @override
+  String get feedbackReasonIncorrect => 'Incorrect or made up';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Not helpful or irrelevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Didn\'t follow instructions';
+
+  @override
+  String get additionalFeedbackOptional => 'Additional feedback (optional)';
+
+  @override
+  String get helpful => 'Helpful';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Day Summary · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'What did I do yesterday?';
+
+  @override
+  String get chatStarterDoDifferently => 'What could I do differently today?';
+
+  @override
+  String get chatStarterTeachMe => 'Can you teach me something new?';
+
+  @override
+  String get thinking => 'Thinking';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Couldn\'t load what\'s new';
+
+  @override
+  String get couldNotLoadPage => 'Couldn\'t load this page';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub Repository URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link to your app\'s source code repository';
+
+  @override
+  String get triggerEvents => 'Trigger Events';
+
+  @override
+  String get noAppsInCategoryYet => 'No Apps in This Category Yet';
+
+  @override
+  String get scopes => 'Scopes';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Build an app with AI in one tap';
+
+  @override
+  String get refreshManifest => 'Refresh manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ users';
+  }
+
+  @override
+  String get discovery => 'Discovery';
 }

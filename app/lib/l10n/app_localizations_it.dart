@@ -10220,4 +10220,165 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Le modifiche non salvate andranno perse.';
+
+  @override
+  String get view => 'Visualizza';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Consentire l\'accesso a $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName riceverà le tue conversazioni, i tuoi ricordi e le tue registrazioni sul server del suo sviluppatore. Omi non è responsabile di come vengono usati lì questi dati.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName disattivata';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count valutazioni',
+      one: '1 valutazione',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index di $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatta con $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Impostazioni di $appName';
+  }
+
+  @override
+  String get appOptions => 'Opzioni app';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Manterrai l\'accesso fino alla fine del periodo di fatturazione in corso.';
+
+  @override
+  String get keepSubscription => 'Mantieni abbonamento';
+
+  @override
+  String get chatSendMessage => 'Invia messaggio';
+
+  @override
+  String get chatAddAttachment => 'Aggiungi allegato';
+
+  @override
+  String get removeAttachment => 'Rimuovi allegato';
+
+  @override
+  String get chatRemoveSelectedText => 'Rimuovi testo citato';
+
+  @override
+  String get chatOfflineHint => 'Sei offline. Riconnettiti per inviare messaggi.';
+
+  @override
+  String get chatReplyFailed => 'Omi non è riuscito a rispondere. Controlla la connessione e riprova.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Disattiva $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Cosa non ha funzionato?';
+
+  @override
+  String get selectAReason => 'Seleziona un motivo';
+
+  @override
+  String get submit => 'Invia';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Troppo prolisso';
+
+  @override
+  String get feedbackReasonIncorrect => 'Errato o inventato';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Non utile o non pertinente';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Non ha seguito le istruzioni';
+
+  @override
+  String get additionalFeedbackOptional => 'Feedback aggiuntivo (facoltativo)';
+
+  @override
+  String get helpful => 'Utile';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Riepilogo del giorno · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Cosa ho fatto ieri?';
+
+  @override
+  String get chatStarterDoDifferently => 'Cosa potrei fare di diverso oggi?';
+
+  @override
+  String get chatStarterTeachMe => 'Puoi insegnarmi qualcosa di nuovo?';
+
+  @override
+  String get thinking => 'Sto pensando';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Impossibile caricare le novità';
+
+  @override
+  String get couldNotLoadPage => 'Impossibile caricare questa pagina';
+
+  @override
+  String get githubRepositoryUrl => 'URL del repository GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link al repository del codice sorgente dell\'app';
+
+  @override
+  String get triggerEvents => 'Eventi di attivazione';
+
+  @override
+  String get noAppsInCategoryYet => 'Ancora nessuna app in questa categoria';
+
+  @override
+  String get scopes => 'Ambiti';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Crea un\'app con l\'IA con un tocco';
+
+  @override
+  String get refreshManifest => 'Aggiorna manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versione $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ utenti';
+  }
+
+  @override
+  String get discovery => 'Scoperta';
 }

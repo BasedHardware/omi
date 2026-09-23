@@ -10172,4 +10172,164 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'तुमचे जतन न केलेले बदल गमावले जातील.';
+
+  @override
+  String get view => 'पहा';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName ला प्रवेश द्यायचा?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName तुमची संभाषणे, आठवणी आणि रेकॉर्डिंग त्याच्या डेव्हलपरच्या सर्व्हरवर मिळवेल. तिथे त्या डेटाचा वापर कसा होतो यासाठी Omi जबाबदार नाही.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName बंद केले';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेटिंग',
+      one: '1 रेटिंग',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'स्क्रीनशॉट $index / $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName सोबत चॅट';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName सेटिंग्ज';
+  }
+
+  @override
+  String get appOptions => 'अ‍ॅप पर्याय';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'सध्याच्या बिलिंग कालावधीच्या शेवटपर्यंत तुमचा प्रवेश कायम राहील.';
+
+  @override
+  String get keepSubscription => 'सदस्यता ठेवा';
+
+  @override
+  String get chatSendMessage => 'संदेश पाठवा';
+
+  @override
+  String get chatAddAttachment => 'संलग्नक जोडा';
+
+  @override
+  String get removeAttachment => 'संलग्नक काढा';
+
+  @override
+  String get chatRemoveSelectedText => 'उद्धृत मजकूर काढा';
+
+  @override
+  String get chatOfflineHint => 'तुम्ही ऑफलाइन आहात. संदेश पाठवण्यासाठी पुन्हा कनेक्ट करा.';
+
+  @override
+  String get chatReplyFailed => 'Omi उत्तर देऊ शकला नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName बंद करा';
+  }
+
+  @override
+  String get whatWentWrong => 'काय चुकले?';
+
+  @override
+  String get selectAReason => 'कारण निवडा';
+
+  @override
+  String get submit => 'सबमिट करा';
+
+  @override
+  String get feedbackReasonTooVerbose => 'खूप लांबलचक';
+
+  @override
+  String get feedbackReasonIncorrect => 'चुकीचे किंवा बनावट';
+
+  @override
+  String get feedbackReasonNotHelpful => 'उपयोगी नाही किंवा असंबद्ध';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'सूचना पाळल्या नाहीत';
+
+  @override
+  String get additionalFeedbackOptional => 'अतिरिक्त अभिप्राय (ऐच्छिक)';
+
+  @override
+  String get helpful => 'उपयुक्त';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'दिवसाचा सारांश · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'मी काल काय केले?';
+
+  @override
+  String get chatStarterDoDifferently => 'आज मी काय वेगळे करू शकतो?';
+
+  @override
+  String get chatStarterTeachMe => 'मला काहीतरी नवीन शिकवशील का?';
+
+  @override
+  String get thinking => 'विचार करत आहे';
+
+  @override
+  String get couldNotLoadWhatsNew => 'नवीन काय आहे ते लोड करता आले नाही';
+
+  @override
+  String get couldNotLoadPage => 'हे पान लोड करता आले नाही';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub रिपॉझिटरी URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'तुमच्या अ‍ॅपच्या सोर्स कोड रिपॉझिटरीची लिंक';
+
+  @override
+  String get triggerEvents => 'ट्रिगर इव्हेंट्स';
+
+  @override
+  String get noAppsInCategoryYet => 'या श्रेणीत अद्याप कोणतीही अ‍ॅप नाही';
+
+  @override
+  String get scopes => 'स्कोप';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'एका टॅपमध्ये AI ने अ‍ॅप तयार करा';
+
+  @override
+  String get refreshManifest => 'मॅनिफेस्ट रिफ्रेश करा';
+
+  @override
+  String versionLabel(String version) {
+    return 'आवृत्ती $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ वापरकर्ते';
+  }
+
+  @override
+  String get discovery => 'शोध';
 }

@@ -10210,4 +10210,165 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Modificările nesalvate se vor pierde.';
+
+  @override
+  String get view => 'Vezi';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Permiți accesul pentru $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName va primi conversațiile, amintirile și înregistrările tale pe serverul dezvoltatorului său. Omi nu răspunde de modul în care sunt folosite acolo aceste date.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName a fost dezactivată';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count evaluări',
+      one: '1 evaluare',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Captura $index din $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chat cu $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Setări $appName';
+  }
+
+  @override
+  String get appOptions => 'Opțiuni aplicație';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Păstrezi accesul până la sfârșitul perioadei de facturare curente.';
+
+  @override
+  String get keepSubscription => 'Păstrează abonamentul';
+
+  @override
+  String get chatSendMessage => 'Trimite mesajul';
+
+  @override
+  String get chatAddAttachment => 'Adaugă atașament';
+
+  @override
+  String get removeAttachment => 'Elimină atașamentul';
+
+  @override
+  String get chatRemoveSelectedText => 'Elimină textul citat';
+
+  @override
+  String get chatOfflineHint => 'Ești offline. Reconectează-te pentru a trimite mesaje.';
+
+  @override
+  String get chatReplyFailed => 'Omi nu a putut răspunde. Verifică conexiunea și încearcă din nou.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Dezactivează $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Ce nu a mers bine?';
+
+  @override
+  String get selectAReason => 'Alege un motiv';
+
+  @override
+  String get submit => 'Trimite';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Prea lung';
+
+  @override
+  String get feedbackReasonIncorrect => 'Greșit sau inventat';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Inutil sau irelevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nu a urmat instrucțiunile';
+
+  @override
+  String get additionalFeedbackOptional => 'Feedback suplimentar (opțional)';
+
+  @override
+  String get helpful => 'Util';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Rezumatul zilei · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Ce am făcut ieri?';
+
+  @override
+  String get chatStarterDoDifferently => 'Ce aș putea face diferit astăzi?';
+
+  @override
+  String get chatStarterTeachMe => 'Mă poți învăța ceva nou?';
+
+  @override
+  String get thinking => 'Mă gândesc';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Nu s-au putut încărca noutățile';
+
+  @override
+  String get couldNotLoadPage => 'Pagina nu a putut fi încărcată';
+
+  @override
+  String get githubRepositoryUrl => 'URL depozit GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link către depozitul codului sursă al aplicației';
+
+  @override
+  String get triggerEvents => 'Evenimente declanșatoare';
+
+  @override
+  String get noAppsInCategoryYet => 'Încă nu există aplicații în această categorie';
+
+  @override
+  String get scopes => 'Domenii de acces';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Creează o aplicație cu AI dintr-o atingere';
+
+  @override
+  String get refreshManifest => 'Reîmprospătează manifestul';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versiunea $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ utilizatori';
+  }
+
+  @override
+  String get discovery => 'Descoperire';
 }

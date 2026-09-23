@@ -10081,4 +10081,164 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'השינויים שלא נשמרו יאבדו.';
+
+  @override
+  String get view => 'הצג';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'לאפשר גישה ל-$appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName יקבל את השיחות, הזיכרונות וההקלטות שלך בשרת של המפתח שלו. Omi אינה אחראית לאופן השימוש בנתונים האלה שם.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName הושבתה';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count דירוגים',
+      one: 'דירוג אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'צילום מסך $index מתוך $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'צ\'אט עם $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'הגדרות $appName';
+  }
+
+  @override
+  String get appOptions => 'אפשרויות האפליקציה';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'הגישה תישאר עד סוף תקופת החיוב הנוכחית.';
+
+  @override
+  String get keepSubscription => 'השאר את המינוי';
+
+  @override
+  String get chatSendMessage => 'שליחת הודעה';
+
+  @override
+  String get chatAddAttachment => 'הוספת קובץ מצורף';
+
+  @override
+  String get removeAttachment => 'הסרת הקובץ המצורף';
+
+  @override
+  String get chatRemoveSelectedText => 'הסרת הטקסט המצוטט';
+
+  @override
+  String get chatOfflineHint => 'אין חיבור. התחבר מחדש כדי לשלוח הודעות.';
+
+  @override
+  String get chatReplyFailed => 'Omi לא הצליחה להשיב. בדוק את החיבור ונסה שוב.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'השבתת $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'מה השתבש?';
+
+  @override
+  String get selectAReason => 'בחר סיבה';
+
+  @override
+  String get submit => 'שליחה';
+
+  @override
+  String get feedbackReasonTooVerbose => 'ארוך מדי';
+
+  @override
+  String get feedbackReasonIncorrect => 'שגוי או מומצא';
+
+  @override
+  String get feedbackReasonNotHelpful => 'לא מועיל או לא רלוונטי';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'לא עקב אחר ההוראות';
+
+  @override
+  String get additionalFeedbackOptional => 'משוב נוסף (אופציונלי)';
+
+  @override
+  String get helpful => 'מועיל';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'סיכום יום · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'מה עשיתי אתמול?';
+
+  @override
+  String get chatStarterDoDifferently => 'מה אני יכול לעשות אחרת היום?';
+
+  @override
+  String get chatStarterTeachMe => 'תוכל ללמד אותי משהו חדש?';
+
+  @override
+  String get thinking => 'חושב';
+
+  @override
+  String get couldNotLoadWhatsNew => 'לא ניתן לטעון את החידושים';
+
+  @override
+  String get couldNotLoadPage => 'לא ניתן לטעון את הדף';
+
+  @override
+  String get githubRepositoryUrl => 'כתובת מאגר GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'קישור למאגר קוד המקור של האפליקציה';
+
+  @override
+  String get triggerEvents => 'אירועי הפעלה';
+
+  @override
+  String get noAppsInCategoryYet => 'אין עדיין אפליקציות בקטגוריה הזו';
+
+  @override
+  String get scopes => 'הרשאות';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'בנו אפליקציה עם AI בהקשה אחת';
+
+  @override
+  String get refreshManifest => 'רענון המניפסט';
+
+  @override
+  String versionLabel(String version) {
+    return 'גרסה $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ משתמשים';
+  }
+
+  @override
+  String get discovery => 'תגלית';
 }
