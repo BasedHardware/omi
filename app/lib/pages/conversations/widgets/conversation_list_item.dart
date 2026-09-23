@@ -18,11 +18,13 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -66,6 +68,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.finishedAt,
         conversation.photos.length,
         conversation.transcriptSegments.length,
+        conversation.captureGroup?.id,
+        conversation.captureGroup?.revision,
       );
 
   @override
@@ -532,6 +536,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     maxLines: 1,
                                   ),
                                 ],
+                                // One row stands for an event several devices recorded.
+                                if (_captureSources.length > 1) ...[
+                                  const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                                  CaptureSourceIcons(sources: _captureSources),
+                                ],
                                 const Spacer(),
                                 if (widget.conversation.starred)
                                   const Padding(
@@ -581,6 +590,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
       ],
     );
   }
+
+  List<String> get _captureSources => CaptureGroupPresentation.distinctSources(widget.conversation);
 
   String? _searchSnippetText() {
     if (widget.conversation.matchSnippets.isEmpty) return null;
