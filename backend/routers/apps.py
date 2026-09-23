@@ -872,7 +872,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     try:
         app = AppCreate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Build app dict
     app_dict = app.model_dump(exclude_unset=True)
@@ -926,7 +926,7 @@ async def create_persona(
     try:
         app_create = AppCreate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     await run_blocking(db_executor, add_app_to_db, app_create.model_dump(exclude_unset=True))
 
@@ -987,7 +987,7 @@ async def update_persona(
     try:
         update_app = AppUpdate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
@@ -1060,7 +1060,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     try:
         persona_create = AppCreate.model_validate(persona_data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Save username
     await run_blocking(db_executor, save_username, persona_data['username'], uid)
@@ -1101,7 +1101,7 @@ def update_app(
     try:
         update_app = AppUpdate.model_validate(data)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Build update dict
     update_dict = update_app.model_dump(exclude_unset=True)
@@ -1631,9 +1631,11 @@ async def generate_app_endpoint(
                 'memory_prompt': generated_app.memory_prompt,
             },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating app: {e}")
-        raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
+        raise HTTPException(status_code=500, detail='Failed to generate app')
 
 
 @router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
@@ -1671,9 +1673,11 @@ async def generate_app_icon_endpoint(
         icon_base64 = base64.b64encode(icon_bytes).decode('utf-8')
 
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating icon: {e}")
-        raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
+        raise HTTPException(status_code=500, detail='Failed to generate icon')
 
 
 # ******************************************************
@@ -1900,8 +1904,11 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 client_info = await register_oauth_client(
                     oauth_meta['registration_endpoint'], redirect_uri, scopes=oauth_meta.get('scopes_supported')
                 )
+            except HTTPException:
+                raise
             except Exception as e:
-                raise HTTPException(status_code=502, detail=f'OAuth client registration failed: {str(e)}')
+                logger.error(f"OAuth client registration failed: {e}")
+                raise HTTPException(status_code=502, detail='OAuth client registration failed')
         else:
             raise HTTPException(
                 status_code=422,
@@ -1963,8 +1970,11 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         # No OAuth — discover tools directly
         try:
             tools = await discover_mcp_tools(server_url)
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f'Failed to discover MCP tools: {str(e)}')
+            logger.error(f"Failed to discover MCP tools: {e}")
+            raise HTTPException(status_code=502, detail='Failed to discover MCP tools')
 
         if not tools:
             raise HTTPException(status_code=422, detail='No tools found on the MCP server')
@@ -2037,7 +2047,8 @@ async def mcp_oauth_callback(code: str, state: str):
             code_verifier=oauth_tokens.get('code_verifier'),
         )
     except Exception as e:
-        return HTMLResponse(f'<html><body><h1>Token exchange failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+        logger.error(f"Token exchange failed: {e}")
+        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>', status_code=502)
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2049,7 +2060,8 @@ async def mcp_oauth_callback(code: str, state: str):
     try:
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
-        return HTMLResponse(f'<html><body><h1>Tool discovery failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+        logger.error(f"Tool discovery failed: {e}")
+        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>', status_code=502)
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2140,8 +2152,11 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
             return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
         raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f'Failed to discover tools: {str(e)}')
+        logger.error(f"Failed to discover tools: {e}")
+        raise HTTPException(status_code=502, detail='Failed to discover tools')
 
     update_dict = {
         'id': app_id,
