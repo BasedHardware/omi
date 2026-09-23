@@ -802,40 +802,24 @@ struct AppsPage: View {
   }
 
   private var searchLoadingState: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-      Text("Searching apps, imports, and exports…")
-        .scaledFont(size: OmiType.body)
-        .foregroundStyle(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+    GlassLoadingState(label: "Searching apps, imports, and exports…", placement: .scrolling)
   }
 
   private var searchFailureState: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Image(systemName: "exclamationmark.circle")
-        .scaledFont(size: 28)
-        .foregroundStyle(Ink.secondary)
-      Text("Couldn't finish searching apps")
-        .scaledFont(size: OmiType.subheading, weight: .medium)
-      Button("Try Again") { Task { await appProvider.searchApps() } }
-        .buttonStyle(.bordered)
-    }
-    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+    GlassErrorState(
+      title: "Couldn't Finish Searching Apps", placement: .scrolling,
+      retry: { Task { await appProvider.searchApps() } })
   }
 
   private var globalSearchEmptyState: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: 28)
-        .foregroundStyle(Ink.secondary)
-      Text("No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”")
-        .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundStyle(Ink.primary)
+    GlassEmptyState(
+      systemImage: "magnifyingglass",
+      title: "No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”",
+      placement: .scrolling
+    ) {
       Button("Clear Search") { searchText = "" }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
     }
-    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
   }
 
   private var marketplaceSearchProgress: some View {
@@ -852,9 +836,8 @@ struct AppsPage: View {
       Text("Marketplace apps couldn't be loaded.")
         .scaledFont(size: OmiType.caption)
         .foregroundStyle(Ink.secondary)
-      Button("Try Again") { Task { await appProvider.searchApps() } }
-        .buttonStyle(.plain)
-        .foregroundStyle(Ink.primary)
+      Button(GlassPageState.retryTitle) { Task { await appProvider.searchApps() } }
+        .buttonStyle(GlassPageState.retryStyle)
     }
   }
 
@@ -911,38 +894,13 @@ struct AppsPage: View {
   private var filteredAppsContent: some View {
     switch filteredAppsPresentation {
     case .loading:
-      VStack(spacing: OmiSpacing.lg) {
-        ProgressView()
-          .scaleEffect(1.2)
-        Text("Searching…")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
-      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+      GlassLoadingState(label: "Searching…", placement: .scrolling)
     case .empty:
-      VStack(spacing: OmiSpacing.md) {
-        Image(systemName: "magnifyingglass")
-          .scaledFont(size: 32)
-          .foregroundColor(Ink.secondary)
-        Text("No apps found")
-          .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(Ink.secondary)
-      }
-      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+      GlassEmptyState(systemImage: "magnifyingglass", title: "No Apps Found", placement: .scrolling)
     case .failure:
-      VStack(spacing: OmiSpacing.md) {
-        Image(systemName: "exclamationmark.circle")
-          .scaledFont(size: 32)
-          .foregroundColor(Ink.secondary)
-        Text("Couldn't load apps")
-          .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(Ink.secondary)
-        Button("Try Again") {
-          Task { await appProvider.searchApps() }
-        }
-        .buttonStyle(.bordered)
-      }
-      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+      GlassErrorState(
+        title: "Couldn't Load Apps", placement: .scrolling,
+        retry: { Task { await appProvider.searchApps() } })
     case .results:
       filteredAppsGrid
     }
@@ -968,7 +926,7 @@ struct AppsPage: View {
         Spacer()
         if appProvider.isLoadingMore {
           ProgressView()
-            .scaleEffect(0.8)
+            .controlSize(.small)
           Text("Loading more…")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -1011,32 +969,6 @@ struct AppsPage: View {
       .padding(.top, PagePanelVerticalRhythm.contentGap)
       .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
-  }
-
-  private var emptyView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "square.grid.2x2")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("No apps found")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      if !searchText.isEmpty {
-        Text("Try a different search term")
-          .foregroundColor(Ink.secondary)
-
-        Button("Clear Search") {
-          searchText = ""
-        }
-        .buttonStyle(.bordered)
-      } else {
-        Text("Apps will appear here once available")
-          .foregroundColor(Ink.secondary)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -1590,23 +1522,16 @@ struct ImportsSection: View {
         .foregroundColor(Ink.primary)
 
       if connectors.isEmpty && !normalizedSearchText.isEmpty {
-        VStack(spacing: OmiSpacing.md) {
-          Image(systemName: "magnifyingglass")
-            .scaledFont(size: 32)
-            .foregroundColor(Ink.secondary)
-
-          Text("No imports match “\(normalizedSearchText)”")
-            .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(Ink.primary)
-            .multilineTextAlignment(.center)
-
+        GlassEmptyState(
+          systemImage: "magnifyingglass",
+          title: "No imports match “\(normalizedSearchText)”",
+          placement: .scrolling
+        ) {
           if let onClearSearch {
             Button("Clear Search", action: onClearSearch)
-              .buttonStyle(.bordered)
-              .tint(Ink.secondary)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
         }
-        .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
       } else {
         LazyVGrid(
           columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
@@ -1734,21 +1659,15 @@ struct ImportConnectorCard: View {
   }
 }
 
+/// Labels drawn inside a caller's plain `Button` (the whole card is the click target), so they cannot
+/// take a `ButtonStyle`. They draw `OmiButtonStyle`'s compact capsule from its own decisions instead,
+/// so a connector's Connect reads as the same control as every other compact button.
 struct ImportConnectorActionButton: View {
   let title: String
   let isConnected: Bool
 
   var body: some View {
-    Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
-      .frame(width: isConnected ? 78 : 68, height: 26)
-      .background(isConnected ? Ink.wash : Ink.primary)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(Ink.separator, lineWidth: 1)
-      )
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
   }
 }
 
@@ -1757,19 +1676,23 @@ struct ConnectionModalActionButton: View {
   var isConnected = false
 
   var body: some View {
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
+  }
+}
+
+private struct OmiCompactButtonLabel: View {
+  let title: String
+  let kind: OmiButtonStyle.Kind
+
+  var body: some View {
     Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
+      .scaledFont(size: OmiType.body, weight: .semibold)
+      .foregroundStyle(OmiButtonStyle.label(kind))
       .lineLimit(1)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(minWidth: isConnected ? 84 : 72)
-      .frame(height: 28)
-      .background(isConnected ? Ink.wash : Ink.primary)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(Ink.separator, lineWidth: 1)
-      )
+      .padding(.horizontal, OmiButtonStyle.horizontalPadding(.compact))
+      .frame(minHeight: OmiButtonStyle.minHeight(.compact))
+      .background(Capsule(style: .continuous).fill(OmiButtonStyle.fill(kind, pressed: false)))
+      .overlay(Capsule(style: .continuous).strokeBorder(OmiButtonStyle.border(kind), lineWidth: 1))
   }
 }
 
@@ -2395,7 +2318,7 @@ struct CompactAppCard: View {
         }
 
         // Get/Open button
-        SmallAppButton(app: app, appProvider: appProvider, onOpen: onSelect)
+        AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
       }
       .frame(width: 90)
       .padding(.vertical, OmiSpacing.sm)
@@ -2413,45 +2336,6 @@ struct CompactAppCard: View {
         Image(systemName: "app.fill")
           .foregroundColor(Ink.secondary)
       )
-  }
-}
-
-// MARK: - Small App Button
-
-struct SmallAppButton: View {
-  let app: OmiApp
-  let appProvider: AppProvider
-  var onOpen: (() -> Void)? = nil
-
-  var body: some View {
-    Button(action: {
-      if app.enabled {
-        // If already enabled, open the app detail
-        onOpen?()
-      } else {
-        // If not enabled, enable it
-        Task { await appProvider.toggleApp(app) }
-      }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.6)
-          .frame(width: 50, height: 22)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.surface)
-          .frame(width: 50, height: 22)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.smallControlRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(Ink.separator, lineWidth: 1)
-          )
-      }
-    }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
   }
 }
 
@@ -2556,40 +2440,29 @@ struct AppCard: View {
 
 // MARK: - App Action Button
 
+/// The one Open/Install button, at one size, on every app card. The label keeps its width while the
+/// spinner shows so the card does not reflow under the pointer.
 struct AppActionButton: View {
   let app: OmiApp
   let appProvider: AppProvider
   var onOpen: (() -> Void)? = nil
 
   var body: some View {
-    Button(action: {
+    let isLoading = appProvider.isAppLoading(app.id)
+    Button {
       if app.enabled {
-        // If already enabled, open the app detail
         onOpen?()
       } else {
-        // If not enabled, enable it
         Task { await appProvider.toggleApp(app) }
       }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.7)
-          .frame(width: 60, height: 28)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.surface)
-          .frame(width: 60, height: 28)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.chipRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-              .stroke(Ink.separator, lineWidth: 1)
-          )
+    } label: {
+      ZStack {
+        Text(app.enabled ? "Open" : "Install").opacity(isLoading ? 0 : 1)
+        if isLoading { ProgressView().controlSize(.small) }
       }
     }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
+    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    .disabled(isLoading)
   }
 }
 
@@ -2889,35 +2762,18 @@ struct AppDetailSheet: View {
                   }
                 }) {
                   if appProvider.isAppLoading(app.id) {
-                    ProgressView()
-                      .frame(width: 100, height: 36)
+                    ProgressView().controlSize(.small)
                   } else if isSettingUp {
                     HStack(spacing: OmiSpacing.xs) {
-                      ProgressView()
-                        .scaleEffect(0.7)
+                      ProgressView().controlSize(.small)
                       Text("Setting up…")
-                        .scaledFont(size: OmiType.caption, weight: .semibold)
                     }
-                    .foregroundColor(Ink.secondary)
-                    .frame(width: 120, height: 36)
                   } else {
-                    Text(
-                      primaryAction == .open
-                        ? "Open"
-                        : primaryAction == .chat ? "Chat" : "Install"
-                    )
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                    .foregroundColor(Ink.surface)
-                    .frame(width: 100, height: 36)
-                    .background(Ink.primary)
-                    .cornerRadius(OmiChrome.controlRadius)
-                    .overlay(
-                      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                        .stroke(Ink.separator, lineWidth: 1)
-                    )
+                    Text(primaryAction == .open ? "Open" : primaryAction == .chat ? "Chat" : "Install")
                   }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.primary))
+                .disabled(appProvider.isAppLoading(app.id) || isSettingUp)
               }
 
               // Disable button shown only when app is enabled
@@ -3404,27 +3260,16 @@ struct AddReviewSheet: View {
 
           // Submit button
           Button(action: submitReview) {
-            HStack {
+            Group {
               if isSubmitting {
-                ProgressView()
-                  .scaleEffect(0.8)
-                  .tint(PageGlass.primaryActionLabel)
+                ProgressView().controlSize(.small)
               } else {
                 Text(existingReview != nil ? "Update Review" : "Submit Review")
-                  .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .foregroundColor(PageGlass.primaryActionLabel)
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(isFormValid ? Ink.primary : Ink.primary.opacity(0.45))
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .stroke(Ink.separator, lineWidth: 1)
-            )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary))
           .disabled(!isFormValid || isSubmitting)
         }
         .padding()

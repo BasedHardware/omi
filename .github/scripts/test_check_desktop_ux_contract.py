@@ -58,6 +58,28 @@ class RuleCountingTests(unittest.TestCase):
         self.assertEqual(guard.count(rule("raw-cursor-push"), "if hovering { NSCursor.pointingHand.push() }"), 1)
         self.assertEqual(guard.count(rule("raw-cursor-push"), ".pointingHandOnHover()"), 0)
 
+    def test_scaled_progress_view_across_lines_and_modifier_chains(self) -> None:
+        r = rule("scaled-progress-view")
+        # The shapes that shipped: one line, a chain split over lines, and a style or tint in between.
+        self.assertEqual(guard.count(r, "ProgressView().scaleEffect(0.6)"), 1)
+        self.assertEqual(guard.count(r, "ProgressView()\n  .scaleEffect(1.2)\n  .tint(Ink.secondary)"), 1)
+        self.assertEqual(
+            guard.count(r, "ProgressView()\n  .progressViewStyle(.circular)\n  .tint(Ink.surface)\n  .scaleEffect(1.2)"), 1
+        )
+        self.assertEqual(guard.count(r, 'ProgressView("Loading")\n  .frame(width: 10, height: 10)\n  .scaleEffect(0.5)'), 1)
+        # The replacements stay quiet.
+        self.assertEqual(guard.count(r, "ProgressView()\n  .controlSize(.small)"), 0)
+        self.assertEqual(guard.count(r, 'GlassLoadingState(label: "Loading tasks…")'), 0)
+        # A scale on something that is not a spinner is not this rule's business.
+        self.assertEqual(guard.count(r, "Image(systemName: \"star\")\n  .scaleEffect(isPulsing ? 1.5 : 1)"), 0)
+        self.assertEqual(guard.count(r, "ProgressView()\nText(\"x\").scaleEffect(2)"), 0)
+
+    def test_scaled_progress_view_allow_marker_on_any_line_of_the_match(self) -> None:
+        r = rule("scaled-progress-view")
+        text = "ProgressView()\n  .scaleEffect(0.4)  // omi-ux-allow: scaled-progress-view -- 8pt badge"
+        self.assertEqual(guard.count(r, text), 0)
+        self.assertEqual(guard.count(r, "// ProgressView().scaleEffect(0.5)"), 0)
+
     def test_comments_do_not_count_but_strings_do(self) -> None:
         self.assertEqual(guard.count(rule("system-alert"), "// never use .alert( here"), 0)
         self.assertEqual(guard.count(rule("system-alert"), "/* .alert( */ let x = 1"), 0)

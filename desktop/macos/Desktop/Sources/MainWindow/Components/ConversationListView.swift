@@ -80,64 +80,23 @@ struct ConversationListView: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ProgressView()
-        .scaleEffect(1.2)
-        .tint(Ink.secondary)
-
-      Text("Loading conversations…")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading conversations…")
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: OmiType.hero)
-        .foregroundColor(PageGlass.warning)
-
-      Text("Failed to load conversations")
-        .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(Ink.primary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-
-      Button(action: onRefresh) {
-        Text("Try Again")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
-          .padding(.horizontal, OmiSpacing.xl)
-          .padding(.vertical, OmiSpacing.sm)
-          .glassChip(isActive: true)
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.section)
+    GlassErrorState(
+      title: "Couldn't Load Conversations",
+      message: "Check your connection and try again.",
+      retry: onRefresh
+    )
   }
 
   private var emptyView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "bubble.left.and.bubble.right")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("No Conversations")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Start recording to capture your first conversation")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.section)
+    GlassEmptyState(
+      systemImage: "bubble.left.and.bubble.right",
+      title: "No Conversations",
+      message: "Start recording to capture your first conversation"
+    )
   }
 
   private var conversationListContent: some View {
