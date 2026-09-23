@@ -47,7 +47,7 @@ the base branch. The prompt is longer, and generated-note length varies, so this
 is not a promise of identical token usage. Published standard Luna pricing on
 September 7, 2026 is $0.20 per million input tokens and $1.20 per million output
 tokens; cached input has a separate lower rate. See the [official Luna model
-documentation](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
+documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
 
 Seven previously inspected difficult conversations were replayed with the same
 prompt at low and high reasoning on Chat Completions. Each arm used 33,585 input
