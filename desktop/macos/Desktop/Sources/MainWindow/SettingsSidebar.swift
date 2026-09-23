@@ -497,6 +497,7 @@ struct SettingsSidebar: View {
         .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
         .straysTypingHere($isSearchFocused)
+        .focusesOnFind($isSearchFocused)
 
       if !searchQuery.isEmpty {
         ClearFieldButton { searchQuery = "" }

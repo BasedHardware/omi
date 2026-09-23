@@ -119,7 +119,7 @@ struct ChatFirstShell: View {
     }
     .onEscapeKey(priority: .navigation) {
       guard navigation.route != .chat else { return false }
-      OmiMotion.withGated(.easeOut(duration: 0.12)) {
+      OmiMotion.perform(.quick) {
         _ = navigation.handleEscapeNavigation()
       }
       return true
@@ -239,6 +239,15 @@ struct ChatFirstShell: View {
       onSelectDestination: selectHubDestination,
       automationRuntime: automationRuntime
     )
+    // Task evidence and Chat citations open Rewind in place of the page the reader was on; give it
+    // the way back. Esc takes the same path through `handleEscapeNavigation`.
+    .environment(\.drillInBack, rewindDrillInBack)
+  }
+
+  private var rewindDrillInBack: DrillInBack? {
+    navigation.rewindDrillInOrigin.map { origin in
+      DrillInBack(title: origin.title) { navigation.closeMorePage() }
+    }
   }
 
   private var settingsDestination: some View {
@@ -271,7 +280,10 @@ struct ChatFirstShell: View {
 
   private var modernTopBarSelection: Binding<Int> {
     Binding(
-      get: { ChatFirstModernNavigationPolicy.topBarIndex(for: navigation.route) },
+      get: {
+        ChatFirstModernNavigationPolicy.topBarIndex(
+          for: navigation.route, dailyRecapOrigin: navigation.dailyRecapOrigin)
+      },
       set: { rawValue in
         guard let route = ChatFirstModernNavigationPolicy.route(forTopBarIndex: rawValue) else {
           return
@@ -682,12 +694,17 @@ private struct ChatFirstRestoredTasksHost: View {
 }
 
 /// Bridges the typed Chat-first routes to the four primary destinations exposed
-/// by the modern top bar. Chat remains Home in this shell; Goals and secondary
-/// destinations keep their route while the bar stays on the nearest primary.
+/// by the modern top bar. Chat remains Home in this shell. Goals has no pill, so
+/// no pill claims it; a daily recap lights the pill of the page that opened it.
 enum ChatFirstModernNavigationPolicy {
-  static func topBarIndex(for route: ChatFirstRoute) -> Int {
+  /// Matches no pill: the bar shows nothing selected.
+  static let noPill = -1
+
+  static func topBarIndex(for route: ChatFirstRoute, dailyRecapOrigin: ChatFirstRoute? = nil) -> Int {
     switch route {
-    case .chat, .goals, .dailyRecap: return SidebarNavItem.dashboard.rawValue
+    case .goals: return noPill
+    case .dailyRecap: return dailyRecapOrigin.map { topBarIndex(for: $0) } ?? noPill
+    case .chat: return SidebarNavItem.dashboard.rawValue
     case .conversations, .memories: return SidebarNavItem.conversations.rawValue
     case .tasks: return SidebarNavItem.tasks.rawValue
     case .more(let page):

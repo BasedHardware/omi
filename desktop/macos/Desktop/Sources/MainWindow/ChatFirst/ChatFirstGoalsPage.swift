@@ -64,30 +64,27 @@ struct ChatFirstGoalsPage: View {
     .accessibilityIdentifier("chat-first-goals-page")
   }
 
+  /// Goals has no top-bar pill, so it is a drill-in: Back to the page that opened it, then the
+  /// shared page title (docs/ux-contract.md §10). Esc takes the same path (`closeGoals`).
   private var header: some View {
-    HStack(alignment: .firstTextBaseline) {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Goals")
-          .scaledFont(size: OmiType.title, weight: .bold)
-          .foregroundStyle(Ink.primary)
-        Text("Keep the work that matters in view.")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(Ink.secondary)
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
+      BackChip((navigation.goalsOrigin ?? .chat).title, accessibilityIdentifier: "chat-first-goals-back") {
+        navigation.closeGoals()
       }
-      Spacer()
-      Button {
-        Task { await refreshProjectionAndDetail() }
-      } label: {
-        Image(systemName: "arrow.clockwise")
-          .scaledFont(size: OmiType.body, weight: .medium)
+      GlassPageHeader(title: "Goals", subtitle: "Keep the work that matters in view") {
+        refreshButton
       }
-      .buttonStyle(.plain)
-      .disabled(goalsStore.isLoading)
-      .accessibilityLabel("Refresh goals")
-      .accessibilityIdentifier("chat-first-goals-refresh")
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.vertical, OmiSpacing.xl)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.sm + 2)
+  }
+
+  private var refreshButton: some View {
+    OmiIconButton("arrow.clockwise", help: "Refresh goals") {
+      Task { await refreshProjectionAndDetail() }
+    }
+    .disabled(goalsStore.isLoading)
+    .accessibilityIdentifier("chat-first-goals-refresh")
   }
 
   private var goalContent: some View {

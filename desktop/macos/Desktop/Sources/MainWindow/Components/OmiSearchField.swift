@@ -104,5 +104,7 @@ struct OmiSearchField: View {
     // cannot disagree — and no drop shadow, which is what `omiControlSurface` added.
     .glassField()
     .accessibilityElement(children: .contain)
+    // ⌘F lands here while this page is the one on screen (`FindCommandRouter`).
+    .focusesOnFind($isFocused)
   }
 }

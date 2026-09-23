@@ -169,10 +169,9 @@ struct SBOnboardingView: View {
       // The band is a sibling of the scroll view, not an overlay on its content. It always claims the
       // same height, including while a step is streaming, so the current-step column never jumps when
       // one widget is replaced by the next.
-      OnboardingProgressBand(
-        total: SBOnboardingModel.Step.allCases.count,
-        current: model.step.rawValue
-      )
+      // Counts the steps this run shows, not `Step.allCases`: a granted permission is skipped, and a
+      // dot for it would make the band jump (`SBOnboardingModel.progress`).
+      OnboardingProgressBand(total: model.progress.total, current: model.progress.current)
     }
     // One shadow, and it is `InkGlassShadow.ambient` — the same broad, diffuse one every floating
     // panel in this app casts, drawn by `onboardingCard`. Not the 60 pt black drop this used to carry
@@ -226,7 +225,7 @@ struct SBOnboardingView: View {
   }
 
   private func scrollDown(_ proxy: ScrollViewProxy) {
-    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
+    OmiMotion.perform(.standard) { proxy.scrollTo("bottom", anchor: .bottom) }
   }
 
   @ViewBuilder private func messageRow(_ msg: SBOnboardingModel.Msg) -> some View {
@@ -765,15 +764,13 @@ struct SBOnboardingView: View {
           Text("Preparing voice…").inkStyle(InkType.rowCopy, color: Ink.secondary)
         }
       }
-      // Continue appears once Omi has actually answered — before that, an always-
-      // tappable, clearly-visible "Skip for now" so the user is never stuck if the
-      // demo doesn't fire (it used to be a tiny, easily-missed text link).
-      // Skip appears only after the doors were opened: the person reads the step and tries the
-      // page before being offered a way past it. Continue still appears once Omi has answered.
+      // Skip for now is always offered, so the step never traps someone whose demo did not fire;
+      // Continue replaces it once Omi has answered (`SBOnboardingModel.screenDemoFooter`).
       Group {
-        if model.screenDemoDone {
+        switch model.screenDemoFooter {
+        case .continue:
           SBInkButton(title: "Continue", isDefaultAction: true) { model.answerScreenDemo() }
-        } else if model.threeDoorsOpened || model.screenDemoPTTUnavailable {
+        case .skip:
           Button {
             model.answerScreenDemo()
           } label: {

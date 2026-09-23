@@ -287,6 +287,7 @@ extension View {
 // MARK: - Components
 
 /// A page's title block: the heading and the sentence under it, in the two rungs glass carries.
+/// The one page-title style (docs/ux-contract.md §10): subheading semibold over a caption.
 struct GlassPageHeader<Trailing: View>: View {
   let title: String
   var subtitle: String?
@@ -296,10 +297,14 @@ struct GlassPageHeader<Trailing: View>: View {
     HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(title)
-          .inkStyle(InkType.firstTitle, color: Ink.primary)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .lineLimit(1)
         if let subtitle {
           Text(subtitle)
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(1)
         }
       }
       Spacer(minLength: OmiSpacing.md)

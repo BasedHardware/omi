@@ -2423,7 +2423,7 @@ struct MemoriesPage: View {
             PageQueryActionLabel(icon: "plus", title: "New Memory", isPrimary: true)
           }
           .buttonStyle(.plain)
-          .help("New memory")
+          .help("New memory (⌘N)").keyboardShortcut("n", modifiers: .command)
           .accessibilityIdentifier("memories-add-memory")
         }
       }

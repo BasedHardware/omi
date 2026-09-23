@@ -45,7 +45,7 @@ struct TryAskingPopupView: View {
             .frame(maxHeight: .infinity, alignment: .top)
 
           FirstUseCasePreview(useCase: selected)
-            .animation(.easeOut(duration: 0.22), value: selected)
+            .omiAnimation(.standard, value: selected)
         }
         .frame(width: popupWidth, height: popupHeight)
         .padding(OmiSpacing.xxl)
