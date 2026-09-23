@@ -152,7 +152,7 @@ class TestConversationsToAtom(unittest.TestCase):
 
     def test_control_chars_and_lone_surrogate_are_dropped_not_fatal(self):
         conv = {"id": "conv-ctrl", "started_at": "2026-09-17T10:00:00Z",
-                "structured": {"title": "Bad\x00\x07Title\ud800End"}}
+                "structured": {"title": "Bad\x00\x07Title\ud800End", "category": "Bad\x01Cat\ud800End"}}
         src = self.write_json("ctrl.json", [conv])
         out = self.dir_path / "ctrl.xml"
         c2a.convert([str(src)], str(out))
@@ -160,6 +160,9 @@ class TestConversationsToAtom(unittest.TestCase):
         title = tree.find(f"{ATOM_NS}entry/{ATOM_NS}title").text
         self.assertNotIn("\x00", title)
         self.assertNotIn("\x07", title)
+        cat = tree.find(f"{ATOM_NS}entry/{ATOM_NS}category").attrib["term"]
+        self.assertNotIn("\x01", cat)
+        self.assertEqual(cat, "BadCatEnd")
 
     def test_end_before_start_gives_zero_duration(self):
         conv = {"id": "conv-neg", "started_at": "2026-09-17T10:20:00Z", "finished_at": "2026-09-17T10:00:00Z",

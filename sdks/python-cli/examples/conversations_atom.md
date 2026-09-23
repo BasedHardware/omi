@@ -54,22 +54,26 @@ def rfc3339(value):
     return value.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def xml_text(value):
-    """Render a field as escaped Atom text, dropping chars XML 1.0 can't hold."""
+def xml_clean(value):
+    """Filter out characters that XML 1.0 cannot represent."""
     if value is None:
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
     # XML 1.0 excludes most control chars and all lone surrogates; drop rather
-    # than fail, since one odd title must not break the whole feed.
-    kept = "".join(
+    # than fail, since one odd title or category must not break the whole feed.
+    return "".join(
         ch for ch in value
         if ch in ("\t", "\n", "\r")
-        or "\x20" <= ch <= "퟿"
-        or "" <= ch <= "�"
+        or "\x20" <= ch <= "\ud7ff"
+        or "\ue000" <= ch <= "\ufffd"
         or ch >= "\U00010000"
     )
-    return escape(kept)
+
+
+def xml_text(value):
+    """Render a field as escaped Atom text, dropping chars XML 1.0 can't hold."""
+    return escape(xml_clean(value))
 
 
 def entry_iri(conversation_id):
@@ -116,7 +120,7 @@ def build_entry(item):
     lines = ["  <entry>", f"    <id>{xml_text(entry_iri(conversation_id))}</id>",
              f"    <title>{xml_text(title)}</title>"]
     if category:
-        lines.append(f"    <category term={quoteattr(str(category))} />")
+        lines.append(f"    <category term={quoteattr(xml_clean(category))} />")
     if published is not None:
         lines.append(f"    <published>{published}</published>")
     lines.append(f"    <updated>{updated}</updated>")
