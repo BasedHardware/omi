@@ -434,6 +434,11 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
+def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict[str, Any]) -> bool:
+    """A relevance verdict reached after the fact; never overrides a restore."""
+    return conversations_db.discard_by_relevance(uid, conversation_id, relevance_decision)
+
+
 def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
     return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
