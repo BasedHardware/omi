@@ -21,7 +21,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcripts_for_llm,
     memory_transcript_from_segments,
 )
-from utils.conversations.wake_word import find_wake_word_matches, has_structural_wake_word_marker
+from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -65,7 +65,6 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-from utils.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
@@ -75,7 +74,12 @@ from utils.conversations.relevance import (
     RelevanceDecision,
     decide_relevance,
     final_relevance,
-    find_neighbor,
+)
+from utils.conversations.relevance_io import (
+    adjacent_conversation,
+    apply_relevance,
+    record_decision,
+    rules_only_relevance,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -97,7 +101,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_conversation_relevance, record_jit_first_open, record_lazy_desktop_deferral
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -552,7 +556,7 @@ def _get_structured(
             calendar_retains=lambda: _calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
-            neighbor=lambda: _adjacent_conversation(uid, main_conv, conversation_id),
+            neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -2100,76 +2104,6 @@ def _is_ingress_create(
 
 # Bound for reject-log provenance only. Schema caps are larger; logs must stay
 # a single line even when the payload never passed validation.
-NEIGHBOR_CANDIDATE_LIMIT = 10
-
-
-def _adjacent_conversation(
-    uid: str, conversation: Union[Conversation, CreateConversation], conversation_id: Optional[str]
-) -> Optional[Neighbor]:
-    """A kept conversation this one would have joined had capture not split it (fail-open)."""
-    started_at, finished_at = conversation.started_at, conversation.finished_at
-    if started_at is None or finished_at is None:
-        return None
-    try:
-        rows = conversations_db.get_conversations_finished_after(
-            uid,
-            status='completed',
-            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS),
-            limit=NEIGHBOR_CANDIDATE_LIMIT,
-        )
-    except Exception as error:
-        logger.warning('relevance neighbor lookup failed uid=%s: %s', uid, error)
-        return None
-    return find_neighbor(
-        rows,
-        conversation_id=conversation_id or getattr(conversation, 'id', None),
-        started_at=started_at,
-        finished_at=finished_at,
-        gap_seconds=DEFAULT_GAP_SECONDS,
-    )
-
-
-def _rules_only_relevance(
-    uid: str,
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    trigger: ProcessingTrigger,
-    user_kept: bool,
-) -> RelevanceDecision:
-    """The relevance step where the plan withholds the model (free-tier desktop).
-
-    The rules cost nothing, so capture that stores without enrichment is still
-    assessed; anything they cannot settle is kept. Any wake-word match skips the
-    rules entirely, the conservative reading of the model path's trusted marker.
-    """
-    segments = list(getattr(conversation, 'transcript_segments', None) or [])
-    return decide_relevance(
-        trigger=trigger,
-        texts=[segment.text for segment in segments],
-        speech_seconds=None,
-        has_photos=any((photo.description or '').strip() for photo in getattr(conversation, 'photos', None) or []),
-        user_kept=user_kept,
-        exempt=is_release_probe_uid(uid),
-        trusted_wake_word=bool(find_wake_word_matches(segments)),
-        model_discards=None,
-        calendar_retains=lambda: _calendar_overlap_retains_conversation(
-            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
-        ),
-    )
-
-
-def _apply_relevance(conversation: Conversation, payload: dict[str, Any], decision: RelevanceDecision) -> None:
-    """Stamp a decision onto an in-memory conversation and its persist payload."""
-    conversation.discarded = decision.discard
-    payload['discarded'] = decision.discard
-    payload[RELEVANCE_DECISION_FIELD] = decision.as_record()
-    record_conversation_relevance(
-        trigger=decision.trigger.value,
-        verdict=decision.verdict,
-        decided_by=decision.decided_by,
-        reason=decision.reason,
-    )
-
-
 def _store_deferred_conversation(
     uid: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -2183,7 +2117,15 @@ def _store_deferred_conversation(
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
     is_initial_creation = _is_ingress_create(conversation)
-    decision = _rules_only_relevance(uid, conversation, trigger, user_kept)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
@@ -2198,7 +2140,7 @@ def _store_deferred_conversation(
     # in-memory snapshot. A None ``processing_state`` is likewise never
     # stamped: merge=True would write the explicit null as a real key.
     payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
-    _apply_relevance(conversation, payload, decision)
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation:
         persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
     else:
@@ -2317,7 +2259,15 @@ def _store_deterministic_minimum(
     ingest site, not through this persist.
     """
     is_initial_creation = _is_ingress_create(conversation)
-    decision = _rules_only_relevance(uid, conversation, trigger, user_kept)
+    decision = rules_only_relevance(
+        uid,
+        conversation,
+        trigger,
+        user_kept,
+        lambda: _calendar_overlap_retains_conversation(
+            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+        ),
+    )
     structured = build_deterministic_minimum_structured(
         conversation,
         tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
@@ -2331,7 +2281,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
-    _apply_relevance(conversation, payload, decision)
+    apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
     if is_initial_creation:
@@ -2865,12 +2815,7 @@ def process_conversation(
     _attach_client_projection(conversation, client_projection)
     relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
     if relevance is not None:
-        record_conversation_relevance(
-            trigger=relevance.trigger.value,
-            verdict=relevance.verdict,
-            decided_by=relevance.decided_by,
-            reason=relevance.reason,
-        )
+        record_decision(relevance)
 
     # Persist the completed generation before it can trigger any derived work.
     # A discard or replacement that wins this transaction must not create

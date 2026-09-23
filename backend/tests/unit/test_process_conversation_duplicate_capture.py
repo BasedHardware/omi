@@ -229,7 +229,7 @@ def _run(conversation, *, rows=None, lookup_error=None, trigger=None):
         patch.object(pc, '_calendar_overlap_retains_conversation', MagicMock(return_value=False)),
         # The relevance neighbor lookup shares the finished-after query; this harness
         # pins that duplicate-capture detection never runs inside the content gate.
-        patch.object(pc, '_adjacent_conversation', MagicMock(return_value=None)),
+        patch.object(pc, 'adjacent_conversation', MagicMock(return_value=None)),
         patch.object(pc, 'record_fallback', fallback),
         patch.object(pc, 'get_transcript_structure', MagicMock(return_value=Structured(title='Summarized'))),
         patch.object(pc, 'get_reprocess_transcript_structure', MagicMock(return_value=Structured(title='Reprocessed'))),
