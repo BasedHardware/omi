@@ -21,7 +21,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptTab => 'Udskrift';
 
   @override
-  String get actionItemsTab => 'Handlingspunkter';
+  String get actionItemsTab => 'Opgaver';
 
   @override
   String get deleteConversationTitle => 'Slet samtale?';
@@ -112,10 +112,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get remaining => 'Tilbage';
 
   @override
-  String get loading => 'Indlæser...';
+  String get loading => 'Indlæser…';
 
   @override
-  String get loadingDuration => 'Indlæser varighed...';
+  String get loadingDuration => 'Indlæser varighed…';
 
   @override
   String secondsCount(int count) {
@@ -152,7 +152,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get selectLanguage => 'Vælg sprog';
 
   @override
-  String get deleting => 'Sletter...';
+  String get deleting => 'Sletter…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -180,7 +180,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get disconnected => 'Afbrudt';
 
   @override
-  String get searching => 'Søger...';
+  String get searching => 'Søger';
 
   @override
   String get connectDevice => 'Tilslut enhed';
@@ -241,7 +241,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'For at stjernemarkere en samtale skal du åbne den og trykke på stjerneikonet i overskriften.';
 
   @override
-  String get searchConversations => 'Søg samtaler...';
+  String get searchConversations => 'Søg samtaler';
 
   @override
   String selectedCount(int count) {
@@ -272,7 +272,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noMessagesYet => 'Ingen beskeder endnu!\nHvorfor starter du ikke en samtale?';
 
   @override
-  String get deletingMessages => 'Sletter dine beskeder fra Omis hukommelse...';
+  String get deletingMessages => 'Sletter dine beskeder fra Omis hukommelse…';
 
   @override
   String get messageCopied => '✨ Besked kopieret til udklipsholder';
@@ -320,7 +320,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get buildAndShareApp => 'Byg og del din tilpassede app';
 
   @override
-  String get searchApps => 'Søg apps...';
+  String get searchApps => 'Søg apps';
 
   @override
   String get myApps => 'Oprettet af mig';
@@ -478,7 +478,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Hos Omi er vi forpligtede til at beskytte dit privatliv. Denne side giver dig mulighed for at styre, hvordan dine data gemmes og bruges.';
 
   @override
-  String get learnMore => 'Læs mere...';
+  String get learnMore => 'Læs mere…';
 
   @override
   String get dataProtectionLevel => 'Databeskyttelsesniveau';
@@ -651,7 +651,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get developerSettingsTitle => 'Udviklerindstillinger';
 
   @override
-  String get saving => 'Gemmer...';
+  String get saving => 'Gemmer…';
 
   @override
   String get beta => 'Beta';
@@ -729,7 +729,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get providing => 'Leverer';
 
   @override
-  String get providingSubtitle => 'Handlingspunkter og notater automatisk registreret.';
+  String get providingSubtitle => 'Opgaver og noter, registreret automatisk.';
 
   @override
   String get remembering => 'Husker';
@@ -771,16 +771,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get shareStatsMessage => 'Deler mine Omi-statistikker! (omi.me - din altid-aktive AI-assistent)';
 
   @override
-  String get sharePeriodToday => 'I dag har omi:';
+  String get sharePeriodToday => 'I dag har Omi:';
 
   @override
-  String get sharePeriodMonth => 'Denne måned har omi:';
+  String get sharePeriodMonth => 'Denne måned har Omi:';
 
   @override
-  String get sharePeriodYear => 'Dette år har omi:';
+  String get sharePeriodYear => 'Dette år har Omi:';
 
   @override
-  String get sharePeriodAllTime => 'Indtil videre har omi:';
+  String get sharePeriodAllTime => 'Indtil videre har Omi:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -830,7 +830,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get debugLogCleared => 'Debug-log ryddet';
 
   @override
-  String get exportStarted => 'Eksport startet. Dette kan tage et par sekunder...';
+  String get exportStarted => 'Eksport startet. Dette kan tage et par sekunder…';
 
   @override
   String get exportAllData => 'Eksporter alle data';
@@ -1332,7 +1332,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'Handlingspunkter synkroniseret til';
+    return 'Dine opgaver bliver synkroniseret med din $appName-konto';
   }
 
   @override
@@ -1930,7 +1930,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get personalGrowthJourney => 'Din personlige vækstrejse med AI, der lytter til hvert ord.';
 
   @override
-  String get actionItemsTitle => 'Handlingspunkter';
+  String get actionItemsTitle => 'Opgaver';
 
   @override
   String get actionItemsDescription => 'Administrer dine handlingspunkter';
@@ -1945,7 +1945,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tabOld => 'Gamle';
 
   @override
-  String get emptyTodoMessage => 'Ingen opgaver at gøre';
+  String get emptyTodoMessage => '🎉 Alt er klaret!\nIngen ventende opgaver';
 
   @override
   String get emptyDoneMessage => 'Ingen færdige opgaver';
@@ -1957,37 +1957,37 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noItems => 'Ingen elementer';
 
   @override
-  String get actionItemMarkedIncomplete => 'Handlingspunkt markeret som ufuldstændig';
+  String get actionItemMarkedIncomplete => 'Opgave markeret som ufuldført';
 
   @override
-  String get actionItemCompleted => 'Handlingspunkt fuldført';
+  String get actionItemCompleted => 'Opgave fuldført';
 
   @override
-  String get deleteActionItemTitle => 'Slet handlingselement';
+  String get deleteActionItemTitle => 'Slet opgave';
 
   @override
-  String get deleteActionItemMessage => 'Er du sikker på, at du vil slette dette handlingselement?';
+  String get deleteActionItemMessage => 'Er du sikker på, at du vil slette denne opgave?';
 
   @override
   String get deleteSelectedItemsTitle => 'Slet valgte elementer';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Er du sikker på, at du vil slette de valgte elementer?';
+    return 'Er du sikker på, at du vil slette $count valgte opgave$s?';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'Handlingspunkt slettet';
+    return 'Opgave \"$description\" slettet';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return 'Elementer slettet';
+    return '$count opgave$s slettet';
   }
 
   @override
-  String get failedToDeleteItem => 'Kunne ikke slette element';
+  String get failedToDeleteItem => 'Kunne ikke slette opgave';
 
   @override
   String get failedToDeleteItems => 'Kunne ikke slette elementer';
@@ -1996,10 +1996,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get failedToDeleteSomeItems => 'Kunne ikke slette nogle elementer';
 
   @override
-  String get welcomeActionItemsTitle => 'Velkommen til handlingspunkter';
+  String get welcomeActionItemsTitle => 'Klar til opgaver';
 
   @override
-  String get welcomeActionItemsDescription => 'Hold styr på dine opgaver';
+  String get welcomeActionItemsDescription =>
+      'Din AI trækker automatisk opgaver ud af dine samtaler. De vises her, når de er oprettet.';
 
   @override
   String get autoExtractionFeature => 'Automatisk udtrækning';
@@ -2019,7 +2020,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteSelected => 'Slet valgte';
 
   @override
-  String get searchMemories => 'Søg minder...';
+  String get searchMemories => 'Søg minder';
 
   @override
   String get memoryDeleted => 'Hukommelse slettet';
@@ -2077,7 +2078,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get createMemoryTooltip => 'Opret hukommelse';
 
   @override
-  String get createActionItemTooltip => 'Opret handlingspunkt';
+  String get createActionItemTooltip => 'Opret ny opgave';
 
   @override
   String get memoryManagement => 'Hukommelsesstyring';
@@ -2151,16 +2152,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get actionItemDescriptionHint => 'Indtast beskrivelse';
 
   @override
-  String get actionItemDescriptionEmpty => 'Beskrivelse kan ikke være tom';
+  String get actionItemDescriptionEmpty => 'Opgavebeskrivelsen kan ikke være tom.';
 
   @override
-  String get actionItemUpdated => 'Handlingspunkt opdateret';
+  String get actionItemUpdated => 'Opgave opdateret';
 
   @override
   String get failedToUpdateActionItem => 'Kunne ikke opdatere opgave';
 
   @override
-  String get actionItemCreated => 'Handlingspunkt oprettet';
+  String get actionItemCreated => 'Opgave oprettet';
 
   @override
   String get failedToCreateActionItem => 'Kunne ikke oprette opgave';
@@ -2199,16 +2200,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String get markComplete => 'Marker som fuldført';
 
   @override
-  String get actionItemDeleted => 'Handlingselement slettet';
+  String get actionItemDeleted => 'Opgave slettet';
 
   @override
   String get failedToDeleteActionItem => 'Kunne ikke slette opgave';
 
   @override
-  String get deleteActionItemConfirmTitle => 'Slet handlingspunkt';
+  String get deleteActionItemConfirmTitle => 'Slet opgave';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Er du sikker på, at du vil slette dette handlingspunkt?';
+  String get deleteActionItemConfirmMessage => 'Er du sikker på, at du vil slette denne opgave?';
 
   @override
   String get appLanguage => 'App-sprog';
@@ -2237,7 +2238,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get pleaseSelectReason => 'Vælg venligst en årsag';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Fortæl os mere om, hvad der gik galt...';
+  String get tellUsMoreWhatWentWrong => 'Fortæl os mere om, hvad der gik galt…';
 
   @override
   String get selectText => 'Vælg tekst';
@@ -2296,7 +2297,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get exportButton => 'Eksportér';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Handlingspunkter kopieret til udklipsholder';
+  String get actionItemsCopiedToClipboard => 'Opgaver kopieret til udklipsholder';
 
   @override
   String get summarize => 'Opsummer';
@@ -2443,7 +2444,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Hjælper med at diagnosticere problemer';
 
   @override
-  String get exportStartedMessage => 'Eksport startet. Dette kan tage et par sekunder...';
+  String get exportStartedMessage => 'Eksport startet. Dette kan tage et par sekunder…';
 
   @override
   String get exportConversationsToJson => 'Eksporter samtaler til en JSON-fil';
@@ -2499,7 +2500,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Spor dine personlige mål på startsiden';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Handlingselementbeskrivelse kan ikke være tom';
+  String get actionItemDescriptionCannotBeEmpty => 'Opgavebeskrivelsen kan ikke være tom';
 
   @override
   String get saved => 'Gemt';
@@ -2581,7 +2582,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get toggleControlBar => 'Skift kontrolbjælke';
 
   @override
-  String get pressKeys => 'Tryk på taster...';
+  String get pressKeys => 'Tryk på taster…';
 
   @override
   String get cmdRequired => '⌘ påkrævet';
@@ -2596,7 +2597,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get search => 'Søg';
 
   @override
-  String get searchPlaceholder => 'Søg...';
+  String get searchPlaceholder => 'Søg';
 
   @override
   String get untitledConversation => 'Unavngivet samtale';
@@ -2669,7 +2670,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get searchResults => 'Søgeresultater';
 
   @override
-  String get actionItems => 'Handlingspunkter';
+  String get actionItems => 'Opgaver';
 
   @override
   String get tasksToday => 'I dag';
@@ -2684,7 +2685,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tasksLater => 'Senere';
 
   @override
-  String get loadingTasks => 'Indlæser opgaver...';
+  String get loadingTasks => 'Indlæser opgaver…';
 
   @override
   String get tasks => 'Opgaver';
@@ -2761,7 +2762,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Er du sikker på, at du vil slette denne opgave? Denne handling kan ikke fortrydes.';
 
   @override
-  String get enterActionItemDescription => 'Indtast opgavebeskrivelse...';
+  String get enterActionItemDescription => 'Indtast opgavebeskrivelse';
 
   @override
   String get markAsCompleted => 'Marker som fuldført';
@@ -2770,10 +2771,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get setDueDateAndTime => 'Indstil forfaldsdato og tid';
 
   @override
-  String get reloadingApps => 'Genindlæser apps...';
+  String get reloadingApps => 'Genindlæser apps…';
 
   @override
-  String get loadingApps => 'Indlæser apps...';
+  String get loadingApps => 'Indlæser apps…';
 
   @override
   String get browseInstallCreateApps => 'Gennemse, installer og opret apps';
@@ -2809,10 +2810,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Byg og indsend din tilpassede Omi-app';
 
   @override
-  String get submittingYourApp => 'Sender din app...';
+  String get submittingYourApp => 'Sender din app…';
 
   @override
-  String get preparingFormForYou => 'Forbereder formularen til dig...';
+  String get preparingFormForYou => 'Forbereder formularen til dig…';
 
   @override
   String get appDetails => 'App-detaljer';
@@ -2834,14 +2835,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Du er en fantastisk app, dit job er at svare på brugerforespørgsler og få dem til at føle sig godt tilpas...';
+      'Du er en fantastisk app, dit job er at svare på brugerforespørgsler og få dem til at føle sig godt tilpas…';
 
   @override
   String get conversationPrompt => 'Samtaleprompt';
 
   @override
   String get conversationPromptPlaceholder =>
-      'Du er en fantastisk app, du vil få en transskription og opsummering af en samtale...';
+      'Du er en fantastisk app, du vil få en transskription og opsummering af en samtale…';
 
   @override
   String get notificationScopes => 'Notifikationsområder';
@@ -3002,7 +3003,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get pricingPaid => 'Betalt';
 
   @override
-  String get loadingCapabilities => 'Indlæser funktioner...';
+  String get loadingCapabilities => 'Indlæser funktioner…';
 
   @override
   String get filterInstalled => 'Installeret';
@@ -3142,7 +3143,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get failedToTranscribeAudio => 'Kunne ikke transkribere lyd';
 
   @override
-  String get transcribing => 'Transskriberer...';
+  String get transcribing => 'Transskriberer…';
 
   @override
   String get discardedConversation => 'Kasseret samtale';
@@ -3154,7 +3155,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get from => 'fra';
 
   @override
-  String get copied => 'Kopieret!';
+  String get copied => 'Kopieret';
 
   @override
   String get copyLink => 'Kopier link';
@@ -3192,7 +3193,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get failedToGenerateShareLink => 'Kunne ikke generere delingslink';
 
   @override
-  String get reloadingConversations => 'Genindlæser samtaler...';
+  String get reloadingConversations => 'Genindlæser samtaler…';
 
   @override
   String get user => 'Bruger';
@@ -3251,7 +3252,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get wearableAiCompanion => 'Bærbar AI-ledsager';
 
   @override
-  String get loadingMemories => 'Indlæser minder...';
+  String get loadingMemories => 'Indlæser minder…';
 
   @override
   String get allMemories => 'Alle minder';
@@ -3263,7 +3264,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get manual => 'Manuel';
 
   @override
-  String get loadingYourMemories => 'Indlæser dine minder...';
+  String get loadingYourMemories => 'Indlæser dine minder…';
 
   @override
   String get createYourFirstMemory => 'Opret dit første minde for at komme i gang';
@@ -3381,7 +3382,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => 'Vælg dit foretrukne sprog for den bedste Omi-oplevelse';
 
   @override
-  String get searchLanguages => 'Søg sprog...';
+  String get searchLanguages => 'Søg sprog';
 
   @override
   String get selectALanguage => 'Vælg et sprog';
@@ -3438,13 +3439,13 @@ class AppLocalizationsDa extends AppLocalizations {
       'Omi har brug for tilgængelighedstilladelse for at opdage, når du deltager i Zoom-, Meet- eller Teams-møder i din browser.';
 
   @override
-  String get pleaseWait => 'Vent venligst...';
+  String get pleaseWait => 'Vent venligst…';
 
   @override
   String get joinTheCommunity => 'Bliv en del af fællesskabet!';
 
   @override
-  String get loadingProfile => 'Indlæser profil...';
+  String get loadingProfile => 'Indlæser profil…';
 
   @override
   String get profileSettings => 'Profilindstillinger';
@@ -3572,7 +3573,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get saveSettings => 'Gem Indstillinger';
 
   @override
-  String get syncingDeveloperSettings => 'Synkroniserer udviklerindstillinger...';
+  String get syncingDeveloperSettings => 'Synkroniserer udviklerindstillinger…';
 
   @override
   String get summary => 'Resumé';
@@ -3625,7 +3626,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get conversationDeleted => 'Samtale slettet';
 
   @override
-  String get generatingLink => 'Genererer link...';
+  String get generatingLink => 'Genererer link…';
 
   @override
   String get editConversation => 'Rediger samtale';
@@ -3646,7 +3647,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get conversationTitle => 'Samtaletitel';
 
   @override
-  String get enterConversationTitle => 'Indtast samtaletitel...';
+  String get enterConversationTitle => 'Indtast samtaletitel…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Samtaletitel opdateret';
@@ -3658,7 +3659,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Fejl ved opdatering af samtaletitel';
 
   @override
-  String get settingUp => 'Konfigurerer...';
+  String get settingUp => 'Konfigurerer…';
 
   @override
   String get startYourFirstRecording => 'Start din første optagelse';
@@ -3667,7 +3668,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Forbereder systemlydoptagelse';
 
   @override
-  String get reconnecting => 'Genopretter forbindelse...';
+  String get reconnecting => 'Genopretter forbindelse…';
 
   @override
   String get recordingPaused => 'Optagelse sat på pause';
@@ -3680,14 +3681,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Genoptager om ${countdown}s...';
+    return 'Genoptager om ${countdown}s…';
   }
 
   @override
   String get tapPlayToResume => 'Tryk på afspil for at fortsætte';
 
   @override
-  String get listeningForAudio => 'Lytter efter lyd...';
+  String get listeningForAudio => 'Lytter efter lyd…';
 
   @override
   String get preparingAudioCapture => 'Forbereder lydoptagelse';
@@ -3715,7 +3716,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get paused => 'På pause';
 
   @override
-  String get initializing => 'Initialiserer...';
+  String get initializing => 'Initialiserer…';
 
   @override
   String get recording => 'Optager';
@@ -3743,7 +3744,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'oversat af omi';
+  String get translatedByOmi => 'oversat af Omi';
 
   @override
   String get backToConversations => 'Tilbage til Samtaler';
@@ -3768,7 +3769,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get selectAudioInput => 'Vælg lydindgang';
 
   @override
-  String get loadingDevices => 'Indlæser enheder...';
+  String get loadingDevices => 'Indlæser enheder…';
 
   @override
   String get settingsHeader => 'INDSTILLINGER';
@@ -3876,7 +3877,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get exportConversationsDescription => 'Eksporter samtaler til JSON';
 
   @override
-  String get exportingConversations => 'Eksporterer samtaler...';
+  String get exportingConversations => 'Eksporterer samtaler…';
 
   @override
   String get clearNodesDescription => 'Ryd alle knudepunkter og forbindelser';
@@ -3969,7 +3970,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ny version tilgængelig  🎉';
+  String get newVersionAvailable => 'Ny version tilgængelig';
 
   @override
   String get no => 'Nej';
@@ -4019,7 +4020,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get cancelSubscriptionButton => 'Annuller abonnement';
 
   @override
-  String get cancelling => 'Annullerer...';
+  String get cancelling => 'Annullerer…';
 
   @override
   String get betaTesterMessage =>
@@ -4136,7 +4137,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Tilføjer til $serviceName...';
+    return 'Tilføjer til $serviceName…';
   }
 
   @override
@@ -4173,7 +4174,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API-nøgler bruges til godkendelse, når din app kommunikerer med OMI-serveren. De gør det muligt for din applikation at oprette minder og få sikker adgang til andre OMI-tjenester.';
+      'API-nøgler bruges til godkendelse, når din app kommunikerer med Omi-serveren. De gør det muligt for din applikation at oprette minder og få sikker adgang til andre Omi-tjenester.';
 
   @override
   String get aboutOmiApiKeys => 'Om Omi API-nøgler';
@@ -4653,7 +4654,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Videngraf slettet';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Eksport startet. Dette kan tage et par sekunder...';
+  String get exportStartedMayTakeFewSeconds => 'Eksport startet. Dette kan tage et par sekunder…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
@@ -4891,7 +4892,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get checkingForUpdates => 'Søger efter opdateringer';
 
   @override
-  String get checkingFirmwareVersion => 'Kontrollerer firmware-version...';
+  String get checkingFirmwareVersion => 'Kontrollerer firmware-version…';
 
   @override
   String get firmwareUpdate => 'Firmwareopdatering';
@@ -5073,19 +5074,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get showLess => 'vis mindre ↑';
 
   @override
-  String get loadingYourRecording => 'Indlæser din optagelse...';
+  String get loadingYourRecording => 'Indlæser din optagelse…';
 
   @override
   String get photoDiscardedMessage => 'Dette foto blev kasseret, da det ikke var betydningsfuldt.';
 
   @override
-  String get analyzing => 'Analyserer...';
+  String get analyzing => 'Analyserer…';
 
   @override
   String get searchCountries => 'Søg lande...';
 
   @override
-  String get checkingAppleWatch => 'Tjekker Apple Watch...';
+  String get checkingAppleWatch => 'Tjekker Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'Installer Omi på dit\nApple Watch';
@@ -5147,7 +5148,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get dontAskAgain => 'Spørg mig ikke igen';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Venter på transskription eller billeder...';
+  String get waitingForTranscriptOrPhotos => 'Venter på transskription eller billeder…';
 
   @override
   String get noSummaryYet => 'Intet resumé endnu';
@@ -5254,7 +5255,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get wrappedYouTalkedAbout => 'Du talte om';
 
   @override
-  String get wrappedActionItems => 'Handlingspunkter';
+  String get wrappedActionItems => 'Opgaver';
 
   @override
   String get wrappedTasksCreated => 'oprettede opgaver';
@@ -5346,10 +5347,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Generer min Wrapped';
 
   @override
-  String get wrappedProcessingDefault => 'Behandler...';
+  String get wrappedProcessingDefault => 'Behandler…';
 
   @override
-  String get wrappedCreatingYourStory => 'Skaber din\n2025 historie...';
+  String get wrappedCreatingYourStory => 'Skaber din\n2025 historie…';
 
   @override
   String get wrappedSomethingWentWrong => 'Noget gik\ngalt';
@@ -5379,7 +5380,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Start af generering mislykkedes. Prøv venligst igen.';
 
   @override
-  String get wrappedStarting => 'Starter...';
+  String get wrappedStarting => 'Starter…';
 
   @override
   String get wrappedShare => 'Del';
@@ -5585,13 +5586,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Noget gik galt! Prøv venligst igen senere.';
 
   @override
-  String get uploadingVoiceProfile => 'Uploader din stemmeprofil....';
+  String get uploadingVoiceProfile => 'Uploader din stemmeprofil….';
 
   @override
-  String get memorizingYourVoice => 'Husker din stemme...';
+  String get memorizingYourVoice => 'Husker din stemme…';
 
   @override
-  String get personalizingExperience => 'Tilpasser din oplevelse...';
+  String get personalizingExperience => 'Tilpasser din oplevelse…';
 
   @override
   String get keepSpeakingUntil100 => 'Bliv ved med at tale indtil du når 100%.';
@@ -5716,7 +5717,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearChatQuestion => 'Ryd chat?';
 
   @override
-  String get syncingMessages => 'Synkroniserer beskeder med serveren...';
+  String get syncingMessages => 'Synkroniserer beskeder med serveren…';
 
   @override
   String get chatAppsTitle => 'Chat apps';
@@ -5876,10 +5877,10 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Opsummerer samtale...\nDette kan tage et par sekunder';
+  String get summarizingConversation => 'Opsummerer samtale…\nDette kan tage et par sekunder';
 
   @override
-  String get resummarizingConversation => 'Gen-opsummerer samtale...\nDette kan tage et par sekunder';
+  String get resummarizingConversation => 'Gen-opsummerer samtale…\nDette kan tage et par sekunder';
 
   @override
   String get nothingInterestingRetry => 'Intet interessant fundet,\nvil du prøve igen?';
@@ -6010,7 +6011,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get doNotCloseApp => 'Luk venligst ikke appen.';
 
   @override
-  String get downloading => 'Downloader...';
+  String get downloading => 'Downloader…';
 
   @override
   String get downloadModel => 'Download model';
@@ -6090,7 +6091,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Forbereder $model...';
+    return 'Forbereder $model…';
   }
 
   @override
@@ -6119,7 +6120,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get useTemplateFrom => 'Brug skabelon fra';
 
   @override
-  String get selectProviderTemplate => 'Vælg en udbyders skabelon...';
+  String get selectProviderTemplate => 'Vælg en udbyders skabelon…';
 
   @override
   String get quicklyPopulateResponse => 'Udfyld hurtigt med en kendt udbyders svarformat';
@@ -6321,13 +6322,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get signUpSuccess => 'Tilmelding gennemført!';
 
   @override
-  String get loadingKnowledgeGraph => 'Indlæser vidensgraf...';
+  String get loadingKnowledgeGraph => 'Indlæser vidensgraf…';
 
   @override
   String get noKnowledgeGraphYet => 'Ingen vidensgraf endnu';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Opbygger vidensgraf fra minder...';
+  String get buildingKnowledgeGraphFromMemories => 'Opbygger vidensgraf fra minder…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6344,7 +6345,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Åbner $appName...';
+    return 'Åbner $appName…';
   }
 
   @override
@@ -6378,7 +6379,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get moneyEarned => 'Penge tjent';
 
   @override
-  String get writeYourReply => 'Skriv dit svar...';
+  String get writeYourReply => 'Skriv dit svar…';
 
   @override
   String get replySentSuccessfully => 'Svar sendt';
@@ -6525,7 +6526,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get selectContactsToShareSummary => 'Vælg kontakter til at dele dit samtaleresumé';
 
   @override
-  String get searchContactsHint => 'Søg kontakter...';
+  String get searchContactsHint => 'Søg kontakter';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6613,7 +6614,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Overfører...';
+  String get transferring => 'Overfører…';
 
   @override
   String get transferRequired => 'Overførsel påkrævet';
@@ -6778,7 +6779,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrerer til beskyttelse';
+    return 'Migrerer til $level-beskyttelse…';
   }
 
   @override
@@ -6786,7 +6787,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrerer $itemType... $percentage%';
+    return 'Migrerer $itemType… $percentage%';
   }
 
   @override
@@ -6825,13 +6826,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get templateName => 'Skabelonnavn';
 
   @override
-  String get templateNameHint => 'f.eks. Mødehandlingspunkter Ekstraktor';
+  String get templateNameHint => 'f.eks. Mødeopgave-ekstraktor';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Navnet skal være mindst 3 tegn';
 
   @override
-  String get conversationPromptHint => 'f.eks. Udtræk handlingspunkter, beslutninger og vigtige pointer fra samtalen.';
+  String get conversationPromptHint => 'f.eks. Udtræk opgaver, beslutninger og vigtige pointer fra samtalen.';
 
   @override
   String get pleaseEnterAppPrompt => 'Indtast venligst en prompt til din app';
@@ -6846,13 +6847,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Kun du kan bruge denne skabelon';
 
   @override
-  String get generatingDescription => 'Genererer beskrivelse...';
+  String get generatingDescription => 'Genererer beskrivelse…';
 
   @override
-  String get creatingAppIcon => 'Opretter app-ikon...';
+  String get creatingAppIcon => 'Opretter app-ikon…';
 
   @override
-  String get installingApp => 'Installerer app...';
+  String get installingApp => 'Installerer app…';
 
   @override
   String get appCreatedAndInstalled => 'App oprettet og installeret!';
@@ -6981,7 +6982,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Indtast venligst en beskrivelse af din app';
 
   @override
-  String get aiGenCreatingAppIcon => 'Opretter app-ikon...';
+  String get aiGenCreatingAppIcon => 'Opretter app-ikon…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7108,7 +7109,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onboardingYoureAllSet => 'Du er klar';
 
   @override
-  String get searchTranscriptOrSummary => 'Søg i transskription eller resumé...';
+  String get searchTranscriptOrSummary => 'Søg i transskription eller resumé';
 
   @override
   String get myGoal => 'Mit mål';
@@ -7341,10 +7342,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get msgUploadFileFailed => 'Kunne ikke uploade fil, prøv venligst igen senere';
 
   @override
-  String get msgReadingMemories => 'Læser dine minder...';
+  String get msgReadingMemories => 'Læser dine minder…';
 
   @override
-  String get msgLearningMemories => 'Lærer fra dine minder...';
+  String get msgLearningMemories => 'Lærer fra dine minder…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Kunne ikke uploade den vedhæftede fil.';
@@ -7409,7 +7410,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Fletter...';
+  String get mergingStatus => 'Fletter…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7504,10 +7505,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get color => 'Farve';
 
   @override
-  String get waitingForDevice => 'Venter på enhed...';
+  String get waitingForDevice => 'Venter på enhed…';
 
   @override
-  String get saySomething => 'Sig noget...';
+  String get saySomething => 'Sig noget…';
 
   @override
   String get initialisingSystemAudio => 'Initialiserer systemlyd';
@@ -7556,7 +7557,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get audioDownloadFailed => 'Kunne ikke downloade lyd';
 
   @override
-  String get downloadingAudio => 'Downloader lyd...';
+  String get downloadingAudio => 'Downloader lyd…';
 
   @override
   String get shareAudio => 'Del lyd';
@@ -7565,7 +7566,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get preparingAudio => 'Forbereder lyd';
 
   @override
-  String get gettingAudioFiles => 'Henter lydfiler...';
+  String get gettingAudioFiles => 'Henter lydfiler…';
 
   @override
   String get downloadingAudioProgress => 'Downloader lyd';
@@ -7574,13 +7575,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingAudio => 'Behandler lyd';
 
   @override
-  String get combiningAudioFiles => 'Kombinerer lydfiler...';
+  String get combiningAudioFiles => 'Kombinerer lydfiler…';
 
   @override
   String get audioReady => 'Lyd klar';
 
   @override
-  String get openingShareSheet => 'Åbner delingsark...';
+  String get openingShareSheet => 'Åbner delingsark…';
 
   @override
   String get audioShareFailed => 'Deling mislykkedes';
@@ -7765,7 +7766,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get mcpConnectionFailed => 'Kunne ikke oprette forbindelse til MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Autoriserer...';
+  String get authorizingMcpServer => 'Autoriserer…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Hvordan fandt du os?';
@@ -7898,7 +7899,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get downloadingFromDevice => 'Downloader fra enhed';
 
   @override
-  String get reconnectingToInternet => 'Genopretter forbindelse til internet...';
+  String get reconnectingToInternet => 'Genopretter forbindelse til internet…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7906,11 +7907,11 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Behandler på serveren...';
+  String get processingOnServer => 'Behandler på serveren…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Behandler... $current/$total segmenter';
+    return 'Behandler… $current/$total segmenter';
   }
 
   @override
@@ -8092,7 +8093,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get followTheVoiceInstructions => 'Folg stemmeinstruktionerne';
 
   @override
-  String get statusCalling => 'Ringer...';
+  String get statusCalling => 'Ringer…';
 
   @override
   String get statusCallInProgress => 'Opkald i gang';
@@ -8137,10 +8138,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get failedToStartCall => 'Kunne ikke starte opkald';
 
   @override
-  String get callStateConnecting => 'Forbinder...';
+  String get callStateConnecting => 'Forbinder…';
 
   @override
-  String get callStateRinging => 'Ringer...';
+  String get callStateRinging => 'Ringer…';
 
   @override
   String get callStateEnded => 'Opkald afsluttet';
@@ -8149,7 +8150,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get callStateFailed => 'Opkald mislykkedes';
 
   @override
-  String get transcriptPlaceholder => 'Transkription vises her...';
+  String get transcriptPlaceholder => 'Transkription vises her…';
 
   @override
   String get phoneUnmute => 'Sla lyd til';
@@ -8247,7 +8248,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'Transskription i realtid af hvert opkald';
 
   @override
-  String get phoneCallsUpsellFeature2 => 'Automatiske opkaldsresuméer og handlingspunkter';
+  String get phoneCallsUpsellFeature2 => 'Automatiske opkaldsresuméer og opgaver';
 
   @override
   String get phoneCallsUpsellFeature3 => 'Modtagere ser dit rigtige nummer, ikke et tilfældigt';
@@ -8388,7 +8389,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptionPaused => 'Optager, genopretter forbindelse';
 
   @override
-  String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription...';
+  String get transcriptionPausedReconnecting => 'Optager stadig — genopretter forbindelse til transskription…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8541,7 +8542,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tellUsMore => 'Fortæl os mere (valgfrit)';
 
   @override
-  String get cancelReasonDetailHint => 'Vi sætter pris på enhver feedback...';
+  String get cancelReasonDetailHint => 'Vi sætter pris på enhver feedback…';
 
   @override
   String get justAMoment => 'Et øjeblik, tak';
@@ -8638,7 +8639,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get diagnostics => 'Diagnostik';
 
   @override
-  String get waitingForData => 'Venter på data...';
+  String get waitingForData => 'Venter på data…';
 
   @override
   String get liveRssiOverTime => 'Live RSSI over tid';
@@ -8647,7 +8648,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noRssiDataYet => 'Ingen RSSI-data endnu';
 
   @override
-  String get collectingData => 'Indsamler data...';
+  String get collectingData => 'Indsamler data…';
 
   @override
   String get cleanDisconnect => 'Ren afbrydelse';
@@ -8728,7 +8729,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get stableFirmware => 'Stabil firmware';
 
   @override
-  String get fetchingStableFirmware => 'Henter seneste stabile firmware...';
+  String get fetchingStableFirmware => 'Henter seneste stabile firmware…';
 
   @override
   String get noStableFirmwareFound => 'Kunne ikke finde en stabil firmwareversion til din enhed.';
@@ -8746,40 +8747,40 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'Uploader $duration lyd til transskription…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'Prøver upload igen… $duration lyd er gemt på din telefon';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'Upload mislykkedes — $duration lyd er gemt på din telefon. Tryk for at prøve igen.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'Upload mislykkedes — $duration lyd er gemt på din telefon.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'Lytter… en transskription vises her.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'Optager offline — transskriptionen indhenter, når du er online igen.';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'Transskription er ikke tilgængelig — optagelsen fortsætter, og din lyd gemmes.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'Optager';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'Tager billeder';
 
   @override
   String get willSyncAutomatically => 'synkroniseres automatisk';
@@ -8795,10 +8796,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get voiceRecordingFound => 'Optagelse fundet';
 
   @override
-  String get transcriptionConnecting => 'Forbinder transskription...';
+  String get transcriptionConnecting => 'Forbinder transskription…';
 
   @override
-  String get transcriptionReconnecting => 'Genopretter transskription...';
+  String get transcriptionReconnecting => 'Genopretter transskription…';
 
   @override
   String get transcriptionUnavailable => 'Transskription ikke tilgængelig';
@@ -9107,7 +9108,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get phoneCallSubtitle => 'Optag et opkald med live-transskription';
 
   @override
-  String get searchActionItems => 'Søg i handlingspunkter';
+  String get searchActionItems => 'Søg i opgaver';
 
   @override
   String get selectActionItems => 'Vælg flere';
@@ -9416,7 +9417,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Godt klaret!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Begynd at tale...';
+  String get deviceOnboardingStartSpeaking => 'Begynd at tale…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Stil Omi et spørgsmål';
@@ -9426,10 +9427,10 @@ class AppLocalizationsDa extends AppLocalizations {
       'Tryk én gang på knappen, stil dit spørgsmål, og tryk igen, når du er færdig';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Behandler dit spørgsmål...';
+  String get deviceOnboardingProcessingQuestion => 'Behandler dit spørgsmål…';
 
   @override
-  String get deviceOnboardingListening => 'Lytter...';
+  String get deviceOnboardingListening => 'Lytter…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Sluk';
@@ -9456,7 +9457,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Afbrudt';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Slukker...';
+  String get deviceOnboardingStatusTurningOff => 'Slukker…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Tilpas dobbelttryk';
@@ -9763,7 +9764,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get copyMessage => 'Kopiér besked';
 
   @override
-  String get searchSettings => 'Søg i indstillinger…';
+  String get searchSettings => 'Søg i indstillinger';
 
   @override
   String get errorLoadingAudio => 'Fejl ved indlæsning af lyd';
@@ -10130,4 +10131,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get clearSearch => 'Ryd søgning';
+
+  @override
+  String get filterBySpeaker => 'Filtrer efter taler';
+
+  @override
+  String get notNow => 'Ikke nu';
+
+  @override
+  String get discard => 'Kassér';
+
+  @override
+  String get keepEditing => 'Fortsæt redigering';
+
+  @override
+  String get discardChangesTitle => 'Kassér ændringer?';
+
+  @override
+  String get discardChangesMessage => 'Dine ikke-gemte ændringer går tabt.';
 }

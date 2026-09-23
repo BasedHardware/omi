@@ -100,8 +100,8 @@ void main() {
     await tester.pumpWidget(feedbackHarness((context) => showOmiAlert(context, title: 'Saved', message: 'Done.')));
     await tapTrigger(tester);
     expect(find.byType(TextButton), findsOneWidget);
-    expect(find.text('Ok'), findsOneWidget);
-    await tester.tap(find.text('Ok'));
+    expect(find.text('OK'), findsOneWidget);
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
   });
@@ -201,7 +201,7 @@ void main() {
       await tapTrigger(tester);
       expect(find.byType(TextButton), findsOneWidget);
       expect(find.text('Cancel'), findsNothing);
-      await tester.tap(find.text('Ok'));
+      await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       expect(cancelled, 1);
       expect(find.byType(AlertDialog), findsNothing);

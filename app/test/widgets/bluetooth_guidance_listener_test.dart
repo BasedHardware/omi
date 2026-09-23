@@ -32,7 +32,7 @@ void main() {
     expect(find.text('Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.'),
         findsOneWidget);
 
-    await tester.tap(find.text('Ok'));
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
     expect(readiness.guidance, isNull);

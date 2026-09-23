@@ -216,7 +216,7 @@ abstract class AppLocalizations {
   /// Tab label for action items
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get actionItemsTab;
 
   /// Title for delete confirmation dialog
@@ -246,7 +246,7 @@ abstract class AppLocalizations {
   /// Generic OK button text
   ///
   /// In en, this message translates to:
-  /// **'Ok'**
+  /// **'OK'**
   String get ok;
 
   /// Delete button
@@ -378,7 +378,7 @@ abstract class AppLocalizations {
   /// Button to copy error details
   ///
   /// In en, this message translates to:
-  /// **'Copy error message'**
+  /// **'Copy Error Message'**
   String get copyErrorMessage;
 
   /// Snackbar message after copying error
@@ -396,13 +396,13 @@ abstract class AppLocalizations {
   /// Loading indicator text
   ///
   /// In en, this message translates to:
-  /// **'Loading...'**
+  /// **'Loading…'**
   String get loading;
 
   /// Loading duration indicator
   ///
   /// In en, this message translates to:
-  /// **'Loading duration...'**
+  /// **'Loading duration…'**
   String get loadingDuration;
 
   /// Duration in seconds
@@ -468,7 +468,7 @@ abstract class AppLocalizations {
   /// Deleting in progress indicator
   ///
   /// In en, this message translates to:
-  /// **'Deleting...'**
+  /// **'Deleting…'**
   String get deleting;
 
   /// Message shown during OAuth flow
@@ -522,7 +522,7 @@ abstract class AppLocalizations {
   /// Loading text displayed while search is in progress
   ///
   /// In en, this message translates to:
-  /// **'Searching...'**
+  /// **'Searching'**
   String get searching;
 
   /// Button to connect a device
@@ -642,7 +642,7 @@ abstract class AppLocalizations {
   /// Placeholder text for conversation search field
   ///
   /// In en, this message translates to:
-  /// **'Search conversations...'**
+  /// **'Search conversations'**
   String get searchConversations;
 
   /// Selection count label
@@ -696,7 +696,7 @@ abstract class AppLocalizations {
   /// Loading text when clearing chat
   ///
   /// In en, this message translates to:
-  /// **'Deleting your messages from Omi\'s memory...'**
+  /// **'Deleting your messages from Omi\'s memory…'**
   String get deletingMessages;
 
   /// Snackbar message for copied text
@@ -792,7 +792,7 @@ abstract class AppLocalizations {
   /// Placeholder text for search input
   ///
   /// In en, this message translates to:
-  /// **'Search apps...'**
+  /// **'Search apps'**
   String get searchApps;
 
   /// Filter button for user's own apps
@@ -1098,7 +1098,7 @@ abstract class AppLocalizations {
   /// Learn more link
   ///
   /// In en, this message translates to:
-  /// **'Learn more...'**
+  /// **'Learn more…'**
   String get learnMore;
 
   /// Data protection section title
@@ -1434,7 +1434,7 @@ abstract class AppLocalizations {
   /// Text shown while saving settings
   ///
   /// In en, this message translates to:
-  /// **'Saving...'**
+  /// **'Saving…'**
   String get saving;
 
   /// Beta label for experimental features
@@ -1590,7 +1590,7 @@ abstract class AppLocalizations {
   /// Providing stat subtitle
   ///
   /// In en, this message translates to:
-  /// **'Action items, and notes automatically captured.'**
+  /// **'Tasks and notes, captured automatically.'**
   String get providingSubtitle;
 
   /// Remembering stat title
@@ -1644,7 +1644,7 @@ abstract class AppLocalizations {
   /// Message shown on locked memory items
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to unlimited'**
+  /// **'Upgrade to Unlimited'**
   String get upgradeToUnlimited;
 
   /// Basic plan description
@@ -1662,25 +1662,25 @@ abstract class AppLocalizations {
   /// Share stats period: Today
   ///
   /// In en, this message translates to:
-  /// **'Today, omi has:'**
+  /// **'Today, Omi has:'**
   String get sharePeriodToday;
 
   /// Share stats period: Month
   ///
   /// In en, this message translates to:
-  /// **'This month, omi has:'**
+  /// **'This month, Omi has:'**
   String get sharePeriodMonth;
 
   /// Share stats period: Year
   ///
   /// In en, this message translates to:
-  /// **'This year, omi has:'**
+  /// **'This year, Omi has:'**
   String get sharePeriodYear;
 
   /// Share stats period: All Time
   ///
   /// In en, this message translates to:
-  /// **'So far, omi has:'**
+  /// **'So far, Omi has:'**
   String get sharePeriodAllTime;
 
   /// Share stats: listened
@@ -1764,7 +1764,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportStarted.
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStarted;
 
   /// Export all data feature name
@@ -2670,7 +2670,7 @@ abstract class AppLocalizations {
   /// No description provided for @actionItemsSyncedTo.
   ///
   /// In en, this message translates to:
-  /// **'Your action items will be synced to your {appName} account'**
+  /// **'Your tasks will be synced to your {appName} account'**
   String actionItemsSyncedTo(String appName);
 
   /// No description provided for @defaultSpace.
@@ -2856,7 +2856,7 @@ abstract class AppLocalizations {
   /// Button to dismiss explanation
   ///
   /// In en, this message translates to:
-  /// **'Got it'**
+  /// **'Got It'**
   String get gotIt;
 
   /// No description provided for @tasksExportedOneApp.
@@ -3198,13 +3198,13 @@ abstract class AppLocalizations {
   /// No description provided for @trySomethingLike.
   ///
   /// In en, this message translates to:
-  /// **'Try something like...'**
+  /// **'Try something like…'**
   String get trySomethingLike;
 
   /// No description provided for @tryIt.
   ///
   /// In en, this message translates to:
-  /// **'Try it'**
+  /// **'Try It'**
   String get tryIt;
 
   /// No description provided for @creatingPlan.
@@ -3252,13 +3252,13 @@ abstract class AppLocalizations {
   /// No description provided for @creatingYourApp.
   ///
   /// In en, this message translates to:
-  /// **'Creating your app...'**
+  /// **'Creating your app…'**
   String get creatingYourApp;
 
   /// No description provided for @generatingIcon.
   ///
   /// In en, this message translates to:
-  /// **'Generating icon...'**
+  /// **'Generating icon…'**
   String get generatingIcon;
 
   /// No description provided for @whatShouldWeMake.
@@ -3360,7 +3360,7 @@ abstract class AppLocalizations {
   /// Loading state text when app generation is in progress
   ///
   /// In en, this message translates to:
-  /// **'Creating...'**
+  /// **'Creating…'**
   String get creating;
 
   /// Button label to create a new app
@@ -3372,7 +3372,7 @@ abstract class AppLocalizations {
   /// Status text while scanning for Bluetooth devices
   ///
   /// In en, this message translates to:
-  /// **'Searching for devices...'**
+  /// **'Searching for devices'**
   String get searchingForDevices;
 
   /// No description provided for @devicesFoundNearby.
@@ -3432,7 +3432,7 @@ abstract class AppLocalizations {
   /// Title for the permissions request page
   ///
   /// In en, this message translates to:
-  /// **'Grant permissions'**
+  /// **'Grant Permissions'**
   String get grantPermissions;
 
   /// Title for background activity permission
@@ -3504,7 +3504,7 @@ abstract class AppLocalizations {
   /// Button text to defer action
   ///
   /// In en, this message translates to:
-  /// **'Maybe Later'**
+  /// **'Not Now'**
   String get maybeLater;
 
   /// Introduction text for speech profile setup
@@ -3540,7 +3540,7 @@ abstract class AppLocalizations {
   /// Link text to skip the permissions screen
   ///
   /// In en, this message translates to:
-  /// **'Skip for now'**
+  /// **'Skip for Now'**
   String get skipForNow;
 
   /// Title for connection error dialog
@@ -3792,7 +3792,7 @@ abstract class AppLocalizations {
   /// Title for the Action Items page
   ///
   /// In en, this message translates to:
-  /// **'To-Do\'s'**
+  /// **'Tasks'**
   String get actionItemsTitle;
 
   /// Instruction text for Action Items interactions
@@ -3822,7 +3822,7 @@ abstract class AppLocalizations {
   /// Message when To Do list is empty
   ///
   /// In en, this message translates to:
-  /// **'🎉 All caught up!\nNo pending action items'**
+  /// **'🎉 All caught up!\nNo pending tasks'**
   String get emptyTodoMessage;
 
   /// Message when Done list is empty
@@ -3846,25 +3846,25 @@ abstract class AppLocalizations {
   /// Snackbar message when item marked incomplete
   ///
   /// In en, this message translates to:
-  /// **'Action item marked as incomplete'**
+  /// **'Task marked as incomplete'**
   String get actionItemMarkedIncomplete;
 
   /// Snackbar message when item completed
   ///
   /// In en, this message translates to:
-  /// **'Action item completed'**
+  /// **'Task completed'**
   String get actionItemCompleted;
 
   /// Dialog title for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItemTitle;
 
   /// Dialog message for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item?'**
+  /// **'Are you sure you want to delete this task?'**
   String get deleteActionItemMessage;
 
   /// Title for bulk delete dialog
@@ -3876,25 +3876,25 @@ abstract class AppLocalizations {
   /// Confirmation message for bulk delete
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete {count} selected action item{s}?'**
+  /// **'Are you sure you want to delete {count} selected task{s}?'**
   String deleteSelectedItemsMessage(int count, String s);
 
   /// Snackbar message after deleting single item
   ///
   /// In en, this message translates to:
-  /// **'Action item \"{description}\" deleted'**
+  /// **'Task \"{description}\" deleted'**
   String actionItemDeletedResult(String description);
 
   /// Snackbar message after bulk delete
   ///
   /// In en, this message translates to:
-  /// **'{count} action item{s} deleted'**
+  /// **'{count} task{s} deleted'**
   String itemsDeletedResult(int count, String s);
 
   /// Error message when deletion fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to delete action item'**
+  /// **'Failed to delete task'**
   String get failedToDeleteItem;
 
   /// Error message when bulk deletion fails
@@ -3912,13 +3912,13 @@ abstract class AppLocalizations {
   /// Heading for empty state welcome
   ///
   /// In en, this message translates to:
-  /// **'Ready for Action Items'**
+  /// **'Ready for Tasks'**
   String get welcomeActionItemsTitle;
 
   /// Description for empty state welcome
   ///
   /// In en, this message translates to:
-  /// **'Your AI will automatically extract tasks and to-dos from your conversations. They\'ll appear here when created.'**
+  /// **'Your AI will automatically pull tasks out of your conversations. They\'ll appear here when created.'**
   String get welcomeActionItemsDescription;
 
   /// Feature point description
@@ -3942,7 +3942,7 @@ abstract class AppLocalizations {
   /// Tooltip for select all
   ///
   /// In en, this message translates to:
-  /// **'Select all'**
+  /// **'Select All'**
   String get selectAll;
 
   /// Tooltip for delete selected
@@ -3954,13 +3954,13 @@ abstract class AppLocalizations {
   /// Search input hint text
   ///
   /// In en, this message translates to:
-  /// **'Search memories...'**
+  /// **'Search memories'**
   String get searchMemories;
 
   /// Notification when memory deleted
   ///
   /// In en, this message translates to:
-  /// **'Memory Deleted.'**
+  /// **'Memory deleted'**
   String get memoryDeleted;
 
   /// Notice shown when the memory history response is truncated
@@ -3978,13 +3978,13 @@ abstract class AppLocalizations {
   /// Button that clears suppression so this memory may be used
   ///
   /// In en, this message translates to:
-  /// **'Allow use'**
+  /// **'Allow Use'**
   String get memoryAllowUse;
 
   /// Button that suppresses this memory from future use
   ///
   /// In en, this message translates to:
-  /// **'Don\'t use'**
+  /// **'Don\'t Use'**
   String get memoryDontUse;
 
   /// Undo button text
@@ -4068,7 +4068,7 @@ abstract class AppLocalizations {
   /// Tooltip for create action item FAB
   ///
   /// In en, this message translates to:
-  /// **'Create new action item'**
+  /// **'Create new task'**
   String get createActionItemTooltip;
 
   /// Title for memory management dialog
@@ -4188,19 +4188,19 @@ abstract class AppLocalizations {
   /// Button label to retry an action
   ///
   /// In en, this message translates to:
-  /// **'Retry'**
+  /// **'Try Again'**
   String get retry;
 
   /// Dialog title for creating action item
   ///
   /// In en, this message translates to:
-  /// **'Create Action Item'**
+  /// **'Create Task'**
   String get createActionItem;
 
   /// Dialog title for editing action item
   ///
   /// In en, this message translates to:
-  /// **'Edit Action Item'**
+  /// **'Edit Task'**
   String get editActionItem;
 
   /// Input hint
@@ -4212,31 +4212,31 @@ abstract class AppLocalizations {
   /// Error message
   ///
   /// In en, this message translates to:
-  /// **'Action item description cannot be empty.'**
+  /// **'Task description cannot be empty.'**
   String get actionItemDescriptionEmpty;
 
   /// Snackbar
   ///
   /// In en, this message translates to:
-  /// **'Action item updated'**
+  /// **'Task updated'**
   String get actionItemUpdated;
 
   /// Error message when updating action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to update action item'**
+  /// **'Failed to update task'**
   String get failedToUpdateActionItem;
 
   /// Snackbar
   ///
   /// In en, this message translates to:
-  /// **'Action item created'**
+  /// **'Task created'**
   String get actionItemCreated;
 
   /// Error message when creating action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to create action item'**
+  /// **'Failed to create task'**
   String get failedToCreateActionItem;
 
   /// Label for due date field
@@ -4254,7 +4254,7 @@ abstract class AppLocalizations {
   /// Placeholder
   ///
   /// In en, this message translates to:
-  /// **'Add due date'**
+  /// **'Add Due Date'**
   String get addDueDate;
 
   /// Instruction
@@ -4308,25 +4308,25 @@ abstract class AppLocalizations {
   /// Message shown when action item is deleted
   ///
   /// In en, this message translates to:
-  /// **'Action item deleted'**
+  /// **'Task deleted'**
   String get actionItemDeleted;
 
   /// Error message when deleting action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to delete action item'**
+  /// **'Failed to delete task'**
   String get failedToDeleteActionItem;
 
   /// Dialog title
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItemConfirmTitle;
 
   /// Dialog message
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item?'**
+  /// **'Are you sure you want to delete this task?'**
   String get deleteActionItemConfirmMessage;
 
   /// Label for app language selector
@@ -4380,7 +4380,7 @@ abstract class AppLocalizations {
   /// Hint text for feedback textarea asking user to provide more details
   ///
   /// In en, this message translates to:
-  /// **'Tell us more about what went wrong...'**
+  /// **'Tell us more about what went wrong…'**
   String get tellUsMoreWhatWentWrong;
 
   /// Button to select text from message
@@ -4494,7 +4494,7 @@ abstract class AppLocalizations {
   /// Success message when action items are copied
   ///
   /// In en, this message translates to:
-  /// **'Action items copied to clipboard'**
+  /// **'Tasks copied to clipboard'**
   String get actionItemsCopiedToClipboard;
 
   /// Button text to generate a summary
@@ -4770,7 +4770,7 @@ abstract class AppLocalizations {
   /// Snackbar message when export starts
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStartedMessage;
 
   /// Description for export feature
@@ -4878,7 +4878,7 @@ abstract class AppLocalizations {
   /// Error message when action item description is empty
   ///
   /// In en, this message translates to:
-  /// **'Action item description cannot be empty'**
+  /// **'Task description cannot be empty'**
   String get actionItemDescriptionCannotBeEmpty;
 
   /// Message shown when changes are saved
@@ -5040,7 +5040,7 @@ abstract class AppLocalizations {
   /// Placeholder text when recording keyboard shortcut
   ///
   /// In en, this message translates to:
-  /// **'Press keys...'**
+  /// **'Press keys…'**
   String get pressKeys;
 
   /// Error message when command key is not pressed
@@ -5070,7 +5070,7 @@ abstract class AppLocalizations {
   /// Search input placeholder text
   ///
   /// In en, this message translates to:
-  /// **'Search...'**
+  /// **'Search'**
   String get searchPlaceholder;
 
   /// Title for a conversation without a title
@@ -5208,7 +5208,7 @@ abstract class AppLocalizations {
   /// Section header for action items
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get actionItems;
 
   /// Category label for tasks due today
@@ -5238,7 +5238,7 @@ abstract class AppLocalizations {
   /// Message shown while tasks are being loaded
   ///
   /// In en, this message translates to:
-  /// **'Loading tasks...'**
+  /// **'Loading tasks…'**
   String get loadingTasks;
 
   /// Title for the tasks page
@@ -5358,37 +5358,37 @@ abstract class AppLocalizations {
   /// Success message when action item is updated
   ///
   /// In en, this message translates to:
-  /// **'Action item updated successfully'**
+  /// **'Task updated successfully'**
   String get actionItemUpdatedSuccessfully;
 
   /// Success message when action item is created
   ///
   /// In en, this message translates to:
-  /// **'Action item created successfully'**
+  /// **'Task created successfully'**
   String get actionItemCreatedSuccessfully;
 
   /// Success message when action item is deleted
   ///
   /// In en, this message translates to:
-  /// **'Action item deleted successfully'**
+  /// **'Task deleted successfully'**
   String get actionItemDeletedSuccessfully;
 
   /// Dialog title for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItem;
 
   /// Confirmation message for deleting action item
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item? This action cannot be undone.'**
+  /// **'Are you sure you want to delete this task? This action cannot be undone.'**
   String get deleteActionItemConfirmation;
 
   /// Placeholder text for action item description field
   ///
   /// In en, this message translates to:
-  /// **'Enter action item description...'**
+  /// **'Enter task description'**
   String get enterActionItemDescription;
 
   /// Label for completion checkbox
@@ -5406,13 +5406,13 @@ abstract class AppLocalizations {
   /// Loading message shown when reloading apps list
   ///
   /// In en, this message translates to:
-  /// **'Reloading apps...'**
+  /// **'Reloading apps…'**
   String get reloadingApps;
 
   /// Loading message shown when apps are being loaded
   ///
   /// In en, this message translates to:
-  /// **'Loading apps...'**
+  /// **'Loading apps…'**
   String get loadingApps;
 
   /// Subtitle describing app page functionality
@@ -5484,13 +5484,13 @@ abstract class AppLocalizations {
   /// Loading message shown while app is being submitted
   ///
   /// In en, this message translates to:
-  /// **'Submitting your app...'**
+  /// **'Submitting your app…'**
   String get submittingYourApp;
 
   /// Loading message shown while form is being prepared
   ///
   /// In en, this message translates to:
-  /// **'Preparing the form for you...'**
+  /// **'Preparing the form for you…'**
   String get preparingFormForYou;
 
   /// Section title for app metadata information
@@ -5532,7 +5532,7 @@ abstract class AppLocalizations {
   /// Placeholder text for chat prompt field
   ///
   /// In en, this message translates to:
-  /// **'You are an awesome app, your job is to respond to the user queries and make them feel good...'**
+  /// **'You are an awesome app, your job is to respond to the user queries and make them feel good…'**
   String get chatPromptPlaceholder;
 
   /// Section title for conversation prompt
@@ -5544,7 +5544,7 @@ abstract class AppLocalizations {
   /// Placeholder text for conversation prompt field
   ///
   /// In en, this message translates to:
-  /// **'You are an awesome app, you will be given transcript and summary of a conversation...'**
+  /// **'You are an awesome app, you will be given transcript and summary of a conversation…'**
   String get conversationPromptPlaceholder;
 
   /// Section title for notification scope configuration
@@ -5844,7 +5844,7 @@ abstract class AppLocalizations {
   /// Loading state message while fetching app capabilities
   ///
   /// In en, this message translates to:
-  /// **'Loading capabilities...'**
+  /// **'Loading capabilities…'**
   String get loadingCapabilities;
 
   /// Filter option for installed apps
@@ -6114,7 +6114,7 @@ abstract class AppLocalizations {
   /// Loading message while transcribing audio
   ///
   /// In en, this message translates to:
-  /// **'Transcribing...'**
+  /// **'Transcribing…'**
   String get transcribing;
 
   /// Label for a discarded conversation
@@ -6138,7 +6138,7 @@ abstract class AppLocalizations {
   /// Button label after copying link
   ///
   /// In en, this message translates to:
-  /// **'Copied!'**
+  /// **'Copied'**
   String get copied;
 
   /// Button label to copy conversation link
@@ -6210,7 +6210,7 @@ abstract class AppLocalizations {
   /// Loading message when refreshing conversations
   ///
   /// In en, this message translates to:
-  /// **'Reloading conversations...'**
+  /// **'Reloading conversations…'**
   String get reloadingConversations;
 
   /// Default fallback name when user name is empty
@@ -6324,7 +6324,7 @@ abstract class AppLocalizations {
   /// Loading overlay message when reloading memories
   ///
   /// In en, this message translates to:
-  /// **'Loading memories...'**
+  /// **'Loading memories…'**
   String get loadingMemories;
 
   /// Filter option to show all memories
@@ -6348,7 +6348,7 @@ abstract class AppLocalizations {
   /// Loading state message
   ///
   /// In en, this message translates to:
-  /// **'Loading your memories...'**
+  /// **'Loading your memories…'**
   String get loadingYourMemories;
 
   /// Empty state message when no memories
@@ -6576,7 +6576,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchLanguages.
   ///
   /// In en, this message translates to:
-  /// **'Search languages...'**
+  /// **'Search languages'**
   String get searchLanguages;
 
   /// No description provided for @selectALanguage.
@@ -6678,7 +6678,7 @@ abstract class AppLocalizations {
   /// No description provided for @pleaseWait.
   ///
   /// In en, this message translates to:
-  /// **'Please wait...'**
+  /// **'Please wait…'**
   String get pleaseWait;
 
   /// No description provided for @joinTheCommunity.
@@ -6690,7 +6690,7 @@ abstract class AppLocalizations {
   /// No description provided for @loadingProfile.
   ///
   /// In en, this message translates to:
-  /// **'Loading profile...'**
+  /// **'Loading profile…'**
   String get loadingProfile;
 
   /// No description provided for @profileSettings.
@@ -6936,7 +6936,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncingDeveloperSettings.
   ///
   /// In en, this message translates to:
-  /// **'Syncing Developer Settings...'**
+  /// **'Syncing Developer Settings…'**
   String get syncingDeveloperSettings;
 
   /// No description provided for @summary.
@@ -7032,7 +7032,7 @@ abstract class AppLocalizations {
   /// No description provided for @generatingLink.
   ///
   /// In en, this message translates to:
-  /// **'Generating link...'**
+  /// **'Generating link…'**
   String get generatingLink;
 
   /// No description provided for @editConversation.
@@ -7074,7 +7074,7 @@ abstract class AppLocalizations {
   /// No description provided for @enterConversationTitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter conversation title...'**
+  /// **'Enter conversation title…'**
   String get enterConversationTitle;
 
   /// No description provided for @conversationTitleUpdatedSuccessfully.
@@ -7098,7 +7098,7 @@ abstract class AppLocalizations {
   /// Status message when initializing recording
   ///
   /// In en, this message translates to:
-  /// **'Setting up...'**
+  /// **'Setting up…'**
   String get settingUp;
 
   /// Call-to-action text for first recording
@@ -7116,7 +7116,7 @@ abstract class AppLocalizations {
   /// Status when reconnecting to audio
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting...'**
+  /// **'Reconnecting…'**
   String get reconnecting;
 
   /// Status when recording is paused
@@ -7140,7 +7140,7 @@ abstract class AppLocalizations {
   /// Status when auto-resuming with countdown
   ///
   /// In en, this message translates to:
-  /// **'Resuming in {countdown}s...'**
+  /// **'Resuming in {countdown}s…'**
   String resumingInCountdown(String countdown);
 
   /// Instruction when paused
@@ -7152,7 +7152,7 @@ abstract class AppLocalizations {
   /// Status when listening for audio
   ///
   /// In en, this message translates to:
-  /// **'Listening for audio...'**
+  /// **'Listening for audio…'**
   String get listeningForAudio;
 
   /// Status when preparing to capture
@@ -7200,7 +7200,7 @@ abstract class AppLocalizations {
   /// Recording status: initializing
   ///
   /// In en, this message translates to:
-  /// **'Initializing...'**
+  /// **'Initializing…'**
   String get initializing;
 
   /// Recording status: recording
@@ -7248,7 +7248,7 @@ abstract class AppLocalizations {
   /// Credit line for translations
   ///
   /// In en, this message translates to:
-  /// **'translated by omi'**
+  /// **'translated by Omi'**
   String get translatedByOmi;
 
   /// Back button text
@@ -7290,7 +7290,7 @@ abstract class AppLocalizations {
   /// Status when loading audio devices
   ///
   /// In en, this message translates to:
-  /// **'Loading devices...'**
+  /// **'Loading devices…'**
   String get loadingDevices;
 
   /// Settings navigation header
@@ -7506,7 +7506,7 @@ abstract class AppLocalizations {
   /// Snackbar message when exporting conversations
   ///
   /// In en, this message translates to:
-  /// **'Exporting conversations...'**
+  /// **'Exporting conversations…'**
   String get exportingConversations;
 
   /// No description provided for @clearNodesDescription.
@@ -7674,7 +7674,7 @@ abstract class AppLocalizations {
   /// Dialog title when a new app version is available
   ///
   /// In en, this message translates to:
-  /// **'New Version Available  🎉'**
+  /// **'New Version Available'**
   String get newVersionAvailable;
 
   /// Button text to decline or dismiss
@@ -7770,7 +7770,7 @@ abstract class AppLocalizations {
   /// Loading text while cancelling
   ///
   /// In en, this message translates to:
-  /// **'Cancelling...'**
+  /// **'Cancelling…'**
   String get cancelling;
 
   /// Message shown to beta testers
@@ -7986,7 +7986,7 @@ abstract class AppLocalizations {
   /// Loading message when adding task to a service
   ///
   /// In en, this message translates to:
-  /// **'Adding to {serviceName}...'**
+  /// **'Adding to {serviceName}…'**
   String addingToService(String serviceName);
 
   /// Success message when task was added to a service
@@ -8040,7 +8040,7 @@ abstract class AppLocalizations {
   /// Description of what API keys are used for
   ///
   /// In en, this message translates to:
-  /// **'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.'**
+  /// **'API Keys are used for authentication when your app communicates with the Omi server. They allow your application to create memories and access other Omi services securely.'**
   String get apiKeysDescription;
 
   /// Tooltip for API keys info button
@@ -8892,7 +8892,7 @@ abstract class AppLocalizations {
   /// Developer settings - exportStartedMayTakeFewSeconds
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStartedMayTakeFewSeconds;
 
   /// Developer settings - knowledgeGraphDeleteDescription
@@ -8904,7 +8904,7 @@ abstract class AppLocalizations {
   /// Subtitle for Daily Summary menu item in profile settings
   ///
   /// In en, this message translates to:
-  /// **'Configure your daily action items digest'**
+  /// **'Configure your daily tasks digest'**
   String get configureDailySummaryDigest;
 
   /// Description showing what data types an app accesses, e.g. 'Accesses Conversations & Memories'
@@ -9312,7 +9312,7 @@ abstract class AppLocalizations {
   /// Status text while checking firmware version
   ///
   /// In en, this message translates to:
-  /// **'Checking firmware version...'**
+  /// **'Checking firmware version…'**
   String get checkingFirmwareVersion;
 
   /// Page title for firmware update screen
@@ -9450,7 +9450,7 @@ abstract class AppLocalizations {
   /// Button to defer connection
   ///
   /// In en, this message translates to:
-  /// **'I\'ll do it later'**
+  /// **'I\'ll Do It Later'**
   String get illDoItLater;
 
   /// Title when connection succeeds
@@ -9654,7 +9654,7 @@ abstract class AppLocalizations {
   /// Loading message shown while audio waveform is being processed
   ///
   /// In en, this message translates to:
-  /// **'Loading your recording...'**
+  /// **'Loading your recording…'**
   String get loadingYourRecording;
 
   /// Message shown when a photo was discarded as not significant
@@ -9666,7 +9666,7 @@ abstract class AppLocalizations {
   /// Loading text shown while analyzing a photo
   ///
   /// In en, this message translates to:
-  /// **'Analyzing...'**
+  /// **'Analyzing…'**
   String get analyzing;
 
   /// Placeholder text for country search field
@@ -9678,7 +9678,7 @@ abstract class AppLocalizations {
   /// Loading text while checking Apple Watch status
   ///
   /// In en, this message translates to:
-  /// **'Checking Apple Watch...'**
+  /// **'Checking Apple Watch…'**
   String get checkingAppleWatch;
 
   /// Title prompting user to install Omi on Apple Watch
@@ -9786,7 +9786,7 @@ abstract class AppLocalizations {
   /// Placeholder text shown while waiting for content
   ///
   /// In en, this message translates to:
-  /// **'Waiting for transcript or photos...'**
+  /// **'Waiting for transcript or photos…'**
   String get waitingForTranscriptOrPhotos;
 
   /// Text shown when no summary is available yet
@@ -9876,7 +9876,7 @@ abstract class AppLocalizations {
   /// Button text to update Omi device firmware
   ///
   /// In en, this message translates to:
-  /// **'Update omi firmware'**
+  /// **'Update Omi firmware'**
   String get updateOmiFirmware;
 
   /// Generic error message asking user to try again
@@ -9984,7 +9984,7 @@ abstract class AppLocalizations {
   /// Badge for action items in Wrapped
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get wrappedActionItems;
 
   /// Label for tasks created in Wrapped
@@ -10164,13 +10164,13 @@ abstract class AppLocalizations {
   /// Default processing status text
   ///
   /// In en, this message translates to:
-  /// **'Processing...'**
+  /// **'Processing…'**
   String get wrappedProcessingDefault;
 
   /// Text shown while generating the wrapped, includes newline
   ///
   /// In en, this message translates to:
-  /// **'Creating your\n2025 story...'**
+  /// **'Creating your\n2025 story…'**
   String get wrappedCreatingYourStory;
 
   /// Error header text, includes newline
@@ -10230,7 +10230,7 @@ abstract class AppLocalizations {
   /// Initial processing step text
   ///
   /// In en, this message translates to:
-  /// **'Starting...'**
+  /// **'Starting…'**
   String get wrappedStarting;
 
   /// Share button label
@@ -10638,19 +10638,19 @@ abstract class AppLocalizations {
   /// Loading message shown while uploading voice profile
   ///
   /// In en, this message translates to:
-  /// **'Uploading your voice profile...'**
+  /// **'Uploading your voice profile…'**
   String get uploadingVoiceProfile;
 
   /// Loading message shown while processing voice profile
   ///
   /// In en, this message translates to:
-  /// **'Memorizing your voice...'**
+  /// **'Memorizing your voice…'**
   String get memorizingYourVoice;
 
   /// Loading message shown while personalizing user experience
   ///
   /// In en, this message translates to:
-  /// **'Personalizing your experience...'**
+  /// **'Personalizing your experience…'**
   String get personalizingExperience;
 
   /// Instruction to user during speech profile recording
@@ -10884,7 +10884,7 @@ abstract class AppLocalizations {
   /// Loading text when syncing messages
   ///
   /// In en, this message translates to:
-  /// **'Syncing messages with server...'**
+  /// **'Syncing messages with server…'**
   String get syncingMessages;
 
   /// Title for chat apps drawer/section
@@ -11166,13 +11166,13 @@ abstract class AppLocalizations {
   /// Loading text while summarizing a conversation
   ///
   /// In en, this message translates to:
-  /// **'Summarizing conversation...\nThis may take a few seconds'**
+  /// **'Summarizing conversation…\nThis may take a few seconds'**
   String get summarizingConversation;
 
   /// Loading text while re-summarizing a conversation
   ///
   /// In en, this message translates to:
-  /// **'Re-summarizing conversation...\nThis may take a few seconds'**
+  /// **'Re-summarizing conversation…\nThis may take a few seconds'**
   String get resummarizingConversation;
 
   /// Message when no interesting content found
@@ -11292,7 +11292,7 @@ abstract class AppLocalizations {
   /// Button to proceed despite warnings
   ///
   /// In en, this message translates to:
-  /// **'Proceed anyway'**
+  /// **'Proceed Anyway'**
   String get proceedAnyway;
 
   /// Title for older device warning dialog
@@ -11364,7 +11364,7 @@ abstract class AppLocalizations {
   /// Link to view usage
   ///
   /// In en, this message translates to:
-  /// **'View usage'**
+  /// **'View Usage'**
   String get viewUsage;
 
   /// Info about local processing
@@ -11424,7 +11424,7 @@ abstract class AppLocalizations {
   /// Status during download
   ///
   /// In en, this message translates to:
-  /// **'Downloading...'**
+  /// **'Downloading…'**
   String get downloading;
 
   /// Dialog title for model download
@@ -11556,7 +11556,7 @@ abstract class AppLocalizations {
   /// Status when preparing model
   ///
   /// In en, this message translates to:
-  /// **'Preparing {model}...'**
+  /// **'Preparing {model}…'**
   String preparingModel(String model);
 
   /// Download error message
@@ -11598,7 +11598,7 @@ abstract class AppLocalizations {
   /// Placeholder for template dropdown
   ///
   /// In en, this message translates to:
-  /// **'Select a provider template...'**
+  /// **'Select a provider template…'**
   String get selectProviderTemplate;
 
   /// Description for response template selector
@@ -11994,7 +11994,7 @@ abstract class AppLocalizations {
   /// Loading text for knowledge graph
   ///
   /// In en, this message translates to:
-  /// **'Loading Knowledge Graph...'**
+  /// **'Loading Knowledge Graph…'**
   String get loadingKnowledgeGraph;
 
   /// Title when knowledge graph is empty
@@ -12006,7 +12006,7 @@ abstract class AppLocalizations {
   /// Message while building knowledge graph
   ///
   /// In en, this message translates to:
-  /// **'Building your knowledge graph from memories...'**
+  /// **'Building your knowledge graph from memories…'**
   String get buildingKnowledgeGraphFromMemories;
 
   /// Info message about automatic graph building
@@ -12036,7 +12036,7 @@ abstract class AppLocalizations {
   /// Snackbar message when opening an app
   ///
   /// In en, this message translates to:
-  /// **'Opening {appName}...'**
+  /// **'Opening {appName}…'**
   String openingApp(String appName);
 
   /// Hint text for reply text field
@@ -12102,7 +12102,7 @@ abstract class AppLocalizations {
   /// Hint text for reply input field
   ///
   /// In en, this message translates to:
-  /// **'Write your reply...'**
+  /// **'Write your reply…'**
   String get writeYourReply;
 
   /// Success message after sending a reply
@@ -12360,7 +12360,7 @@ abstract class AppLocalizations {
   /// Hint text for contacts search field
   ///
   /// In en, this message translates to:
-  /// **'Search contacts...'**
+  /// **'Search contacts'**
   String get searchContactsHint;
 
   /// Shows count of selected contacts
@@ -12372,7 +12372,7 @@ abstract class AppLocalizations {
   /// Button to clear all selected contacts
   ///
   /// In en, this message translates to:
-  /// **'Clear all'**
+  /// **'Clear All'**
   String get clearAllSelection;
 
   /// Button text when no contacts are selected
@@ -12504,7 +12504,7 @@ abstract class AppLocalizations {
   /// Status text shown during file transfer
   ///
   /// In en, this message translates to:
-  /// **'Transferring...'**
+  /// **'Transferring…'**
   String get transferring;
 
   /// Title when transfer is needed
@@ -12552,7 +12552,7 @@ abstract class AppLocalizations {
   /// Menu item text when transfer is ongoing
   ///
   /// In en, this message translates to:
-  /// **'Transfer in progress...'**
+  /// **'Transfer in progress…'**
   String get transferInProgress;
 
   /// Menu item to share a recording
@@ -12738,7 +12738,7 @@ abstract class AppLocalizations {
   /// Button text to postpone an action
   ///
   /// In en, this message translates to:
-  /// **'Later'**
+  /// **'Not Now'**
   String get later;
 
   /// Success message when an app is deleted
@@ -12774,7 +12774,7 @@ abstract class AppLocalizations {
   /// Migration ETA calculation in progress message
   ///
   /// In en, this message translates to:
-  /// **'Calculating...'**
+  /// **'Calculating…'**
   String get calculatingETA;
 
   /// Migration time remaining in minutes
@@ -12792,43 +12792,43 @@ abstract class AppLocalizations {
   /// Migration is almost complete
   ///
   /// In en, this message translates to:
-  /// **'Almost done...'**
+  /// **'Almost done…'**
   String get almostDone;
 
   /// Notification title for omi app messages
   ///
   /// In en, this message translates to:
-  /// **'omi says'**
+  /// **'Omi says'**
   String get omiSays;
 
   /// Migration start message when analyzing data
   ///
   /// In en, this message translates to:
-  /// **'Analyzing your data...'**
+  /// **'Analyzing your data…'**
   String get analyzingYourData;
 
   /// Notification body when migration starts
   ///
   /// In en, this message translates to:
-  /// **'Migrating to {level} protection...'**
+  /// **'Migrating to {level} protection…'**
   String migratingToProtection(String level);
 
   /// Migration message when no data needs to be migrated
   ///
   /// In en, this message translates to:
-  /// **'No data to migrate. Finalizing...'**
+  /// **'No data to migrate. Finalizing…'**
   String get noDataToMigrateFinalizing;
 
   /// Migration progress message with item type and percentage
   ///
   /// In en, this message translates to:
-  /// **'Migrating {itemType}... {percentage}%'**
+  /// **'Migrating {itemType}… {percentage}%'**
   String migratingItemsProgress(String itemType, int percentage);
 
   /// Migration message when all objects have been migrated
   ///
   /// In en, this message translates to:
-  /// **'All objects migrated. Finalizing...'**
+  /// **'All objects migrated. Finalizing…'**
   String get allObjectsMigratedFinalizing;
 
   /// Error message when data migration fails
@@ -12894,7 +12894,7 @@ abstract class AppLocalizations {
   /// Hint text for template name field
   ///
   /// In en, this message translates to:
-  /// **'e.g., Meeting Action Items Extractor'**
+  /// **'e.g., Meeting Task Extractor'**
   String get templateNameHint;
 
   /// Validation error when name is too short
@@ -12906,7 +12906,7 @@ abstract class AppLocalizations {
   /// Hint text for conversation prompt field
   ///
   /// In en, this message translates to:
-  /// **'e.g., Extract action items, decisions made, and key takeaways from the provided conversation.'**
+  /// **'e.g., Extract tasks, decisions made, and key takeaways from the provided conversation.'**
   String get conversationPromptHint;
 
   /// Validation error when prompt is empty
@@ -12936,19 +12936,19 @@ abstract class AppLocalizations {
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Generating description...'**
+  /// **'Generating description…'**
   String get generatingDescription;
 
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Creating app icon...'**
+  /// **'Creating app icon…'**
   String get creatingAppIcon;
 
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Installing app...'**
+  /// **'Installing app…'**
   String get installingApp;
 
   /// Success message after app is created and installed
@@ -13194,7 +13194,7 @@ abstract class AppLocalizations {
   /// Status message shown while generating app icon
   ///
   /// In en, this message translates to:
-  /// **'Creating app icon...'**
+  /// **'Creating app icon…'**
   String get aiGenCreatingAppIcon;
 
   /// Error message with details in AI app generator
@@ -13296,7 +13296,7 @@ abstract class AppLocalizations {
   /// JSON configuration placeholder hint text in transcription settings
   ///
   /// In en, this message translates to:
-  /// **'Paste your JSON configuration here...'**
+  /// **'Paste your JSON configuration here…'**
   String get transcriptionJsonPlaceholder;
 
   /// Tab title for Omi transcription source option
@@ -13416,7 +13416,7 @@ abstract class AppLocalizations {
   /// Placeholder text for search field in conversation detail page
   ///
   /// In en, this message translates to:
-  /// **'Search transcript or summary...'**
+  /// **'Search transcript or summary'**
   String get searchTranscriptOrSummary;
 
   /// Default title for a new goal in the goal tracker widget
@@ -13806,13 +13806,13 @@ abstract class AppLocalizations {
   /// Loading text while reading memories
   ///
   /// In en, this message translates to:
-  /// **'Reading your memories...'**
+  /// **'Reading your memories…'**
   String get msgReadingMemories;
 
   /// Loading text while learning from memories
   ///
   /// In en, this message translates to:
-  /// **'Learning from your memories...'**
+  /// **'Learning from your memories…'**
   String get msgLearningMemories;
 
   /// Error when attached file upload fails
@@ -13926,7 +13926,7 @@ abstract class AppLocalizations {
   /// Status indicator shown when conversations are being merged
   ///
   /// In en, this message translates to:
-  /// **'Merging...'**
+  /// **'Merging…'**
   String get mergingStatus;
 
   /// Duration in singular second
@@ -14052,13 +14052,13 @@ abstract class AppLocalizations {
   /// Status message while waiting for device connection
   ///
   /// In en, this message translates to:
-  /// **'Waiting for device...'**
+  /// **'Waiting for device…'**
   String get waitingForDevice;
 
   /// Prompt for user to start speaking
   ///
   /// In en, this message translates to:
-  /// **'Say something...'**
+  /// **'Say something…'**
   String get saySomething;
 
   /// Status message during system audio initialization on desktop
@@ -14148,7 +14148,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadingAudio.
   ///
   /// In en, this message translates to:
-  /// **'Downloading audio...'**
+  /// **'Downloading audio…'**
   String get downloadingAudio;
 
   /// No description provided for @shareAudio.
@@ -14166,7 +14166,7 @@ abstract class AppLocalizations {
   /// No description provided for @gettingAudioFiles.
   ///
   /// In en, this message translates to:
-  /// **'Getting audio files...'**
+  /// **'Getting audio files…'**
   String get gettingAudioFiles;
 
   /// No description provided for @downloadingAudioProgress.
@@ -14184,7 +14184,7 @@ abstract class AppLocalizations {
   /// No description provided for @combiningAudioFiles.
   ///
   /// In en, this message translates to:
-  /// **'Combining audio files...'**
+  /// **'Combining audio files…'**
   String get combiningAudioFiles;
 
   /// No description provided for @audioReady.
@@ -14196,7 +14196,7 @@ abstract class AppLocalizations {
   /// No description provided for @openingShareSheet.
   ///
   /// In en, this message translates to:
-  /// **'Opening share sheet...'**
+  /// **'Opening share sheet…'**
   String get openingShareSheet;
 
   /// No description provided for @audioShareFailed.
@@ -14484,7 +14484,7 @@ abstract class AppLocalizations {
   /// No description provided for @resetFilters.
   ///
   /// In en, this message translates to:
-  /// **'Reset filters'**
+  /// **'Reset Filters'**
   String get resetFilters;
 
   /// No description provided for @applyFilters.
@@ -14562,7 +14562,7 @@ abstract class AppLocalizations {
   /// No description provided for @authorizingMcpServer.
   ///
   /// In en, this message translates to:
-  /// **'Authorizing...'**
+  /// **'Authorizing…'**
   String get authorizingMcpServer;
 
   /// No description provided for @whereDidYouHearAboutOmi.
@@ -14670,7 +14670,7 @@ abstract class AppLocalizations {
   /// No description provided for @iveDoneThis.
   ///
   /// In en, this message translates to:
-  /// **'I\'ve done this'**
+  /// **'I\'ve Done This'**
   String get iveDoneThis;
 
   /// No description provided for @pairNewDevice.
@@ -14688,7 +14688,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportAnIssue.
   ///
   /// In en, this message translates to:
-  /// **'Report an issue'**
+  /// **'Report an Issue'**
   String get reportAnIssue;
 
   /// Pairing title for Omi device
@@ -14820,7 +14820,7 @@ abstract class AppLocalizations {
   /// No description provided for @reconnectingToInternet.
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting to internet...'**
+  /// **'Reconnecting to internet…'**
   String get reconnectingToInternet;
 
   /// No description provided for @uploadingToCloud.
@@ -14832,13 +14832,13 @@ abstract class AppLocalizations {
   /// No description provided for @processingOnServer.
   ///
   /// In en, this message translates to:
-  /// **'Processing on server...'**
+  /// **'Processing on server…'**
   String get processingOnServer;
 
   /// No description provided for @processingOnServerProgress.
   ///
   /// In en, this message translates to:
-  /// **'Processing... {current}/{total} segments'**
+  /// **'Processing… {current}/{total} segments'**
   String processingOnServerProgress(int current, int total);
 
   /// No description provided for @processedStatus.
@@ -15180,7 +15180,7 @@ abstract class AppLocalizations {
   /// No description provided for @statusCalling.
   ///
   /// In en, this message translates to:
-  /// **'Calling...'**
+  /// **'Calling…'**
   String get statusCalling;
 
   /// No description provided for @statusCallInProgress.
@@ -15270,13 +15270,13 @@ abstract class AppLocalizations {
   /// No description provided for @callStateConnecting.
   ///
   /// In en, this message translates to:
-  /// **'Connecting...'**
+  /// **'Connecting…'**
   String get callStateConnecting;
 
   /// No description provided for @callStateRinging.
   ///
   /// In en, this message translates to:
-  /// **'Ringing...'**
+  /// **'Ringing…'**
   String get callStateRinging;
 
   /// No description provided for @callStateEnded.
@@ -15294,7 +15294,7 @@ abstract class AppLocalizations {
   /// No description provided for @transcriptPlaceholder.
   ///
   /// In en, this message translates to:
-  /// **'Transcript will appear here...'**
+  /// **'Transcript will appear here…'**
   String get transcriptPlaceholder;
 
   /// No description provided for @phoneUnmute.
@@ -15468,7 +15468,7 @@ abstract class AppLocalizations {
   /// Phone calls upsell feature 2
   ///
   /// In en, this message translates to:
-  /// **'Automatic call summaries and action items'**
+  /// **'Automatic call summaries and tasks'**
   String get phoneCallsUpsellFeature2;
 
   /// Phone calls upsell feature 3
@@ -15726,7 +15726,7 @@ abstract class AppLocalizations {
   /// No description provided for @transcriptionPausedReconnecting.
   ///
   /// In en, this message translates to:
-  /// **'Still recording — reconnecting to transcription...'**
+  /// **'Still recording — reconnecting to transcription…'**
   String get transcriptionPausedReconnecting;
 
   /// No description provided for @fairUseBannerStatus.
@@ -15750,7 +15750,7 @@ abstract class AppLocalizations {
   /// No description provided for @improveConnectionAction.
   ///
   /// In en, this message translates to:
-  /// **'Got it'**
+  /// **'Got It'**
   String get improveConnectionAction;
 
   /// No description provided for @clockSkewWarning.
@@ -15822,7 +15822,7 @@ abstract class AppLocalizations {
   /// Button label to dismiss cancel dialog and continue syncing
   ///
   /// In en, this message translates to:
-  /// **'Keep syncing'**
+  /// **'Keep Syncing'**
   String get keepSyncing;
 
   /// Title for cancel sync confirmation dialog
@@ -15996,7 +15996,7 @@ abstract class AppLocalizations {
   /// Hint for cancel reason detail text field
   ///
   /// In en, this message translates to:
-  /// **'We appreciate any feedback...'**
+  /// **'We appreciate any feedback…'**
   String get cancelReasonDetailHint;
 
   /// Title for cancel consequences page
@@ -16182,7 +16182,7 @@ abstract class AppLocalizations {
   /// No description provided for @waitingForData.
   ///
   /// In en, this message translates to:
-  /// **'Waiting for data...'**
+  /// **'Waiting for data…'**
   String get waitingForData;
 
   /// No description provided for @liveRssiOverTime.
@@ -16200,7 +16200,7 @@ abstract class AppLocalizations {
   /// No description provided for @collectingData.
   ///
   /// In en, this message translates to:
-  /// **'Collecting data...'**
+  /// **'Collecting data…'**
   String get collectingData;
 
   /// No description provided for @cleanDisconnect.
@@ -16350,7 +16350,7 @@ abstract class AppLocalizations {
   /// Loading text while fetching stable firmware version
   ///
   /// In en, this message translates to:
-  /// **'Fetching latest stable firmware...'**
+  /// **'Fetching latest stable firmware…'**
   String get fetchingStableFirmware;
 
   /// Error message when no stable firmware is available
@@ -16380,13 +16380,13 @@ abstract class AppLocalizations {
   /// Live-capture WAL indicator while unsynced audio is uploading
   ///
   /// In en, this message translates to:
-  /// **'Uploading {duration} of audio for transcription...'**
+  /// **'Uploading {duration} of audio for transcription…'**
   String uploadingAudioForTranscription(String duration);
 
   /// Live-capture WAL indicator after a failed upload attempt that will be retried automatically
   ///
   /// In en, this message translates to:
-  /// **'Retrying upload... {duration} of audio kept on your phone'**
+  /// **'Retrying upload… {duration} of audio kept on your phone'**
   String audioUploadRetrying(String duration);
 
   /// Live-capture WAL indicator when auto-retries are exhausted and a manual retry is available
@@ -16458,13 +16458,13 @@ abstract class AppLocalizations {
   /// Status when transcription WebSocket is connecting
   ///
   /// In en, this message translates to:
-  /// **'Connecting transcription...'**
+  /// **'Connecting transcription…'**
   String get transcriptionConnecting;
 
   /// Status when transcription WebSocket is reconnecting
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting transcription...'**
+  /// **'Reconnecting transcription…'**
   String get transcriptionReconnecting;
 
   /// Status when transcription WebSocket failed after max retries
@@ -16704,13 +16704,13 @@ abstract class AppLocalizations {
   /// Primary destructive action label
   ///
   /// In en, this message translates to:
-  /// **'Delete account permanently'**
+  /// **'Delete Account Permanently'**
   String get deleteAccountPermanently;
 
   /// Secondary action to back out of deletion
   ///
   /// In en, this message translates to:
-  /// **'Keep my account'**
+  /// **'Keep My Account'**
   String get keepMyAccount;
 
   /// Error shown when deletion API fails
@@ -16914,7 +16914,7 @@ abstract class AppLocalizations {
   /// Voice response mode setting row title
   ///
   /// In en, this message translates to:
-  /// **'Voice response'**
+  /// **'Voice Response'**
   String get voiceResponseMode;
 
   /// Bottom sheet title for voice response mode selector
@@ -17016,13 +17016,13 @@ abstract class AppLocalizations {
   /// Hint text for the action items search field
   ///
   /// In en, this message translates to:
-  /// **'Search action items'**
+  /// **'Search tasks'**
   String get searchActionItems;
 
   /// Top-bar button to enter selection mode on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Select multiple'**
+  /// **'Select Multiple'**
   String get selectActionItems;
 
   /// Title of the bottom sheet listing platforms to bulk-export selected action items to
@@ -17052,19 +17052,19 @@ abstract class AppLocalizations {
   /// Action menu entry to reveal completed tasks on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Show completed'**
+  /// **'Show Completed'**
   String get showCompletedTasks;
 
   /// Action menu entry to hide completed tasks on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Hide completed'**
+  /// **'Hide Completed'**
   String get hideCompletedTasks;
 
   /// Action menu entry to select every task in the action items list
   ///
   /// In en, this message translates to:
-  /// **'Select all'**
+  /// **'Select All'**
   String get selectAllTasksMenu;
 
   /// Snackbar shown when the user taps Export but no third-party task integration is connected
@@ -17082,7 +17082,7 @@ abstract class AppLocalizations {
   /// Action menu entry that clears any current task selection while staying in selection mode
   ///
   /// In en, this message translates to:
-  /// **'Deselect all'**
+  /// **'Deselect All'**
   String get deselectAllTasksMenu;
 
   /// Snackbar shown when every selected task is already exported and Export is tapped
@@ -17100,7 +17100,7 @@ abstract class AppLocalizations {
   /// Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background.
   ///
   /// In en, this message translates to:
-  /// **'Delete recap'**
+  /// **'Delete Recap'**
   String get deleteRecap;
 
   /// Title of the confirm dialog when deleting a daily recap.
@@ -17190,7 +17190,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteWhileProcessingTitle.
   ///
   /// In en, this message translates to:
-  /// **'Still processing'**
+  /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
   /// No description provided for @deleteWhileProcessingMessage.
@@ -17400,7 +17400,7 @@ abstract class AppLocalizations {
   /// No description provided for @regenerateRecap.
   ///
   /// In en, this message translates to:
-  /// **'Regenerate recap'**
+  /// **'Regenerate Recap'**
   String get regenerateRecap;
 
   /// No description provided for @recapRegeneratedSnackbar.
@@ -17568,7 +17568,7 @@ abstract class AppLocalizations {
   /// Tutorial step 1 placeholder in the live transcript area before any speech is detected
   ///
   /// In en, this message translates to:
-  /// **'Start speaking...'**
+  /// **'Start speaking…'**
   String get deviceOnboardingStartSpeaking;
 
   /// Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press
@@ -17586,13 +17586,13 @@ abstract class AppLocalizations {
   /// Tutorial step 2 status while the spoken question is processed by the AI
   ///
   /// In en, this message translates to:
-  /// **'Processing your question...'**
+  /// **'Processing your question…'**
   String get deviceOnboardingProcessingQuestion;
 
   /// Tutorial step 2 status chip while Omi is actively listening to the question
   ///
   /// In en, this message translates to:
-  /// **'Listening...'**
+  /// **'Listening…'**
   String get deviceOnboardingListening;
 
   /// Tutorial step 3 title while waiting for the user to power the device off
@@ -17646,7 +17646,7 @@ abstract class AppLocalizations {
   /// Tutorial step 3 status chip while the device is powering off
   ///
   /// In en, this message translates to:
-  /// **'Turning off...'**
+  /// **'Turning off…'**
   String get deviceOnboardingStatusTurningOff;
 
   /// Tutorial step 4 title — configure the device double-tap action
@@ -18216,13 +18216,13 @@ abstract class AppLocalizations {
   /// Label of the copy-message action on an AI chat message
   ///
   /// In en, this message translates to:
-  /// **'Copy message'**
+  /// **'Copy Message'**
   String get copyMessage;
 
   /// Placeholder of the search input in the settings drawer
   ///
   /// In en, this message translates to:
-  /// **'Search settings…'**
+  /// **'Search settings'**
   String get searchSettings;
 
   /// Title shown when an audio recording fails to load in the conversation player
@@ -18378,7 +18378,7 @@ abstract class AppLocalizations {
   /// Button that opens the app store for a required cutover upgrade
   ///
   /// In en, this message translates to:
-  /// **'Open store'**
+  /// **'Open Store'**
   String get accountCutoverOpenStore;
 
   /// Chat scope chip when asking about a specific conversation
@@ -18588,7 +18588,7 @@ abstract class AppLocalizations {
   /// Action on a chat conversation link block
   ///
   /// In en, this message translates to:
-  /// **'Open conversation'**
+  /// **'Open Conversation'**
   String get chatBlockOpenConversation;
 
   /// Action on a chat memory link block
@@ -18654,7 +18654,7 @@ abstract class AppLocalizations {
   /// Accessible name for the conversation-detail star button when the conversation is already starred
   ///
   /// In en, this message translates to:
-  /// **'Unstar conversation'**
+  /// **'Unstar Conversation'**
   String get unstarConversation;
 
   /// Accessible name for the conversation-detail overflow menu
@@ -18732,8 +18732,44 @@ abstract class AppLocalizations {
   /// Clear the current search query.
   ///
   /// In en, this message translates to:
-  /// **'Clear search'**
+  /// **'Clear Search'**
   String get clearSearch;
+
+  /// Tooltip and sheet title for filtering conversations by who spoke (a person, not a loudspeaker)
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by speaker'**
+  String get filterBySpeaker;
+
+  /// Button that postpones a prompt without dismissing it forever (iOS "Not Now")
+  ///
+  /// In en, this message translates to:
+  /// **'Not Now'**
+  String get notNow;
+
+  /// Destructive button that throws away unsaved edits
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// Cancel button of the discard-changes dialog; returns to the editor
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Editing'**
+  String get keepEditing;
+
+  /// Title of the dialog shown when leaving an editor with unsaved changes
+  ///
+  /// In en, this message translates to:
+  /// **'Discard Changes?'**
+  String get discardChangesTitle;
+
+  /// Message of the dialog shown when leaving an editor with unsaved changes
+  ///
+  /// In en, this message translates to:
+  /// **'Your unsaved changes will be lost.'**
+  String get discardChangesMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

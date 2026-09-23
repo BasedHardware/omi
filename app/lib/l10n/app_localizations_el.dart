@@ -21,7 +21,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptTab => 'Απομαγνητοφώνηση';
 
   @override
-  String get actionItemsTab => 'Ενέργειες';
+  String get actionItemsTab => 'Εργασίες';
 
   @override
   String get deleteConversationTitle => 'Διαγραφή Συνομιλίας;';
@@ -113,10 +113,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get remaining => 'Απομένει';
 
   @override
-  String get loading => 'Φόρτωση...';
+  String get loading => 'Φόρτωση…';
 
   @override
-  String get loadingDuration => 'Φόρτωση διάρκειας...';
+  String get loadingDuration => 'Φόρτωση διάρκειας…';
 
   @override
   String secondsCount(int count) {
@@ -153,7 +153,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get selectLanguage => 'Επιλογή Γλώσσας';
 
   @override
-  String get deleting => 'Διαγραφή...';
+  String get deleting => 'Διαγραφή…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -181,7 +181,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get disconnected => 'Αποσυνδεδεμένο';
 
   @override
-  String get searching => 'Αναζήτηση...';
+  String get searching => 'Αναζήτηση';
 
   @override
   String get connectDevice => 'Σύνδεση Συσκευής';
@@ -242,7 +242,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Για να προσθέσετε μια συνομιλία στα αγαπημένα, ανοίξτε τη και πατήστε το εικονίδιο αστεριού στην κεφαλίδα.';
 
   @override
-  String get searchConversations => 'Αναζήτηση συνομιλιών...';
+  String get searchConversations => 'Αναζήτηση συνομιλιών';
 
   @override
   String selectedCount(int count) {
@@ -273,7 +273,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noMessagesYet => 'Δεν υπάρχουν μηνύματα ακόμα!\nΓιατί δεν ξεκινάτε μια συνομιλία;';
 
   @override
-  String get deletingMessages => 'Διαγραφή των μηνυμάτων σας από τη μνήμη του Omi...';
+  String get deletingMessages => 'Διαγραφή των μηνυμάτων σας από τη μνήμη του Omi…';
 
   @override
   String get messageCopied => '✨ Μήνυμα αντιγράφηκε στο πρόχειρο';
@@ -322,7 +322,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get buildAndShareApp => 'Δημιουργήστε και μοιραστείτε την προσαρμοσμένη εφαρμογή σας';
 
   @override
-  String get searchApps => 'Αναζήτηση εφαρμογών...';
+  String get searchApps => 'Αναζήτηση εφαρμογών';
 
   @override
   String get myApps => 'Δημιουργήθηκε από εμένα';
@@ -481,7 +481,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Στο Omi, δεσμευόμαστε να προστατεύουμε το απόρρητό σας. Αυτή η σελίδα σας επιτρέπει να ελέγχετε πώς αποθηκεύονται και χρησιμοποιούνται τα δεδομένα σας.';
 
   @override
-  String get learnMore => 'Μάθετε περισσότερα...';
+  String get learnMore => 'Μάθετε περισσότερα…';
 
   @override
   String get dataProtectionLevel => 'Επίπεδο Προστασίας Δεδομένων';
@@ -655,7 +655,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get developerSettingsTitle => 'Ρυθμίσεις Προγραμματιστή';
 
   @override
-  String get saving => 'Αποθήκευση...';
+  String get saving => 'Αποθήκευση…';
 
   @override
   String get beta => 'BETA';
@@ -734,7 +734,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get providing => 'Παροχή';
 
   @override
-  String get providingSubtitle => 'Ενέργειες και σημειώσεις που καταγράφονται αυτόματα.';
+  String get providingSubtitle => 'Εργασίες και σημειώσεις, καταγεγραμμένες αυτόματα.';
 
   @override
   String get remembering => 'Απομνημόνευση';
@@ -776,16 +776,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get shareStatsMessage => 'Μοιράζομαι τα στατιστικά μου στο Omi! (omi.me - ο πάντα ενεργός βοηθός AI σας)';
 
   @override
-  String get sharePeriodToday => 'Σήμερα, το omi:';
+  String get sharePeriodToday => 'Σήμερα, το Omi:';
 
   @override
-  String get sharePeriodMonth => 'Αυτόν τον μήνα, το omi:';
+  String get sharePeriodMonth => 'Αυτόν τον μήνα, το Omi:';
 
   @override
-  String get sharePeriodYear => 'Φέτος, το omi:';
+  String get sharePeriodYear => 'Φέτος, το Omi:';
 
   @override
-  String get sharePeriodAllTime => 'Μέχρι τώρα, το omi:';
+  String get sharePeriodAllTime => 'Μέχρι τώρα, το Omi:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -835,7 +835,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get debugLogCleared => 'Το αρχείο εντοπισμού σφαλμάτων εκκαθαρίστηκε';
 
   @override
-  String get exportStarted => 'Η εξαγωγή ξεκίνησε. Μπορεί να διαρκέσει μερικά δευτερόλεπτα...';
+  String get exportStarted => 'Η εξαγωγή ξεκίνησε. Μπορεί να διαρκέσει μερικά δευτερόλεπτα…';
 
   @override
   String get exportAllData => 'Εξαγωγή Όλων των Δεδομένων';
@@ -1339,7 +1339,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'Οι ενέργειές σας θα συγχρονιστούν με τον λογαριασμό σας $appName';
+    return 'Οι εργασίες σας θα συγχρονιστούν με τον λογαριασμό σας $appName';
   }
 
   @override
@@ -1635,7 +1635,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get viewTemplate => 'Προβολή Προτύπου';
 
   @override
-  String get trySomethingLike => 'Δοκιμάστε κάτι σαν...';
+  String get trySomethingLike => 'Δοκιμάστε κάτι σαν…';
 
   @override
   String get tryIt => 'Δοκιμάστε το';
@@ -1662,10 +1662,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get features => 'Χαρακτηριστικά';
 
   @override
-  String get creatingYourApp => 'Δημιουργία της εφαρμογής σας...';
+  String get creatingYourApp => 'Δημιουργία της εφαρμογής σας…';
 
   @override
-  String get generatingIcon => 'Δημιουργία εικονιδίου...';
+  String get generatingIcon => 'Δημιουργία εικονιδίου…';
 
   @override
   String get whatShouldWeMake => 'Τι να φτιάξουμε;';
@@ -1716,13 +1716,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get perMonthLabel => '/ μήνα';
 
   @override
-  String get creating => 'Δημιουργία...';
+  String get creating => 'Δημιουργία…';
 
   @override
   String get createApp => 'Δημιουργία εφαρμογής';
 
   @override
-  String get searchingForDevices => 'Αναζήτηση συσκευών...';
+  String get searchingForDevices => 'Αναζήτηση συσκευών';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1961,7 +1961,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get personalGrowthJourney => 'Το ταξίδι προσωπικής σας ανάπτυξης με AI που ακούει κάθε σας λέξη.';
 
   @override
-  String get actionItemsTitle => 'Προς Εκτέλεση';
+  String get actionItemsTitle => 'Εργασίες';
 
   @override
   String get actionItemsDescription =>
@@ -1977,7 +1977,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tabOld => 'Παλιά';
 
   @override
-  String get emptyTodoMessage => '🎉 Είστε ενημερωμένοι!\nΔεν υπάρχουν εκκρεμείς ενέργειες';
+  String get emptyTodoMessage => '🎉 Είστε ενημερωμένοι!\nΔεν υπάρχουν εκκρεμείς εργασίες';
 
   @override
   String get emptyDoneMessage => 'Δεν υπάρχουν ολοκληρωμένα στοιχεία ακόμα';
@@ -1989,37 +1989,37 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noItems => 'Δεν υπάρχουν στοιχεία';
 
   @override
-  String get actionItemMarkedIncomplete => 'Η ενέργεια επισημάνθηκε ως ημιτελής';
+  String get actionItemMarkedIncomplete => 'Η εργασία επισημάνθηκε ως ημιτελής';
 
   @override
-  String get actionItemCompleted => 'Η ενέργεια ολοκληρώθηκε';
+  String get actionItemCompleted => 'Η εργασία ολοκληρώθηκε';
 
   @override
-  String get deleteActionItemTitle => 'Διαγραφή στοιχείου ενέργειας';
+  String get deleteActionItemTitle => 'Διαγραφή εργασίας';
 
   @override
-  String get deleteActionItemMessage => 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το στοιχείο ενέργειας;';
+  String get deleteActionItemMessage => 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την εργασία;';
 
   @override
   String get deleteSelectedItemsTitle => 'Διαγραφή Επιλεγμένων Στοιχείων';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε $count επιλεγμένες ενέργειες$s;';
+    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε $count επιλεγμένες εργασίες$s;';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'Η ενέργεια \"$description\" διαγράφηκε';
+    return 'Η εργασία \"$description\" διαγράφηκε';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count ενέργειες$s διαγράφηκαν';
+    return '$count εργασίες$s διαγράφηκαν';
   }
 
   @override
-  String get failedToDeleteItem => 'Αποτυχία διαγραφής ενέργειας';
+  String get failedToDeleteItem => 'Αποτυχία διαγραφής εργασίας';
 
   @override
   String get failedToDeleteItems => 'Αποτυχία διαγραφής στοιχείων';
@@ -2028,11 +2028,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedToDeleteSomeItems => 'Αποτυχία διαγραφής ορισμένων στοιχείων';
 
   @override
-  String get welcomeActionItemsTitle => 'Έτοιμοι για Ενέργειες';
+  String get welcomeActionItemsTitle => 'Έτοιμοι για Εργασίες';
 
   @override
   String get welcomeActionItemsDescription =>
-      'Το AI σας θα εξάγει αυτόματα εργασίες και υποχρεώσεις από τις συνομιλίες σας. Θα εμφανιστούν εδώ όταν δημιουργηθούν.';
+      'Το AI σας θα εξάγει αυτόματα εργασίες από τις συνομιλίες σας. Θα εμφανιστούν εδώ όταν δημιουργηθούν.';
 
   @override
   String get autoExtractionFeature => 'Αυτόματη εξαγωγή από συνομιλίες';
@@ -2052,10 +2052,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteSelected => 'Διαγραφή επιλεγμένων';
 
   @override
-  String get searchMemories => 'Αναζήτηση αναμνήσεων...';
+  String get searchMemories => 'Αναζήτηση αναμνήσεων';
 
   @override
-  String get memoryDeleted => 'Η ανάμνηση διαγράφηκε.';
+  String get memoryDeleted => 'Η ανάμνηση διαγράφηκε';
 
   @override
   String get memoryHistoryPartial =>
@@ -2111,7 +2111,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get createMemoryTooltip => 'Δημιουργία νέας ανάμνησης';
 
   @override
-  String get createActionItemTooltip => 'Δημιουργία νέας ενέργειας';
+  String get createActionItemTooltip => 'Δημιουργία νέας εργασίας';
 
   @override
   String get memoryManagement => 'Διαχείριση μνήμης';
@@ -2185,16 +2185,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get actionItemDescriptionHint => 'Τι πρέπει να γίνει;';
 
   @override
-  String get actionItemDescriptionEmpty => 'Η περιγραφή της ενέργειας δεν μπορεί να είναι κενή.';
+  String get actionItemDescriptionEmpty => 'Η περιγραφή της εργασίας δεν μπορεί να είναι κενή.';
 
   @override
-  String get actionItemUpdated => 'Η ενέργεια ενημερώθηκε';
+  String get actionItemUpdated => 'Η εργασία ενημερώθηκε';
 
   @override
   String get failedToUpdateActionItem => 'Αποτυχία ενημέρωσης εργασίας';
 
   @override
-  String get actionItemCreated => 'Η ενέργεια δημιουργήθηκε';
+  String get actionItemCreated => 'Η εργασία δημιουργήθηκε';
 
   @override
   String get failedToCreateActionItem => 'Αποτυχία δημιουργίας εργασίας';
@@ -2233,16 +2233,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get markComplete => 'Σήμανση ως ολοκληρωμένο';
 
   @override
-  String get actionItemDeleted => 'Το στοιχείο ενέργειας διαγράφηκε';
+  String get actionItemDeleted => 'Η εργασία διαγράφηκε';
 
   @override
   String get failedToDeleteActionItem => 'Αποτυχία διαγραφής εργασίας';
 
   @override
-  String get deleteActionItemConfirmTitle => 'Διαγραφή Ενέργειας';
+  String get deleteActionItemConfirmTitle => 'Διαγραφή Εργασίας';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την ενέργεια;';
+  String get deleteActionItemConfirmMessage => 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την εργασία;';
 
   @override
   String get appLanguage => 'Γλώσσα Εφαρμογής';
@@ -2271,7 +2271,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get pleaseSelectReason => 'Επιλέξτε έναν λόγο';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Πείτε μας περισσότερα για το τι πήγε στραβά...';
+  String get tellUsMoreWhatWentWrong => 'Πείτε μας περισσότερα για το τι πήγε στραβά…';
 
   @override
   String get selectText => 'Επιλογή κειμένου';
@@ -2331,7 +2331,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get exportButton => 'Εξαγωγή';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Τα στοιχεία ενεργειών αντιγράφηκαν στο πρόχειρο';
+  String get actionItemsCopiedToClipboard => 'Οι εργασίες αντιγράφηκαν στο πρόχειρο';
 
   @override
   String get summarize => 'Περίληψη';
@@ -2478,7 +2478,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Βοηθά στη διάγνωση προβλημάτων';
 
   @override
-  String get exportStartedMessage => 'Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα...';
+  String get exportStartedMessage => 'Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα…';
 
   @override
   String get exportConversationsToJson => 'Εξαγωγή συνομιλιών σε αρχείο JSON';
@@ -2534,7 +2534,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Η περιγραφή του στοιχείου ενέργειας δεν μπορεί να είναι κενή';
+  String get actionItemDescriptionCannotBeEmpty => 'Η περιγραφή της εργασίας δεν μπορεί να είναι κενή';
 
   @override
   String get saved => 'Αποθηκεύτηκε';
@@ -2617,7 +2617,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get toggleControlBar => 'Εναλλαγή γραμμής ελέγχου';
 
   @override
-  String get pressKeys => 'Πατήστε πλήκτρα...';
+  String get pressKeys => 'Πατήστε πλήκτρα…';
 
   @override
   String get cmdRequired => '⌘ απαιτείται';
@@ -2632,7 +2632,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get search => 'Αναζήτηση';
 
   @override
-  String get searchPlaceholder => 'Αναζήτηση...';
+  String get searchPlaceholder => 'Αναζήτηση';
 
   @override
   String get untitledConversation => 'Συνομιλία χωρίς τίτλο';
@@ -2706,7 +2706,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchResults => 'Αποτελέσματα αναζήτησης';
 
   @override
-  String get actionItems => 'Στοιχεία δράσης';
+  String get actionItems => 'Εργασίες';
 
   @override
   String get tasksToday => 'Σήμερα';
@@ -2721,7 +2721,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksLater => 'Αργότερα';
 
   @override
-  String get loadingTasks => 'Φόρτωση εργασιών...';
+  String get loadingTasks => 'Φόρτωση εργασιών…';
 
   @override
   String get tasks => 'Εργασίες';
@@ -2798,7 +2798,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτήν την εργασία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
-  String get enterActionItemDescription => 'Εισαγάγετε περιγραφή εργασίας...';
+  String get enterActionItemDescription => 'Εισαγάγετε περιγραφή εργασίας';
 
   @override
   String get markAsCompleted => 'Επισήμανση ως ολοκληρωμένη';
@@ -2807,10 +2807,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get setDueDateAndTime => 'Ορισμός καταληκτικής ημερομηνίας και ώρας';
 
   @override
-  String get reloadingApps => 'Επαναφόρτωση εφαρμογών...';
+  String get reloadingApps => 'Επαναφόρτωση εφαρμογών…';
 
   @override
-  String get loadingApps => 'Φόρτωση εφαρμογών...';
+  String get loadingApps => 'Φόρτωση εφαρμογών…';
 
   @override
   String get browseInstallCreateApps => 'Περιήγηση, εγκατάσταση και δημιουργία εφαρμογών';
@@ -2846,10 +2846,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Κατασκευάστε και υποβάλετε την προσαρμοσμένη εφαρμογή Omi σας';
 
   @override
-  String get submittingYourApp => 'Υποβολή της εφαρμογής σας...';
+  String get submittingYourApp => 'Υποβολή της εφαρμογής σας…';
 
   @override
-  String get preparingFormForYou => 'Προετοιμασία της φόρμας για εσάς...';
+  String get preparingFormForYou => 'Προετοιμασία της φόρμας για εσάς…';
 
   @override
   String get appDetails => 'Λεπτομέρειες εφαρμογής';
@@ -2871,14 +2871,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Είστε μια υπέροχη εφαρμογή, η δουλειά σας είναι να απαντάτε στα ερωτήματα των χρηστών και να τους κάνετε να αισθάνονται καλά...';
+      'Είστε μια υπέροχη εφαρμογή, η δουλειά σας είναι να απαντάτε στα ερωτήματα των χρηστών και να τους κάνετε να αισθάνονται καλά…';
 
   @override
   String get conversationPrompt => 'Προτροπή συνομιλίας';
 
   @override
   String get conversationPromptPlaceholder =>
-      'Είστε μια υπέροχη εφαρμογή, θα σας δοθεί απομαγνητοφώνηση και περίληψη μιας συζήτησης...';
+      'Είστε μια υπέροχη εφαρμογή, θα σας δοθεί απομαγνητοφώνηση και περίληψη μιας συζήτησης…';
 
   @override
   String get notificationScopes => 'Πεδία ειδοποιήσεων';
@@ -3039,7 +3039,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get pricingPaid => 'Επί πληρωμή';
 
   @override
-  String get loadingCapabilities => 'Φόρτωση δυνατοτήτων...';
+  String get loadingCapabilities => 'Φόρτωση δυνατοτήτων…';
 
   @override
   String get filterInstalled => 'Εγκατεστημένα';
@@ -3180,7 +3180,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedToTranscribeAudio => 'Αποτυχία μεταγραφής ήχου';
 
   @override
-  String get transcribing => 'Μεταγραφή...';
+  String get transcribing => 'Μεταγραφή…';
 
   @override
   String get discardedConversation => 'Απορριφθείσα συνομιλία';
@@ -3192,7 +3192,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get from => 'από';
 
   @override
-  String get copied => 'Αντιγράφηκε!';
+  String get copied => 'Αντιγράφηκε';
 
   @override
   String get copyLink => 'Αντιγραφή συνδέσμου';
@@ -3230,7 +3230,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedToGenerateShareLink => 'Αποτυχία δημιουργίας συνδέσμου κοινής χρήσης';
 
   @override
-  String get reloadingConversations => 'Επαναφόρτωση συνομιλιών...';
+  String get reloadingConversations => 'Επαναφόρτωση συνομιλιών…';
 
   @override
   String get user => 'Χρήστης';
@@ -3289,7 +3289,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get wearableAiCompanion => 'Φορετός σύντροφος AI';
 
   @override
-  String get loadingMemories => 'Φόρτωση αναμνήσεων...';
+  String get loadingMemories => 'Φόρτωση αναμνήσεων…';
 
   @override
   String get allMemories => 'Όλες οι αναμνήσεις';
@@ -3301,7 +3301,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get manual => 'Χειροκίνητη';
 
   @override
-  String get loadingYourMemories => 'Φόρτωση των αναμνήσεών σας...';
+  String get loadingYourMemories => 'Φόρτωση των αναμνήσεών σας…';
 
   @override
   String get createYourFirstMemory => 'Δημιουργήστε την πρώτη σας ανάμνηση για να ξεκινήσετε';
@@ -3420,7 +3420,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Επιλέξτε την προτιμώμενη γλώσσα σας για την καλύτερη εμπειρία Omi';
 
   @override
-  String get searchLanguages => 'Αναζήτηση γλωσσών...';
+  String get searchLanguages => 'Αναζήτηση γλωσσών';
 
   @override
   String get selectALanguage => 'Επιλέξτε μια γλώσσα';
@@ -3478,13 +3478,13 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το Omi χρειάζεται άδεια προσβασιμότητας για να ανιχνεύει πότε συμμετέχετε σε συναντήσεις Zoom, Meet ή Teams στον περιηγητή σας.';
 
   @override
-  String get pleaseWait => 'Παρακαλώ περιμένετε...';
+  String get pleaseWait => 'Παρακαλώ περιμένετε…';
 
   @override
   String get joinTheCommunity => 'Γίνετε μέλος της κοινότητας!';
 
   @override
-  String get loadingProfile => 'Φόρτωση προφίλ...';
+  String get loadingProfile => 'Φόρτωση προφίλ…';
 
   @override
   String get profileSettings => 'Ρυθμίσεις προφίλ';
@@ -3612,7 +3612,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saveSettings => 'Αποθήκευση Ρυθμίσεων';
 
   @override
-  String get syncingDeveloperSettings => 'Συγχρονισμός ρυθμίσεων προγραμματιστή...';
+  String get syncingDeveloperSettings => 'Συγχρονισμός ρυθμίσεων προγραμματιστή…';
 
   @override
   String get summary => 'Περίληψη';
@@ -3666,7 +3666,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get conversationDeleted => 'Η συνομιλία διαγράφηκε';
 
   @override
-  String get generatingLink => 'Δημιουργία συνδέσμου...';
+  String get generatingLink => 'Δημιουργία συνδέσμου…';
 
   @override
   String get editConversation => 'Επεξεργασία συνομιλίας';
@@ -3687,7 +3687,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get conversationTitle => 'Τίτλος συνομιλίας';
 
   @override
-  String get enterConversationTitle => 'Εισαγάγετε τίτλο συνομιλίας...';
+  String get enterConversationTitle => 'Εισαγάγετε τίτλο συνομιλίας…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Ο τίτλος της συνομιλίας ενημερώθηκε επιτυχώς';
@@ -3699,7 +3699,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Σφάλμα κατά την ενημέρωση του τίτλου της συνομιλίας';
 
   @override
-  String get settingUp => 'Ρύθμιση...';
+  String get settingUp => 'Ρύθμιση…';
 
   @override
   String get startYourFirstRecording => 'Ξεκινήστε την πρώτη σας καταγραφή';
@@ -3708,7 +3708,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Προετοιμασία καταγραφής ήχου συστήματος';
 
   @override
-  String get reconnecting => 'Επανασύνδεση...';
+  String get reconnecting => 'Επανασύνδεση…';
 
   @override
   String get recordingPaused => 'Καταγραφή σε παύση';
@@ -3721,14 +3721,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Συνέχεια σε ${countdown}s...';
+    return 'Συνέχεια σε ${countdown}s…';
   }
 
   @override
   String get tapPlayToResume => 'Πατήστε αναπαραγωγή για συνέχεια';
 
   @override
-  String get listeningForAudio => 'Ακρόαση για ήχο...';
+  String get listeningForAudio => 'Ακρόαση για ήχο…';
 
   @override
   String get preparingAudioCapture => 'Προετοιμασία καταγραφής ήχου';
@@ -3756,7 +3756,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paused => 'Σε παύση';
 
   @override
-  String get initializing => 'Αρχικοποίηση...';
+  String get initializing => 'Αρχικοποίηση…';
 
   @override
   String get recording => 'Καταγραφή';
@@ -3784,7 +3784,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'μεταφρασμένο από omi';
+  String get translatedByOmi => 'μεταφρασμένο από Omi';
 
   @override
   String get backToConversations => 'Επιστροφή στις συνομιλίες';
@@ -3809,7 +3809,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get selectAudioInput => 'Επιλέξτε είσοδο ήχου';
 
   @override
-  String get loadingDevices => 'Φόρτωση συσκευών...';
+  String get loadingDevices => 'Φόρτωση συσκευών…';
 
   @override
   String get settingsHeader => 'ΡΥΘΜΙΣΕΙΣ';
@@ -3918,7 +3918,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get exportConversationsDescription => 'Εξαγωγή συνομιλιών σε JSON';
 
   @override
-  String get exportingConversations => 'Εξαγωγή συνομιλιών...';
+  String get exportingConversations => 'Εξαγωγή συνομιλιών…';
 
   @override
   String get clearNodesDescription => 'Διαγραφή όλων των κόμβων και συνδέσεων';
@@ -4011,7 +4011,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Νέα έκδοση διαθέσιμη  🎉';
+  String get newVersionAvailable => 'Νέα έκδοση διαθέσιμη';
 
   @override
   String get no => 'Όχι';
@@ -4061,7 +4061,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get cancelSubscriptionButton => 'Ακύρωση συνδρομής';
 
   @override
-  String get cancelling => 'Ακύρωση...';
+  String get cancelling => 'Ακύρωση…';
 
   @override
   String get betaTesterMessage =>
@@ -4181,7 +4181,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Προσθήκη σε $serviceName...';
+    return 'Προσθήκη σε $serviceName…';
   }
 
   @override
@@ -4218,7 +4218,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'Τα κλειδιά API χρησιμοποιούνται για έλεγχο ταυτότητας όταν η εφαρμογή σας επικοινωνεί με τον διακομιστή OMI. Επιτρέπουν στην εφαρμογή σας να δημιουργεί αναμνήσεις και να έχει ασφαλή πρόσβαση σε άλλες υπηρεσίες OMI.';
+      'Τα κλειδιά API χρησιμοποιούνται για έλεγχο ταυτότητας όταν η εφαρμογή σας επικοινωνεί με τον διακομιστή Omi. Επιτρέπουν στην εφαρμογή σας να δημιουργεί αναμνήσεις και να έχει ασφαλή πρόσβαση σε άλλες υπηρεσίες Omi.';
 
   @override
   String get aboutOmiApiKeys => 'Σχετικά με τα κλειδιά API Omi';
@@ -4702,7 +4702,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Ο γράφος γνώσεων διαγράφηκε επιτυχώς';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα...';
+  String get exportStartedMayTakeFewSeconds => 'Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
@@ -4942,7 +4942,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get checkingForUpdates => 'Έλεγχος για ενημερώσεις';
 
   @override
-  String get checkingFirmwareVersion => 'Έλεγχος έκδοσης υλικολογισμικού...';
+  String get checkingFirmwareVersion => 'Έλεγχος έκδοσης υλικολογισμικού…';
 
   @override
   String get firmwareUpdate => 'Ενημέρωση υλικολογισμικού';
@@ -5126,19 +5126,19 @@ class AppLocalizationsEl extends AppLocalizations {
   String get showLess => 'λιγότερα ↑';
 
   @override
-  String get loadingYourRecording => 'Φόρτωση της εγγραφής σας...';
+  String get loadingYourRecording => 'Φόρτωση της εγγραφής σας…';
 
   @override
   String get photoDiscardedMessage => 'Αυτή η φωτογραφία απορρίφθηκε καθώς δεν ήταν σημαντική.';
 
   @override
-  String get analyzing => 'Ανάλυση...';
+  String get analyzing => 'Ανάλυση…';
 
   @override
   String get searchCountries => 'Αναζήτηση χωρών...';
 
   @override
-  String get checkingAppleWatch => 'Έλεγχος Apple Watch...';
+  String get checkingAppleWatch => 'Έλεγχος Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'Εγκαταστήστε το Omi στο\nApple Watch σας';
@@ -5201,7 +5201,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dontAskAgain => 'Μη με ρωτήσεις ξανά';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Αναμονή για μεταγραφή ή φωτογραφίες...';
+  String get waitingForTranscriptOrPhotos => 'Αναμονή για μεταγραφή ή φωτογραφίες…';
 
   @override
   String get noSummaryYet => 'Δεν υπάρχει σύνοψη ακόμα';
@@ -5248,7 +5248,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noSummary => 'Χωρίς σύνοψη';
 
   @override
-  String get updateOmiFirmware => 'Ενημέρωση firmware omi';
+  String get updateOmiFirmware => 'Ενημέρωση firmware Omi';
 
   @override
   String get anErrorOccurredTryAgain => 'Παρουσιάστηκε σφάλμα. Παρακαλώ δοκιμάστε ξανά.';
@@ -5400,10 +5400,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Δημιούργησε το Wrapped μου';
 
   @override
-  String get wrappedProcessingDefault => 'Επεξεργασία...';
+  String get wrappedProcessingDefault => 'Επεξεργασία…';
 
   @override
-  String get wrappedCreatingYourStory => 'Δημιουργούμε την\nιστορία του 2025...';
+  String get wrappedCreatingYourStory => 'Δημιουργούμε την\nιστορία του 2025…';
 
   @override
   String get wrappedSomethingWentWrong => 'Κάτι πήγε\nστραβά';
@@ -5433,7 +5433,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Η εκκίνηση δημιουργίας απέτυχε. Δοκιμάστε ξανά.';
 
   @override
-  String get wrappedStarting => 'Εκκίνηση...';
+  String get wrappedStarting => 'Εκκίνηση…';
 
   @override
   String get wrappedShare => 'Κοινοποίηση';
@@ -5641,13 +5641,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Κάτι πήγε στραβά! Παρακαλώ δοκιμάστε ξανά αργότερα.';
 
   @override
-  String get uploadingVoiceProfile => 'Μεταφόρτωση του φωνητικού σας προφίλ....';
+  String get uploadingVoiceProfile => 'Μεταφόρτωση του φωνητικού σας προφίλ….';
 
   @override
-  String get memorizingYourVoice => 'Απομνημόνευση της φωνής σας...';
+  String get memorizingYourVoice => 'Απομνημόνευση της φωνής σας…';
 
   @override
-  String get personalizingExperience => 'Εξατομίκευση της εμπειρίας σας...';
+  String get personalizingExperience => 'Εξατομίκευση της εμπειρίας σας…';
 
   @override
   String get keepSpeakingUntil100 => 'Συνεχίστε να μιλάτε μέχρι να φτάσετε το 100%.';
@@ -5773,7 +5773,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get clearChatQuestion => 'Διαγραφή συνομιλίας;';
 
   @override
-  String get syncingMessages => 'Συγχρονισμός μηνυμάτων με τον διακομιστή...';
+  String get syncingMessages => 'Συγχρονισμός μηνυμάτων με τον διακομιστή…';
 
   @override
   String get chatAppsTitle => 'Εφαρμογές συνομιλίας';
@@ -5934,10 +5934,10 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Σύνοψη συνομιλίας...\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
+  String get summarizingConversation => 'Σύνοψη συνομιλίας…\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
 
   @override
-  String get resummarizingConversation => 'Εκ νέου σύνοψη συνομιλίας...\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
+  String get resummarizingConversation => 'Εκ νέου σύνοψη συνομιλίας…\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
 
   @override
   String get nothingInterestingRetry => 'Δεν βρέθηκε τίποτα ενδιαφέρον,\nθέλετε να δοκιμάσετε ξανά;';
@@ -6069,7 +6069,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doNotCloseApp => 'Παρακαλώ μην κλείσετε την εφαρμογή.';
 
   @override
-  String get downloading => 'Λήψη σε εξέλιξη...';
+  String get downloading => 'Λήψη σε εξέλιξη…';
 
   @override
   String get downloadModel => 'Λήψη μοντέλου';
@@ -6150,7 +6150,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Προετοιμασία $model...';
+    return 'Προετοιμασία $model…';
   }
 
   @override
@@ -6179,7 +6179,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get useTemplateFrom => 'Χρήση προτύπου από';
 
   @override
-  String get selectProviderTemplate => 'Επιλέξτε πρότυπο παρόχου...';
+  String get selectProviderTemplate => 'Επιλέξτε πρότυπο παρόχου…';
 
   @override
   String get quicklyPopulateResponse => 'Γρήγορη συμπλήρωση με γνωστή μορφή απόκρισης παρόχου';
@@ -6381,13 +6381,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get signUpSuccess => 'Επιτυχής εγγραφή!';
 
   @override
-  String get loadingKnowledgeGraph => 'Φόρτωση γραφήματος γνώσης...';
+  String get loadingKnowledgeGraph => 'Φόρτωση γραφήματος γνώσης…';
 
   @override
   String get noKnowledgeGraphYet => 'Δεν υπάρχει ακόμα γράφημα γνώσης';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Δημιουργία γραφήματος γνώσης από αναμνήσεις...';
+  String get buildingKnowledgeGraphFromMemories => 'Δημιουργία γραφήματος γνώσης από αναμνήσεις…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6404,7 +6404,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Άνοιγμα $appName...';
+    return 'Άνοιγμα $appName…';
   }
 
   @override
@@ -6438,7 +6438,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get moneyEarned => 'Κέρδη';
 
   @override
-  String get writeYourReply => 'Γράψτε την απάντησή σας...';
+  String get writeYourReply => 'Γράψτε την απάντησή σας…';
 
   @override
   String get replySentSuccessfully => 'Η απάντηση στάλθηκε επιτυχώς';
@@ -6585,7 +6585,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get selectContactsToShareSummary => 'Επιλέξτε επαφές για κοινοποίηση της περίληψης συνομιλίας';
 
   @override
-  String get searchContactsHint => 'Αναζήτηση επαφών...';
+  String get searchContactsHint => 'Αναζήτηση επαφών';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6674,7 +6674,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Μεταφορά...';
+  String get transferring => 'Μεταφορά…';
 
   @override
   String get transferRequired => 'Απαιτείται μεταφορά';
@@ -6699,7 +6699,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get recordingInfo => 'Πληροφορίες εγγραφής';
 
   @override
-  String get transferInProgress => 'Μεταφορά σε εξέλιξη...';
+  String get transferInProgress => 'Μεταφορά σε εξέλιξη…';
 
   @override
   String get shareRecording => 'Κοινοποίηση εγγραφής';
@@ -6821,7 +6821,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Παρουσιάστηκε σφάλμα κατά την ενημέρωση της κατάστασης της εφαρμογής.';
 
   @override
-  String get calculatingETA => 'Υπολογισμός...';
+  String get calculatingETA => 'Υπολογισμός…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6832,29 +6832,29 @@ class AppLocalizationsEl extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Απομένει περίπου ένα λεπτό';
 
   @override
-  String get almostDone => 'Σχεδόν έτοιμο...';
+  String get almostDone => 'Σχεδόν έτοιμο…';
 
   @override
-  String get omiSays => 'το omi λέει';
+  String get omiSays => 'το Omi λέει';
 
   @override
-  String get analyzingYourData => 'Ανάλυση των δεδομένων σας...';
+  String get analyzingYourData => 'Ανάλυση των δεδομένων σας…';
 
   @override
   String migratingToProtection(String level) {
-    return 'Μεταφορά σε προστασία $level...';
+    return 'Μεταφορά σε προστασία $level…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Δεν υπάρχουν δεδομένα προς μεταφορά. Ολοκλήρωση...';
+  String get noDataToMigrateFinalizing => 'Δεν υπάρχουν δεδομένα προς μεταφορά. Ολοκλήρωση…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Μεταφορά $itemType... $percentage%';
+    return 'Μεταφορά $itemType… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Όλα τα αντικείμενα μεταφέρθηκαν. Ολοκλήρωση...';
+  String get allObjectsMigratedFinalizing => 'Όλα τα αντικείμενα μεταφέρθηκαν. Ολοκλήρωση…';
 
   @override
   String get migrationErrorOccurred => 'Παρουσιάστηκε σφάλμα κατά τη μεταφορά. Παρακαλώ δοκιμάστε ξανά.';
@@ -6889,13 +6889,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get templateName => 'Όνομα προτύπου';
 
   @override
-  String get templateNameHint => 'π.χ. Εξαγωγέας ενεργειών συνάντησης';
+  String get templateNameHint => 'π.χ. Εξαγωγέας εργασιών συνάντησης';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Το όνομα πρέπει να έχει τουλάχιστον 3 χαρακτήρες';
 
   @override
-  String get conversationPromptHint => 'π.χ., Εξάγετε ενέργειες, αποφάσεις και βασικά συμπεράσματα από τη συνομιλία.';
+  String get conversationPromptHint => 'π.χ., Εξάγετε εργασίες, αποφάσεις και βασικά συμπεράσματα από τη συνομιλία.';
 
   @override
   String get pleaseEnterAppPrompt => 'Παρακαλώ εισάγετε μια προτροπή για την εφαρμογή σας';
@@ -6910,13 +6910,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Μόνο εσείς μπορείτε να χρησιμοποιήσετε αυτό το πρότυπο';
 
   @override
-  String get generatingDescription => 'Δημιουργία περιγραφής...';
+  String get generatingDescription => 'Δημιουργία περιγραφής…';
 
   @override
-  String get creatingAppIcon => 'Δημιουργία εικονιδίου...';
+  String get creatingAppIcon => 'Δημιουργία εικονιδίου…';
 
   @override
-  String get installingApp => 'Εγκατάσταση εφαρμογής...';
+  String get installingApp => 'Εγκατάσταση εφαρμογής…';
 
   @override
   String get appCreatedAndInstalled => 'Η εφαρμογή δημιουργήθηκε και εγκαταστάθηκε!';
@@ -7045,7 +7045,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Εισάγετε μια περιγραφή για την εφαρμογή σας';
 
   @override
-  String get aiGenCreatingAppIcon => 'Δημιουργία εικονιδίου εφαρμογής...';
+  String get aiGenCreatingAppIcon => 'Δημιουργία εικονιδίου εφαρμογής…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7104,7 +7104,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν ήταν δυνατή η εκκίνηση της σελίδας αναβάθμισης. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Επικολλήστε τη διαμόρφωση JSON εδώ...';
+  String get transcriptionJsonPlaceholder => 'Επικολλήστε τη διαμόρφωση JSON εδώ…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7174,7 +7174,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingYoureAllSet => 'Είσαι έτοιμος';
 
   @override
-  String get searchTranscriptOrSummary => 'Αναζήτηση σε απομαγνητοφώνηση ή περίληψη...';
+  String get searchTranscriptOrSummary => 'Αναζήτηση σε απομαγνητοφώνηση ή περίληψη';
 
   @override
   String get myGoal => 'Ο στόχος μου';
@@ -7408,10 +7408,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get msgUploadFileFailed => 'Η μεταφόρτωση αρχείου απέτυχε, παρακαλώ δοκιμάστε ξανά αργότερα';
 
   @override
-  String get msgReadingMemories => 'Διαβάζω τις αναμνήσεις σου...';
+  String get msgReadingMemories => 'Διαβάζω τις αναμνήσεις σου…';
 
   @override
-  String get msgLearningMemories => 'Μαθαίνω από τις αναμνήσεις σου...';
+  String get msgLearningMemories => 'Μαθαίνω από τις αναμνήσεις σου…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Η μεταφόρτωση του συνημμένου αρχείου απέτυχε.';
@@ -7478,7 +7478,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Συγχώνευση...';
+  String get mergingStatus => 'Συγχώνευση…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7573,10 +7573,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get color => 'Χρώμα';
 
   @override
-  String get waitingForDevice => 'Αναμονή για συσκευή...';
+  String get waitingForDevice => 'Αναμονή για συσκευή…';
 
   @override
-  String get saySomething => 'Πείτε κάτι...';
+  String get saySomething => 'Πείτε κάτι…';
 
   @override
   String get initialisingSystemAudio => 'Αρχικοποίηση ήχου συστήματος';
@@ -7625,7 +7625,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get audioDownloadFailed => 'Αποτυχία λήψης ήχου';
 
   @override
-  String get downloadingAudio => 'Λήψη ήχου...';
+  String get downloadingAudio => 'Λήψη ήχου…';
 
   @override
   String get shareAudio => 'Κοινοποίηση ήχου';
@@ -7634,7 +7634,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get preparingAudio => 'Προετοιμασία ήχου';
 
   @override
-  String get gettingAudioFiles => 'Λήψη αρχείων ήχου...';
+  String get gettingAudioFiles => 'Λήψη αρχείων ήχου…';
 
   @override
   String get downloadingAudioProgress => 'Λήψη ήχου';
@@ -7643,13 +7643,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingAudio => 'Επεξεργασία ήχου';
 
   @override
-  String get combiningAudioFiles => 'Συνδυασμός αρχείων ήχου...';
+  String get combiningAudioFiles => 'Συνδυασμός αρχείων ήχου…';
 
   @override
   String get audioReady => 'Ο ήχος είναι έτοιμος';
 
   @override
-  String get openingShareSheet => 'Άνοιγμα φύλλου κοινοποίησης...';
+  String get openingShareSheet => 'Άνοιγμα φύλλου κοινοποίησης…';
 
   @override
   String get audioShareFailed => 'Η κοινοποίηση απέτυχε';
@@ -7834,7 +7834,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get mcpConnectionFailed => 'Αποτυχία σύνδεσης με τον διακομιστή MCP';
 
   @override
-  String get authorizingMcpServer => 'Εξουσιοδότηση...';
+  String get authorizingMcpServer => 'Εξουσιοδότηση…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Πώς μας βρήκατε;';
@@ -7972,7 +7972,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get downloadingFromDevice => 'Λήψη από τη συσκευή';
 
   @override
-  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο...';
+  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7980,11 +7980,11 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Επεξεργασία στον διακομιστή...';
+  String get processingOnServer => 'Επεξεργασία στον διακομιστή…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Επεξεργασία... $current/$total τμήματα';
+    return 'Επεξεργασία… $current/$total τμήματα';
   }
 
   @override
@@ -8168,7 +8168,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get followTheVoiceInstructions => 'Ακολουθήστε τις φωνητικές οδηγίες';
 
   @override
-  String get statusCalling => 'Κλήση...';
+  String get statusCalling => 'Κλήση…';
 
   @override
   String get statusCallInProgress => 'Κλήση σε εξέλιξη';
@@ -8213,10 +8213,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedToStartCall => 'Αποτυχία έναρξης κλήσης';
 
   @override
-  String get callStateConnecting => 'Σύνδεση...';
+  String get callStateConnecting => 'Σύνδεση…';
 
   @override
-  String get callStateRinging => 'Κουδουνίζει...';
+  String get callStateRinging => 'Κουδουνίζει…';
 
   @override
   String get callStateEnded => 'Κλήση τερματίστηκε';
@@ -8225,7 +8225,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get callStateFailed => 'Κλήση απέτυχε';
 
   @override
-  String get transcriptPlaceholder => 'Η μεταγραφή θα εμφανιστεί εδώ...';
+  String get transcriptPlaceholder => 'Η μεταγραφή θα εμφανιστεί εδώ…';
 
   @override
   String get phoneUnmute => 'Κατάργηση σίγασης';
@@ -8323,7 +8323,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'Μεταγραφή σε πραγματικό χρόνο κάθε κλήσης';
 
   @override
-  String get phoneCallsUpsellFeature2 => 'Αυτόματες περιλήψεις κλήσεων και ενέργειες';
+  String get phoneCallsUpsellFeature2 => 'Αυτόματες περιλήψεις κλήσεων και εργασίες';
 
   @override
   String get phoneCallsUpsellFeature3 => 'Οι παραλήπτες βλέπουν τον πραγματικό σας αριθμό, όχι τυχαίο';
@@ -8464,7 +8464,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptionPaused => 'Εγγραφή, επανασύνδεση';
 
   @override
-  String get transcriptionPausedReconnecting => 'Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή...';
+  String get transcriptionPausedReconnecting => 'Συνεχίζει η εγγραφή — επανασύνδεση με τη μεταγραφή…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8617,7 +8617,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tellUsMore => 'Πείτε μας περισσότερα (προαιρετικό)';
 
   @override
-  String get cancelReasonDetailHint => 'Εκτιμούμε κάθε σχόλιο...';
+  String get cancelReasonDetailHint => 'Εκτιμούμε κάθε σχόλιο…';
 
   @override
   String get justAMoment => 'Μια στιγμή, παρακαλώ';
@@ -8713,7 +8713,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get diagnostics => 'Διαγνωστικά';
 
   @override
-  String get waitingForData => 'Αναμονή για δεδομένα...';
+  String get waitingForData => 'Αναμονή για δεδομένα…';
 
   @override
   String get liveRssiOverTime => 'RSSI σε πραγματικό χρόνο';
@@ -8722,7 +8722,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get noRssiDataYet => 'Δεν υπάρχουν δεδομένα RSSI ακόμη';
 
   @override
-  String get collectingData => 'Συλλογή δεδομένων...';
+  String get collectingData => 'Συλλογή δεδομένων…';
 
   @override
   String get cleanDisconnect => 'Καθαρή αποσύνδεση';
@@ -8803,7 +8803,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stableFirmware => 'Σταθερό firmware';
 
   @override
-  String get fetchingStableFirmware => 'Ανάκτηση τελευταίου σταθερού firmware...';
+  String get fetchingStableFirmware => 'Ανάκτηση τελευταίου σταθερού firmware…';
 
   @override
   String get noStableFirmwareFound => 'Δεν βρέθηκε σταθερή έκδοση firmware για τη συσκευή σας.';
@@ -8821,40 +8821,40 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'Μεταφόρτωση ήχου διάρκειας $duration για απομαγνητοφώνηση…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'Νέα προσπάθεια μεταφόρτωσης… ήχος διάρκειας $duration διατηρείται στο τηλέφωνό σας';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'Η μεταφόρτωση απέτυχε — ήχος διάρκειας $duration διατηρείται στο τηλέφωνό σας. Πατήστε για επανάληψη.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'Η μεταφόρτωση απέτυχε — ήχος διάρκειας $duration διατηρείται στο τηλέφωνό σας.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'Ακρόαση… εδώ θα εμφανιστεί η απομαγνητοφώνηση.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'Εγγραφή εκτός σύνδεσης — η απομαγνητοφώνηση θα ενημερωθεί όταν συνδεθείτε ξανά.';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη — η εγγραφή συνεχίζεται και ο ήχος σας αποθηκεύεται.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'Καταγραφή';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'Λήψη φωτογραφιών';
 
   @override
   String get willSyncAutomatically => 'θα συγχρονιστεί αυτόματα';
@@ -8869,10 +8869,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get voiceRecordingFound => 'Βρέθηκε εγγραφή';
 
   @override
-  String get transcriptionConnecting => 'Σύνδεση μεταγραφής...';
+  String get transcriptionConnecting => 'Σύνδεση μεταγραφής…';
 
   @override
-  String get transcriptionReconnecting => 'Επανασύνδεση μεταγραφής...';
+  String get transcriptionReconnecting => 'Επανασύνδεση μεταγραφής…';
 
   @override
   String get transcriptionUnavailable => 'Η μεταγραφή δεν είναι διαθέσιμη';
@@ -9183,7 +9183,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get phoneCallSubtitle => 'Καταγράψτε κλήση με ζωντανή μεταγραφή';
 
   @override
-  String get searchActionItems => 'Αναζήτηση ενεργειών';
+  String get searchActionItems => 'Αναζήτηση εργασιών';
 
   @override
   String get selectActionItems => 'Πολλαπλή επιλογή';
@@ -9496,7 +9496,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Μπράβο!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Αρχίστε να μιλάτε...';
+  String get deviceOnboardingStartSpeaking => 'Αρχίστε να μιλάτε…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Κάντε μια ερώτηση στο Omi';
@@ -9506,10 +9506,10 @@ class AppLocalizationsEl extends AppLocalizations {
       'Πατήστε το κουμπί μία φορά, πείτε την ερώτησή σας και πατήστε ξανά όταν τελειώσετε';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Επεξεργασία της ερώτησής σας...';
+  String get deviceOnboardingProcessingQuestion => 'Επεξεργασία της ερώτησής σας…';
 
   @override
-  String get deviceOnboardingListening => 'Ακούει...';
+  String get deviceOnboardingListening => 'Ακούει…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Απενεργοποίηση';
@@ -9536,7 +9536,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Αποσυνδεδεμένη';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Απενεργοποίηση...';
+  String get deviceOnboardingStatusTurningOff => 'Απενεργοποίηση…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Προσαρμογή Διπλού Πατήματος';
@@ -9845,7 +9845,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get copyMessage => 'Αντιγραφή μηνύματος';
 
   @override
-  String get searchSettings => 'Αναζήτηση ρυθμίσεων…';
+  String get searchSettings => 'Αναζήτηση ρυθμίσεων';
 
   @override
   String get errorLoadingAudio => 'Σφάλμα φόρτωσης ήχου';
@@ -10215,4 +10215,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get clearSearch => 'Εκκαθάριση αναζήτησης';
+
+  @override
+  String get filterBySpeaker => 'Φιλτράρισμα κατά ομιλητή';
+
+  @override
+  String get notNow => 'Όχι τώρα';
+
+  @override
+  String get discard => 'Απόρριψη';
+
+  @override
+  String get keepEditing => 'Συνέχεια επεξεργασίας';
+
+  @override
+  String get discardChangesTitle => 'Απόρριψη αλλαγών;';
+
+  @override
+  String get discardChangesMessage => 'Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.';
 }

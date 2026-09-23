@@ -21,7 +21,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptTab => '文字起こし';
 
   @override
-  String get actionItemsTab => 'アクションアイテム';
+  String get actionItemsTab => 'タスク';
 
   @override
   String get deleteConversationTitle => '会話を削除しますか？';
@@ -111,10 +111,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get remaining => '残り';
 
   @override
-  String get loading => '読み込み中...';
+  String get loading => '読み込み中…';
 
   @override
-  String get loadingDuration => '再生時間を読み込み中...';
+  String get loadingDuration => '再生時間を読み込み中…';
 
   @override
   String secondsCount(int count) {
@@ -151,7 +151,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectLanguage => '言語を選択';
 
   @override
-  String get deleting => '削除中...';
+  String get deleting => '削除中…';
 
   @override
   String get pleaseCompleteAuthentication => 'ブラウザで認証を完了してください。完了したらアプリに戻ってください。';
@@ -178,7 +178,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get disconnected => '切断されました';
 
   @override
-  String get searching => '検索中...';
+  String get searching => '検索中';
 
   @override
   String get connectDevice => 'デバイスを接続';
@@ -238,7 +238,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get starConversationHint => '会話をスターするには、会話を開いてヘッダーのスターアイコンをタップしてください。';
 
   @override
-  String get searchConversations => '会話を検索...';
+  String get searchConversations => '会話を検索';
 
   @override
   String selectedCount(int count) {
@@ -269,7 +269,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noMessagesYet => 'まだメッセージがありません！\n会話を始めてみませんか？';
 
   @override
-  String get deletingMessages => 'Omiの記憶からメッセージを削除しています...';
+  String get deletingMessages => 'Omiの記憶からメッセージを削除しています…';
 
   @override
   String get messageCopied => '✨ メッセージをクリップボードにコピーしました';
@@ -317,7 +317,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get buildAndShareApp => 'カスタムアプリを作成して共有';
 
   @override
-  String get searchApps => 'アプリを検索...';
+  String get searchApps => 'アプリを検索';
 
   @override
   String get myApps => '自分で作成';
@@ -470,7 +470,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get privacyIntro => 'Omiでは、あなたのプライバシーを守ることに尽力しています。このページでは、データの保存と使用方法を管理できます。';
 
   @override
-  String get learnMore => '詳細を見る...';
+  String get learnMore => '詳細を見る…';
 
   @override
   String get dataProtectionLevel => 'データ保護レベル';
@@ -639,7 +639,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get developerSettingsTitle => '開発者設定';
 
   @override
-  String get saving => '保存中...';
+  String get saving => '保存中…';
 
   @override
   String get beta => 'ベータ';
@@ -717,7 +717,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get providing => '提供';
 
   @override
-  String get providingSubtitle => '自動的にキャプチャされたアクションアイテムとメモ。';
+  String get providingSubtitle => 'タスクとメモを自動でキャプチャ。';
 
   @override
   String get remembering => '記憶';
@@ -818,7 +818,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get debugLogCleared => 'デバッグログを消去しました';
 
   @override
-  String get exportStarted => 'エクスポートを開始しました。数秒かかる場合があります...';
+  String get exportStarted => 'エクスポートを開始しました。数秒かかる場合があります…';
 
   @override
   String get exportAllData => '全データをエクスポート';
@@ -1309,7 +1309,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'アクションアイテムは$appNameアカウントに同期されます';
+    return 'タスクは$appNameアカウントに同期されます';
   }
 
   @override
@@ -1441,7 +1441,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bringYourOwn => '自分で用意';
 
   @override
-  String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
+  String get payYourSttProvider => 'Omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
   String get freeMinutesMonth => '月300分無料。無制限は';
@@ -1602,7 +1602,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewTemplate => 'テンプレートを表示';
 
   @override
-  String get trySomethingLike => '例えば...';
+  String get trySomethingLike => '例えば…';
 
   @override
   String get tryIt => '試す';
@@ -1629,10 +1629,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get features => '機能';
 
   @override
-  String get creatingYourApp => 'アプリを作成中...';
+  String get creatingYourApp => 'アプリを作成中…';
 
   @override
-  String get generatingIcon => 'アイコンを生成中...';
+  String get generatingIcon => 'アイコンを生成中…';
 
   @override
   String get whatShouldWeMake => '何を作りましょうか？';
@@ -1683,13 +1683,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get perMonthLabel => '/月';
 
   @override
-  String get creating => '作成中...';
+  String get creating => '作成中…';
 
   @override
   String get createApp => 'アプリを作成';
 
   @override
-  String get searchingForDevices => 'デバイスを検索中...';
+  String get searchingForDevices => 'デバイスを検索中';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1909,7 +1909,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get personalGrowthJourney => 'あなたのすべての言葉に耳を傾けるAIとの個人的成長の旅。';
 
   @override
-  String get actionItemsTitle => 'To-Doリスト';
+  String get actionItemsTitle => 'タスク';
 
   @override
   String get actionItemsDescription => 'タップして編集 • 長押しで選択 • スワイプで操作';
@@ -1924,7 +1924,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tabOld => '過去';
 
   @override
-  String get emptyTodoMessage => '🎉 すべて完了！\n保留中のアクションアイテムはありません';
+  String get emptyTodoMessage => '🎉 すべて完了！\n保留中のタスクはありません';
 
   @override
   String get emptyDoneMessage => '完了したアイテムはまだありません';
@@ -1936,37 +1936,37 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noItems => 'アイテムなし';
 
   @override
-  String get actionItemMarkedIncomplete => 'アクションアイテムを未完了にしました';
+  String get actionItemMarkedIncomplete => 'タスクを未完了にしました';
 
   @override
-  String get actionItemCompleted => 'アクションアイテムを完了しました';
+  String get actionItemCompleted => 'タスクを完了しました';
 
   @override
-  String get deleteActionItemTitle => 'アクションアイテムを削除';
+  String get deleteActionItemTitle => 'タスクを削除';
 
   @override
-  String get deleteActionItemMessage => 'このアクションアイテムを削除してもよろしいですか？';
+  String get deleteActionItemMessage => 'このタスクを削除してもよろしいですか？';
 
   @override
   String get deleteSelectedItemsTitle => '選択したアイテムを削除';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '選択した $count 件のアクションアイテムを削除してもよろしいですか？';
+    return '選択した $count 件のタスク$sを削除してもよろしいですか？';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'アクションアイテム「$description」を削除しました';
+    return 'タスク「$description」を削除しました';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count 件のアクションアイテムを削除しました';
+    return '$count 件のタスク$sを削除しました';
   }
 
   @override
-  String get failedToDeleteItem => 'アクションアイテムの削除に失敗しました';
+  String get failedToDeleteItem => 'タスクの削除に失敗しました';
 
   @override
   String get failedToDeleteItems => 'アイテムの削除に失敗しました';
@@ -1975,10 +1975,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToDeleteSomeItems => '一部のアイテムの削除に失敗しました';
 
   @override
-  String get welcomeActionItemsTitle => 'アクションアイテムの準備完了';
+  String get welcomeActionItemsTitle => 'タスクの準備完了';
 
   @override
-  String get welcomeActionItemsDescription => 'AIが会話からタスクやTo-Doを自動的に抽出します。作成されるとここに表示されます。';
+  String get welcomeActionItemsDescription => 'AIが会話からタスクを自動的に抽出します。作成されるとここに表示されます。';
 
   @override
   String get autoExtractionFeature => '会話から自動抽出';
@@ -1998,7 +1998,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteSelected => '選択項目を削除';
 
   @override
-  String get searchMemories => '記憶を検索...';
+  String get searchMemories => '記憶を検索';
 
   @override
   String get memoryDeleted => '記憶を削除しました';
@@ -2055,7 +2055,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createMemoryTooltip => '新しい記憶を作成';
 
   @override
-  String get createActionItemTooltip => '新しいアクションアイテムを作成';
+  String get createActionItemTooltip => '新しいタスクを作成';
 
   @override
   String get memoryManagement => '記憶の管理';
@@ -2120,28 +2120,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
-  String get createActionItem => 'アクションアイテムを作成';
+  String get createActionItem => 'タスクを作成';
 
   @override
-  String get editActionItem => 'アクションアイテムを編集';
+  String get editActionItem => 'タスクを編集';
 
   @override
   String get actionItemDescriptionHint => '何をする必要がありますか？';
 
   @override
-  String get actionItemDescriptionEmpty => 'アクションアイテムの説明は空にできません。';
+  String get actionItemDescriptionEmpty => 'タスクの説明は空にできません。';
 
   @override
-  String get actionItemUpdated => 'アクションアイテムを更新しました';
+  String get actionItemUpdated => 'タスクを更新しました';
 
   @override
-  String get failedToUpdateActionItem => 'アクションアイテムの更新に失敗しました';
+  String get failedToUpdateActionItem => 'タスクの更新に失敗しました';
 
   @override
-  String get actionItemCreated => 'アクションアイテムを作成しました';
+  String get actionItemCreated => 'タスクを作成しました';
 
   @override
-  String get failedToCreateActionItem => 'アクションアイテムの作成に失敗しました';
+  String get failedToCreateActionItem => 'タスクの作成に失敗しました';
 
   @override
   String get dueDate => '期限';
@@ -2177,16 +2177,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get markComplete => '完了としてマーク';
 
   @override
-  String get actionItemDeleted => 'アクションアイテムが削除されました';
+  String get actionItemDeleted => 'タスクが削除されました';
 
   @override
-  String get failedToDeleteActionItem => 'アクションアイテムの削除に失敗しました';
+  String get failedToDeleteActionItem => 'タスクの削除に失敗しました';
 
   @override
-  String get deleteActionItemConfirmTitle => 'アクションアイテムの削除';
+  String get deleteActionItemConfirmTitle => 'タスクの削除';
 
   @override
-  String get deleteActionItemConfirmMessage => 'このアクションアイテムを削除してもよろしいですか？';
+  String get deleteActionItemConfirmMessage => 'このタスクを削除してもよろしいですか？';
 
   @override
   String get appLanguage => 'アプリ言語';
@@ -2213,7 +2213,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pleaseSelectReason => '理由を選択してください';
 
   @override
-  String get tellUsMoreWhatWentWrong => '何が問題だったか詳しく教えてください...';
+  String get tellUsMoreWhatWentWrong => '何が問題だったか詳しく教えてください…';
 
   @override
   String get selectText => 'テキストを選択';
@@ -2272,7 +2272,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exportButton => 'エクスポート';
 
   @override
-  String get actionItemsCopiedToClipboard => 'アクション項目をクリップボードにコピーしました';
+  String get actionItemsCopiedToClipboard => 'タスクをクリップボードにコピーしました';
 
   @override
   String get summarize => '要約';
@@ -2419,7 +2419,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get helpsDiagnoseIssues => '問題の診断に役立ちます';
 
   @override
-  String get exportStartedMessage => 'エクスポートを開始しました。数秒かかる場合があります...';
+  String get exportStartedMessage => 'エクスポートを開始しました。数秒かかる場合があります…';
 
   @override
   String get exportConversationsToJson => '会話をJSONファイルにエクスポート';
@@ -2475,7 +2475,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'アクションアイテムの説明を空にすることはできません';
+  String get actionItemDescriptionCannotBeEmpty => 'タスクの説明を空にすることはできません';
 
   @override
   String get saved => '保存しました';
@@ -2556,7 +2556,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get toggleControlBar => 'コントロールバーの切り替え';
 
   @override
-  String get pressKeys => 'キーを押してください...';
+  String get pressKeys => 'キーを押してください…';
 
   @override
   String get cmdRequired => '⌘ が必要';
@@ -2571,7 +2571,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get search => '検索';
 
   @override
-  String get searchPlaceholder => '検索...';
+  String get searchPlaceholder => '検索';
 
   @override
   String get untitledConversation => '無題の会話';
@@ -2644,7 +2644,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchResults => '検索結果';
 
   @override
-  String get actionItems => 'アクションアイテム';
+  String get actionItems => 'タスク';
 
   @override
   String get tasksToday => '今日';
@@ -2659,7 +2659,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksLater => '後で';
 
   @override
-  String get loadingTasks => 'タスクを読み込んでいます...';
+  String get loadingTasks => 'タスクを読み込んでいます…';
 
   @override
   String get tasks => 'タスク';
@@ -2719,22 +2719,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get timeAM => '午前';
 
   @override
-  String get actionItemUpdatedSuccessfully => 'アクションアイテムが正常に更新されました';
+  String get actionItemUpdatedSuccessfully => 'タスクが正常に更新されました';
 
   @override
-  String get actionItemCreatedSuccessfully => 'アクションアイテムが正常に作成されました';
+  String get actionItemCreatedSuccessfully => 'タスクが正常に作成されました';
 
   @override
-  String get actionItemDeletedSuccessfully => 'アクションアイテムが正常に削除されました';
+  String get actionItemDeletedSuccessfully => 'タスクが正常に削除されました';
 
   @override
-  String get deleteActionItem => 'アクションアイテムを削除';
+  String get deleteActionItem => 'タスクを削除';
 
   @override
-  String get deleteActionItemConfirmation => 'このアクションアイテムを削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteActionItemConfirmation => 'このタスクを削除してもよろしいですか？この操作は元に戻せません。';
 
   @override
-  String get enterActionItemDescription => 'アクションアイテムの説明を入力...';
+  String get enterActionItemDescription => 'タスクの説明を入力';
 
   @override
   String get markAsCompleted => '完了としてマーク';
@@ -2743,10 +2743,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setDueDateAndTime => '期限と時刻を設定';
 
   @override
-  String get reloadingApps => 'アプリを再読み込み中...';
+  String get reloadingApps => 'アプリを再読み込み中…';
 
   @override
-  String get loadingApps => 'アプリを読み込み中...';
+  String get loadingApps => 'アプリを読み込み中…';
 
   @override
   String get browseInstallCreateApps => 'アプリを閲覧、インストール、作成';
@@ -2782,10 +2782,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'カスタムOmiアプリを構築して送信する';
 
   @override
-  String get submittingYourApp => 'アプリを送信しています...';
+  String get submittingYourApp => 'アプリを送信しています…';
 
   @override
-  String get preparingFormForYou => 'フォームを準備しています...';
+  String get preparingFormForYou => 'フォームを準備しています…';
 
   @override
   String get appDetails => 'アプリの詳細';
@@ -2806,13 +2806,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatPrompt => 'チャットプロンプト';
 
   @override
-  String get chatPromptPlaceholder => 'あなたは素晴らしいアプリです。ユーザーのクエリに応答し、良い気分にさせることがあなたの仕事です...';
+  String get chatPromptPlaceholder => 'あなたは素晴らしいアプリです。ユーザーのクエリに応答し、良い気分にさせることがあなたの仕事です…';
 
   @override
   String get conversationPrompt => '会話プロンプト';
 
   @override
-  String get conversationPromptPlaceholder => 'あなたは素晴らしいアプリです。会話の文字起こしと要約が提供されます...';
+  String get conversationPromptPlaceholder => 'あなたは素晴らしいアプリです。会話の文字起こしと要約が提供されます…';
 
   @override
   String get notificationScopes => '通知スコープ';
@@ -2964,7 +2964,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pricingPaid => '有料';
 
   @override
-  String get loadingCapabilities => '機能を読み込み中...';
+  String get loadingCapabilities => '機能を読み込み中…';
 
   @override
   String get filterInstalled => 'インストール済み';
@@ -3103,7 +3103,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToTranscribeAudio => '音声の文字起こしに失敗しました';
 
   @override
-  String get transcribing => '文字起こし中...';
+  String get transcribing => '文字起こし中…';
 
   @override
   String get discardedConversation => '破棄された会話';
@@ -3115,7 +3115,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get from => 'から';
 
   @override
-  String get copied => 'コピーしました！';
+  String get copied => 'コピーしました';
 
   @override
   String get copyLink => 'リンクをコピー';
@@ -3153,7 +3153,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToGenerateShareLink => '共有リンクの生成に失敗しました';
 
   @override
-  String get reloadingConversations => '会話を再読み込み中...';
+  String get reloadingConversations => '会話を再読み込み中…';
 
   @override
   String get user => 'ユーザー';
@@ -3212,7 +3212,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wearableAiCompanion => 'ウェアラブルAIコンパニオン';
 
   @override
-  String get loadingMemories => '記憶を読み込んでいます...';
+  String get loadingMemories => '記憶を読み込んでいます…';
 
   @override
   String get allMemories => 'すべての記憶';
@@ -3224,7 +3224,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manual => '手動';
 
   @override
-  String get loadingYourMemories => '記憶を読み込んでいます...';
+  String get loadingYourMemories => '記憶を読み込んでいます…';
 
   @override
   String get createYourFirstMemory => '最初の記憶を作成して始めましょう';
@@ -3340,7 +3340,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => '最高のOmi体験のために優先言語を選択してください';
 
   @override
-  String get searchLanguages => '言語を検索...';
+  String get searchLanguages => '言語を検索';
 
   @override
   String get selectALanguage => '言語を選択';
@@ -3393,13 +3393,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accessibilityDescription => 'Omiは、ブラウザでZoom、Meet、またはTeamsの会議に参加したことを検出するためにアクセシビリティ権限が必要です。';
 
   @override
-  String get pleaseWait => 'お待ちください...';
+  String get pleaseWait => 'お待ちください…';
 
   @override
   String get joinTheCommunity => 'コミュニティに参加！';
 
   @override
-  String get loadingProfile => 'プロフィールを読み込んでいます...';
+  String get loadingProfile => 'プロフィールを読み込んでいます…';
 
   @override
   String get profileSettings => 'プロフィール設定';
@@ -3524,7 +3524,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saveSettings => '設定を保存';
 
   @override
-  String get syncingDeveloperSettings => '開発者設定を同期中...';
+  String get syncingDeveloperSettings => '開発者設定を同期中…';
 
   @override
   String get summary => '要約';
@@ -3576,7 +3576,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationDeleted => '会話が削除されました';
 
   @override
-  String get generatingLink => 'リンクを生成中...';
+  String get generatingLink => 'リンクを生成中…';
 
   @override
   String get editConversation => '会話を編集';
@@ -3597,7 +3597,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationTitle => '会話のタイトル';
 
   @override
-  String get enterConversationTitle => '会話のタイトルを入力...';
+  String get enterConversationTitle => '会話のタイトルを入力…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => '会話のタイトルが正常に更新されました';
@@ -3609,7 +3609,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errorUpdatingConversationTitle => '会話のタイトルの更新中にエラーが発生しました';
 
   @override
-  String get settingUp => '設定中...';
+  String get settingUp => '設定中…';
 
   @override
   String get startYourFirstRecording => '最初の録音を開始';
@@ -3618,7 +3618,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get preparingSystemAudioCapture => 'システム音声キャプチャを準備中';
 
   @override
-  String get reconnecting => '再接続中...';
+  String get reconnecting => '再接続中…';
 
   @override
   String get recordingPaused => '録音一時停止中';
@@ -3631,14 +3631,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return '$countdown秒後に再開...';
+    return '$countdown秒後に再開…';
   }
 
   @override
   String get tapPlayToResume => '再開するには再生をタップ';
 
   @override
-  String get listeningForAudio => '音声を待機中...';
+  String get listeningForAudio => '音声を待機中…';
 
   @override
   String get preparingAudioCapture => '音声キャプチャを準備中';
@@ -3666,7 +3666,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paused => '一時停止中';
 
   @override
-  String get initializing => '初期化中...';
+  String get initializing => '初期化中…';
 
   @override
   String get recording => '録音中';
@@ -3694,7 +3694,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'omiによって翻訳';
+  String get translatedByOmi => 'Omiによって翻訳';
 
   @override
   String get backToConversations => '会話に戻る';
@@ -3719,7 +3719,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectAudioInput => '音声入力を選択';
 
   @override
-  String get loadingDevices => 'デバイスを読み込み中...';
+  String get loadingDevices => 'デバイスを読み込み中…';
 
   @override
   String get settingsHeader => '設定';
@@ -3827,7 +3827,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exportConversationsDescription => '会話を JSON にエクスポート';
 
   @override
-  String get exportingConversations => '会話をエクスポート中...';
+  String get exportingConversations => '会話をエクスポート中…';
 
   @override
   String get clearNodesDescription => 'すべてのノードと接続をクリア';
@@ -3917,7 +3917,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '新しいバージョンが利用可能です  🎉';
+  String get newVersionAvailable => '新しいバージョンが利用可能です';
 
   @override
   String get no => 'いいえ';
@@ -3965,7 +3965,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cancelSubscriptionButton => 'サブスクリプションをキャンセル';
 
   @override
-  String get cancelling => 'キャンセル中...';
+  String get cancelling => 'キャンセル中…';
 
   @override
   String get betaTesterMessage => 'あなたはこのアプリのベータテスターです。まだ公開されていません。承認後に公開されます。';
@@ -4080,7 +4080,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return '$serviceNameに追加中...';
+    return '$serviceNameに追加中…';
   }
 
   @override
@@ -4116,7 +4116,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get omiApiKeys => 'Omi APIキー';
 
   @override
-  String get apiKeysDescription => 'APIキーは、アプリがOMIサーバーと通信する際の認証に使用されます。アプリケーションが記憶を作成し、他のOMIサービスに安全にアクセスできるようにします。';
+  String get apiKeysDescription => 'APIキーは、アプリがOmiサーバーと通信する際の認証に使用されます。アプリケーションが記憶を作成し、他のOmiサービスに安全にアクセスできるようにします。';
 
   @override
   String get aboutOmiApiKeys => 'Omi APIキーについて';
@@ -4582,7 +4582,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'ナレッジグラフが正常に削除されました';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'エクスポートを開始しました。数秒かかる場合があります...';
+  String get exportStartedMayTakeFewSeconds => 'エクスポートを開始しました。数秒かかる場合があります…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
@@ -4815,7 +4815,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get checkingForUpdates => 'アップデートを確認中';
 
   @override
-  String get checkingFirmwareVersion => 'ファームウェアバージョンを確認中...';
+  String get checkingFirmwareVersion => 'ファームウェアバージョンを確認中…';
 
   @override
   String get firmwareUpdate => 'ファームウェア更新';
@@ -4991,19 +4991,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get showLess => '閉じる ↑';
 
   @override
-  String get loadingYourRecording => '録音を読み込み中...';
+  String get loadingYourRecording => '録音を読み込み中…';
 
   @override
   String get photoDiscardedMessage => 'この写真は重要ではなかったため破棄されました。';
 
   @override
-  String get analyzing => '分析中...';
+  String get analyzing => '分析中…';
 
   @override
   String get searchCountries => '国を検索...';
 
   @override
-  String get checkingAppleWatch => 'Apple Watchを確認中...';
+  String get checkingAppleWatch => 'Apple Watchを確認中…';
 
   @override
   String get installOmiOnAppleWatch => 'Apple WatchにOmiを\nインストール';
@@ -5062,7 +5062,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dontAskAgain => '次回から表示しない';
 
   @override
-  String get waitingForTranscriptOrPhotos => '文字起こしまたは写真を待機中...';
+  String get waitingForTranscriptOrPhotos => '文字起こしまたは写真を待機中…';
 
   @override
   String get noSummaryYet => 'まだ要約がありません';
@@ -5109,7 +5109,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSummary => '要約なし';
 
   @override
-  String get updateOmiFirmware => 'omiファームウェアを更新';
+  String get updateOmiFirmware => 'Omiファームウェアを更新';
 
   @override
   String get anErrorOccurredTryAgain => 'エラーが発生しました。もう一度お試しください。';
@@ -5261,10 +5261,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Wrappedを生成';
 
   @override
-  String get wrappedProcessingDefault => '処理中...';
+  String get wrappedProcessingDefault => '処理中…';
 
   @override
-  String get wrappedCreatingYourStory => 'あなたの\n2025年のストーリーを作成中...';
+  String get wrappedCreatingYourStory => 'あなたの\n2025年のストーリーを作成中…';
 
   @override
   String get wrappedSomethingWentWrong => '問題が\n発生しました';
@@ -5294,7 +5294,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wrappedFailedToStartGeneration => '生成の開始に失敗しました。もう一度お試しください。';
 
   @override
-  String get wrappedStarting => '開始中...';
+  String get wrappedStarting => '開始中…';
 
   @override
   String get wrappedShare => '共有';
@@ -5499,13 +5499,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'エラーが発生しました！後でもう一度お試しください。';
 
   @override
-  String get uploadingVoiceProfile => '音声プロファイルをアップロード中....';
+  String get uploadingVoiceProfile => '音声プロファイルをアップロード中….';
 
   @override
-  String get memorizingYourVoice => 'あなたの声を記憶中...';
+  String get memorizingYourVoice => 'あなたの声を記憶中…';
 
   @override
-  String get personalizingExperience => '体験をパーソナライズ中...';
+  String get personalizingExperience => '体験をパーソナライズ中…';
 
   @override
   String get keepSpeakingUntil100 => '100%になるまで話し続けてください。';
@@ -5628,7 +5628,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clearChatQuestion => 'チャットを削除しますか？';
 
   @override
-  String get syncingMessages => 'サーバーとメッセージを同期中...';
+  String get syncingMessages => 'サーバーとメッセージを同期中…';
 
   @override
   String get chatAppsTitle => 'チャットアプリ';
@@ -5787,10 +5787,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => '会話を要約中...\n数秒かかる場合があります';
+  String get summarizingConversation => '会話を要約中…\n数秒かかる場合があります';
 
   @override
-  String get resummarizingConversation => '会話を再要約中...\n数秒かかる場合があります';
+  String get resummarizingConversation => '会話を再要約中…\n数秒かかる場合があります';
 
   @override
   String get nothingInterestingRetry => '興味深い内容が見つかりませんでした。\n再試行しますか？';
@@ -5918,7 +5918,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doNotCloseApp => 'アプリを閉じないでください。';
 
   @override
-  String get downloading => 'ダウンロード中...';
+  String get downloading => 'ダウンロード中…';
 
   @override
   String get downloadModel => 'モデルをダウンロード';
@@ -5995,7 +5995,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return '$modelを準備中...';
+    return '$modelを準備中…';
   }
 
   @override
@@ -6023,7 +6023,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get useTemplateFrom => 'テンプレートを使用';
 
   @override
-  String get selectProviderTemplate => 'プロバイダーテンプレートを選択...';
+  String get selectProviderTemplate => 'プロバイダーテンプレートを選択…';
 
   @override
   String get quicklyPopulateResponse => '既知のプロバイダー応答形式で素早く入力';
@@ -6225,13 +6225,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signUpSuccess => '登録成功！';
 
   @override
-  String get loadingKnowledgeGraph => 'ナレッジグラフを読み込み中...';
+  String get loadingKnowledgeGraph => 'ナレッジグラフを読み込み中…';
 
   @override
   String get noKnowledgeGraphYet => 'ナレッジグラフはまだありません';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => '記憶からナレッジグラフを構築中...';
+  String get buildingKnowledgeGraphFromMemories => '記憶からナレッジグラフを構築中…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically => '新しい記憶を作成すると、ナレッジグラフが自動的に構築されます。';
@@ -6247,7 +6247,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return '$appNameを開いています...';
+    return '$appNameを開いています…';
   }
 
   @override
@@ -6281,7 +6281,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get moneyEarned => '収益';
 
   @override
-  String get writeYourReply => '返信を入力...';
+  String get writeYourReply => '返信を入力…';
 
   @override
   String get replySentSuccessfully => '返信を送信しました';
@@ -6428,7 +6428,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectContactsToShareSummary => '会話の要約を共有する連絡先を選択';
 
   @override
-  String get searchContactsHint => '連絡先を検索...';
+  String get searchContactsHint => '連絡先を検索';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6516,7 +6516,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get transferring => '転送中...';
+  String get transferring => '転送中…';
 
   @override
   String get transferRequired => '転送が必要です';
@@ -6540,7 +6540,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get recordingInfo => '録音情報';
 
   @override
-  String get transferInProgress => '転送中...';
+  String get transferInProgress => '転送中…';
 
   @override
   String get shareRecording => '録音を共有';
@@ -6657,7 +6657,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errorUpdatingAppStatus => 'アプリのステータス更新中にエラーが発生しました。';
 
   @override
-  String get calculatingETA => '計算中...';
+  String get calculatingETA => '計算中…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6668,29 +6668,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aboutAMinuteRemaining => '残り約1分';
 
   @override
-  String get almostDone => 'もうすぐ完了...';
+  String get almostDone => 'もうすぐ完了…';
 
   @override
-  String get omiSays => 'omiより';
+  String get omiSays => 'Omiより';
 
   @override
-  String get analyzingYourData => 'データを分析中...';
+  String get analyzingYourData => 'データを分析中…';
 
   @override
   String migratingToProtection(String level) {
-    return '$level保護に移行中...';
+    return '$level保護に移行中…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => '移行するデータがありません。完了処理中...';
+  String get noDataToMigrateFinalizing => '移行するデータがありません。完了処理中…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return '$itemTypeを移行中... $percentage%';
+    return '$itemTypeを移行中… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'すべてのオブジェクトを移行しました。完了処理中...';
+  String get allObjectsMigratedFinalizing => 'すべてのオブジェクトを移行しました。完了処理中…';
 
   @override
   String get migrationErrorOccurred => '移行中にエラーが発生しました。もう一度お試しください。';
@@ -6725,13 +6725,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get templateName => 'テンプレート名';
 
   @override
-  String get templateNameHint => '例: 会議アクション項目抽出';
+  String get templateNameHint => '例: 会議タスク抽出';
 
   @override
   String get nameMustBeAtLeast3Characters => '名前は3文字以上である必要があります';
 
   @override
-  String get conversationPromptHint => '例：会話からアクションアイテム、決定事項、重要なポイントを抽出します。';
+  String get conversationPromptHint => '例：会話からタスク、決定事項、重要なポイントを抽出します。';
 
   @override
   String get pleaseEnterAppPrompt => 'アプリのプロンプトを入力してください';
@@ -6746,13 +6746,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'このテンプレートを使用できるのはあなただけです';
 
   @override
-  String get generatingDescription => '説明を生成中...';
+  String get generatingDescription => '説明を生成中…';
 
   @override
-  String get creatingAppIcon => 'アプリアイコンを作成中...';
+  String get creatingAppIcon => 'アプリアイコンを作成中…';
 
   @override
-  String get installingApp => 'アプリをインストール中...';
+  String get installingApp => 'アプリをインストール中…';
 
   @override
   String get appCreatedAndInstalled => 'アプリが作成・インストールされました！';
@@ -6881,7 +6881,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'アプリの説明を入力してください';
 
   @override
-  String get aiGenCreatingAppIcon => 'アプリアイコンを作成中...';
+  String get aiGenCreatingAppIcon => 'アプリアイコンを作成中…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -6936,7 +6936,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'アップグレードページを開けませんでした。もう一度お試しください。';
 
   @override
-  String get transcriptionJsonPlaceholder => 'JSON設定をここに貼り付け...';
+  String get transcriptionJsonPlaceholder => 'JSON設定をここに貼り付け…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7006,7 +7006,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingYoureAllSet => '準備完了です';
 
   @override
-  String get searchTranscriptOrSummary => '文字起こしまたは要約を検索...';
+  String get searchTranscriptOrSummary => '文字起こしまたは要約を検索';
 
   @override
   String get myGoal => '私の目標';
@@ -7231,10 +7231,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get msgUploadFileFailed => 'ファイルのアップロードに失敗しました。後でもう一度お試しください';
 
   @override
-  String get msgReadingMemories => '記憶を読み込んでいます...';
+  String get msgReadingMemories => '記憶を読み込んでいます…';
 
   @override
-  String get msgLearningMemories => '記憶から学習しています...';
+  String get msgLearningMemories => '記憶から学習しています…';
 
   @override
   String get msgUploadAttachedFileFailed => '添付ファイルのアップロードに失敗しました。';
@@ -7299,7 +7299,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => '統合中...';
+  String get mergingStatus => '統合中…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7394,10 +7394,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get color => '色';
 
   @override
-  String get waitingForDevice => 'デバイスを待機中...';
+  String get waitingForDevice => 'デバイスを待機中…';
 
   @override
-  String get saySomething => '何か話してください...';
+  String get saySomething => '何か話してください…';
 
   @override
   String get initialisingSystemAudio => 'システム音声を初期化中';
@@ -7446,7 +7446,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get audioDownloadFailed => '音声のダウンロードに失敗しました';
 
   @override
-  String get downloadingAudio => '音声をダウンロード中...';
+  String get downloadingAudio => '音声をダウンロード中…';
 
   @override
   String get shareAudio => '音声を共有';
@@ -7455,7 +7455,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get preparingAudio => '音声を準備中';
 
   @override
-  String get gettingAudioFiles => '音声ファイルを取得中...';
+  String get gettingAudioFiles => '音声ファイルを取得中…';
 
   @override
   String get downloadingAudioProgress => '音声をダウンロード中';
@@ -7464,13 +7464,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingAudio => '音声を処理中';
 
   @override
-  String get combiningAudioFiles => '音声ファイルを結合中...';
+  String get combiningAudioFiles => '音声ファイルを結合中…';
 
   @override
   String get audioReady => '音声の準備完了';
 
   @override
-  String get openingShareSheet => '共有シートを開いています...';
+  String get openingShareSheet => '共有シートを開いています…';
 
   @override
   String get audioShareFailed => '共有に失敗しました';
@@ -7655,7 +7655,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get mcpConnectionFailed => 'MCPサーバーへの接続に失敗しました';
 
   @override
-  String get authorizingMcpServer => '認証中...';
+  String get authorizingMcpServer => '認証中…';
 
   @override
   String get whereDidYouHearAboutOmi => 'どこで知りましたか？';
@@ -7784,7 +7784,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get downloadingFromDevice => 'デバイスからダウンロード中';
 
   @override
-  String get reconnectingToInternet => 'インターネットに再接続中...';
+  String get reconnectingToInternet => 'インターネットに再接続中…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7792,11 +7792,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'サーバーで処理中...';
+  String get processingOnServer => 'サーバーで処理中…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return '処理中... $current/$total セグメント';
+    return '処理中… $current/$total セグメント';
   }
 
   @override
@@ -7976,7 +7976,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get followTheVoiceInstructions => '音声案内に従ってください';
 
   @override
-  String get statusCalling => '発信中...';
+  String get statusCalling => '発信中…';
 
   @override
   String get statusCallInProgress => '通話中';
@@ -8021,10 +8021,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToStartCall => '通話の開始に失敗しました';
 
   @override
-  String get callStateConnecting => '接続中...';
+  String get callStateConnecting => '接続中…';
 
   @override
-  String get callStateRinging => '呼び出し中...';
+  String get callStateRinging => '呼び出し中…';
 
   @override
   String get callStateEnded => '通話終了';
@@ -8033,7 +8033,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get callStateFailed => '通話失敗';
 
   @override
-  String get transcriptPlaceholder => '文字起こしがここに表示されます...';
+  String get transcriptPlaceholder => '文字起こしがここに表示されます…';
 
   @override
   String get phoneUnmute => 'ミュート解除';
@@ -8130,7 +8130,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
 
   @override
-  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とタスク';
 
   @override
   String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
@@ -8268,7 +8268,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionPaused => '録音中、再接続中';
 
   @override
-  String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています...';
+  String get transcriptionPausedReconnecting => '録音は継続中 — 文字起こしに再接続しています…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8416,7 +8416,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tellUsMore => '詳しく教えてください（任意）';
 
   @override
-  String get cancelReasonDetailHint => 'フィードバックをお待ちしています...';
+  String get cancelReasonDetailHint => 'フィードバックをお待ちしています…';
 
   @override
   String get justAMoment => '少しお待ちください';
@@ -8511,7 +8511,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnostics => '診断';
 
   @override
-  String get waitingForData => 'データを待っています...';
+  String get waitingForData => 'データを待っています…';
 
   @override
   String get liveRssiOverTime => 'リアルタイムRSSI推移';
@@ -8520,7 +8520,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noRssiDataYet => 'RSSIデータはまだありません';
 
   @override
-  String get collectingData => 'データ収集中...';
+  String get collectingData => 'データ収集中…';
 
   @override
   String get cleanDisconnect => '正常切断';
@@ -8601,7 +8601,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stableFirmware => '安定版ファームウェア';
 
   @override
-  String get fetchingStableFirmware => '最新の安定版ファームウェアを取得中...';
+  String get fetchingStableFirmware => '最新の安定版ファームウェアを取得中…';
 
   @override
   String get noStableFirmwareFound => 'お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。';
@@ -8619,40 +8619,38 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return '文字起こしのため $duration の音声をアップロード中…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'アップロードを再試行中… $duration の音声はスマートフォンに保存されています';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'アップロードに失敗しました — $duration の音声はスマートフォンに保存されています。タップして再試行。';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'アップロードに失敗しました — $duration の音声はスマートフォンに保存されています。';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => '聞き取り中… ここに文字起こしが表示されます。';
 
   @override
-  String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+  String get recordingOfflineTranscriptWillCatchUp => 'オフラインで録音中 — オンラインに戻ると文字起こしが追いつきます。';
 
   @override
-  String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+  String get transcriptionUnavailableRecordingSaved => '文字起こしは利用できません — 録音は継続し、音声は保存されます。';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'キャプチャ中';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => '写真をキャプチャ中';
 
   @override
   String get willSyncAutomatically => '自動的に同期されます';
@@ -8667,10 +8665,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get voiceRecordingFound => '録音が見つかりました';
 
   @override
-  String get transcriptionConnecting => '文字起こしに接続中...';
+  String get transcriptionConnecting => '文字起こしに接続中…';
 
   @override
-  String get transcriptionReconnecting => '文字起こしに再接続中...';
+  String get transcriptionReconnecting => '文字起こしに再接続中…';
 
   @override
   String get transcriptionUnavailable => '文字起こしは利用できません';
@@ -8978,7 +8976,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSubtitle => 'ライブ文字起こしで通話を録音';
 
   @override
-  String get searchActionItems => 'アクション項目を検索';
+  String get searchActionItems => 'タスクを検索';
 
   @override
   String get selectActionItems => '複数選択';
@@ -9278,7 +9276,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'いいですね！';
 
   @override
-  String get deviceOnboardingStartSpeaking => '話してみてください...';
+  String get deviceOnboardingStartSpeaking => '話してみてください…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Omiに質問してみよう';
@@ -9287,10 +9285,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingAskQuestionSubtitle => 'ボタンを1回押して質問を話し、終わったらもう一度押します';
 
   @override
-  String get deviceOnboardingProcessingQuestion => '質問を処理しています...';
+  String get deviceOnboardingProcessingQuestion => '質問を処理しています…';
 
   @override
-  String get deviceOnboardingListening => '聞いています...';
+  String get deviceOnboardingListening => '聞いています…';
 
   @override
   String get deviceOnboardingTurnOffTitle => '電源を切る';
@@ -9317,7 +9315,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => '未接続';
 
   @override
-  String get deviceOnboardingStatusTurningOff => '電源を切っています...';
+  String get deviceOnboardingStatusTurningOff => '電源を切っています…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'ダブルタップをカスタマイズ';
@@ -9619,7 +9617,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get copyMessage => 'メッセージをコピー';
 
   @override
-  String get searchSettings => '設定を検索…';
+  String get searchSettings => '設定を検索';
 
   @override
   String get errorLoadingAudio => '音声の読み込みエラー';
@@ -9975,4 +9973,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearSearch => '検索をクリア';
+
+  @override
+  String get filterBySpeaker => '話者で絞り込む';
+
+  @override
+  String get notNow => '後で';
+
+  @override
+  String get discard => '破棄';
+
+  @override
+  String get keepEditing => '編集を続ける';
+
+  @override
+  String get discardChangesTitle => '変更を破棄しますか？';
+
+  @override
+  String get discardChangesMessage => '保存されていない変更は失われます。';
 }

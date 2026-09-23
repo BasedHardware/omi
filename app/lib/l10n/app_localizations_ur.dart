@@ -21,7 +21,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcriptTab => 'ٹرانسکرپٹ';
 
   @override
-  String get actionItemsTab => 'کردہ کام';
+  String get actionItemsTab => 'کام';
 
   @override
   String get deleteConversationTitle => 'بات چیت حذف کریں؟';
@@ -112,10 +112,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get remaining => 'باقی';
 
   @override
-  String get loading => 'لوڈ ہو رہا ہے...';
+  String get loading => 'لوڈ ہو رہا ہے…';
 
   @override
-  String get loadingDuration => 'مدت لوڈ ہو رہی ہے...';
+  String get loadingDuration => 'مدت لوڈ ہو رہی ہے…';
 
   @override
   String secondsCount(int count) {
@@ -152,7 +152,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get selectLanguage => 'زبان منتخب کریں';
 
   @override
-  String get deleting => 'حذف ہو رہا ہے...';
+  String get deleting => 'حذف ہو رہا ہے…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -180,7 +180,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get disconnected => 'منقطع';
 
   @override
-  String get searching => 'تلاش ہو رہی ہے...';
+  String get searching => 'تلاش ہو رہی ہے';
 
   @override
   String get connectDevice => 'ڈیوائس سے جڑیں';
@@ -240,7 +240,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get starConversationHint => 'بات چیت کو اسٹار کرنے کے لیے، اسے کھولیں اور ہیڈر میں ستارے کی علامت تھپتھپائیں۔';
 
   @override
-  String get searchConversations => 'بات چیتوں کو تلاش کریں...';
+  String get searchConversations => 'بات چیتوں کو تلاش کریں';
 
   @override
   String selectedCount(int count) {
@@ -271,7 +271,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get noMessagesYet => 'ابھی کوئی پیغام نہیں!\nکیا آپ بات چیت شروع نہیں کریں گے?';
 
   @override
-  String get deletingMessages => 'اپنے پیغامات کو Omi کی یادوں سے حذف کیا جا رہا ہے...';
+  String get deletingMessages => 'اپنے پیغامات کو Omi کی یادوں سے حذف کیا جا رہا ہے…';
 
   @override
   String get messageCopied => '✨ پیغام کلپ بورڈ پر کاپی ہو گیا';
@@ -319,7 +319,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get buildAndShareApp => 'اپنی حسب ضرورت ایپلیکیشن بنائیں اور شیئر کریں';
 
   @override
-  String get searchApps => 'ایپلیکیشنز تلاش کریں...';
+  String get searchApps => 'ایپلیکیشنز تلاش کریں';
 
   @override
   String get myApps => 'میری بنائی ہوئی';
@@ -477,7 +477,7 @@ class AppLocalizationsUr extends AppLocalizations {
       'Omi میں، ہم آپ کی رازداری کی حفاظت کے لیے پرتوشامل ہیں۔ یہ صفحہ آپ کو اپنے ڈیٹا کو کیسے محفوظ اور استعمال کیا جاتا ہے اس پر کنٹرول کرنے کی اجازت دیتا ہے۔';
 
   @override
-  String get learnMore => 'مزید جانیں...';
+  String get learnMore => 'مزید جانیں…';
 
   @override
   String get dataProtectionLevel => 'ڈیٹا تحفظ کی سطح';
@@ -651,7 +651,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get developerSettingsTitle => 'ڈیولپر ترتیبات';
 
   @override
-  String get saving => 'محفوظ ہو رہا ہے...';
+  String get saving => 'محفوظ ہو رہا ہے…';
 
   @override
   String get beta => 'BETA';
@@ -730,7 +730,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get providing => 'فراہم کرنا';
 
   @override
-  String get providingSubtitle => 'کردہ کام، اور خود بخود حاصل نوٹس۔';
+  String get providingSubtitle => 'کام اور نوٹس، خود بخود محفوظ کیے گئے۔';
 
   @override
   String get remembering => 'یاد رکھنا';
@@ -772,16 +772,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get shareStatsMessage => 'اپنے Omi کے اعدادوشمار شیئر کر رہے ہیں! (omi.me - آپ کا ہمیشہ چالو AI معاون)';
 
   @override
-  String get sharePeriodToday => 'آج، omi نے:';
+  String get sharePeriodToday => 'آج، Omi نے:';
 
   @override
-  String get sharePeriodMonth => 'اس ماہ، omi نے:';
+  String get sharePeriodMonth => 'اس ماہ، Omi نے:';
 
   @override
-  String get sharePeriodYear => 'اس سال، omi نے:';
+  String get sharePeriodYear => 'اس سال، Omi نے:';
 
   @override
-  String get sharePeriodAllTime => 'ابھی تک، omi نے:';
+  String get sharePeriodAllTime => 'ابھی تک، Omi نے:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -831,7 +831,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get debugLogCleared => 'ڈیبگ لاگ صاف ہو گیا';
 
   @override
-  String get exportStarted => 'برآمد شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں...';
+  String get exportStarted => 'برآمد شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں…';
 
   @override
   String get exportAllData => 'تمام ڈیٹا برآمد کریں';
@@ -1622,7 +1622,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get viewTemplate => 'ٹیمپلیٹ دیکھیں';
 
   @override
-  String get trySomethingLike => 'کچھ اس طرح کریں...';
+  String get trySomethingLike => 'کچھ اس طرح کریں…';
 
   @override
   String get tryIt => 'کوشش کریں';
@@ -1649,10 +1649,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get features => 'خصوصیات';
 
   @override
-  String get creatingYourApp => 'آپ کی ایپ بن رہی ہے...';
+  String get creatingYourApp => 'آپ کی ایپ بن رہی ہے…';
 
   @override
-  String get generatingIcon => 'آئیکن تیار ہو رہا ہے...';
+  String get generatingIcon => 'آئیکن تیار ہو رہا ہے…';
 
   @override
   String get whatShouldWeMake => 'ہمیں کیا بنانا چاہیے؟';
@@ -1703,13 +1703,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get perMonthLabel => '/ ماہ';
 
   @override
-  String get creating => 'بنایا جا رہا ہے...';
+  String get creating => 'بنایا جا رہا ہے…';
 
   @override
   String get createApp => 'ایپ بنائیں';
 
   @override
-  String get searchingForDevices => 'آلے تلاش کیے جا رہے ہیں...';
+  String get searchingForDevices => 'آلے تلاش کیے جا رہے ہیں';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1944,7 +1944,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get personalGrowthJourney => 'AI کے ساتھ آپ کا ذاتی نشوونما کا سفر جو آپ کے ہر لفظ کو سنتا ہے۔';
 
   @override
-  String get actionItemsTitle => 'کام کریں';
+  String get actionItemsTitle => 'کام';
 
   @override
   String get actionItemsDescription =>
@@ -1988,7 +1988,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Are you sure you want to delete $count selected action item$s?';
+    return 'کیا آپ یقینی ہیں کہ آپ $count منتخب کام$s حذف کرنا چاہتے ہیں؟';
   }
 
   @override
@@ -1998,7 +1998,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count action item$s deleted';
+    return '$count کام$s حذف ہو گئے';
   }
 
   @override
@@ -2015,7 +2015,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get welcomeActionItemsDescription =>
-      'آپ کا AI خودکار طور پر آپ کی بات چیت سے کام اور کام نکالے گا۔ وہ بنائے جانے پر یہاں ظاہر ہوں گے۔';
+      'آپ کا AI خودکار طور پر آپ کی بات چیت سے کام نکالے گا۔ وہ بنائے جانے پر یہاں ظاہر ہوں گے۔';
 
   @override
   String get autoExtractionFeature => 'بات چیت سے خودکار طور پر نکالا گیا';
@@ -2035,7 +2035,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteSelected => 'منتخب شدہ حذف کریں';
 
   @override
-  String get searchMemories => 'یادوں میں تلاش کریں...';
+  String get searchMemories => 'یادوں میں تلاش کریں';
 
   @override
   String get memoryDeleted => 'یاد حذف ہو گئی۔';
@@ -2253,7 +2253,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get pleaseSelectReason => 'براہ کرم ایک وجہ منتخب کریں';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'ہمیں مزید بتائیں کہ کیا غلط ہوا...';
+  String get tellUsMoreWhatWentWrong => 'ہمیں مزید بتائیں کہ کیا غلط ہوا…';
 
   @override
   String get selectText => 'متن منتخب کریں';
@@ -2312,7 +2312,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get exportButton => 'برائے';
 
   @override
-  String get actionItemsCopiedToClipboard => 'کارروائی کی چیزیں کلپ بورڈ پر کاپی ہو گئیں';
+  String get actionItemsCopiedToClipboard => 'کام کلپ بورڈ پر کاپی ہو گئے';
 
   @override
   String get summarize => 'خلاصہ';
@@ -2466,7 +2466,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get helpsDiagnoseIssues => 'مسائل کی تشخیص میں مدد کرتا ہے';
 
   @override
-  String get exportStartedMessage => 'برائے شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں...';
+  String get exportStartedMessage => 'برائے شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں…';
 
   @override
   String get exportConversationsToJson => 'بات چیتوں کو JSON فائل میں برائے کریں';
@@ -2522,7 +2522,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'ہوم پیج پر اپنے ذاتی مقاصد کو ٹریک کریں';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'کارروائی کی چیز کی تفصیل خالی نہیں ہو سکتی';
+  String get actionItemDescriptionCannotBeEmpty => 'کام کی تفصیل خالی نہیں ہو سکتی';
 
   @override
   String get saved => 'محفوظ کیا گیا';
@@ -2604,7 +2604,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get toggleControlBar => 'کنٹرول بار کو ٹوگل کریں';
 
   @override
-  String get pressKeys => 'کلیدیں دبائیں...';
+  String get pressKeys => 'کلیدیں دبائیں…';
 
   @override
   String get cmdRequired => '⌘ ضروری';
@@ -2619,7 +2619,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get search => 'تلاش کریں';
 
   @override
-  String get searchPlaceholder => 'تلاش کریں...';
+  String get searchPlaceholder => 'تلاش کریں';
 
   @override
   String get untitledConversation => 'بغیر عنوان کی بات چیت';
@@ -2692,7 +2692,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchResults => 'تلاش کے نتائج';
 
   @override
-  String get actionItems => 'کارروائی کی چیزیں';
+  String get actionItems => 'کام';
 
   @override
   String get tasksToday => 'آج';
@@ -2707,7 +2707,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get tasksLater => 'بعد میں';
 
   @override
-  String get loadingTasks => 'کام لوڈ ہو رہے ہیں...';
+  String get loadingTasks => 'کام لوڈ ہو رہے ہیں…';
 
   @override
   String get tasks => 'کام';
@@ -2768,23 +2768,22 @@ class AppLocalizationsUr extends AppLocalizations {
   String get timeAM => 'AM';
 
   @override
-  String get actionItemUpdatedSuccessfully => 'کارروائی کی چیز کامیابی سے اپ ڈیٹ ہو گئی';
+  String get actionItemUpdatedSuccessfully => 'کام کامیابی سے اپ ڈیٹ ہو گیا';
 
   @override
-  String get actionItemCreatedSuccessfully => 'کارروائی کی چیز کامیابی سے بنائی گئی';
+  String get actionItemCreatedSuccessfully => 'کام کامیابی سے بنایا گیا';
 
   @override
-  String get actionItemDeletedSuccessfully => 'کارروائی کی چیز کامیابی سے حذف ہو گئی';
+  String get actionItemDeletedSuccessfully => 'کام کامیابی سے حذف ہو گیا';
 
   @override
-  String get deleteActionItem => 'کارروائی کی چیز حذف کریں';
+  String get deleteActionItem => 'کام حذف کریں';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'کیا آپ اس کارروائی کی چیز کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
+  String get deleteActionItemConfirmation => 'کیا آپ اس کام کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔';
 
   @override
-  String get enterActionItemDescription => 'کارروائی کی چیز کی تفصیل درج کریں...';
+  String get enterActionItemDescription => 'کام کی تفصیل درج کریں';
 
   @override
   String get markAsCompleted => 'مکمل کے طور پر نشان زد کریں';
@@ -2793,10 +2792,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get setDueDateAndTime => 'مقررہ تاریخ اور وقت سیٹ کریں';
 
   @override
-  String get reloadingApps => 'ایپس دوبارہ لوڈ ہو رہی ہیں...';
+  String get reloadingApps => 'ایپس دوبارہ لوڈ ہو رہی ہیں…';
 
   @override
-  String get loadingApps => 'ایپس لوڈ ہو رہی ہیں...';
+  String get loadingApps => 'ایپس لوڈ ہو رہی ہیں…';
 
   @override
   String get browseInstallCreateApps => 'ایپس براؤز، انسٹال اور بنائیں';
@@ -2833,10 +2832,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'اپنی کسٹم Omi ایپ بنائیں اور جمع کریں';
 
   @override
-  String get submittingYourApp => 'اپنی ایپ جمع کی جا رہی ہے...';
+  String get submittingYourApp => 'اپنی ایپ جمع کی جا رہی ہے…';
 
   @override
-  String get preparingFormForYou => 'آپ کے لیے فارم تیار کیا جا رہا ہے...';
+  String get preparingFormForYou => 'آپ کے لیے فارم تیار کیا جا رہا ہے…';
 
   @override
   String get appDetails => 'ایپ کی تفصیلات';
@@ -2858,14 +2857,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'آپ ایک بہترین ایپ ہیں، آپ کا کام صارف کی سوالات کا جواب دینا اور انہیں خوش محسوس کرانا ہے...';
+      'آپ ایک بہترین ایپ ہیں، آپ کا کام صارف کی سوالات کا جواب دینا اور انہیں خوش محسوس کرانا ہے…';
 
   @override
   String get conversationPrompt => 'بات چیت کا اشارہ';
 
   @override
   String get conversationPromptPlaceholder =>
-      'آپ ایک بہترین ایپ ہیں، آپ کو بات چیت کا ٹرانسکرپٹ اور خلاصہ دیا جائے گا...';
+      'آپ ایک بہترین ایپ ہیں، آپ کو بات چیت کا ٹرانسکرپٹ اور خلاصہ دیا جائے گا…';
 
   @override
   String get notificationScopes => 'اطلاع کے دائرے';
@@ -3024,7 +3023,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get pricingPaid => 'معاوضہ';
 
   @override
-  String get loadingCapabilities => 'صلاحیتیں لوڈ ہو رہی ہیں...';
+  String get loadingCapabilities => 'صلاحیتیں لوڈ ہو رہی ہیں…';
 
   @override
   String get filterInstalled => 'انسٹال شدہ';
@@ -3164,7 +3163,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get failedToTranscribeAudio => 'آڈیو کو ٹرانسکرائب کرنے میں ناکام';
 
   @override
-  String get transcribing => 'ٹرانسکرائب کیا جا رہا ہے...';
+  String get transcribing => 'ٹرانسکرائب کیا جا رہا ہے…';
 
   @override
   String get discardedConversation => 'مسترد شدہ بات چیت';
@@ -3176,7 +3175,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get from => 'سے';
 
   @override
-  String get copied => 'کاپی ہو گیا!';
+  String get copied => 'کاپی ہو گیا';
 
   @override
   String get copyLink => 'لنک کاپی کریں';
@@ -3214,7 +3213,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get failedToGenerateShareLink => 'شیئر لنک بنانے میں ناکام';
 
   @override
-  String get reloadingConversations => 'بات چیتیں دوبارہ لوڈ ہو رہی ہیں...';
+  String get reloadingConversations => 'بات چیتیں دوبارہ لوڈ ہو رہی ہیں…';
 
   @override
   String get user => 'صارف';
@@ -3273,7 +3272,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get wearableAiCompanion => 'قابل فراغ AI ساتھی';
 
   @override
-  String get loadingMemories => 'یادیں لوڈ ہو رہی ہیں...';
+  String get loadingMemories => 'یادیں لوڈ ہو رہی ہیں…';
 
   @override
   String get allMemories => 'تمام یادیں';
@@ -3285,7 +3284,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get manual => 'دستی';
 
   @override
-  String get loadingYourMemories => 'آپ کی یادیں لوڈ ہو رہی ہیں...';
+  String get loadingYourMemories => 'آپ کی یادیں لوڈ ہو رہی ہیں…';
 
   @override
   String get createYourFirstMemory => 'شروع کرنے کے لیے اپنی پہلی یاد بنائیں';
@@ -3402,7 +3401,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => 'بہترین Omi تجربے کے لیے اپنی پسندیدہ زبان منتخب کریں';
 
   @override
-  String get searchLanguages => 'زبانوں میں تلاش کریں...';
+  String get searchLanguages => 'زبانوں میں تلاش کریں';
 
   @override
   String get selectALanguage => 'کوئی زبان منتخب کریں';
@@ -3459,13 +3458,13 @@ class AppLocalizationsUr extends AppLocalizations {
       'Omi کو جب آپ اپنے براؤزر میں Zoom، Meet، یا Teams میٹنگز میں شامل ہوں تب ان کا پتہ لگانے کے لیے رسائی کی اجازت کی ضرورت ہے۔';
 
   @override
-  String get pleaseWait => 'براہ کرم انتظار کریں...';
+  String get pleaseWait => 'براہ کرم انتظار کریں…';
 
   @override
   String get joinTheCommunity => 'کمیونٹی میں شامل ہوں!';
 
   @override
-  String get loadingProfile => 'پروفائل لوڈ ہو رہا ہے...';
+  String get loadingProfile => 'پروفائل لوڈ ہو رہا ہے…';
 
   @override
   String get profileSettings => 'پروفائل کی ترتیبات';
@@ -3592,7 +3591,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get saveSettings => 'ترتیبات محفوظ کریں';
 
   @override
-  String get syncingDeveloperSettings => 'ڈیولپر کی ترتیبات کو ہم آہنگ کیا جا رہا ہے...';
+  String get syncingDeveloperSettings => 'ڈیولپر کی ترتیبات کو ہم آہنگ کیا جا رہا ہے…';
 
   @override
   String get summary => 'خلاصہ';
@@ -3645,7 +3644,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get conversationDeleted => 'بات چیت حذف ہو گئی';
 
   @override
-  String get generatingLink => 'لنک بنایا جا رہا ہے...';
+  String get generatingLink => 'لنک بنایا جا رہا ہے…';
 
   @override
   String get editConversation => 'بات چیت میں ترمیم کریں';
@@ -3666,7 +3665,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get conversationTitle => 'بات چیت کا عنوان';
 
   @override
-  String get enterConversationTitle => 'بات چیت کا عنوان درج کریں...';
+  String get enterConversationTitle => 'بات چیت کا عنوان درج کریں…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'بات چیت کا عنوان کامیابی سے اپ ڈیٹ ہو گیا';
@@ -3678,7 +3677,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'بات چیت کے عنوان کو اپ ڈیٹ کرتے ہوئے خرابی';
 
   @override
-  String get settingUp => 'ترتیب دی جا رہی ہے...';
+  String get settingUp => 'ترتیب دی جا رہی ہے…';
 
   @override
   String get startYourFirstRecording => 'اپنی پہلی ریکارڈنگ شروع کریں';
@@ -3687,7 +3686,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get preparingSystemAudioCapture => 'سسٹم آڈیو کیپچر کی تیاری ہو رہی ہے';
 
   @override
-  String get reconnecting => 'دوبارہ جڑ رہے ہیں...';
+  String get reconnecting => 'دوبارہ جڑ رہے ہیں…';
 
   @override
   String get recordingPaused => 'ریکارڈنگ موقوف';
@@ -3700,14 +3699,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return '${countdown}s میں دوبارہ شروع ہو رہا ہے...';
+    return '${countdown}s میں دوبارہ شروع ہو رہا ہے…';
   }
 
   @override
   String get tapPlayToResume => 'دوبارہ شروع کرنے کے لیے پلے پر ٹیپ کریں';
 
   @override
-  String get listeningForAudio => 'آڈیو سن رہا ہے...';
+  String get listeningForAudio => 'آڈیو سن رہا ہے…';
 
   @override
   String get preparingAudioCapture => 'آڈیو کیپچر کی تیاری ہو رہی ہے';
@@ -3735,7 +3734,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paused => 'موقوف';
 
   @override
-  String get initializing => 'شروع کیا جا رہا ہے...';
+  String get initializing => 'شروع کیا جا رہا ہے…';
 
   @override
   String get recording => 'ریکارڈنگ';
@@ -3763,7 +3762,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'omi نے ترجمہ کیا ہوا';
+  String get translatedByOmi => 'Omi نے ترجمہ کیا ہوا';
 
   @override
   String get backToConversations => 'بات چیت پر واپس جائیں';
@@ -3788,7 +3787,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get selectAudioInput => 'آڈیو ان پٹ منتخب کریں';
 
   @override
-  String get loadingDevices => 'ڈیوائسز لوڈ ہو رہے ہیں...';
+  String get loadingDevices => 'ڈیوائسز لوڈ ہو رہے ہیں…';
 
   @override
   String get settingsHeader => 'ترتیبات';
@@ -3897,7 +3896,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get exportConversationsDescription => 'JSON میں بات چیت برآمد کریں';
 
   @override
-  String get exportingConversations => 'بات چیت برآمد کی جا رہی ہے...';
+  String get exportingConversations => 'بات چیت برآمد کی جا رہی ہے…';
 
   @override
   String get clearNodesDescription => 'تمام نوڈس اور تعلقات صاف کریں';
@@ -3989,7 +3988,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'نیا ورژن دستیاب ہے 🎉';
+  String get newVersionAvailable => 'نیا ورژن دستیاب ہے';
 
   @override
   String get no => 'نہیں';
@@ -4039,7 +4038,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get cancelSubscriptionButton => 'رکنیت منسوخ کریں';
 
   @override
-  String get cancelling => 'منسوخ کیا جا رہا ہے...';
+  String get cancelling => 'منسوخ کیا جا رہا ہے…';
 
   @override
   String get betaTesterMessage =>
@@ -4158,7 +4157,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return '$serviceName میں شامل کیا جا رہا ہے...';
+    return '$serviceName میں شامل کیا جا رہا ہے…';
   }
 
   @override
@@ -4195,7 +4194,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API کلیدیں تصدیق کے لیے استعمال ہوتی ہیں جب آپ کی ایپ OMI سرور سے بات کرے۔ یہ آپ کی ایپ کو یادوں بنانے اور دوسری OMI خدمات تک محفوظ طریقے سے رسائی حاصل کرنے دیتی ہے۔';
+      'API کلیدیں تصدیق کے لیے استعمال ہوتی ہیں جب آپ کی ایپ Omi سرور سے بات کرے۔ یہ آپ کی ایپ کو یادوں بنانے اور دوسری Omi خدمات تک محفوظ طریقے سے رسائی حاصل کرنے دیتی ہے۔';
 
   @override
   String get aboutOmiApiKeys => 'Omi API کلیدوں کے بارے میں';
@@ -4672,14 +4671,14 @@ class AppLocalizationsUr extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'علم کے گراف کو کامیابی سے حذف کیا گیا';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'برآمدگی شروع ہو گئی۔ اس میں کچھ سیکنڈ لگ سکتے ہیں...';
+  String get exportStartedMayTakeFewSeconds => 'برآمدگی شروع ہو گئی۔ اس میں کچھ سیکنڈ لگ سکتے ہیں…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
       'اس سے تمام اخذ شدہ علم کے گراف ڈیٹا (نوڈس اور کنکشنز) حذف ہوں گے۔ آپ کی اصل یادیں محفوظ رہیں گی۔ گراف وقت کے ساتھ یا اگلی درخواست پر دوبارہ بنایا جائے گا۔';
 
   @override
-  String get configureDailySummaryDigest => 'اپنے روزانہ کام کی چیزوں کا خلاصہ ترتیب دیں';
+  String get configureDailySummaryDigest => 'اپنے روزانہ کاموں کا خلاصہ ترتیب دیں';
 
   @override
   String accessesDataTypes(String dataTypes) {
@@ -4911,7 +4910,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get checkingForUpdates => 'اپ ڈیٹس کے لیے چیک کیا جا رہا ہے';
 
   @override
-  String get checkingFirmwareVersion => 'فرم وئیئر ورژن چیک کیا جا رہا ہے...';
+  String get checkingFirmwareVersion => 'فرم وئیئر ورژن چیک کیا جا رہا ہے…';
 
   @override
   String get firmwareUpdate => 'فرم وئیئر اپ ڈیٹ';
@@ -5093,19 +5092,19 @@ class AppLocalizationsUr extends AppLocalizations {
   String get showLess => 'کم دکھائیں ↑';
 
   @override
-  String get loadingYourRecording => 'آپ کی ریکارڈنگ لوڈ ہو رہی ہے...';
+  String get loadingYourRecording => 'آپ کی ریکارڈنگ لوڈ ہو رہی ہے…';
 
   @override
   String get photoDiscardedMessage => 'یہ تصویر اس لیے ہٹا دی گئی کیونکہ یہ نمایاں نہیں تھی۔';
 
   @override
-  String get analyzing => 'تجزیہ کیا جا رہا ہے...';
+  String get analyzing => 'تجزیہ کیا جا رہا ہے…';
 
   @override
   String get searchCountries => 'ممالک تلاش کریں';
 
   @override
-  String get checkingAppleWatch => 'Apple Watch چیک کیا جا رہا ہے...';
+  String get checkingAppleWatch => 'Apple Watch چیک کیا جا رہا ہے…';
 
   @override
   String get installOmiOnAppleWatch => 'Omi کو اپنے\nApple Watch پر انسٹال کریں';
@@ -5167,7 +5166,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get dontAskAgain => 'دوبارہ مت پوچھیں';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'ٹرانسکرپٹ یا تصاویر کا انتظار کیا جا رہا ہے...';
+  String get waitingForTranscriptOrPhotos => 'ٹرانسکرپٹ یا تصاویر کا انتظار کیا جا رہا ہے…';
 
   @override
   String get noSummaryYet => 'ابھی کوئی خلاصہ نہیں';
@@ -5274,7 +5273,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get wrappedYouTalkedAbout => 'آپ نے اس کے بارے میں بات کی';
 
   @override
-  String get wrappedActionItems => 'کام کی چیزیں';
+  String get wrappedActionItems => 'کام';
 
   @override
   String get wrappedTasksCreated => 'کام بنائے گئے';
@@ -5366,10 +5365,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'میرا Wrapped بنائیں';
 
   @override
-  String get wrappedProcessingDefault => 'پروسیس کیا جا رہا ہے...';
+  String get wrappedProcessingDefault => 'پروسیس کیا جا رہا ہے…';
 
   @override
-  String get wrappedCreatingYourStory => 'آپ کی\n2025 کی کہانی بنائی جا رہی ہے...';
+  String get wrappedCreatingYourStory => 'آپ کی\n2025 کی کہانی بنائی جا رہی ہے…';
 
   @override
   String get wrappedSomethingWentWrong => 'کچھ\nغلط ہوگیا';
@@ -5399,7 +5398,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'تخلیق شروع کرنے میں ناکام۔ براہ کرم دوبارہ کوشش کریں۔';
 
   @override
-  String get wrappedStarting => 'شروع ہو رہا ہے...';
+  String get wrappedStarting => 'شروع ہو رہا ہے…';
 
   @override
   String get wrappedShare => 'شیئر کریں';
@@ -5606,13 +5605,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'کچھ غلط ہو گیا! براہ کرم بعد میں دوبارہ کوشش کریں۔';
 
   @override
-  String get uploadingVoiceProfile => 'آپ کا وائس پروفائل اپ لوڈ کیا جا رہا ہے....';
+  String get uploadingVoiceProfile => 'آپ کا وائس پروفائل اپ لوڈ کیا جا رہا ہے….';
 
   @override
-  String get memorizingYourVoice => 'آپ کی آواز یاد کی جا رہی ہے...';
+  String get memorizingYourVoice => 'آپ کی آواز یاد کی جا رہی ہے…';
 
   @override
-  String get personalizingExperience => 'آپ کے تجربے کو ذاتی بنایا جا رہا ہے...';
+  String get personalizingExperience => 'آپ کے تجربے کو ذاتی بنایا جا رہا ہے…';
 
   @override
   String get keepSpeakingUntil100 => '100% تک پہنچنے تک بولتے رہیں۔';
@@ -5737,7 +5736,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get clearChatQuestion => 'چیٹ صاف کریں؟';
 
   @override
-  String get syncingMessages => 'سرور کے ساتھ پیغامات کو ہم آہنگ کیا جا رہا ہے...';
+  String get syncingMessages => 'سرور کے ساتھ پیغامات کو ہم آہنگ کیا جا رہا ہے…';
 
   @override
   String get chatAppsTitle => 'چیٹ ایپس';
@@ -5897,10 +5896,10 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'بات چیت کو خلاصہ کیا جا رہا ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں';
+  String get summarizingConversation => 'بات چیت کو خلاصہ کیا جا رہا ہے…\nاس میں چند سیکنڈ لگ سکتے ہیں';
 
   @override
-  String get resummarizingConversation => 'بات چیت کو دوبارہ خلاصہ کیا جا رہا ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں';
+  String get resummarizingConversation => 'بات چیت کو دوبارہ خلاصہ کیا جا رہا ہے…\nاس میں چند سیکنڈ لگ سکتے ہیں';
 
   @override
   String get nothingInterestingRetry => 'کچھ دلچسپ نہیں ملا،\nکیا آپ دوبارہ کوشش کرنا چاہتے ہیں؟';
@@ -6032,7 +6031,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doNotCloseApp => 'براہ کرم ایپ بند نہ کریں۔';
 
   @override
-  String get downloading => 'ڈاؤن لوڈ کیا جا رہا ہے...';
+  String get downloading => 'ڈاؤن لوڈ کیا جا رہا ہے…';
 
   @override
   String get downloadModel => 'ماڈل ڈاؤن لوڈ کریں';
@@ -6112,7 +6111,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return '$model تیار کیا جا رہا ہے...';
+    return '$model تیار کیا جا رہا ہے…';
   }
 
   @override
@@ -6141,7 +6140,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get useTemplateFrom => 'اس سے ٹیمپلیٹ استعمال کریں';
 
   @override
-  String get selectProviderTemplate => 'ایک فراہم کنندہ ٹیمپلیٹ منتخب کریں...';
+  String get selectProviderTemplate => 'ایک فراہم کنندہ ٹیمپلیٹ منتخب کریں…';
 
   @override
   String get quicklyPopulateResponse => 'معروف فراہم کنندہ کے جواب کی شکل سے تیزی سے بھریں';
@@ -6343,13 +6342,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get signUpSuccess => 'سائن اپ کامیاب!';
 
   @override
-  String get loadingKnowledgeGraph => 'Knowledge Graph لوڈ کیا جا رہا ہے...';
+  String get loadingKnowledgeGraph => 'Knowledge Graph لوڈ کیا جا رہا ہے…';
 
   @override
   String get noKnowledgeGraphYet => 'ابھی کوئی knowledge graph نہیں';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'یادوں سے آپ کا knowledge graph بنایا جا رہا ہے...';
+  String get buildingKnowledgeGraphFromMemories => 'یادوں سے آپ کا knowledge graph بنایا جا رہا ہے…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6366,7 +6365,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return '$appName کھولا جا رہا ہے...';
+    return '$appName کھولا جا رہا ہے…';
   }
 
   @override
@@ -6400,7 +6399,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get moneyEarned => 'کمائی ہوئی رقم';
 
   @override
-  String get writeYourReply => 'اپنا جواب لکھیں...';
+  String get writeYourReply => 'اپنا جواب لکھیں…';
 
   @override
   String get replySentSuccessfully => 'جواب کامیابی سے بھیجا گیا';
@@ -6547,7 +6546,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get selectContactsToShareSummary => 'اپنی بات چیت کا خلاصہ شیئر کرنے کے لیے رابطے منتخب کریں';
 
   @override
-  String get searchContactsHint => 'رابطے تلاش کریں...';
+  String get searchContactsHint => 'رابطے تلاش کریں';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6636,7 +6635,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'منتقل کیا جا رہا ہے...';
+  String get transferring => 'منتقل کیا جا رہا ہے…';
 
   @override
   String get transferRequired => 'منتقلی درکار ہے';
@@ -6661,7 +6660,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get recordingInfo => 'ریکارڈنگ کی معلومات';
 
   @override
-  String get transferInProgress => 'ٹرانسفر جاری ہے...';
+  String get transferInProgress => 'ٹرانسفر جاری ہے…';
 
   @override
   String get shareRecording => 'ریکارڈنگ شیئر کریں';
@@ -6782,7 +6781,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get errorUpdatingAppStatus => 'ایپ کی حالت کو اپڈیٹ کرتے ہوئے ایک خرابی واقع ہوئی۔';
 
   @override
-  String get calculatingETA => 'شمار ہو رہا ہے...';
+  String get calculatingETA => 'شمار ہو رہا ہے…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6793,29 +6792,29 @@ class AppLocalizationsUr extends AppLocalizations {
   String get aboutAMinuteRemaining => 'تقریباً ایک منٹ باقی ہے';
 
   @override
-  String get almostDone => 'تقریباً ختم ہو گیا...';
+  String get almostDone => 'تقریباً ختم ہو گیا…';
 
   @override
-  String get omiSays => 'omi کہتا ہے';
+  String get omiSays => 'Omi کہتا ہے';
 
   @override
-  String get analyzingYourData => 'آپ کے ڈیٹا کا تجزیہ جاری ہے...';
+  String get analyzingYourData => 'آپ کے ڈیٹا کا تجزیہ جاری ہے…';
 
   @override
   String migratingToProtection(String level) {
-    return '$level حفاظت میں منتقل کیا جا رہا ہے...';
+    return '$level حفاظت میں منتقل کیا جا رہا ہے…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'منتقل کرنے کے لیے کوئی ڈیٹا نہیں۔ حتمی کیا جا رہا ہے...';
+  String get noDataToMigrateFinalizing => 'منتقل کرنے کے لیے کوئی ڈیٹا نہیں۔ حتمی کیا جا رہا ہے…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return '$itemType منتقل کیا جا رہا ہے... $percentage%';
+    return '$itemType منتقل کیا جا رہا ہے… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'تمام اشیاء منتقل کر دی گئی ہیں۔ حتمی کیا جا رہا ہے...';
+  String get allObjectsMigratedFinalizing => 'تمام اشیاء منتقل کر دی گئی ہیں۔ حتمی کیا جا رہا ہے…';
 
   @override
   String get migrationErrorOccurred => 'منتقلی کے دوران ایک خرابی واقع ہوئی۔ براہ کرم دوبارہ کوشش کریں۔';
@@ -6851,13 +6850,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get templateName => 'ٹیمپلیٹ کا نام';
 
   @override
-  String get templateNameHint => 'مثال کے طور پر، میٹنگ ایکشن آئٹمز نکالنے والا';
+  String get templateNameHint => 'مثال کے طور پر، میٹنگ کام نکالنے والا';
 
   @override
   String get nameMustBeAtLeast3Characters => 'نام کم از کم 3 حروف ہونا چاہیے';
 
   @override
-  String get conversationPromptHint => 'مثال کے طور پر، فراہم کردہ بات چیت سے ایکشن آئٹمز، فیصلے، اور اہم نکات نکالیں۔';
+  String get conversationPromptHint => 'مثال کے طور پر، فراہم کردہ بات چیت سے کام، فیصلے، اور اہم نکات نکالیں۔';
 
   @override
   String get pleaseEnterAppPrompt => 'براہ کرم اپنی ایپ کے لیے ایک اشارہ درج کریں';
@@ -6872,13 +6871,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'صرف آپ اس ٹیمپلیٹ کو استعمال کر سکتے ہیں';
 
   @override
-  String get generatingDescription => 'تفصیل تیار کی جا رہی ہے...';
+  String get generatingDescription => 'تفصیل تیار کی جا رہی ہے…';
 
   @override
-  String get creatingAppIcon => 'ایپ کا آئکن بنایا جا رہا ہے...';
+  String get creatingAppIcon => 'ایپ کا آئکن بنایا جا رہا ہے…';
 
   @override
-  String get installingApp => 'ایپ انسٹال کی جا رہی ہے...';
+  String get installingApp => 'ایپ انسٹال کی جا رہی ہے…';
 
   @override
   String get appCreatedAndInstalled => 'ایپ بنائی گئی اور انسٹال کی گئی!';
@@ -7009,7 +7008,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'براہ کرم اپنی ایپ کے لیے ایک تفصیل درج کریں';
 
   @override
-  String get aiGenCreatingAppIcon => 'ایپ کا آئکن بنایا جا رہا ہے...';
+  String get aiGenCreatingAppIcon => 'ایپ کا آئکن بنایا جا رہا ہے…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7066,7 +7065,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'اپ گریڈ صفحہ شروع نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔';
 
   @override
-  String get transcriptionJsonPlaceholder => 'اپنی JSON ترتیب یہاں پیسٹ کریں...';
+  String get transcriptionJsonPlaceholder => 'اپنی JSON ترتیب یہاں پیسٹ کریں…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7136,7 +7135,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onboardingYoureAllSet => 'آپ تیار ہیں';
 
   @override
-  String get searchTranscriptOrSummary => 'ٹرانسکرپٹ یا خلاصہ تلاش کریں...';
+  String get searchTranscriptOrSummary => 'ٹرانسکرپٹ یا خلاصہ تلاش کریں';
 
   @override
   String get myGoal => 'میرا مقصد';
@@ -7368,10 +7367,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get msgUploadFileFailed => 'فائل اپ لوڈ میں ناکام، براہ کرم بعد میں دوبارہ کوشش کریں';
 
   @override
-  String get msgReadingMemories => 'آپ کی یادوں کو پڑھا جا رہا ہے...';
+  String get msgReadingMemories => 'آپ کی یادوں کو پڑھا جا رہا ہے…';
 
   @override
-  String get msgLearningMemories => 'آپ کی یادوں سے سیکھا جا رہا ہے...';
+  String get msgLearningMemories => 'آپ کی یادوں سے سیکھا جا رہا ہے…';
 
   @override
   String get msgUploadAttachedFileFailed => 'منسلک فائل اپ لوڈ میں ناکام۔';
@@ -7436,7 +7435,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'ملایا جا رہا ہے...';
+  String get mergingStatus => 'ملایا جا رہا ہے…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7531,10 +7530,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get color => 'رنگ';
 
   @override
-  String get waitingForDevice => 'ڈیوائس کی انتظار ہو رہی ہے...';
+  String get waitingForDevice => 'ڈیوائس کی انتظار ہو رہی ہے…';
 
   @override
-  String get saySomething => 'کچھ کہیں...';
+  String get saySomething => 'کچھ کہیں…';
 
   @override
   String get initialisingSystemAudio => 'سسٹم آڈیو شروع کیا جا رہا ہے';
@@ -7583,7 +7582,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get audioDownloadFailed => 'آڈیو ڈاؤن لوڈ میں ناکام';
 
   @override
-  String get downloadingAudio => 'آڈیو ڈاؤن لوڈ کیا جا رہا ہے...';
+  String get downloadingAudio => 'آڈیو ڈاؤن لوڈ کیا جا رہا ہے…';
 
   @override
   String get shareAudio => 'آڈیو شیئر کریں';
@@ -7592,7 +7591,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get preparingAudio => 'آڈیو تیار کیا جا رہا ہے';
 
   @override
-  String get gettingAudioFiles => 'آڈیو فائلیں حاصل کی جا رہی ہیں...';
+  String get gettingAudioFiles => 'آڈیو فائلیں حاصل کی جا رہی ہیں…';
 
   @override
   String get downloadingAudioProgress => 'آڈیو ڈاؤن لوڈ کیا جا رہا ہے';
@@ -7601,13 +7600,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String get processingAudio => 'آڈیو پروسیس کیا جا رہا ہے';
 
   @override
-  String get combiningAudioFiles => 'آڈیو فائلیں ملائی جا رہی ہیں...';
+  String get combiningAudioFiles => 'آڈیو فائلیں ملائی جا رہی ہیں…';
 
   @override
   String get audioReady => 'آڈیو تیار ہے';
 
   @override
-  String get openingShareSheet => 'شیئر شیٹ کھولی جا رہی ہے...';
+  String get openingShareSheet => 'شیئر شیٹ کھولی جا رہی ہے…';
 
   @override
   String get audioShareFailed => 'شیئر ناکام';
@@ -7792,7 +7791,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get mcpConnectionFailed => 'MCP سرور سے منسلک ہونا ناکام';
 
   @override
-  String get authorizingMcpServer => 'اختیار دیا جا رہا ہے...';
+  String get authorizingMcpServer => 'اختیار دیا جا رہا ہے…';
 
   @override
   String get whereDidYouHearAboutOmi => 'آپ نے ہم سے کہاں سنا؟';
@@ -7926,7 +7925,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get downloadingFromDevice => 'ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
-  String get reconnectingToInternet => 'انٹرنیٹ سے دوبارہ منسلک ہو رہے ہیں...';
+  String get reconnectingToInternet => 'انٹرنیٹ سے دوبارہ منسلک ہو رہے ہیں…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7934,11 +7933,11 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'سرور پر پروسیس ہو رہا ہے...';
+  String get processingOnServer => 'سرور پر پروسیس ہو رہا ہے…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'پروسیس ہو رہا ہے... $current/$total حصے';
+    return 'پروسیس ہو رہا ہے… $current/$total حصے';
   }
 
   @override
@@ -8119,7 +8118,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get followTheVoiceInstructions => 'آواز کی ہدایات پر عمل کریں';
 
   @override
-  String get statusCalling => 'کال ہو رہی ہے...';
+  String get statusCalling => 'کال ہو رہی ہے…';
 
   @override
   String get statusCallInProgress => 'کال جاری ہے';
@@ -8164,10 +8163,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get failedToStartCall => 'کال شروع کرنا ناکام';
 
   @override
-  String get callStateConnecting => 'منسلک ہو رہے ہیں...';
+  String get callStateConnecting => 'منسلک ہو رہے ہیں…';
 
   @override
-  String get callStateRinging => 'بجائی جا رہی ہے...';
+  String get callStateRinging => 'بجائی جا رہی ہے…';
 
   @override
   String get callStateEnded => 'کال ختم ہو گئی';
@@ -8176,7 +8175,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get callStateFailed => 'کال ناکام';
 
   @override
-  String get transcriptPlaceholder => 'نسخہ یہاں ظاہر ہوگا...';
+  String get transcriptPlaceholder => 'نسخہ یہاں ظاہر ہوگا…';
 
   @override
   String get phoneUnmute => 'آواز کھولیں';
@@ -8274,7 +8273,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'ہر کال کی حقیقی وقت میں نقل';
 
   @override
-  String get phoneCallsUpsellFeature2 => 'خودکار کال خلاصے اور ایکشن آئٹمز';
+  String get phoneCallsUpsellFeature2 => 'خودکار کال خلاصے اور کام';
 
   @override
   String get phoneCallsUpsellFeature3 => 'وصول کنندگان آپ کا اصل نمبر دیکھتے ہیں، بے ترتیب نہیں';
@@ -8415,7 +8414,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcriptionPaused => 'ریکارڈ ہو رہا ہے، دوبارہ منسلک ہو رہے ہیں';
 
   @override
-  String get transcriptionPausedReconnecting => 'ابھی ریکارڈ ہو رہا ہے — نقل سے دوبارہ منسلک ہو رہے ہیں...';
+  String get transcriptionPausedReconnecting => 'ابھی ریکارڈ ہو رہا ہے — نقل سے دوبارہ منسلک ہو رہے ہیں…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8568,7 +8567,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get tellUsMore => 'ہمیں مزید بتائیں (اختیاری)';
 
   @override
-  String get cancelReasonDetailHint => 'ہم کسی بھی رائے کی تعریف کرتے ہیں...';
+  String get cancelReasonDetailHint => 'ہم کسی بھی رائے کی تعریف کرتے ہیں…';
 
   @override
   String get justAMoment => 'برائے کرم ایک لمحہ انتظار کریں';
@@ -8664,7 +8663,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get diagnostics => 'تشخیص';
 
   @override
-  String get waitingForData => 'ڈیٹا کے انتظار میں...';
+  String get waitingForData => 'ڈیٹا کے انتظار میں…';
 
   @override
   String get liveRssiOverTime => 'وقت کے ساتھ RSSI کی زندگی';
@@ -8673,7 +8672,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get noRssiDataYet => 'ابھی کوئی RSSI ڈیٹا نہیں';
 
   @override
-  String get collectingData => 'ڈیٹا جمع ہو رہا ہے...';
+  String get collectingData => 'ڈیٹا جمع ہو رہا ہے…';
 
   @override
   String get cleanDisconnect => 'صاف ڈسکنیکٹ';
@@ -8754,7 +8753,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stableFirmware => 'مستحکم فرم ویئر';
 
   @override
-  String get fetchingStableFirmware => 'تازہ ترین مستحکم فرم ویئر حاصل ہو رہا ہے...';
+  String get fetchingStableFirmware => 'تازہ ترین مستحکم فرم ویئر حاصل ہو رہا ہے…';
 
   @override
   String get noStableFirmwareFound => 'آپ کے ڈیوائس کے لیے مستحکم فرم ویئر ورژن نہیں مل سکا۔';
@@ -8772,40 +8771,40 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'ٹرانسکرپشن کے لیے $duration کا آڈیو اپ لوڈ ہو رہا ہے…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'اپ لوڈ دوبارہ کیا جا رہا ہے… $duration کا آڈیو آپ کے فون پر محفوظ ہے';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'اپ لوڈ ناکام ہو گیا — $duration کا آڈیو آپ کے فون پر محفوظ ہے۔ دوبارہ کوشش کرنے کے لیے تھپتھپائیں۔';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'اپ لوڈ ناکام ہو گیا — $duration کا آڈیو آپ کے فون پر محفوظ ہے۔';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'سن رہے ہیں… ٹرانسکرپٹ یہاں ظاہر ہوگا۔';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'آف لائن ریکارڈنگ — آپ کے دوبارہ آن لائن آنے پر ٹرانسکرپٹ اپ ڈیٹ ہو جائے گا۔';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'ٹرانسکرپشن دستیاب نہیں — ریکارڈنگ جاری ہے اور آپ کا آڈیو محفوظ ہو رہا ہے۔';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'کیپچر ہو رہا ہے';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'تصاویر کیپچر ہو رہی ہیں';
 
   @override
   String get willSyncAutomatically => 'خودکار طور پر ہم آہنگ ہوگا';
@@ -8820,10 +8819,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get voiceRecordingFound => 'ریکارڈنگ ملی';
 
   @override
-  String get transcriptionConnecting => 'نقل منسلک ہو رہی ہے...';
+  String get transcriptionConnecting => 'نقل منسلک ہو رہی ہے…';
 
   @override
-  String get transcriptionReconnecting => 'نقل دوبارہ منسلک ہو رہی ہے...';
+  String get transcriptionReconnecting => 'نقل دوبارہ منسلک ہو رہی ہے…';
 
   @override
   String get transcriptionUnavailable => 'نقل دستیاب نہیں';
@@ -9134,7 +9133,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSubtitle => 'لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں';
 
   @override
-  String get searchActionItems => 'ایکشن آئٹمز تلاش کریں';
+  String get searchActionItems => 'کام تلاش کریں';
 
   @override
   String get selectActionItems => 'متعدد منتخب کریں';
@@ -9443,7 +9442,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'شاباش!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'بولنا شروع کریں...';
+  String get deviceOnboardingStartSpeaking => 'بولنا شروع کریں…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Omi سے سوال پوچھیں';
@@ -9453,10 +9452,10 @@ class AppLocalizationsUr extends AppLocalizations {
       'بٹن ایک بار دبائیں، اپنا سوال بولیں، اور مکمل ہونے پر دوبارہ دبائیں';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'آپ کے سوال پر کارروائی ہو رہی ہے...';
+  String get deviceOnboardingProcessingQuestion => 'آپ کے سوال پر کارروائی ہو رہی ہے…';
 
   @override
-  String get deviceOnboardingListening => 'سن رہا ہوں...';
+  String get deviceOnboardingListening => 'سن رہا ہوں…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'بند کریں';
@@ -9483,7 +9482,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'منقطع';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'بند ہو رہا ہے...';
+  String get deviceOnboardingStatusTurningOff => 'بند ہو رہا ہے…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'ڈبل ٹیپ حسبِ ضرورت ترتیب دیں';
@@ -9790,7 +9789,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get copyMessage => 'پیغام کاپی کریں';
 
   @override
-  String get searchSettings => 'ترتیبات تلاش کریں…';
+  String get searchSettings => 'ترتیبات تلاش کریں';
 
   @override
   String get errorLoadingAudio => 'آڈیو لوڈ کرنے میں خرابی';
@@ -10157,4 +10156,22 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get clearSearch => 'تلاش صاف کریں';
+
+  @override
+  String get filterBySpeaker => 'بولنے والے کے لحاظ سے فلٹر کریں';
+
+  @override
+  String get notNow => 'ابھی نہیں';
+
+  @override
+  String get discard => 'رد کریں';
+
+  @override
+  String get keepEditing => 'ترمیم جاری رکھیں';
+
+  @override
+  String get discardChangesTitle => 'تبدیلیاں رد کریں؟';
+
+  @override
+  String get discardChangesMessage => 'آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔';
 }
