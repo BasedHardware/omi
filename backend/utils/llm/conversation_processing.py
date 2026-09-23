@@ -7,7 +7,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import SystemMessage
@@ -29,6 +29,7 @@ from utils.conversations.wake_word import (
     WAKE_WORD_PROMPT_RULES,
     has_structural_wake_word_marker,
 )
+from utils.conversations.relevance_rules import KEEP_WORD_COUNT
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
@@ -552,11 +553,16 @@ def should_discard_conversation(
     duration_seconds: Optional[float] = None,
     *,
     trusted_wake_word_markers: bool = False,
+    on_error: Optional[Callable[[Exception], None]] = None,
 ) -> bool:
+    """Model tier of the relevance decision (utils/conversations/relevance.py).
+
+    Fails open to keep; ``on_error`` lets the caller record that it did.
+    """
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
     word_count = _word_count(transcript) if transcript and transcript.strip() else 0
-    if word_count > 100:
+    if word_count > KEEP_WORD_COUNT:
         return False
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
@@ -634,6 +640,8 @@ Content:
 
     except Exception as e:
         logger.error(f'Error determining memory discard: {e}')
+        if on_error is not None:
+            on_error(e)
         return False
 
 
