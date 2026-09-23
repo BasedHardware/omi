@@ -166,4 +166,55 @@ case "$trace" in
   *) fail "lock allowed interleaved critical sections: $trace" ;;
 esac
 
+assert_eq "$(arc_node_runtime_cache_policy "" 0)" "reuse"
+assert_eq "$(arc_node_runtime_cache_policy false 0)" "reuse"
+assert_eq "$(arc_node_runtime_cache_policy true 0)" "direct"
+assert_eq "$(arc_node_runtime_cache_policy 1 1)" "direct"
+assert_eq "$(arc_node_runtime_cache_policy "" 1)" "refresh"
+assert_eq "$(arc_node_runtime_cache_policy false 1)" "refresh"
+
+runtime_material="$(printf 'schema=1\nmode=universal\nversion=%s\narm64=%s\nx64=%s\n' v22.19.0 aaa bbb)"
+runtime_name="$(arc_node_runtime_cache_name v22.19.0 universal "$runtime_material")"
+assert_eq "$runtime_name" "$(arc_node_runtime_cache_name v22.19.0 universal "$runtime_material")"
+case "$runtime_name" in
+  v22.19.0-universal-*) ;;
+  *) fail "unexpected node runtime cache name: $runtime_name" ;;
+esac
+[ "$runtime_name" != "$(arc_node_runtime_cache_name v22.19.0 universal "${runtime_material}changed")" ] || fail "node runtime material did not change the cache name"
+[ "$runtime_name" != "$(arc_node_runtime_cache_name v22.19.0 local "$runtime_material")" ] || fail "node runtime mode did not change the cache name"
+runtime_file="$(arc_node_runtime_cache_file "$TMP_ROOT/node-runtime" v22.19.0 universal "$runtime_material")"
+assert_eq "$runtime_file" "$TMP_ROOT/node-runtime/$runtime_name/node"
+
+payload="$TMP_ROOT/clone-src.bin"
+python3 - "$payload" <<'PY'
+import sys
+with open(sys.argv[1], "wb") as handle:
+    handle.write(b"\0" * (4096 * 1024))
+PY
+arc_clone_or_copy_file "$payload" "$TMP_ROOT/clone-dst.bin"
+cmp -s "$payload" "$TMP_ROOT/clone-dst.bin" || fail "clone-or-copy changed file bytes"
+if [ "$(uname -s)" = "Darwin" ]; then
+  arc_same_clone "$payload" "$TMP_ROOT/clone-dst.bin" || fail "same-directory stage did not share an APFS clone"
+  cross_src="$TMP_ROOT/cross-src.bin"
+  cross_dst="/tmp/omi-node-runtime-cross-$$.bin"
+  src_vol="$(df -P "$payload" | awk 'NR==2 {print $1}')"
+  dst_vol="$(df -P /tmp | awk 'NR==2 {print $1}')"
+  if [ "$src_vol" != "$dst_vol" ]; then
+    cp -f "$payload" "$cross_src"
+    arc_clone_or_copy_file "$cross_src" "$cross_dst"
+    if arc_same_clone "$cross_src" "$cross_dst"; then
+      fail "cross-volume stage reported a shared clone"
+    fi
+    cmp -s "$cross_src" "$cross_dst" || fail "cross-volume fallback changed file bytes"
+    rm -f "$cross_dst"
+  fi
+fi
+
+# A missing parent must not spin: the lock helper creates it.
+missing_parent_lock="$TMP_ROOT/missing-parent/node.lock.d"
+arc_acquire_lock "$missing_parent_lock" 5
+[ -d "$missing_parent_lock" ] || fail "lock helper did not create a missing parent"
+arc_release_lock "$missing_parent_lock"
+[ ! -d "$missing_parent_lock" ] || fail "lock helper left the lock directory behind"
+
 echo "agent runtime cache hermetic tests passed"
