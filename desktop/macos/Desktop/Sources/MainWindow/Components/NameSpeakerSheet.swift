@@ -22,14 +22,26 @@ struct NameSpeakerSheet: View {
 
   /// Segments from the same speaker in this conversation
   private var sameSpeakerSegments: [TranscriptSegment] {
-    allSegments.filter { $0.speaker == segment.speaker && !$0.isUser }
+    Self.sameSpeakerIndices(of: segment, in: allSegments).map { allSegments[$0] }
   }
 
   /// Segment indices (positional index in allSegments) for the same speaker
   private var sameSpeakerIndices: [Int] {
-    allSegments.enumerated().compactMap { index, seg in
-      seg.speaker == segment.speaker && !seg.isUser ? index : nil
+    Self.sameSpeakerIndices(of: segment, in: allSegments)
+  }
+
+  /// Positions of the segments "Also tag" covers: the tapped segment's speaker, on the same side of
+  /// "You" as the tapped segment. A segment marked as you is only grouped with other "You" segments,
+  /// so fixing or clearing a wrong "You" reaches them, and naming someone else never overwrites them.
+  static func sameSpeakerIndices(of segment: TranscriptSegment, in segments: [TranscriptSegment]) -> [Int] {
+    segments.enumerated().compactMap { index, candidate in
+      candidate.speaker == segment.speaker && candidate.isUser == segment.isUser ? index : nil
     }
+  }
+
+  /// Whether the segment currently has an identity the sheet can take away.
+  static func canUnassign(_ segment: TranscriptSegment) -> Bool {
+    segment.isUser || segment.personId != nil
   }
 
   /// Index of the tapped segment
@@ -92,6 +104,16 @@ struct NameSpeakerSheet: View {
 
       // Action buttons
       HStack {
+        // Back to anonymous "Speaker N": no person, not you.
+        if Self.canUnassign(segment) {
+          Button("Unassign") {
+            Task { await save(personId: nil, isUser: false) }
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(isSaving)
+          .help("Return this speaker to \(SpeakerLabelFormatter.anonymousLabel(speakerId: segment.speakerId))")
+          .accessibilityIdentifier("name-speaker-unassign")
+        }
         Spacer()
         Button("Cancel") {
           onDismiss()
@@ -100,7 +122,7 @@ struct NameSpeakerSheet: View {
         .keyboardShortcut(.cancelAction)
 
         Button {
-          Task { await save() }
+          Task { await save(personId: selectedPersonId, isUser: isUserSelected) }
         } label: {
           if isSaving {
             ProgressView()
@@ -320,13 +342,13 @@ struct NameSpeakerSheet: View {
     isCreating = false
   }
 
-  private func save() async {
+  private func save(personId: String?, isUser: Bool) async {
     guard !isSaving else { return }
 
     isSaving = true
     saveError = nil
     let segmentIndices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
-    let succeeded = await onSave(selectedPersonId, isUserSelected, segmentIndices)
+    let succeeded = await onSave(personId, isUser, segmentIndices)
     isSaving = false
 
     if succeeded {

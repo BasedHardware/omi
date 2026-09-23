@@ -4080,7 +4080,7 @@ struct TasksPage: View {
   }
 
   private var tasksMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More task actions", accessibilityIdentifier: "tasks-more-actions") {
       if !viewModel.displayTasks.isEmpty {
         Button {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -4108,15 +4108,7 @@ struct TasksPage: View {
           Label(showChatPanel ? "Close Task Assistant" : "Open Task Assistant", systemImage: "bubble.left")
         }
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More task actions")
-    .accessibilityLabel("More task actions")
-    .accessibilityIdentifier("tasks-more-actions")
   }
 
   private var chatToggleButton: some View {

@@ -128,7 +128,11 @@ matching mobile). Raw diarization labels (`SPEAKER_00`) never reach the UI.
 
 - Page actions sit trailing in the page's query toolbar: `[secondary…] [More] [primary]`. The add
   verb is **New** ("New Task", "New Memory").
-- "More" is a `Menu`, never a popover.
+- "More" is `PageMoreMenu(help:accessibilityIdentifier:) { … }`, never a popover and never a
+  hand-built `Menu` (its label inherits the accent tint and renders blue).
+- A repeated row control (a summary's "Add to Tasks", "Transcript") appears on hover or keyboard
+  focus, in space the row already reserves, and is also a VoiceOver action on the row. A control
+  that shows state (added, in flight, failed, linked) stays visible. See `ConversationActionItemRow`.
 - A detail that replaces a list hides the list's search and filter chrome, or retargets it to the
   detail. Typing in a search field never closes the detail as a side effect.
 - Truncated titles carry `.help(fullTitle)`.

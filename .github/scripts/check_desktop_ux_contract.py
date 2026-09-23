@@ -110,6 +110,13 @@ RULES: tuple[Rule, ...] = (
         (THEME_DIR,),
     ),
     Rule(
+        "hand-rolled-more-menu",
+        re.compile(r'PageQueryActionLabel\(\s*icon:\s*"ellipsis"'),
+        "Use `PageMoreMenu(help:accessibilityIdentifier:)` for a page's More menu. A hand-built `Menu` "
+        "label inherits the accent tint and renders a blue \"More\".",
+        _owners("MainWindow/Components/PageQueryToolbar.swift"),
+    ),
+    Rule(
         "ascii-ellipsis",
         re.compile(
             r'(?:\b(?:Text|Button|Label|TextField|SecureField|Toggle|Menu|help|navigationTitle)\(\s*|'

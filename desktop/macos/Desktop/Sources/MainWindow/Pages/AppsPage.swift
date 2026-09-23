@@ -559,7 +559,7 @@ struct AppsPage: View {
   }
 
   private var appsMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More app actions", accessibilityIdentifier: "apps-more-actions") {
       Button {
         if let url = URL(string: "https://docs.omi.me/doc/developer/apps/Introduction") {
           NSWorkspace.shared.open(url)
@@ -567,15 +567,7 @@ struct AppsPage: View {
       } label: {
         Label("Build an app…", systemImage: "app.badge.fill")
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More app actions")
-    .accessibilityLabel("More app actions")
-    .accessibilityIdentifier("apps-more-actions")
   }
 
   @ViewBuilder

@@ -19,7 +19,7 @@ a page does not draw its own back button, close button, confirmation, copy feedb
 - Name a transcript speaker other than through `SpeakerLabelFormatter` (raw `SPEAKER_00` labels
   never reach the UI).
 - Add `.font(.system(size:))`, literal `scaledFont` sizes, literal corner radii, raw
-  `NSCursor.pointingHand.push()`, or "..." in UI copy.
+  `NSCursor.pointingHand.push()`, "..." in UI copy, or a page "More" menu other than `PageMoreMenu`.
 
 ## Surfaces
 

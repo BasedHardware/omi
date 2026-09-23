@@ -58,6 +58,16 @@ class RuleCountingTests(unittest.TestCase):
         self.assertEqual(guard.count(rule("raw-cursor-push"), "if hovering { NSCursor.pointingHand.push() }"), 1)
         self.assertEqual(guard.count(rule("raw-cursor-push"), ".pointingHandOnHover()"), 0)
 
+    def test_hand_rolled_more_menu(self) -> None:
+        self.assertEqual(
+            guard.count(rule("hand-rolled-more-menu"), 'PageQueryActionLabel(icon: "ellipsis", title: "More")'), 1
+        )
+        self.assertEqual(
+            guard.count(rule("hand-rolled-more-menu"), 'PageMoreMenu(help: "More task actions", accessibilityIdentifier: "x") {'),
+            0,
+        )
+        self.assertTrue(guard.is_owner(rule("hand-rolled-more-menu"), SRC + "MainWindow/Components/PageQueryToolbar.swift"))
+
     def test_comments_do_not_count_but_strings_do(self) -> None:
         self.assertEqual(guard.count(rule("system-alert"), "// never use .alert( here"), 0)
         self.assertEqual(guard.count(rule("system-alert"), "/* .alert( */ let x = 1"), 0)

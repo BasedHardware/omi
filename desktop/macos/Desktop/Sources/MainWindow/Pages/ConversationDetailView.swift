@@ -95,6 +95,7 @@ struct ConversationDetailView: View {
   /// tasks (I1); this is the record of the reader's own "Add to Tasks" gesture.
   @State private var addedActionItemIDs: Set<String> = []
   @State private var addingActionItemIDs: Set<String> = []
+  @State private var failedActionItemIDs: Set<String> = []
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
@@ -201,32 +202,16 @@ struct ConversationDetailView: View {
           headerView
 
           ScrollView {
-            // Card container wrapping summary content
-            VStack(alignment: .leading, spacing: 0) {
-              // Card header bar
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "doc.text")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(Ink.secondary)
-                Text("Conversation Details")
-                  .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(Ink.secondary)
-                Spacer()
-              }
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.sm)
-              .background(Ink.rowFillHover.opacity(0.4))
-
-              ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
-                deferredProcessingSection
-              } content: {
-                summaryContent
-              }
-              .padding(OmiSpacing.xxl)
+            // The summary sits on the page itself, aligned with the header's inset: the page is
+            // already the conversation, so a second titled card around it only nested it deeper.
+            ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+              deferredProcessingSection
+            } content: {
+              summaryContent
             }
-            .glassCard(cornerRadius: OmiChrome.controlRadius)
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
-            .padding(OmiSpacing.xxl)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.top, OmiSpacing.sm)
+            .padding(.bottom, OmiSpacing.xxl)
           }
           .glassScrollFade()
         }
@@ -464,9 +449,10 @@ struct ConversationDetailView: View {
             .lineLimit(1)
             .help(displayConversation.displayTitle)
 
+          // Fixed so a narrow window truncates the title, never wraps the badge.
           ConversationStatusBadge(state: displayConversation.displayState)
+            .fixedSize()
 
-          // Edit title button (inline with title)
           OmiIconButton("pencil", help: "Edit Title", size: .compact) {
             editedTitle = displayConversation.title
             showEditDialog = true
@@ -476,6 +462,8 @@ struct ConversationDetailView: View {
         Text(formattedTimeRange)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
+          .lineLimit(1)
+          .help(formattedTimeRange)
       }
 
       Spacer()
@@ -1434,97 +1422,47 @@ struct ConversationDetailView: View {
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(activeItems) { item in
-          HStack(alignment: .top, spacing: OmiSpacing.sm) {
-            Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
-
-            Text(item.description)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-              .strikethrough(item.completed, color: Ink.secondary)
-
-            Spacer(minLength: OmiSpacing.sm)
-
-            if let taskID = item.targetTaskID, let onOpenLinkedTask {
-              Button {
-                onOpenLinkedTask(taskID)
-              } label: {
-                HStack(spacing: OmiSpacing.xxs) {
-                  Image(systemName: "checklist")
-                  Text("Open linked task")
-                }
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
+          let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
+            item.sourceSegmentIDs, segments: displayConversation.transcriptSegments)
+          let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
+          ConversationActionItemRow(
+            item: item,
+            taskState: taskState(for: item, linkedTaskID: linkedTaskID),
+            transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
+            onTaskAction: {
+              if let linkedTaskID {
+                onOpenLinkedTask?(linkedTaskID)
+              } else {
+                addActionItemToTasks(item)
               }
-              .buttonStyle(.plain)
-              .accessibilityIdentifier("chat-first-capture-task-\(taskID)")
-              .help("Open the task linked to this action item")
-            } else {
-              addToTasksButton(for: item)
-            }
-
-            let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
-              item.sourceSegmentIDs, segments: displayConversation.transcriptSegments)
-            Button {
+            },
+            onOpenTranscript: {
               ConversationDetailAutomationState.shared.requestOpen(
                 conversationId: displayConversation.id,
                 showTranscript: true,
                 transcriptSegmentIds: sourceIDs
               )
-            } label: {
-              HStack(spacing: OmiSpacing.xxs) {
-                Image(systemName: "text.quote")
-                Text(sourceIDs.isEmpty ? "Transcript" : "Source")
-              }
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
             }
-            .buttonStyle(.plain)
-            .help("Open the full transcript")
-          }
-          .padding(OmiSpacing.md)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .fill(Ink.rowFillHover)
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(Ink.rowFillHover.opacity(0.3), lineWidth: 1)
           )
         }
       }
     }
   }
 
-  /// Explicit, per-item promotion of a summary action item into the task list.
-  /// This gesture is the only way an extracted item becomes a task.
-  @ViewBuilder
-  private func addToTasksButton(for item: ActionItem) -> some View {
-    let isAdded = addedActionItemIDs.contains(item.id)
-    let isAdding = addingActionItemIDs.contains(item.id)
-
-    Button {
-      addActionItemToTasks(item)
-    } label: {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: isAdded ? "checkmark" : "plus")
-        Text(isAdded ? "Added" : "Add to Tasks")
-      }
-      .scaledFont(size: OmiType.caption)
-      .foregroundColor(isAdded ? Ink.listeningGreen : Ink.secondary)
-    }
-    .buttonStyle(.plain)
-    .disabled(isAdded || isAdding)
-    .opacity(isAdding ? 0.5 : 1)
-    .accessibilityIdentifier("action-item-add-to-tasks")
-    .help(isAdded ? "Already in your tasks" : "Add this to your tasks")
+  private func taskState(for item: ActionItem, linkedTaskID: String?) -> ActionItemTaskState {
+    if linkedTaskID != nil { return .linked }
+    if addedActionItemIDs.contains(item.id) { return .added }
+    if addingActionItemIDs.contains(item.id) { return .adding }
+    if failedActionItemIDs.contains(item.id) { return .failed }
+    return .idle
   }
 
+  /// Explicit, per-item promotion of a summary action item into the task list.
+  /// This gesture is the only way an extracted item becomes a task.
   private func addActionItemToTasks(_ item: ActionItem) {
     guard !addedActionItemIDs.contains(item.id), !addingActionItemIDs.contains(item.id) else { return }
     addingActionItemIDs.insert(item.id)
+    failedActionItemIDs.remove(item.id)
     Task { @MainActor in
       let created = await TasksStore.shared.createTask(
         description: item.description,
@@ -1534,6 +1472,8 @@ struct ConversationDetailView: View {
       addingActionItemIDs.remove(item.id)
       if created != nil {
         addedActionItemIDs.insert(item.id)
+      } else {
+        failedActionItemIDs.insert(item.id)
       }
     }
   }
