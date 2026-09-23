@@ -875,6 +875,11 @@ checks:
     triggers: ["app/scripts/mobile_release_identity.py", "app/scripts/mobile_release_identity_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "platform-specific Codemagic tags must resolve one strict version/build/source identity before a mobile publisher or Flutter build runs"
+  - id: android-foreground-service-start-contract
+    command: ["python3", "app/scripts/patch_flutter_foreground_task_test.py"]
+    triggers: ["app/scripts/patch_flutter_foreground_task.py", "app/scripts/patch_flutter_foreground_task_test.py", "app/android/build.gradle", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#16600 passed Android CI yet the foreground-service deadline crash recurred in production; first promotion must precede plugin cold-start work on fresh and previously patched sources"
   - id: mobile-store-version-contract
     command: ["python3", "app/scripts/mobile_store_version_test.py"]
     triggers: ["app/scripts/mobile_store_version.py", "app/scripts/mobile_store_version_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
