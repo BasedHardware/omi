@@ -49,7 +49,7 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         await dc_routes._chat_completions_unobserved(
-            body={"model": "gpt-4"},
+            body={"model": "omi-sonnet", "messages": [{"role": "user", "content": "hello"}]},
             uid="test-user-002",
             x_omi_chat_contract_version="1",
         )
