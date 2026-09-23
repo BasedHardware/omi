@@ -240,7 +240,7 @@ async def send_omi_notification(
             print(f"✓ Sent Omi notification to user {uid}: {message}")
             return {"success": True, "message": message}
         else:
-            print(f"Omi API error {response.status_code}: {response.text}")
+            print(f"Omi API error: {response.status_code}")
             return {"success": False, "error": "Omi API request failed."}
     except Exception as e:
         error_msg = "Failed to send Omi notification"
@@ -294,7 +294,7 @@ async def create_omi_memory(
             print(f"✓ Created Omi memory for user {uid}")
             return {"success": True, "memory": text}
         else:
-            print(f"Omi API error {response.status_code}: {response.text}")
+            print(f"Omi API error: {response.status_code}")
             return {"success": False, "error": "Omi API request failed."}
     except Exception as e:
         error_msg = "Failed to create Omi memory"
