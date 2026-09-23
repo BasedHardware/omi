@@ -6,7 +6,19 @@ You need Python 3.10+, an authenticated `omi-cli` for the initial export, and [`
 
 ```sh
 pip install openpyxl
+```
+
+Export up to 200 action items:
+
+```sh
 omi --json action-item list --limit 200 --offset 0 > action_items.json
+```
+
+Check that the command succeeded before converting the file. This is one page, not a complete-account backup. To retrieve another page, increase `--offset` by 200 and use a different filename.
+
+Save the following as `action_items_to_xlsx.py`:
+
+```python
 import json
 import os
 import sys
@@ -193,3 +205,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+Run the conversion:
+
+```sh
+python action_items_to_xlsx.py action_items.json action_items.xlsx
+```
+
+Open `action_items.xlsx` in Excel, LibreOffice Calc, or Google Sheets. The sheet opens with frozen headers, colored status badges (green for completed, soft red for overdue), and auto-filters ready for querying tasks.
