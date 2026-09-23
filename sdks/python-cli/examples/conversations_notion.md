@@ -1,48 +1,64 @@
-# Convert conversations to Notion block payloads
+# Export conversations to Notion block children
 
-Use this recipe to format Omi conversation transcripts, overviews, and action items into Notion API-compatible block batches (ready for the `/v1/blocks/{id}/children` endpoint).
+Use this recipe to convert Omi conversation transcripts into structured Notion block objects ready for immediate upload to Notion pages via the Notion REST API.
 
-Export conversations:
+## Requirements
+
+- Python 3.10+ (standard library only)
+- Notion API Integration Token and Target Page ID
+
+## Workflow
+
+### 1. Export conversations from Omi
 
 ```sh
-omi --json conversation list --include-transcript --limit 50 > conversations.json
+omi --json conversation list > conversations.json
 ```
 
-Convert to Notion blocks:
+### 2. Convert to Notion blocks payload
 
 ```sh
-python conversations_to_notion.py conversations.json notion_blocks.json
+# Using -o / --output flag
+python sdks/python-cli/examples/conversations_to_notion.py conversations.json -o notion_blocks.json
+
+# Or using positional arguments
+python sdks/python-cli/examples/conversations_to_notion.py conversations.json notion_blocks.json
 ```
 
+### 3. Append to Notion Page via REST API
 
-## Appending Blocks to Notion Page
-To append converted blocks to a Notion page via the Notion API:
+The generated JSON file has the `{"children": [...]}` structure expected directly by the Notion API:
 
 ```sh
-export NOTION_TOKEN="secret_..."
-PAGE_ID="your_page_id"
+export NOTION_TOKEN="secret_your_notion_integration_token"
+export PAGE_ID="your_target_page_id"
 
-curl -X PATCH "https://api.notion.com/v1/blocks/${PAGE_ID}/children" \
+curl -s -X PATCH "https://api.notion.com/v1/blocks/${PAGE_ID}/children" \
   -H "Authorization: Bearer ${NOTION_TOKEN}" \
   -H "Content-Type: application/json" \
   -H "Notion-Version: 2022-06-28" \
   -d @notion_blocks.json
 ```
 
+## Output Format
 
-## Uploading to Notion API
-To append the generated blocks to your target Notion page:
-
-```sh
-export NOTION_TOKEN="secret_..."
-PAGE_ID="your_target_page_id"
-
-# Extract each batch and append to page children
-jq -c '.batches[]' notion_blocks.json | while read -r batch; do
-  curl -s -X PATCH "https://api.notion.com/v1/blocks/${PAGE_ID}/children" \
-    -H "Authorization: Bearer ${NOTION_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -H "Notion-Version: 2022-06-28" \
-    -d "{\"children\": $batch}"
-done
+```json
+{
+  "children": [
+    {
+      "object": "block",
+      "type": "heading_2",
+      "heading_2": {
+        "rich_text": [{"type": "text", "text": {"content": "Weekly Team Sync (2026-09-22)"}}]
+      }
+    },
+    {
+      "object": "block",
+      "type": "paragraph",
+      "paragraph": {
+        "rich_text": [{"type": "text", "text": {"content": "Alice: The hardware build is on schedule."}}]
+      }
+    }
+  ]
+}
 ```
