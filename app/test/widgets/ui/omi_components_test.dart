@@ -228,17 +228,17 @@ void main() {
       ),
     );
     expect(find.text('Search memories'), findsOneWidget);
-    expect(find.byTooltip('Clear search'), findsNothing);
+    expect(find.byTooltip('Clear Search'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'coffee');
     await tester.pump();
-    expect(find.byTooltip('Clear search'), findsOneWidget);
+    expect(find.byTooltip('Clear Search'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Clear search'));
+    await tester.tap(find.byTooltip('Clear Search'));
     await tester.pump();
     expect(find.text('coffee'), findsNothing);
     expect(changes.last, '');
     expect(cleared, 1);
-    expect(find.byTooltip('Clear search'), findsNothing);
+    expect(find.byTooltip('Clear Search'), findsNothing);
   });
 }
