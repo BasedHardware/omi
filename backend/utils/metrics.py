@@ -242,7 +242,8 @@ CONVERSATION_RELEVANCE_LABELS = {
 }
 
 CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
-    'conversation_relevance_decision_total',
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_conversation_relevance_decision_total',
     (
         'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
         'bounded reason (a rule id, model_keep/model_discard/model_error, a policy trigger, '

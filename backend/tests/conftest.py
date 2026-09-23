@@ -34,6 +34,15 @@ if 'tiktoken' not in sys.modules:
 
 from testing.hermetic_network import block_outbound_network
 
+
+@pytest.fixture
+def luna_model() -> str:
+    """Canonical Luna model id. Backend tests use this instead of a versioned literal."""
+    from utils.llm.model_config import LUNA_MODEL
+
+    return LUNA_MODEL
+
+
 _network_guard = None
 _test_file_durations = defaultdict(float)
 _test_item_durations = defaultdict(float)
