@@ -483,7 +483,13 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_user_subscription(uid)
-        subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
+        plan_subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
+        for subscription_id in stripe_utils.find_billable_app_subscription_ids(uid):
+            if stripe_utils.cancel_subscription(subscription_id):
+                continue
+            if not stripe_utils.is_subscription_terminal(subscription_id):
+                raise RuntimeError('stripe cancel returned no subscription')
+        subscription_id = plan_subscription_id
         if not subscription_id:
             return
         canceled = stripe_utils.cancel_subscription(subscription_id)

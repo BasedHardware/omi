@@ -128,6 +128,18 @@ def is_subscription_terminal(subscription_id: str) -> bool:
     return subscription.get('status') in TERMINAL_SUBSCRIPTION_STATUSES
 
 
+def find_billable_app_subscription_ids(uid: str) -> list[str]:
+    if not stripe.api_key:
+        return []
+    subscriptions = stripe.Subscription.search(query=f"metadata['uid']:'{uid}'")
+    return [
+        subscription.id
+        for subscription in subscriptions.auto_paging_iter()
+        if subscription.get('metadata', {}).get('app_id')
+        and subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES
+    ]
+
+
 def find_app_subscription_by_customer_id(
     customer_id: str, app_id: str, uid: str, status_filter: str = 'all'
 ) -> Optional[Dict[str, Any]]:
