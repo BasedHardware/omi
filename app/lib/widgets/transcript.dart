@@ -15,7 +15,6 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 
@@ -985,7 +984,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     PlatformManager.instance.analytics.tagSheetOpened();
                                   },
                             child: Text(
-                              speakerLabel(context, data, person),
+                              speakerLabel(context, data, person, segments: widget.segments),
                               style: TextStyle(
                                 color: data.speakerId == omiSpeakerId || person != null
                                     ? Colors.grey.shade300
@@ -1276,25 +1275,4 @@ String tryDecodingText(String text) {
     }
   }
   return _decodedTextCache[text]!;
-}
-
-String formatChatTimestamp(DateTime dateTime, {BuildContext? context}) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-  final timeStr = dateTimeFormat('h:mm a', dateTime);
-
-  if (messageDate == today) {
-    // Today, show time only
-    return timeStr;
-  } else if (messageDate == today.subtract(const Duration(days: 1))) {
-    // Yesterday
-    if (context != null) {
-      return context.l10n.yesterdayAtTime(timeStr);
-    }
-    return 'Yesterday $timeStr';
-  } else {
-    // Other days
-    return dateTimeFormat('MMM d, h:mm a', dateTime);
-  }
 }

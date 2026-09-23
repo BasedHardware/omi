@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 
-/// The one way to put a date or time on screen (docs/ux-contract.md §7).
+/// The one way to put a date or time on screen (docs/ux-contract.md §8).
 ///
 /// Every style follows the app's locale (month names, order, separators) and the device's 24-hour
 /// setting. Never format with a pattern string such as `DateFormat('h:mm a')`: it forces English
@@ -15,8 +15,8 @@ import 'package:omi/l10n/app_localizations.dart';
 /// | [time]       | 10:43 AM                               | a row inside a day group              |
 /// | [dayHeader]  | Today · Yesterday · Wed, Sep 23 · Wed, Sep 23, 2025 | a group header           |
 /// | [date]       | Sep 23, 2026                           | a date standing alone                 |
-/// | [dateTime]   | Sep 23, 2026, 10:43 AM                 | an absolute moment (details, exports) |
-/// | [timestamp]  | 10:43 AM · Yesterday at 10:43 AM · Sep 21, 10:43 AM | a moment in a feed       |
+/// | [dateTime]   | Sep 23, 2026 10:43 AM                  | an absolute moment (details, exports) |
+/// | [timestamp]  | 10:43 AM · Yesterday at 10:43 AM · Sep 21 10:43 AM | a moment in a feed        |
 /// | [timeRange]  | 10:17 – 11:19 AM                       | a span (cross-day spans show dates)   |
 ///
 /// ```dart
@@ -67,7 +67,7 @@ class OmiDateFormat {
   /// A date standing alone: "Sep 23, 2026".
   String date(DateTime value) => DateFormat.yMMMd(localeName).format(value);
 
-  /// An absolute moment: "Sep 23, 2026, 10:43 AM" (locale order and separators).
+  /// An absolute moment: "Sep 23, 2026 10:43 AM" (locale order and separators).
   String dateTime(DateTime value) {
     final format = DateFormat.yMMMd(localeName);
     return use24HourFormat ? format.add_Hm().format(value) : format.add_jm().format(value);
@@ -95,7 +95,7 @@ class OmiDateFormat {
 
   DateFormat _timeFormat() => use24HourFormat ? DateFormat.Hm(localeName) : DateFormat.jm(localeName);
 
-  static final RegExp _trailingPeriod = RegExp(r'[\s  ]*a$');
+  static final RegExp _trailingPeriod = RegExp(r'[\s\u00a0\u202f]*a$');
 
   bool _sharesTrailingPeriod(DateTime start, DateTime end) {
     if (use24HourFormat) return false;

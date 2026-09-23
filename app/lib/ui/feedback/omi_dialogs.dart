@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The app's single confirmation / alert system (docs/ux-contract.md §4).
+/// The app's single confirmation / alert system (docs/ux-contract.md §5).
 ///
 /// * [showOmiConfirm] — a question with two answers: Cancel and a verb that names the action
 ///   ("Delete", "Sign Out", "Clear Chat"). Cancel is always shown.
@@ -79,6 +79,7 @@ class OmiAlertDialog extends StatelessWidget {
       );
     }
     return AlertDialog(
+      scrollable: true,
       title: title == null ? null : Text(title!),
       content: body,
       actions: [

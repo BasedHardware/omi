@@ -7,7 +7,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/constants.dart';
 
-/// The one source of speaker names for a conversation (docs/ux-contract.md §8): transcript
+/// The one source of speaker names for a conversation (docs/ux-contract.md §9): transcript
 /// bubbles, the edit-segment and tag-speaker sheets, participant lists, filters, and every copied,
 /// shared or exported transcript.
 ///

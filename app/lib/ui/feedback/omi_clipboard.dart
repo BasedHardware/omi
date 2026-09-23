@@ -7,7 +7,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The one way to copy text (docs/ux-contract.md §6).
+/// The one way to copy text (docs/ux-contract.md §7).
 ///
 /// ```dart
 /// await OmiClipboard.copy(context, transcript, what: l10n.transcript);

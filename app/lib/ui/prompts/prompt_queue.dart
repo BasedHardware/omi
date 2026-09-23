@@ -24,7 +24,7 @@ abstract final class PromptPriority {
 typedef PromptPresenter = Future<void> Function(BuildContext context);
 
 /// One modal prompt at a time, in priority order, never while the user is busy
-/// (docs/ux-contract.md §13).
+/// (docs/ux-contract.md §14).
 ///
 /// Startup and background prompts — upgrade alert, announcements, changelog, device tutorial,
 /// firmware notice, plan sheet, review request — are enqueued here instead of calling `showDialog`

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// How long each kind of feedback stays up (docs/ux-contract.md §5).
+/// How long each kind of feedback stays up (docs/ux-contract.md §6).
 abstract final class OmiFeedbackTiming {
   /// "Saved", "Copied": the reader just did it and only needs to see it landed.
   static const confirm = Duration(milliseconds: 1500);

@@ -1,6 +1,6 @@
 import 'package:omi/l10n/app_localizations.dart';
 
-/// The one way to put a length of time on screen (docs/ux-contract.md §7).
+/// The one way to put a length of time on screen (docs/ux-contract.md §8).
 ///
 /// | Style      | Examples                  | Use                                                     |
 /// |------------|---------------------------|---------------------------------------------------------|
