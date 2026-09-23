@@ -8,6 +8,7 @@ import threading
 import time
 import wave
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
@@ -1729,14 +1730,16 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
     with owner_storage_write_gate(uid, bucket):
         for name in files_name:
             try:
-                blob = bucket.blob(f'{uid}/{name}')
+                source_path = Path(name)
+                blob_name = source_path.name
+                blob = bucket.blob(f'{uid}/{blob_name}')
                 blob.cache_control = 'public, no-cache'
-                blob.upload_from_filename(f'./{name}')
+                blob.upload_from_filename(str(source_path))
                 try:
                     blob.make_public()
                 except Exception as e:
                     logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-                dictFiles[name] = _blob_public_url(blob, chat_files_bucket, f'{uid}/{name}')
+                dictFiles[name] = _blob_public_url(blob, chat_files_bucket, f'{uid}/{blob_name}')
             except Exception as e:
                 logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles

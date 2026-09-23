@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
@@ -1234,6 +1235,19 @@ class MessageActionBar extends StatefulWidget {
 
 class _MessageActionBarState extends State<MessageActionBar> {
   int? _selectedNps;
+  bool _copied = false;
+  Timer? _copyTimer;
+
+  String _label(String Function(AppLocalizations) value, String fallback) {
+    final localizations = Localizations.of<AppLocalizations>(context, AppLocalizations);
+    return localizations == null ? fallback : value(localizations);
+  }
+
+  @override
+  void dispose() {
+    _copyTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -1256,7 +1270,8 @@ class _MessageActionBarState extends State<MessageActionBar> {
   void _showThumbsDownReasonPicker() {
     showFeedbackBottomSheet(
       context,
-      onSubmit: (reason, comment) {
+      onSubmit: (reason, comment) async {
+        final previous = _selectedNps;
         setState(() {
           _selectedNps = -1;
         });
@@ -1265,7 +1280,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
         if (comment != null && comment.isNotEmpty) {
           feedbackReason = '$reason: $comment';
         }
-        widget.setMessageNps?.call(-1, reason: feedbackReason);
+        final saved = await widget.setMessageNps?.call(-1, reason: feedbackReason);
+        if (saved == false) {
+          if (mounted) setState(() => _selectedNps = previous);
+          return;
+        }
 
         // Show confirmation snackbar
         if (mounted) {
@@ -1289,7 +1308,8 @@ class _MessageActionBarState extends State<MessageActionBar> {
         children: [
           // Copy button
           _buildActionButton(
-            icon: FontAwesomeIcons.copy,
+            icon: _copied ? FontAwesomeIcons.check : FontAwesomeIcons.copy,
+            label: _copied ? _label((l10n) => l10n.copied, 'Copied') : _label((l10n) => l10n.copyMessage, 'Copy'),
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
@@ -1299,6 +1319,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
               );
 
               if (context.mounted) {
+                _copyTimer?.cancel();
+                setState(() => _copied = true);
+                _copyTimer = Timer(const Duration(seconds: 2), () {
+                  if (mounted) setState(() => _copied = false);
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -1314,27 +1339,32 @@ class _MessageActionBarState extends State<MessageActionBar> {
           // Thumbs up button
           _buildActionButton(
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
+            label: _label((l10n) => l10n.good, 'Helpful'),
             isSelected: _selectedNps == 1,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.lightImpact();
+              final previous = _selectedNps;
               setState(() {
                 _selectedNps = _selectedNps == 1 ? null : 1;
               });
-              widget.setMessageNps?.call(_selectedNps ?? 0);
+              final saved = await widget.setMessageNps?.call(_selectedNps ?? 0);
+              if (saved == false && mounted) setState(() => _selectedNps = previous);
             },
           ),
           // Thumbs down button
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
+            label: _label((l10n) => l10n.notHelpful, 'Not helpful'),
             isSelected: _selectedNps == -1,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.lightImpact();
               if (_selectedNps == -1) {
                 // Already thumbs down, toggle off
                 setState(() {
                   _selectedNps = null;
                 });
-                widget.setMessageNps?.call(0);
+                final saved = await widget.setMessageNps?.call(0);
+                if (saved == false && mounted) setState(() => _selectedNps = -1);
               } else {
                 // Show reason picker for thumbs down
                 _showThumbsDownReasonPicker();
@@ -1344,6 +1374,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           // Share button
           _buildActionButton(
             icon: FontAwesomeIcons.share,
+            label: _label((l10n) => l10n.share, 'Share'),
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
@@ -1361,21 +1392,34 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
-    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
-    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
-    // by dropping the 20pt gaps between buttons in favour of this padding.
-    return InkWell(
-      splashColor: Colors.transparent,
-      focusColor: Colors.transparent,
-      hoverColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
-      ),
-    );
+  Widget _buildActionButton(
+      {required FaIconData icon, required String label, required VoidCallback onTap, bool isSelected = false}) {
+    return Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: Semantics(
+          button: true,
+          label: label,
+          selected: isSelected,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            splashColor: Colors.white24,
+            highlightColor: Colors.white10,
+            onTap: onTap,
+            child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                    child: ExcludeSemantics(
+                  child: AnimatedSwitcher(
+                    duration:
+                        MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 150),
+                    child:
+                        FaIcon(icon, key: ValueKey(icon), color: isSelected ? Colors.white : Colors.white60, size: 16),
+                  ),
+                ))),
+          ),
+        ));
   }
 }
 

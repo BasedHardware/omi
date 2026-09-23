@@ -657,6 +657,8 @@ struct DesktopHomeView: View {
       isSidebarCollapsed: chatFirstNavigation.isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
+      accountUserID: AuthState.automationAccountUserID(),
+      accountEmail: authState.userEmail,
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,

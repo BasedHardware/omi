@@ -24,7 +24,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 /// The named faults. `name` is the stable wire identifier used by the
-/// `omi.controls.fault` VM-service extension and journey receipts.
+/// `ext.omi.controls.fault` VM-service extension and journey receipts.
 enum JourneyFault {
   /// The chat send request never leaves the app (dropped at the HTTP
   /// chokepoint). Journey must fail: no server-visible user message, no

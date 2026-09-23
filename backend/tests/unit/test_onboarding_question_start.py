@@ -62,6 +62,7 @@ async def test_receiver_enqueues_client_transcript_for_onboarding_only_in_custom
     enqueued = []
     receiver = object.__new__(ListenReceiver)
     receiver.speaker_provider_epoch = SpeakerProviderEpoch()
+    receiver._pending_live_failover = None
     receiver.host = SimpleNamespace(
         onboarding_handler=SimpleNamespace(completed=False),
         use_custom_stt=True,

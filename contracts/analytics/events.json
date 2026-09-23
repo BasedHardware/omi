@@ -1,0 +1,2169 @@
+{
+  "version": 1,
+  "adopted_files": [],
+  "events": [
+    {
+      "id": "onboardingCompleted",
+      "wire_name": "Onboarding Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneMicRecordingStarted",
+      "wire_name": "Phone Mic Recording Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneMicRecordingStopped",
+      "wire_name": "Phone Mic Recording Stopped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "transcribeLaterToggled",
+      "wire_name": "Transcribe Later Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceOnboardingCompleted",
+      "wire_name": "Device Onboarding Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "transcribeLaterRecordingProcessed",
+      "wire_name": "Transcribe Later Recording Processed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarEnabled",
+      "wire_name": "Calendar Enabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarDisabled",
+      "wire_name": "Calendar Disabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarSelected",
+      "wire_name": "Calendar Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationDisplaySettingsOpened",
+      "wire_name": "Conversation Display Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerModeEnabled",
+      "wire_name": "Developer Mode Enabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerModeDisabled",
+      "wire_name": "Developer Mode Disabled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "developerSettingsSaved",
+      "wire_name": "Developer Settings Saved",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "hasWebhookMemoryCreated": {
+          "type": "bool",
+          "wire_name": "has_webhook_memory_created"
+        },
+        "hasWebhookTranscriptReceived": {
+          "type": "bool",
+          "wire_name": "has_webhook_transcript_received"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceResponseToggled",
+      "wire_name": "Voice Response Audio Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "showShortConversationsToggled",
+      "wire_name": "Show Short Conversations Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showShort": {
+          "type": "bool",
+          "wire_name": "show_short"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceOnboardingAbandoned",
+      "wire_name": "Device Onboarding Abandoned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceOnboardingDoubleTapConfigured",
+      "wire_name": "Device Onboarding Double Tap Configured",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "action": {
+          "type": "int",
+          "wire_name": "action"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallEnded",
+      "wire_name": "Phone Call Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "durationSeconds": {
+          "type": "int",
+          "wire_name": "duration_seconds"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "shortConversationThresholdChanged",
+      "wire_name": "Short Conversation Threshold Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "thresholdSeconds": {
+          "type": "int",
+          "wire_name": "threshold_seconds"
+        },
+        "thresholdMinutes": {
+          "type": "int",
+          "wire_name": "threshold_minutes"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memorySearchCleared",
+      "wire_name": "Fact Search Cleared",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "totalFactsCount": {
+          "type": "int",
+          "wire_name": "total_facts_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesAllDeleted",
+      "wire_name": "All Facts Deleted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "factsCountBeforeDeletion": {
+          "type": "int",
+          "wire_name": "facts_count_before_deletion"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "notificationFrequencyChanged",
+      "wire_name": "Notification Frequency Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "oldFrequency": {
+          "type": "int",
+          "wire_name": "old_frequency"
+        },
+        "newFrequency": {
+          "type": "int",
+          "wire_name": "new_frequency"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "changelogDismissed",
+      "wire_name": "Changelog Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "changelogCount": {
+          "type": "int",
+          "wire_name": "changelog_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterRating",
+      "wire_name": "Apps Filter Rating",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "rating": {
+          "type": "int",
+          "wire_name": "rating"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "aiAppGeneratorPromptSubmitted",
+      "wire_name": "AI App Generator Prompt Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "promptLength": {
+          "type": "int",
+          "wire_name": "prompt_length"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceResponseModeChanged",
+      "wire_name": "Voice Response Mode Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always",
+            "unknown"
+          ]
+        },
+        "modeInt": {
+          "type": "int",
+          "wire_name": "mode_int"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesAllVisibilityChanged",
+      "wire_name": "All Facts Visibility Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "newVisibility": {
+          "type": "enum",
+          "wire_name": "new_visibility",
+          "values": [
+            "private",
+            "public",
+            "shared"
+          ]
+        },
+        "factsCount": {
+          "type": "int",
+          "wire_name": "facts_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "showDiscardedMemoriesToggled",
+      "wire_name": "Show Discarded Memories Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDiscarded": {
+          "type": "bool",
+          "wire_name": "show_discarded"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "showDiscardedConversationsToggled",
+      "wire_name": "Show Discarded Conversations Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDiscarded": {
+          "type": "bool",
+          "wire_name": "show_discarded"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deletedConversationsFilterToggled",
+      "wire_name": "Deleted Conversations Filter Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "showDeleted": {
+          "type": "bool",
+          "wire_name": "show_deleted"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterMyApps",
+      "wire_name": "Apps Filter My Apps",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterInstalled",
+      "wire_name": "Apps Filter Installed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "dailySummaryToggled",
+      "wire_name": "Daily Summary Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "aiAppGeneratorAppGenerated",
+      "wire_name": "AI App Generator App Generated",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "success": {
+          "type": "bool",
+          "wire_name": "success"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "actionItemsViewToggled",
+      "wire_name": "Action Items View Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "groupedView": {
+          "type": "bool",
+          "wire_name": "grouped_view"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallStarted",
+      "wire_name": "Phone Call Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "hasContactName": {
+          "type": "bool",
+          "wire_name": "has_contact_name"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallPageOpened",
+      "wire_name": "Phone Call Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallVerificationStarted",
+      "wire_name": "Phone Call Verification Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallVerificationCompleted",
+      "wire_name": "Phone Call Verification Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallConnected",
+      "wire_name": "Phone Call Connected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallDialpadOpened",
+      "wire_name": "Phone Call Dialpad Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallUpsellUpgradeTapped",
+      "wire_name": "Phone Call Upsell Upgrade Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "phoneCallUpsellDismissed",
+      "wire_name": "Phone Call Upsell Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceDisconnected",
+      "wire_name": "Device Disconnected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speechProfileCapturePageClicked",
+      "wire_name": "Speech Profile Capture Page Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speechProfileSkipped",
+      "wire_name": "Speech Profile Skipped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speechProfileUploadSucceeded",
+      "wire_name": "Speech Profile Upload Succeeded",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speechProfileEmbeddingStored",
+      "wire_name": "Speech Profile Embedding Stored",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speechProfileContinued",
+      "wire_name": "Onboarding Step Speech Profile Continued",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "useWithoutDeviceOnboardingWelcome",
+      "wire_name": "Use Without Device Onboarding Welcome",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "useWithoutDeviceOnboardingFindDevices",
+      "wire_name": "Use Without Device Onboarding Find Devices",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesPageEditedMemory",
+      "wire_name": "Fact Page Edited Fact",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesPageCreateMemoryBtn",
+      "wire_name": "Fact Page Create Fact Button Pressed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "memoriesManagementSheetOpened",
+      "wire_name": "Facts Management Sheet Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationMergeSelectionModeEntered",
+      "wire_name": "Conversation Merge Selection Mode Entered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationMergeSelectionModeExited",
+      "wire_name": "Conversation Merge Selection Mode Exited",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "addManualConversationClicked",
+      "wire_name": "Add Manual Memory Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "userIDCopied",
+      "wire_name": "User ID Copied",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "exportMemories",
+      "wire_name": "Dev Mode Export Memories",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "importMemories",
+      "wire_name": "Dev Mode Import Memories",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "importedMemories",
+      "wire_name": "Dev Mode Imported Memories",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "supportContacted",
+      "wire_name": "Support Contacted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeSucceeded",
+      "wire_name": "Upgrade Succeeded",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeCancelled",
+      "wire_name": "Upgrade Cancelled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeModalDismissed",
+      "wire_name": "Upgrade Modal Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeModalClicked",
+      "wire_name": "Upgrade Modal Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelFlowStarted",
+      "wire_name": "Subscription Cancel Flow Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "connectFriendClicked",
+      "wire_name": "Connect Friend Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "disconnectFriendClicked",
+      "wire_name": "Disconnect Friend Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "batteryIndicatorClicked",
+      "wire_name": "Battery Indicator Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "addedPerson",
+      "wire_name": "Added Person",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "removedPerson",
+      "wire_name": "Removed Person",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "tagSheetOpened",
+      "wire_name": "Tag Sheet Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "untaggedSegment",
+      "wire_name": "Untagged Segment",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSegmentTextStarted",
+      "wire_name": "Edit Segment Text Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSegmentTextSaved",
+      "wire_name": "Edit Segment Text Saved",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSegmentTextCancelled",
+      "wire_name": "Edit Segment Text Cancelled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSummaryStarted",
+      "wire_name": "Edit Summary Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSummarySaved",
+      "wire_name": "Edit Summary Saved",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "editSummaryCancelled",
+      "wire_name": "Edit Summary Cancelled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deleteAccountClicked",
+      "wire_name": "Delete Account Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deleteAccountConfirmed",
+      "wire_name": "Delete Account Confirmed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deleteAccountCancelled",
+      "wire_name": "Delete Account Cancelled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deleteAccountFlowStarted",
+      "wire_name": "Delete Account Flow Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterOpened",
+      "wire_name": "Apps Filter Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsFilterApplied",
+      "wire_name": "Apps Filter Applied",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appsClearFilters",
+      "wire_name": "Apps Clear Filters",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "brainMapOpened",
+      "wire_name": "Brain Map Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "brainMapShareClicked",
+      "wire_name": "Brain Map Share Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "actionItemsPageOpened",
+      "wire_name": "Action Items Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "actionItemsDateFilterCleared",
+      "wire_name": "Action Items Date Filter Cleared",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "trainingDataOptInSubmitted",
+      "wire_name": "Training Data Opt-In Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "trainingDataOptInApproved",
+      "wire_name": "Training Data Opt-In Approved",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "calendarFilterCleared",
+      "wire_name": "Calendar Filter Cleared",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "searchBarFocused",
+      "wire_name": "Search Bar Focused",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "searchQueryCleared",
+      "wire_name": "Search Query Cleared",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "exportTasksBannerClicked",
+      "wire_name": "Export Tasks Banner Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "createFolderButtonClicked",
+      "wire_name": "Create Folder Button Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "wrappedPageOpened",
+      "wire_name": "Wrapped Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "wrappedBannerClicked",
+      "wire_name": "Wrapped Banner Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "wrappedGenerationStarted",
+      "wire_name": "Wrapped Generation Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "dailySummarySettingsOpened",
+      "wire_name": "Daily Summary Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "permissionsSettingsOpened",
+      "wire_name": "Permissions Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "permissionsInterstitialShown",
+      "wire_name": "Permissions Interstitial Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "permissionsInterstitialCompleted",
+      "wire_name": "Permissions Interstitial Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "permissionsInterstitialSkipped",
+      "wire_name": "Permissions Interstitial Skipped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "recapTabOpened",
+      "wire_name": "Recap Tab Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "whatsNewOpened",
+      "wire_name": "Whats New Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "dailyScoreHelpTapped",
+      "wire_name": "Daily Score Help Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "integrationsPageOpened",
+      "wire_name": "Integrations Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paymentsPageOpened",
+      "wire_name": "Payments Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "connectDevicePageOpened",
+      "wire_name": "Connect Device Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "getOmiDeviceClicked",
+      "wire_name": "Get Omi Device Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "connectionGuideOpened",
+      "wire_name": "Connection Guide Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "dataPrivacyPageOpened",
+      "wire_name": "Data Privacy Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "aiAppGeneratorPageOpened",
+      "wire_name": "AI App Generator Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "importHistoryPageOpened",
+      "wire_name": "Import History Page Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "liveTranscriptCardClicked",
+      "wire_name": "Live Transcript Card Clicked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "hasSegments": {
+          "type": "bool",
+          "wire_name": "has_segments"
+        },
+        "hasPhotos": {
+          "type": "bool",
+          "wire_name": "has_photos"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        },
+        "photoCount": {
+          "type": "int",
+          "wire_name": "photo_count"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appleRemindersSyncCompleted",
+      "wire_name": "Apple Reminders Sync Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "pendingExported": {
+          "type": "int",
+          "wire_name": "pending_exported"
+        },
+        "syncedChecked": {
+          "type": "int",
+          "wire_name": "synced_checked"
+        },
+        "completionsPulled": {
+          "type": "int",
+          "wire_name": "completions_pulled"
+        },
+        "completionsPushed": {
+          "type": "int",
+          "wire_name": "completions_pushed"
+        },
+        "titleDuePulled": {
+          "type": "int",
+          "wire_name": "title_due_pulled"
+        },
+        "titleDuePushed": {
+          "type": "int",
+          "wire_name": "title_due_pushed"
+        },
+        "remindersUnlinked": {
+          "type": "int",
+          "wire_name": "reminders_unlinked"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "wrappedGenerationCompleted",
+      "wire_name": "Wrapped Generation Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "totalConversations": {
+          "type": "int",
+          "wire_name": "total_conversations"
+        },
+        "totalMinutes": {
+          "type": "int",
+          "wire_name": "total_minutes"
+        },
+        "daysActive": {
+          "type": "int",
+          "wire_name": "days_active"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "typeExtensionProbe",
+      "wire_name": "Type Extension Probe",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        },
+        "count": {
+          "type": "int",
+          "wire_name": "count"
+        },
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always"
+          ]
+        }
+      },
+      "consumers": [
+        "c8-type-extension"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appReviewOpportunity",
+      "wire_name": "App Review Opportunity",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        },
+        "decision": {
+          "type": "enum",
+          "wire_name": "decision",
+          "values": [
+            "eligible",
+            "not_ios_or_android",
+            "storage_error",
+            "not_familiar",
+            "migration_cooldown",
+            "cooldown",
+            "budget_exhausted",
+            "version_already_attempted",
+            "session_already_attempted",
+            "lifecycle_not_appropriate",
+            "lifecycle_changed",
+            "availability_error",
+            "unavailable",
+            "request_error"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appReviewRequestAttempted",
+      "wire_name": "App Review Request Attempted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appReviewRequestFinished",
+      "wire_name": "App Review Request Finished",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "moment": {
+          "type": "enum",
+          "wire_name": "moment",
+          "values": [
+            "daily_summary_read",
+            "conversation_read"
+          ]
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "returned",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "productJourneyStarted",
+      "wire_name": "Product Journey Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "attempt",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyFirstResult",
+      "wire_name": "Product Journey First Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "progress",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyOutcome",
+      "wire_name": "Product Journey Outcome",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "outcome",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "success",
+            "empty",
+            "failure",
+            "cancelled",
+            "superseded",
+            "unobserved"
+          ]
+        },
+        "failure": {
+          "type": "enum",
+          "wire_name": "failure",
+          "values": [
+            "none",
+            "network",
+            "server",
+            "unauthorized",
+            "permission_denied",
+            "quota",
+            "timeout",
+            "invalid_response",
+            "incomplete",
+            "unknown"
+          ]
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "resultCount": {
+          "type": "int",
+          "wire_name": "result_count"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productValueEvent",
+      "wire_name": "Product Value",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "result_viewed",
+            "copied",
+            "shared",
+            "task_completed",
+            "memory_kept",
+            "feedback_helpful",
+            "search_result_opened",
+            "recording_recovered"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": null
+    }
+  ]
+}

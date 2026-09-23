@@ -30,7 +30,28 @@ from testing.import_isolation import load_module_fresh, stub_modules
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _detect_speaker_from_text(text: str):
+def _make_assigned_conversation():
+    """Realistic assigned-conversation dict as the sync intake returns it.
+
+    The intake (``ingest_sync_conversation``) owns persistence now; pipeline
+    tests assert on the ``incoming`` dict handed to it and on this shape
+    coming back.
+    """
+    from datetime import datetime, timezone
+
+    return {
+        'id': 'test-id',
+        'sync_relevance': 'keep',
+        'started_at': datetime.fromtimestamp(1700000000, tz=timezone.utc),
+        'finished_at': datetime.fromtimestamp(1700000002, tz=timezone.utc),
+        'transcript_segments': [
+            {'start': 0.0, 'end': 1.0, 'text': 'Hello', 'speaker': 'SPEAKER_00'},
+            {'start': 1.0, 'end': 2.0, 'text': 'world', 'speaker': 'SPEAKER_00'},
+        ],
+    }
+
+
+def _detect_speaker_from_text(text: str, language=None):
     match = re.search(r'\b(?:my name is|i am)\s+([a-z][a-z-]*)', text, re.IGNORECASE)
     return match.group(1).capitalize() if match else None
 
@@ -155,6 +176,7 @@ def _build_fakes() -> dict:
     speaker_embedding = ModuleType('utils.stt.speaker_embedding')
     speaker_embedding.extract_embedding_from_bytes = MagicMock()
     speaker_embedding.compare_embeddings = _compare_embeddings
+    speaker_embedding.speaker_embedding_configured = lambda: True
     speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
     fakes['utils.stt.speaker_embedding'] = speaker_embedding
 
@@ -164,6 +186,7 @@ def _build_fakes() -> dict:
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_audio_merge_cloud_tasks_oidc = MagicMock(return_value=0)
     cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
     fakes['utils.cloud_tasks'] = cloud_tasks
 
@@ -177,6 +200,22 @@ def _build_fakes() -> dict:
     fakes['google.cloud.tasks_v2'] = tasks_v2
 
     return fakes
+
+
+def _build_intake_fakes() -> dict:
+    """Lifecycle stub the refactored pipeline imports at its intake seam.
+
+    ``utils.sync.assignment``, ``utils.sync.merge_dedupe``,
+    ``utils.conversations.deterministic_minimum``, ``utils.manual_speaker_assignments``,
+    and ``utils.stt.speaker_identity`` are dependency-free, so the real
+    implementations are exec'd into ``fakes`` by the fixture instead.
+    ``utils.conversations.lifecycle`` carries heavyweight database imports, so
+    it is AutoMocked here and tests patch ``ingest_sync_conversation`` at this
+    local-import site.
+    """
+    from testing.import_isolation import AutoMockModule
+
+    return {'utils.conversations.lifecycle': AutoMockModule('utils.conversations.lifecycle')}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -193,11 +232,31 @@ def sync_module():
     import google.cloud.storage as _gcs
 
     fakes = _build_fakes()
+    _intake_fakes = _build_intake_fakes()
     _orig_storage_client = getattr(_gcs, 'Client', None)
     _gcs.Client = MagicMock
 
+    import importlib.util as _il
+
+    def _load_real(name: str, relative: str):
+        spec = _il.spec_from_file_location(name, os.path.join(str(_BACKEND), *relative.split('/')))
+        module = _il.module_from_spec(spec)
+        fakes[name] = module
+        spec.loader.exec_module(module)
+
+    # The new seam's pure imports (merge_dedupe, deterministic_minimum, assignment)
+    # are dependency-free production code: exec the real modules so they bind the
+    # real models.* (pydantic-only, importable here) instead of mocks. Assignment
+    # also imports the receipt-policy and allocator modules at scope; load those
+    # for real first so a stubbed utils tree cannot substitute MagicMocks.
+    _load_real('utils.sync.merge_dedupe', 'utils/sync/merge_dedupe.py')
+    _load_real('utils.conversations.deterministic_minimum', 'utils/conversations/deterministic_minimum.py')
+    _load_real('utils.manual_speaker_assignments', 'utils/manual_speaker_assignments.py')
+    _load_real('utils.stt.speaker_identity', 'utils/stt/speaker_identity.py')
+    _load_real('utils.sync.assignment', 'utils/sync/assignment.py')
+
     try:
-        with stub_modules(fakes):
+        with stub_modules({**fakes, **_intake_fakes}):
             load_module_fresh("routers.sync", os.path.join(str(_BACKEND), "routers", "sync.py"))
             load_module_fresh(
                 "utils.sync.pipeline",
@@ -605,21 +664,17 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'multi'
         assert kwargs['return_language'] is True
 
-    @patch('utils.sync.pipeline.process_conversation')
     @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.pipeline.prerecorded')
     @patch('utils.sync.pipeline.delete_syncing_temporal_file')
     @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_single_language_trusts_user_language(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
-    ):
+    def test_single_language_trusts_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest):
         """Single-language mode should trust user's language, not Deepgram's detection."""
         from utils.sync.pipeline import process_segment
 
         # Deepgram detects 'fr' but user chose 'en' in single-language mode
         mock_dg.return_value = (self._make_mock_words(), 'fr')
-        mock_process.return_value = MagicMock(id='test-id')
 
         prefs = {'vocabulary': [], 'language': 'en', 'single_language_mode': True}
 
@@ -627,43 +682,55 @@ class TestProcessSegmentPreferences:
         lock = threading.Lock()
         errors = []
 
-        process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
+        assigned = _make_assigned_conversation()
 
-        # process_conversation should be called with user's language, not detected
-        call_args = mock_process.call_args
-        # The language arg is the second positional argument
-        assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
+        with patch(
+            'utils.conversations.lifecycle.ingest_sync_conversation',
+            return_value=(assigned, True, assigned['transcript_segments']),
+        ) as mock_intake:
+            process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
 
-    @patch('utils.sync.pipeline.process_conversation')
+        # The intake must be handed the user's language, not Deepgram's detected one
+        incoming = mock_intake.call_args[0][1]
+        assert incoming['language'] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
+        assert 'test-id' in response['new_memories']
+
     @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.pipeline.prerecorded')
     @patch('utils.sync.pipeline.delete_syncing_temporal_file')
     @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_private_cloud_sync_flag_passed_to_new_conversation(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
     ):
         """New offline sync conversations must retain private-cloud audio metadata intent."""
         from utils.sync.pipeline import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
-        mock_process.return_value = MagicMock(id='test-id')
 
         response = {'new_memories': set(), 'updated_memories': set()}
         lock = threading.Lock()
         errors = []
 
-        process_segment(
-            'test/path.bin',
-            'uid123',
-            response,
-            lock,
-            errors,
-            private_cloud_sync_enabled=True,
-        )
+        assigned = _make_assigned_conversation()
 
-        create_conversation = mock_process.call_args[0][2]
-        assert create_conversation.private_cloud_sync_enabled is True
+        with patch(
+            'utils.conversations.lifecycle.ingest_sync_conversation',
+            return_value=(assigned, True, assigned['transcript_segments']),
+        ) as mock_intake:
+            process_segment(
+                'test/path.bin',
+                'uid123',
+                response,
+                lock,
+                errors,
+                private_cloud_sync_enabled=True,
+            )
+
+        # The private-cloud intent must reach the conversation intake
+        incoming = mock_intake.call_args[0][1]
+        assert incoming['private_cloud_sync_enabled'] is True
+        assert 'test-id' in response['new_memories']
 
 
 # ---------------------------------------------------------------------------
@@ -865,9 +932,21 @@ class TestBuildPersonEmbeddingsCache:
 
         mock_users_db.get_user_speaker_embedding.return_value = None
         mock_users_db.get_people.return_value = [
-            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': [0.2] * 512, 'speech_samples': ['sample-1']},
+            {
+                'id': 'p1',
+                'name': 'Alice',
+                'speaker_embedding': [0.2] * 512,
+                'speech_samples': ['sample-1'],
+                'speech_samples_version': 3,
+            },
             {'id': 'p2', 'name': 'Bob'},  # no embedding
-            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': [0.3] * 512, 'speech_samples': ['sample-3']},
+            {
+                'id': 'p3',
+                'name': 'Carol',
+                'speaker_embedding': [0.3] * 512,
+                'speech_samples': ['sample-3'],
+                'speech_samples_version': 3,
+            },
         ]
 
         cache = build_person_embeddings_cache('uid1')
@@ -890,13 +969,14 @@ class TestBuildPersonEmbeddingsCache:
 
 
 class TestExtractSpeakerClipWav:
-    """Verify _extract_speaker_clip_wav clips audio correctly."""
+    """Verify pooled WAV extraction preserves bounds and the total evidence floor."""
 
     def test_extracts_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 3.0)
+        evidence = collect_speaker_audio(audio, [(1.0, 3.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         # Verify it's valid WAV
         with wave.open(io.BytesIO(clip), 'rb') as wf:
@@ -904,27 +984,30 @@ class TestExtractSpeakerClipWav:
             assert 1.8 < clip_duration < 2.2  # ~2 seconds
 
     def test_returns_none_for_short_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.5)  # only 0.5s < 1.0s threshold
+        evidence = collect_speaker_audio(audio, [(1.0, 1.5)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # only 0.5s < 1.0s threshold
         assert clip is None
 
     def test_caps_at_10_seconds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=20.0)
-        clip = _extract_speaker_clip_wav(audio, 0.0, 15.0)
+        evidence = collect_speaker_audio(audio, [(0.0, 15.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
             assert clip_duration <= 10.1  # should be capped at ~10s
 
     def test_clamps_to_audio_bounds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=3.0)
-        clip = _extract_speaker_clip_wav(audio, -1.0, 5.0)
+        evidence = collect_speaker_audio(audio, [(-1.0, 5.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
@@ -1061,6 +1144,27 @@ class TestIdentifySpeakersForSegments:
         identify_speakers_for_segments(segments, None, {}, 'uid1')
 
         assert segments[0].person_id == 'p1'
+
+    def test_unset_embedding_url_skips_voice_match(self, monkeypatch):
+        import utils.sync.pipeline as sync_module
+
+        mock_extract = MagicMock()
+        mock_users_db = MagicMock()
+        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        monkeypatch.setattr(sync_module, 'extract_embedding_from_bytes', mock_extract)
+        monkeypatch.setattr(sync_module, 'speaker_embedding_configured', lambda: False)
+        monkeypatch.setattr(sync_module, 'users_db', mock_users_db)
+        cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),
+        ]
+        audio = _make_wav_bytes(duration_sec=5.0)
+
+        sync_module.identify_speakers_for_segments(segments, audio, cache, 'uid1')
+
+        mock_extract.assert_not_called()
+        assert segments[0].person_id == 'p2'
+        assert not segments[0].is_user
 
     @patch('utils.sync.pipeline.users_db')
     def test_no_audio_still_runs_text_detection(self, mock_users_db):
@@ -1438,7 +1542,7 @@ class TestSpeakerIdExceptionHandling:
             {'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00', 'text': 'world'},
         ]
 
-    @patch('utils.sync.pipeline.process_conversation')
+    @patch('utils.conversations.lifecycle.ingest_sync_conversation')
     @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.pipeline.prerecorded')
@@ -1447,12 +1551,13 @@ class TestSpeakerIdExceptionHandling:
     @patch('utils.sync.pipeline.identify_speakers_for_segments', side_effect=RuntimeError("embedding API down"))
     @patch('utils.sync.pipeline._download_audio_bytes', return_value=b'audio')
     def test_speaker_id_exception_does_not_break_processing(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_intake
     ):
         from utils.sync.pipeline import process_segment
 
         mock_dg.return_value = (self._mock_words(), 'en')
-        mock_process.return_value = MagicMock(id='test-id')
+        assigned = _make_assigned_conversation()
+        mock_intake.return_value = (assigned, True, assigned['transcript_segments'])
 
         cache = {'p1': {'embedding': np.ones((1, 512)), 'name': 'Alice'}}
         response = {'new_memories': set(), 'updated_memories': set()}
@@ -1470,7 +1575,7 @@ class TestSpeakerIdExceptionHandling:
         )
 
         # Conversation should still be created despite speaker ID failure
-        mock_process.assert_called_once()
+        mock_intake.assert_called_once()
         assert 'test-id' in response['new_memories']
 
 
@@ -1478,11 +1583,12 @@ class TestSpeakerIdBoundaries:
     """Verify boundary conditions for speaker identification."""
 
     def test_exact_threshold_clip_duration(self):
-        """Clip exactly at SPEAKER_ID_MIN_AUDIO (1.0s) should be extracted."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        """Clip exactly at the total evidence floor (1.0s) should be extracted."""
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 2.0)  # exactly 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 2.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # exactly 1.0s
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             duration = wf.getnframes() / wf.getframerate()
@@ -1490,10 +1596,11 @@ class TestSpeakerIdBoundaries:
 
     def test_just_below_threshold_clip_duration(self):
         """Clip just below 1.0s threshold should return None."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.99)  # 0.99s < 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 1.99)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # 0.99s < 1.0s
         assert clip is None
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')

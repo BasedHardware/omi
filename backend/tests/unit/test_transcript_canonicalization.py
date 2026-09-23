@@ -324,8 +324,10 @@ def test_prepare_for_write_canonicalizes_before_compressing() -> None:
     """
     source = (_BACKEND / 'database' / 'conversations.py').read_text()
     write_fn = source.split('def _prepare_conversation_for_write')[1].split('\ndef ')[0]
+    protect_fn = source.split('def _protect_json_value')[1].split('\ndef ')[0]
     assert 'canonicalize_transcript_segments_for_storage' in write_fn
-    assert write_fn.index('canonicalize_transcript_segments_for_storage') < write_fn.index('json.dumps')
+    assert write_fn.index('canonicalize_transcript_segments_for_storage') < write_fn.index('_protect_json_value')
+    assert 'json.dumps' in protect_fn
     assert 'canonicalize_transcript_segments_for_storage' in (_BACKEND / 'database' / 'conversations.py').read_text()
 
 

@@ -84,6 +84,7 @@ final class QuickActionsIconPatcher: NSObject {
 @objc class AppDelegate: FlutterAppDelegate {
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
+  private var capturePolicyChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -165,6 +166,58 @@ final class QuickActionsIconPatcher: NSObject {
               environment: PhoneMicLiveEnvironment.make(sink: phoneMicFlutterApi))
           phoneMicController = micController
           PhoneMicHostApiSetup.setUp(binaryMessenger: messenger, api: PhoneMicHostApiImpl(controller: micController))
+      }
+
+      // Native capture admission latch. Mute is applied before Dart persists
+      // its preference; unmute is released only after the durable canonical
+      // preference matches the requested revision.
+      capturePolicyChannel = FlutterMethodChannel(
+          name: "com.omi/capture_policy",
+          binaryMessenger: controller.binaryMessenger
+      )
+      capturePolicyChannel?.setMethodCallHandler { call, result in
+          if call.method == "getRevision" {
+              result(CaptureAdmissionPolicy.currentProcessRevision())
+              return
+          }
+          guard call.method == "setMuted" else {
+              result(FlutterMethodNotImplemented)
+              return
+          }
+          guard let args = call.arguments as? [String: Any],
+                let muted = args["muted"] as? Bool,
+                let revision = CaptureAdmissionPolicy.channelRevision(args["revision"]),
+                revision >= 0 else {
+              result(FlutterError(
+                  code: "INVALID_CAPTURE_POLICY",
+                  message: "setMuted requires {muted: bool, revision: nonnegative int}",
+                  details: nil
+              ))
+              return
+          }
+
+          switch CaptureAdmissionPolicy.applyProcessUpdate(
+              muted: muted,
+              revision: revision,
+              defaults: .standard
+          ) {
+          case .applied:
+              // This acknowledges the process latch only. It deliberately
+              // does not wait for BLE/audio queue drains.
+              result(nil)
+          case let .stale(currentRevision):
+              result(FlutterError(
+                  code: "STALE_CAPTURE_POLICY",
+                  message: "capture policy revision is older than native state",
+                  details: ["currentRevision": currentRevision]
+              ))
+          case .persistenceNotReady:
+              result(FlutterError(
+                  code: "CAPTURE_POLICY_NOT_PERSISTED",
+                  message: "unmute requires the matching durable capture policy",
+                  details: nil
+              ))
+          }
       }
 
       // Retrieve the link from parameters

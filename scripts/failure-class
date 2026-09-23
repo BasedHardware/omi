@@ -379,14 +379,37 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 
 def commit_subjects(root: Path, base: str, head: str) -> tuple[str, list[str]]:
+    """Commits reachable from *head* and not from the merge-base with *base*.
+
+    Use two-dot log from the merge-base, never ``base...head`` (that is
+    git-log's symmetric difference and would pick up unique base-side
+    commits) and never ``--first-parent`` / ``HEAD~`` (GitHub's merge ref
+    has BASE as first parent, so those walk the base instead of the PR).
+    ``--no-merges`` drops the synthetic merge commit so the subject list
+    is the same on the branch head and on either parent order of a merge.
+    """
     common = merge_base(root, base, head)
-    subjects = run_git(root, "log", "--format=%s", f"{common}..{head}")
+    subjects = run_git(root, "log", "--format=%s", "--no-merges", f"{common}..{head}")
     return common, [subject for subject in subjects.splitlines() if subject]
 
 
-def changed_paths_in_range(root: Path, common: str, head: str) -> list[str]:
-    output = run_git(root, "diff", "--name-only", common, head)
+def changed_paths_in_range(root: Path, base: str, head: str) -> list[str]:
+    """PR file list: three-dot diff of *base*...*head*, never first-parent."""
+    output = run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", f"{base}...{head}")
     return [line for line in output.splitlines() if line]
+
+
+def scope_hint_pattern(hint: str) -> str:
+    """Turn a `scope_hints` entry into an fnmatch pattern.
+
+    Authors write directory prefixes with a trailing slash
+    (``app/lib/pages/home/``). fnmatch treats that as a literal, so it never
+    matches a file under the directory. Expand a slash-terminated hint that
+    is not already a glob to ``<hint>**``.
+    """
+    if hint.endswith("/") and not any(character in hint for character in "*?["):
+        return hint + "**"
+    return hint
 
 
 def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -> list[Definition]:
@@ -401,33 +424,80 @@ def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -
     matched: list[Definition] = []
     for definition in definitions:
         hints = definition.data.get("scope_hints") or []
-        if any(fnmatch(path, hint) for hint in hints for path in paths):
+        if any(fnmatch(path, scope_hint_pattern(hint)) for hint in hints for path in paths):
             matched.append(definition)
     return matched
 
 
-def added_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+def tracked_paths(root: Path) -> list[str]:
+    return [line for line in run_git(root, "ls-files").splitlines() if line]
+
+
+def dead_scope_hint_errors(root: Path, common: str, head: str) -> list[dict[str, Any]]:
+    """Fail closed when a changed definition's hint matches zero tracked files.
+
+    A hint that matches nothing is silently skipped during candidate narrowing,
+    which is fail-open: the class disappears from the list and the author
+    invents a new one. Checking every current hint on a changed definition,
+    not only newly added strings, is required because an already-dead hint
+    never appears in current-minus-previous and would stay fail-open even
+    when its own JSON is edited.
+    """
+    try:
+        tracked = tracked_paths(root)
+        changed = changed_definition_paths(root, common, head)
+    except CliError as exc:
+        return [error("scope_hint_check_failed", str(exc))]
+    errors: list[dict[str, Any]] = []
+    for relative in changed:
+        data = definition_json_at_ref(root, head, relative)
+        if data is None:
+            try:
+                data = json.loads((root / relative).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+        if not isinstance(data, dict):
+            continue
+        current = data.get("scope_hints") or []
+        if not isinstance(current, list):
+            continue
+        for hint in current:
+            if not isinstance(hint, str) or not hint.strip():
+                continue
+            pattern = scope_hint_pattern(hint)
+            if not any(fnmatch(path, pattern) for path in tracked):
+                errors.append(
+                    error(
+                        "scope_hint_matches_nothing",
+                        f"scope_hint {hint!r} matches zero tracked paths; a hint that matches "
+                        "nothing fails open and must be a glob that hits at least one file",
+                        path=str(relative),
+                        hint=hint,
+                    )
+                )
+    return errors
+
+
+def added_definition_paths(root: Path, base: str, head: str) -> list[Path]:
     output = run_git(
         root,
         "diff",
         "--name-only",
         "--diff-filter=A",
-        common,
-        head,
+        f"{base}...{head}",
         "--",
         str(DEFINITIONS_RELATIVE_PATH),
     )
     return [Path(line) for line in output.splitlines() if line]
 
 
-def changed_definition_paths(root: Path, common: str, head: str) -> list[Path]:
+def changed_definition_paths(root: Path, base: str, head: str) -> list[Path]:
     output = run_git(
         root,
         "diff",
         "--name-only",
         "--diff-filter=ACMRD",
-        common,
-        head,
+        f"{base}...{head}",
         "--",
         str(DEFINITIONS_RELATIVE_PATH),
     )
@@ -513,9 +583,10 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     changed_definition_paths_in_range: list[Path] = []
     if common:
         try:
-            changed_definition_paths_in_range = changed_definition_paths(root, common, args.head)
+            changed_definition_paths_in_range = changed_definition_paths(root, args.base, args.head)
         except CliError as exc:
             errors.append(error("definition_change_check_failed", str(exc)))
+        errors.extend(dead_scope_hint_errors(root, common, args.head))
     if declaration is None:
         if has_fix_commit:
             errors.append(
@@ -529,7 +600,7 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     elif declaration == "new":
         if common:
             try:
-                added_paths = added_definition_paths(root, common, args.head)
+                added_paths = added_definition_paths(root, args.base, args.head)
             except CliError as exc:
                 errors.append(error("new_definition_check_failed", str(exc)))
             else:
@@ -654,10 +725,11 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
     narrowing = "none: every definition is listed"
     if not args.all_candidates and common:
         try:
-            paths = changed_paths_in_range(root, common, args.head)
+            paths = changed_paths_in_range(root, args.base, args.head)
         except CliError as exc:
             errors.append(error("changed_path_check_failed", str(exc)))
         else:
+            errors.extend(dead_scope_hint_errors(root, common, args.head))
             matched = candidates_matching_scope(definitions, paths)
             # Never narrow to nothing: an empty list reads as "no class can apply",
             # which is a classification this CLI does not make.

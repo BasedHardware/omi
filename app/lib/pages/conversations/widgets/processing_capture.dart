@@ -660,7 +660,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   icon: muted ? FontAwesomeIcons.microphone : FontAwesomeIcons.microphoneSlash,
                   label: muted ? context.l10n.unmute : context.l10n.mute,
                   primary: false,
-                  onTap: () => provider.toggleOfflineMute(),
+                  onTap: () async {
+                    try {
+                      await provider.toggleOfflineMute();
+                    } catch (_) {
+                      if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
+                    }
+                  },
                 ),
                 const SizedBox(width: 10),
                 _buildOfflineControl(

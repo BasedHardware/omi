@@ -48,6 +48,7 @@ import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
 import { buildTimelineDayGroups, countTimelineItems } from '@/lib/conversationTimeline';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 import {
   MIN_CONVERSATION_GALLERY_WIDTH,
   resizeConversationDetailPanel,
@@ -57,7 +58,9 @@ import {
 const DEFAULT_PANEL_WIDTH = 480;
 
 type Selection =
-  { kind: 'conversation'; id: string } | { kind: 'recap'; id: string } | null;
+  | { kind: 'conversation'; id: string }
+  | { kind: 'recap'; id: string }
+  | null;
 
 export function ConversationSplitView() {
   const { user } = useAuth();
@@ -71,8 +74,8 @@ export function ConversationSplitView() {
     urlRecapId
       ? { kind: 'recap', id: urlRecapId }
       : urlConversationId
-        ? { kind: 'conversation', id: urlConversationId }
-        : null,
+      ? { kind: 'conversation', id: urlConversationId }
+      : null,
   );
   const selectionRef = useRef(selection);
   const setSelection = useCallback((nextSelection: Selection) => {
@@ -188,7 +191,7 @@ export function ConversationSplitView() {
         type: 'conversation',
         id: selectedConversation.id,
         title: selectedConversation.structured.title,
-        summary: selectedConversation.structured.overview,
+        summary: selectConversationSummary(selectedConversation).content,
       });
     } else if (selection?.kind === 'recap' && selectedRecap) {
       setContext({
@@ -669,7 +672,7 @@ export function ConversationSplitView() {
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       <PageToolbar
         search={{
           value: searchQuery,
@@ -678,7 +681,7 @@ export function ConversationSplitView() {
           placeholder: 'Search conversations...',
         }}
         controls={
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {foldersLoading ? (
               <FolderTabsSkeleton />
             ) : (
@@ -702,19 +705,19 @@ export function ConversationSplitView() {
             <button
               onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-control flex-shrink-0 whitespace-nowrap',
+                'flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5',
                 'text-sm font-medium transition-colors',
                 isSelectionMode
                   ? 'bg-white text-bg-primary hover:bg-white/90'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
+                  : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
               )}
             >
               <span className="t-icon-swap" data-state={isSelectionMode ? 'b' : 'a'}>
                 <span className="t-icon" data-icon="a">
-                  <CheckSquare className="w-4 h-4" />
+                  <CheckSquare className="h-4 w-4" />
                 </span>
                 <span className="t-icon" data-icon="b">
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </span>
               </span>
               <TextSwap text={isSelectionMode ? 'Cancel' : 'Select'} />
@@ -731,18 +734,18 @@ export function ConversationSplitView() {
               {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
                 <div className="flex items-center gap-2 text-xs text-text-tertiary">
                   {isSearching && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-tertiary">
-                      <SearchIcon className="w-3 h-3" />
+                    <span className="flex items-center gap-1 rounded-chip bg-bg-tertiary px-2 py-0.5">
+                      <SearchIcon className="h-3 w-3" />
                       {searchResults.length} results
                     </span>
                   )}
                   {filterDate && (
-                    <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
+                    <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
                       Filtered by date
                     </span>
                   )}
                   {selectedFolderId === FOLDER_STARRED && (
-                    <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-text-secondary">
+                    <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
                       Showing starred only
                     </span>
                   )}
@@ -769,11 +772,11 @@ export function ConversationSplitView() {
       />
 
       {/* Gallery + detail pane */}
-      <div ref={splitViewRef} className="flex flex-1 overflow-hidden w-full">
+      <div ref={splitViewRef} className="flex w-full flex-1 overflow-hidden">
         {/* Gallery */}
         <div
           className={cn(
-            'flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-bg-primary',
+            'flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary',
             // On mobile, hide the gallery when a tile is open
             selection ? 'hidden lg:flex' : 'flex',
           )}
@@ -787,31 +790,31 @@ export function ConversationSplitView() {
 
           {/* Error state */}
           {listError && !isSearching && (
-            <div className="m-5 p-4 rounded-section bg-error/10 border border-error/20 text-error text-sm">
+            <div className="m-5 rounded-section border border-error/20 bg-error/10 p-4 text-sm text-error">
               {listError}
             </div>
           )}
 
           {/* Empty state */}
           {isEmpty && !listError && (
-            <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-14 h-14 rounded-section bg-bg-tertiary flex items-center justify-center mb-3">
+            <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
                 {isSearching ? (
-                  <SearchIcon className="w-6 h-6 text-text-quaternary" />
+                  <SearchIcon className="h-6 w-6 text-text-quaternary" />
                 ) : (
-                  <CalendarDays className="w-6 h-6 text-text-quaternary" />
+                  <CalendarDays className="h-6 w-6 text-text-quaternary" />
                 )}
               </div>
-              <p className="text-text-tertiary text-sm">
+              <p className="text-sm text-text-tertiary">
                 {isSearching
                   ? 'No conversations found'
                   : filterDate
-                    ? 'Nothing on this date'
-                    : selectedFolderId === FOLDER_STARRED
-                      ? 'No starred conversations'
-                      : selectedFolderId !== FOLDER_ALL
-                        ? 'No conversations in this folder'
-                        : 'Your timeline is empty'}
+                  ? 'Nothing on this date'
+                  : selectedFolderId === FOLDER_STARRED
+                  ? 'No starred conversations'
+                  : selectedFolderId !== FOLDER_ALL
+                  ? 'No conversations in this folder'
+                  : 'Your timeline is empty'}
               </p>
             </div>
           )}
@@ -855,7 +858,7 @@ export function ConversationSplitView() {
               width: `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
             }}
             data-dragging={detailResizing ? 'true' : undefined}
-            className="t-resize w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-pane border-l border-stroke"
+            className="t-resize flex h-full w-full flex-shrink-0 flex-col overflow-hidden border-l border-stroke bg-bg-pane lg:w-auto"
           >
             <AnimatePresence mode="wait">
               <motion.div

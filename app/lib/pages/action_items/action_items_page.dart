@@ -5,13 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
@@ -35,7 +36,6 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  final AppReviewService _appReviewService = AppReviewService();
 
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
@@ -82,7 +82,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-      if (provider.actionItems.isEmpty) {
+      final phase = provider.apiViewState.phase;
+      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
+          phase == ApiViewPhase.locked ||
+          phase == ApiViewPhase.terminal ||
+          phase == ApiViewPhase.authenticationRequired ||
+          phase == ApiViewPhase.empty;
+      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -149,16 +155,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _onActionItemCompleted() async {
     PlatformManager.instance.analytics.actionItemCompleted(fromTab: 'Tasks');
-
-    final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
-
-    if (!hasCompletedFirst) {
-      await _appReviewService.markFirstActionItemCompleted();
-
-      if (mounted) {
-        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
-      }
-    }
   }
 
   void _showCreateActionItemSheet({DateTime? defaultDueDate}) {
@@ -519,12 +515,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       builder: (context, provider, child) {
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
+        final apiPhase = provider.apiViewState.phase;
+        final showTypedStatus = apiPhase == ApiViewPhase.error ||
+            apiPhase == ApiViewPhase.locked ||
+            apiPhase == ApiViewPhase.terminal ||
+            apiPhase == ApiViewPhase.authenticationRequired ||
+            apiPhase == ApiViewPhase.empty;
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
                   onRefresh: () async {
@@ -535,9 +538,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   backgroundColor: Colors.white,
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
-                      : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      : showTypedStatus
+                          ? CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                ),
+                              ],
+                            )
+                          : categorizedItems.values.every((l) => l.isEmpty)
+                              ? _buildEmptyTasksList()
+                              : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the purple corner FAB when the empty-state already
@@ -583,6 +597,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
       child: Column(
+        key: const ValueKey('omi.action_items.empty'),
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
@@ -1332,30 +1347,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-
-    if (item.dueAt == null) {
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-        return TaskCategory.overdue;
-      }
-      return TaskCategory.noDeadline;
-    }
-    final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfToday)) {
-      return TaskCategory.overdue;
-    } else if (dueDate.isBefore(startOfTomorrow)) {
-      return TaskCategory.today;
-    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-      return TaskCategory.tomorrow;
-    } else {
-      return TaskCategory.later;
-    }
-  }
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) =>
+      categoryForItem(item, Provider.of<ActionItemsProvider>(context, listen: false).showCompletedView);
 
   Widget _buildTaskItemContent(
     ActionItemWithMetadata item,

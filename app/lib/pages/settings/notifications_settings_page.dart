@@ -64,6 +64,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   // Notification frequency (0-5), default 0 (disabled)
   int _notificationFrequency = 0;
+  int _savedNotificationFrequency = 0;
 
   // Daily Summary settings
   bool _dailySummaryEnabled = true;
@@ -94,6 +95,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         }
         // Use backend value if available, otherwise use local
         _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        _savedNotificationFrequency = _notificationFrequency;
         // Sync local with backend
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
@@ -110,7 +112,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
-    await setMentorNotificationSettings(value);
+    final saved = await setMentorNotificationSettings(value);
+    if (saved) {
+      _savedNotificationFrequency = value;
+    } else if (mounted && _notificationFrequency == value) {
+      setState(() => _notificationFrequency = _savedNotificationFrequency);
+      SharedPreferencesUtil().notificationFrequency = _savedNotificationFrequency;
+    }
   }
 
   String _getFrequencyLabel(BuildContext context, int value) {
@@ -158,14 +166,22 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateDailySummaryEnabled(bool value) async {
+    final previous = _dailySummaryEnabled;
     setState(() => _dailySummaryEnabled = value);
-    await setDailySummarySettings(enabled: value);
+    if (!await setDailySummarySettings(enabled: value)) {
+      if (mounted) setState(() => _dailySummaryEnabled = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
+    final previous = _dailySummaryHour;
     setState(() => _dailySummaryHour = hour);
-    await setDailySummarySettings(hour: hour);
+    if (!await setDailySummarySettings(hour: hour)) {
+      if (mounted) setState(() => _dailySummaryHour = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 

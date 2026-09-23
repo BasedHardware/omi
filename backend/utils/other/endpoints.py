@@ -14,6 +14,7 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
+from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
@@ -80,6 +81,7 @@ def _account_deletion_status(uid: str) -> str | None:
 
 
 def enforce_account_deletion_http_access(uid: str) -> None:
+    bind_request_owner(uid)
     status = _account_deletion_status(uid)
     if account_deletion_blocks_access(status):
         raise HTTPException(
@@ -93,6 +95,7 @@ def enforce_account_deletion_http_access(uid: str) -> None:
 
 
 def enforce_account_deletion_ws_access(uid: str) -> None:
+    bind_request_owner(uid)
     try:
         status = _account_deletion_status(uid)
     except HTTPException as error:

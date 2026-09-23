@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
@@ -16,6 +16,8 @@ from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.live_continuation import resolve_live_continuation
+from utils.conversation_continuity import resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -24,6 +26,7 @@ from utils.transcribe_decisions import (
     RecordingSessionReconnectAction,
     decide_existing_conversation_action,
     decide_lifecycle_action,
+    normalize_listen_source,
     decide_recording_session_reconnect_action,
     recording_session_id_for_lifecycle_event,
     select_recording_session_id,
@@ -60,8 +63,65 @@ def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
 class LiveConversationController:
     """Own the recording-session to conversation mapping for one WebSocket."""
 
-    def __init__(self, host: Any):
+    def __init__(self, host: Any, *, clock: Callable[[], datetime] | None = None) -> None:
         self.host = host
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+
+    async def _continuation(self, proposed: dict[str, str] | None = None) -> dict[str, str] | None:
+        if not self.host.client_conversation_id or self.host.is_multi_channel:
+            return None
+        return await self.host.persistence.call(
+            resolve_live_continuation,
+            self.host.request.uid,
+            self.host.client_conversation_id,
+            source=normalize_listen_source(self.host.request.source),
+            device_id=self.host.client_device_context.client_device_id,
+            now=self.clock(),
+            timeout=self.host.conversation_creation_timeout,
+            proposed=proposed,
+        )
+
+    async def _resume_continuation(self, pointer: dict[str, str]) -> bool:
+        binding = await self.host.persistence.call(
+            lifecycle_service.open_live_recording_session,
+            self.host.request.uid,
+            pointer['recording_session_id'],
+            pointer['conversation_id'],
+        )
+        if binding['requires_rollover']:
+            return False
+        existing = binding.get('conversation_snapshot')
+        if existing is None:
+            existing = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                self.host.request.uid,
+                binding['conversation_id'],
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
+        if not existing or not resumable_continuation(
+            existing,
+            source=normalize_listen_source(self.host.request.source),
+            device_id=self.host.client_device_context.client_device_id,
+            now=self.clock(),
+            timeout=self.host.conversation_creation_timeout,
+        ):
+            return False
+        self.host.recording_session_id = pointer['recording_session_id']
+        self.host.state.current_conversation_id = binding['conversation_id']
+        self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
+        if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
+            await self.host.persistence.call(
+                conversations_db.update_conversation,
+                self.host.request.uid,
+                binding['conversation_id'],
+                {'uses_custom_stt': True},
+            )
+        await self.host.persistence.call(
+            redis_db.set_in_progress_conversation_id, self.host.request.uid, binding['conversation_id']
+        )
+        await self.host.speakers.refresh_for_conversation(binding['conversation_id'])
+        self.send_conversation_session(binding, self.host.recording_session_id)
+        return True
 
     async def _recording_session_event(self, recording_session_id: str, conversation_id: str, phase: str):
         try:
@@ -220,6 +280,10 @@ class LiveConversationController:
 
     async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
         request = self.host.request
+        if rollover:
+            continuation = await self._continuation()
+            if continuation and await self._resume_continuation(continuation):
+                return
         self.host.recording_session_id = select_recording_session_id(
             client_conversation_id=self.host.client_conversation_id,
             current_recording_session_id=self.host.recording_session_id,
@@ -269,7 +333,24 @@ class LiveConversationController:
                 discarded=bool(existing.get('discarded')),
                 in_progress_status=ConversationStatus.in_progress,
             )
-            if action == RecordingSessionReconnectAction.resume_current:
+            if action == RecordingSessionReconnectAction.resume_current and not existing.get('deleted'):
+                if not self.host.is_multi_channel and not resumable_continuation(
+                    existing,
+                    source=normalize_listen_source(request.source),
+                    device_id=self.host.client_device_context.client_device_id,
+                    now=self.clock(),
+                    timeout=self.host.conversation_creation_timeout,
+                ):
+                    if (
+                        existing.get('source') == normalize_listen_source(request.source)
+                        and existing.get('client_device_id') == self.host.client_device_context.client_device_id
+                        and not any(
+                            existing.get(key) for key in ('transcript_segments', 'photos', 'has_content', 'is_locked')
+                        )
+                    ):
+                        await self.process_conversation(conversation_id)
+                    await self.create_new_in_progress_conversation(rollover=True)
+                    return
                 self.host.state.current_conversation_id = conversation_id
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
@@ -283,9 +364,10 @@ class LiveConversationController:
                         {'uses_custom_stt': True},
                     )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
+                await self.host.speakers.refresh_for_conversation(conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
-            if action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
+            if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
                 await self.create_new_in_progress_conversation(rollover=True)
                 return
             self.send_conversation_session(binding, self.host.recording_session_id, status=str(existing.get('status')))
@@ -304,9 +386,9 @@ class LiveConversationController:
             external_data['onboarding_session_id'] = onboarding_session_id
         conversation = Conversation(
             id=conversation_id,
-            created_at=datetime.now(timezone.utc),
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
+            created_at=self.clock(),
+            started_at=self.clock(),
+            finished_at=self.clock(),
             structured=Structured(),
             language=self.host.language,
             transcript_segments=[],
@@ -330,6 +412,19 @@ class LiveConversationController:
             omit_null_processing_state(conversation.model_dump()),
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
+        if rollover:
+            proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
+            adopted = await self._continuation(proposed)
+            if adopted and adopted != proposed and await self._resume_continuation(adopted):
+                # The winner is revalidated before deleting our unexposed loser.
+                # A racing content write or lock still defeats deletion.
+                await self.host.persistence.call(
+                    lifecycle_service.delete_empty_recording_conversation,
+                    request.uid,
+                    proposed['conversation_id'],
+                    proposed['recording_session_id'],
+                )
+                return
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         if source == ConversationSource.desktop:
             now = datetime.now(timezone.utc)
@@ -343,6 +438,7 @@ class LiveConversationController:
                 closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
                 await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
         self.host.state.current_conversation_id = conversation_id
+        await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)
 
     async def prepare(self) -> Optional[str]:
@@ -378,8 +474,14 @@ class LiveConversationController:
         ):
             await self.create_new_in_progress_conversation()
             return None
+        if (
+            any(existing.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+            or existing.get('client_device_id') != self.host.client_device_context.client_device_id
+        ):
+            await self.create_new_in_progress_conversation()
+            return None
         finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
-        seconds = (datetime.now(timezone.utc) - finished_at).total_seconds()
+        seconds = (self.clock() - finished_at).total_seconds()
         if (
             decide_existing_conversation_action(
                 seconds_since_last_segment=seconds,
@@ -387,6 +489,10 @@ class LiveConversationController:
             )
             == ConversationLifecycleAction.process_and_create_new
         ):
+            # This runs before STT initialization: an outage cannot indefinitely
+            # defer empty-generation cleanup. The transaction still lets content win.
+            if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
+                await self.process_conversation(existing['id'])
             await self.create_new_in_progress_conversation()
             return existing['id']
         binding = await self.host.persistence.call(
@@ -466,7 +572,7 @@ class LiveConversationController:
                 conversation_exists=True,
                 status=conversation.get('status'),
                 in_progress_status=ConversationStatus.in_progress,
-                seconds_since_last_update=(datetime.now(timezone.utc) - finished_at).total_seconds(),
+                seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
                 conversation_creation_timeout=self.host.conversation_creation_timeout,
             )
             if action == ConversationLifecycleAction.create_new:

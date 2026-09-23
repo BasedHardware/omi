@@ -123,7 +123,7 @@ dev_harness_require_cli() {
   {
     echo "Omi dev harness is not provisioned: $python_bin cannot import dev_harness.cli"
     printf '%s\n' "$probe" | tail -n 1 | sed 's/^/  /'
-    echo "Run \`make lane-bootstrap\` first (Python 3.11 venv + cheap-gate packages). Full backend lock remains \`make setup-backend\`."
+    echo "Run \`make lane-bootstrap\` first (Python 3.11 venv + cheap-gate packages). Uvicorn/pyright: \`make lane-backend\`. Locked pylock sync remains \`make setup-backend\`."
   } >&2
   return 1
 }

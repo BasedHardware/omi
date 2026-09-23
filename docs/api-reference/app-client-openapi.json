@@ -7476,6 +7476,32 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
+          },
           "transcript_segments": {
             "default": [],
             "items": {
@@ -8578,6 +8604,32 @@
             },
             "title": "Suggested Summarization Apps",
             "type": "array"
+          },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
+          "sync_relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep",
+                  "review"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Relevance"
           },
           "transcript_segments": {
             "default": [],
@@ -19759,6 +19811,219 @@
         "title": "MigrationTargetRequest",
         "type": "object"
       },
+      "MobileFeedbackKind": {
+        "description": "Explicit mobile feedback surfaces with separate reason taxonomies.",
+        "enum": [
+          "summary_helpfulness",
+          "recording_quality"
+        ],
+        "title": "MobileFeedbackKind",
+        "type": "string"
+      },
+      "MobileFeedbackReason": {
+        "description": "Closed reasons mobile can attach to explicit output feedback.\n\nReasons intentionally describe the failure mode rather than asking a\nmodel to classify free text.  Positive feedback can omit a reason;\nnegative feedback may send one of these values only.",
+        "enum": [
+          "summary_inaccurate",
+          "summary_incomplete",
+          "summary_irrelevant",
+          "summary_wrong_context",
+          "summary_other",
+          "recording_missing_audio",
+          "recording_poor_transcription",
+          "recording_wrong_speaker",
+          "recording_delayed_or_stuck",
+          "recording_fragmented_or_duplicated",
+          "recording_other"
+        ],
+        "title": "MobileFeedbackReason",
+        "type": "string"
+      },
+      "MobileFeedbackReceipt": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "persisted": {
+            "const": true,
+            "default": true,
+            "title": "Persisted",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "mobile_feedback_receipt.v1",
+            "default": "mobile_feedback_receipt.v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "event_id",
+          "created"
+        ],
+        "title": "MobileFeedbackReceipt",
+        "type": "object"
+      },
+      "MobileFeedbackRequest": {
+        "description": "Authenticated, idempotent mobile summary/recording feedback write.",
+        "properties": {
+          "app_build": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Build"
+          },
+          "app_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version"
+          },
+          "client_app_namespace": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client App Namespace"
+          },
+          "client_app_profile": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client App Profile"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "feedback_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MobileFeedbackKind"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MobileFeedbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schema_version": {
+            "const": "mobile_feedback.v1",
+            "default": "mobile_feedback.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "recording"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "value": {
+            "enum": [
+              -1,
+              1
+            ],
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "kind",
+          "target_id",
+          "value"
+        ],
+        "title": "MobileFeedbackRequest",
+        "type": "object"
+      },
       "MoveConversationRequest": {
         "description": "Request model for moving a conversation to a folder.",
         "properties": {
@@ -20787,6 +21052,10 @@
               }
             ],
             "title": "Updated At"
+          },
+          "voice_readiness": {
+            "$ref": "#/components/schemas/VoiceReadiness",
+            "default": "unknown"
           }
         },
         "required": [
@@ -29255,6 +29524,16 @@
         ],
         "title": "VoiceMessageTranscriptionResponse",
         "type": "object"
+      },
+      "VoiceReadiness": {
+        "enum": [
+          "ready",
+          "saved_sample_awaiting_embedding",
+          "not_learned",
+          "unknown"
+        ],
+        "title": "VoiceReadiness",
+        "type": "string"
       },
       "WebSearchAssistantSettings": {
         "properties": {
@@ -39928,7 +40207,6 @@
     },
     "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of all segments in the transcript of a conversation with the given speaker_id.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file should be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch",
         "parameters": [
           {
@@ -40054,7 +40332,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Set Assignee Conversation Segment",
+        "summary": "Set Assignee Conversation Speaker",
         "tags": [
           "conversations"
         ]
@@ -41821,7 +42099,6 @@
     },
     "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign": {
       "patch": {
-        "description": "Another complex endpoint.\n\nModify the assignee of a segment in the transcript of a conversation.\nBut,\nif `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.\n\nSpeech training of whom?\n\nIf `assign_type` is 'is_user', the segment will be used for the user speech training.\nIf `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.\n\nWhat is required for a segment to be used for speech training?\n1. The segment must have more than 5 words.\n2. The conversation audio file shuold be already stored in the user's bucket.\n\n:return: The updated conversation.",
         "operationId": "set_assignee_conversation_segment_v1_conversations__conversation_id__segments__segment_idx__assign_patch",
         "parameters": [
           {
@@ -52472,6 +52749,110 @@
         ]
       }
     },
+    "/v1/mobile/feedback": {
+      "post": {
+        "description": "Persist one explicit mobile feedback action.\n\nSummary targets are authenticated conversation ids. Recording targets are\nauthenticated recording-session ids whose user-scoped binding is read\nbefore the write. The idempotency key is scoped to the authenticated UID,\nso a retry is safe while a reused key with a different payload is rejected.",
+        "operationId": "submit_mobile_feedback_v1_mobile_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileFeedbackReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Mobile Feedback",
+        "tags": [
+          "mobile-feedback"
+        ]
+      }
+    },
     "/v1/payment-methods/default": {
       "post": {
         "description": "Set the default payment method for the user",
@@ -57131,6 +57512,31 @@
           },
           {
             "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -57153,15 +57559,6 @@
             "required": false,
             "schema": {
               "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
               "type": "string"
             }
           }
@@ -66271,6 +66668,31 @@
           },
           {
             "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -66284,15 +66706,6 @@
             "required": false,
             "schema": {
               "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
               "type": "string"
             }
           }

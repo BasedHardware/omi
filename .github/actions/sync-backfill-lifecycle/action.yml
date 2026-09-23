@@ -255,3 +255,46 @@ runs:
             --project=${{ inputs.project_id }} \
             --format='value(notificationChannels)' | grep -q .
         done
+
+        METRIC="sync_backfill_dispatch_abort"
+        DISPLAY_NAME="Sync backfill dispatch abort"
+        LOG_FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync-backfill\" AND \"The request was aborted because there was no available instance\""
+        if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud logging metrics update "$METRIC" \
+            --project=${{ inputs.project_id }} \
+            --description="$DISPLAY_NAME" \
+            --log-filter="$LOG_FILTER"
+        else
+          gcloud logging metrics create "$METRIC" \
+            --project=${{ inputs.project_id }} \
+            --description="$DISPLAY_NAME" \
+            --log-filter="$LOG_FILTER"
+        fi
+
+        POLICY="$(
+          gcloud monitoring policies list \
+            --project=${{ inputs.project_id }} \
+            --filter="displayName=\"${DISPLAY_NAME}\"" \
+            --format='value(name)' \
+            --limit=1
+        )"
+        if [[ -z "$POLICY" ]]; then
+          POLICY="$(
+            gcloud monitoring policies create \
+              --project=${{ inputs.project_id }} \
+              --display-name="$DISPLAY_NAME" \
+              --condition-display-name="$DISPLAY_NAME" \
+              --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+              --duration=0s \
+              --if='> 0' \
+              --trigger-count=1 \
+              --combiner=OR \
+              --notification-channels="$ALERT_CHANNELS" \
+              --documentation="backend-sync-backfill rejected a Cloud Tasks request because no instance was available (cold-start / scale-up abort)." \
+              --format='value(name)'
+          )"
+        fi
+        test -n "$POLICY"
+        gcloud monitoring policies describe "$POLICY" \
+          --project=${{ inputs.project_id }} \
+          --format='value(notificationChannels)' | grep -q .

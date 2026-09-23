@@ -266,7 +266,7 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<void> updateDevice() async {
     if (device == null) {
       await deviceProvider?.scanAndConnectToDevice();
-      device = deviceProvider?.connectedDevice;
+      device = deviceProvider?.capabilityNormalizedDevice;
     }
     notifyListeners();
   }
@@ -298,7 +298,7 @@ class SpeechProfileProvider extends ChangeNotifier
         }
       } else {
         // Device mode - use device codec
-        device = deviceProvider?.connectedDevice;
+        device = deviceProvider?.capabilityNormalizedDevice;
         BleAudioCodec codec = await _getAudioCodec(device!.id);
         audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
         await _initiateWebsocket(codec: codec, force: true);
@@ -463,7 +463,7 @@ class SpeechProfileProvider extends ChangeNotifier
   Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
 
   bool _isTooShortUploadError(Object error) {
-    final text = error.toString().toLowerCase();
+    final text = (error is SpeechProfileUploadException ? error.detail ?? '' : error.toString()).toLowerCase();
     return text.contains('audio duration is invalid') || text.contains('audio is empty');
   }
 

@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 DASH_DIR = HERE / "dashboards"
 BASE_PATH = DASH_DIR / "omi-tv.json"
 
-PROFIT_PATH = "/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3"
+PROFIT_PATH = "/api/omi/stats/profitability?days=30"
 VIRAL_PATH = "/api/omi/stats/viral-metrics?days=60"
 PROXY = "http://127.0.0.1:8899"
 RFC3339 = "2006-01-02T15:04:05Z07:00"
@@ -59,6 +59,8 @@ DESKTOP_ONLY_TITLES = {
 # "Notifications enabled" counts all user docs and defaults missing fields to
 # enabled, so scoping it to a platform would silently lie.
 ACCOUNT_LEVEL_TITLES = {
+    "Plan economics — data coverage", "Cost and margin by plan — 30-day run rate",
+    "Per-user economics by plan", "Cost by plan — 30-day run rate",
     "Daily notifications sent", "Notifications sent — last 168 hours",
     "Weekly notification reach", "Notifications enabled",
 }
