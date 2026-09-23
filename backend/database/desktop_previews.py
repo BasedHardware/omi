@@ -199,6 +199,7 @@ def _publish_preview_transaction(
     expected_generation: int | None,
 ) -> dict[str, Any]:
     manifest_snapshot = manifest_ref.get(transaction=transaction)
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
     if getattr(manifest_snapshot, "exists", False):
         raw_existing: object = manifest_snapshot.to_dict()
         existing_data = cast(dict[str, Any], raw_existing) if isinstance(raw_existing, dict) else {}
@@ -208,7 +209,6 @@ def _publish_preview_transaction(
     else:
         transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
 
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
     raw_current: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
     pointer = _build_preview_pointer(current, manifest, expected_generation=expected_generation)
