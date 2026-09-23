@@ -44,6 +44,8 @@ Esc removes the **innermost layer first**, one layer per press:
 | Text action | `OmiButtonStyle(.primary / .secondary / .destructive, size: .regular / .compact)` | a filled `Capsule`/`RoundedRectangle` label, `.bordered`, `.borderedProminent` |
 | Copy | `CopyButton(help:) { text }`; from a menu item, `OmiToastCenter.shared.copy(text, confirming:)` | `NSPasteboard.general.setString` |
 | On/off setting | `OmiToggleStyle()` switch | `.checkbox` (checkboxes are only for picking items out of a list) |
+| Selected / on state | neutral ink: `GlassShell.pillFill` for nav rows, `PageGlass.chipFill` / `SettingsSelection` for chosen options, `OmiToggleStyle` (ink track) for switches | an `Ink.accent` / system-blue fill; the accent is reserved for the one actionable link on a surface |
+| Editing a long text setting in its own window (assistant prompts) | `AssistantPromptEditorView`: a draft, Cancel (Esc), Save (⌘↩), Reset to Default bottom-left behind `.shellConfirmation` | saving on every keystroke, a "Done" button |
 
 - Icon buttons come in three diameters: 22 (inline), 28 (headers — default), 32 (top bar).
 - `help` is required and doubles as the accessibility label. An icon without words is only a control

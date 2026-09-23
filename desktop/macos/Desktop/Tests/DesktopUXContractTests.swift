@@ -213,4 +213,10 @@ final class DesktopUXContractTests: XCTestCase {
     let missing = SettingsSearchItem.allSearchableItems.map(\.settingId).filter { !anchors.contains($0) }
     XCTAssertEqual(missing, [], "search results with no card to scroll to")
   }
+
+  /// "Reset Window Size" is a window setting, not a font one: its result lands on its own card.
+  func testResetWindowSizeSearchResultLandsOnTheWindowCard() throws {
+    let item = try XCTUnwrap(SettingsSearchItem.allSearchableItems.first { $0.name == "Reset Window Size" })
+    XCTAssertEqual(item.settingId, "general.window")
+  }
 }
