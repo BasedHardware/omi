@@ -43,7 +43,7 @@ class TestMemoriesToAnki(unittest.TestCase):
             },
             {
                 "id": "mem_04",
-                "content": "Multiline fact:\nLine 1 summary.\nLine 2 details with \ttab indent.",
+                "content": "Multiline fact:\nLine 1 summary.\nLine 2 details with \ttab indent and <b>HTML</b> markup.",
                 "category": "skills",
                 "tags": ["notes"],
                 "created_at": "2026-09-22T09:00:00Z",
@@ -89,6 +89,7 @@ class TestMemoriesToAnki(unittest.TestCase):
             multiline_card = card_lines[3]
             self.assertIn("<br>", multiline_card)
             self.assertNotIn("\t\t", multiline_card)  # tabs are sanitized in content
+            self.assertIn("&lt;b&gt;HTML&lt;/b&gt;", multiline_card)  # html markup is escaped
         finally:
             if os.path.exists(json_in_path):
                 os.remove(json_in_path)

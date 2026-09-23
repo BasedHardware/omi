@@ -54,10 +54,10 @@ omi --json memory list | python memories_to_anki.py - --template prompt --output
 
 ## Importing into Anki
 
-1. Open **Anki Desktop** (or AnkiMobile / AnkiDroid).
+1. Open **Anki Desktop** (v2.1.55+ recommended for automatic directive detection), AnkiMobile, or AnkiDroid.
 2. Click **File** -> **Import...** (or press `Ctrl+I` / `Cmd+I`).
 3. Select the generated `.tsv` file (e.g. `omi_memories.tsv`).
-4. Anki will automatically recognize the `#separator:tab`, `#html:true`, and `#tags column:3` headers.
+4. Anki 2.1.55+ will automatically recognize the `#separator:tab`, `#html:true`, and `#tags column:3` headers.
 5. Click **Import** to add the cards to your spaced repetition queue.
 
 ## CLI Options

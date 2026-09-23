@@ -17,7 +17,7 @@ Usage:
 """
 
 import argparse
-import csv
+import html
 import io
 import json
 import os
@@ -26,7 +26,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Ensure UTF-8 output on all platforms
 if sys.platform == "win32":
@@ -34,7 +34,6 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     elif hasattr(sys.stdout, "buffer"):
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
 
 
 CATEGORY_PROMPTS: Dict[str, str] = {
@@ -70,11 +69,13 @@ def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
 
 
 def sanitize_field(text: str) -> str:
-    """Sanitize text field for TSV/Anki export: replace newlines with <br> and remove tabs."""
+    """Sanitize text field for TSV/Anki export: HTML escape, replace newlines with <br> and remove tabs."""
     if not text:
         return ""
+    # HTML escape raw text to prevent unintended markup execution in Anki
+    escaped = html.escape(text)
     # Normalize carriage returns and newlines to HTML break for Anki multiline cards
-    cleaned = text.replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
+    cleaned = escaped.replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>")
     # Tabs are TSV delimiters in Anki, replace with 4 spaces
     cleaned = cleaned.replace("\t", "    ")
     return cleaned.strip()
@@ -146,7 +147,6 @@ def memory_to_card(
     item: Dict[str, Any],
     template: str = "category",
     include_tags: bool = True,
-    deck: Optional[str] = None,
     extra_tags: Optional[List[str]] = None,
 ) -> List[str]:
     """Convert a single memory item to a list of TSV column values for Anki."""
@@ -333,7 +333,6 @@ def main() -> int:
             m,
             template=args.template,
             include_tags=include_tags,
-            deck=args.deck,
             extra_tags=args.tag,
         )
         if card:
