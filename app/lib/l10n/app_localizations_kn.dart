@@ -10177,4 +10177,52 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get clearSearch => 'ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ';
+
+  @override
+  String get captureRecordingsSheetTitle => 'ಈ ಸಂಭಾಷಣೆಯ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು';
+
+  @override
+  String get captureRecordingSeparate => 'ಬೇರ್ಪಡಿಸಿ…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಬೇರ್ಪಡಿಸುವುದೇ?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ಪ್ರತ್ಯೇಕ ಸಂಭಾಷಣೆಯಾಗಿ ತೋರಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಈ ಈವೆಂಟ್‌ನೊಂದಿಗೆ ಮತ್ತೆ ಗುಂಪುಗೊಳ್ಳುವುದಿಲ್ಲ.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'ಬೇರ್ಪಡಿಸಿ';
+
+  @override
+  String get captureRecordingSeparateFailed => 'ಬೇರ್ಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get captureRecordingOpenFailed => 'ಈ ರೆಕಾರ್ಡಿಂಗ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get captureRecordingViewing => 'ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ನೋಡುತ್ತಿದ್ದೀರಿ';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices ರೆಕಾರ್ಡ್ ಮಾಡಿದೆ';
+  }
+
+  @override
+  String get captureSourceDesktop => 'ಡೆಸ್ಕ್‌ಟಾಪ್';
+
+  @override
+  String get renameConversation => 'ಮರುಹೆಸರಿಸಿ';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್',
+    );
+    return '$_temp0';
+  }
 }

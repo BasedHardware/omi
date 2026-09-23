@@ -10065,4 +10065,52 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get clearSearch => 'ניקוי החיפוש';
+
+  @override
+  String get captureRecordingsSheetTitle => 'הקלטות של השיחה הזו';
+
+  @override
+  String get captureRecordingSeparate => 'הפרד…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'להפריד את ההקלטה הזו?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording יוצג כשיחה נפרדת ולא יקובץ שוב עם האירוע הזה.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'הפרד';
+
+  @override
+  String get captureRecordingSeparateFailed => 'ההפרדה נכשלה. נסה שוב.';
+
+  @override
+  String get captureRecordingOpenFailed => 'לא ניתן לפתוח את ההקלטה הזו.';
+
+  @override
+  String get captureRecordingViewing => 'אתה צופה בהקלטה הזו';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'הוקלט על ידי $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'מחשב';
+
+  @override
+  String get renameConversation => 'שנה שם';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות',
+      one: 'הקלטה אחת',
+    );
+    return '$_temp0';
+  }
 }

@@ -9975,4 +9975,52 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearSearch => '検索をクリア';
+
+  @override
+  String get captureRecordingsSheetTitle => 'この会話の録音';
+
+  @override
+  String get captureRecordingSeparate => '分離…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'この録音を分離しますか？';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording は個別の会話として表示され、このイベントと再びまとめられることはありません。';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '分離';
+
+  @override
+  String get captureRecordingSeparateFailed => '分離できませんでした。もう一度お試しください。';
+
+  @override
+  String get captureRecordingOpenFailed => 'この録音を開けませんでした。';
+
+  @override
+  String get captureRecordingViewing => 'この録音を表示中';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices で録音';
+  }
+
+  @override
+  String get captureSourceDesktop => 'デスクトップ';
+
+  @override
+  String get renameConversation => '名前を変更';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音',
+      one: '1件の録音',
+    );
+    return '$_temp0';
+  }
 }

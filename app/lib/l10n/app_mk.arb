@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што можеш да направиш за мене?} goal{Помогни ми да поставам цел} activity{Сумирај ги моите неодамнешни активности} improve{Како можам да се подобрам?} other{}}",
     "nextWeek": "Следната недела",
-    "clearSearch": "Исчисти го пребарувањето"
+    "clearSearch": "Исчисти го пребарувањето",
+    "captureRecordingsSheetTitle": "Снимки од овој разговор",
+    "captureRecordingSeparate": "Одвои…",
+    "captureRecordingSeparateTitle": "Да се одвои ли оваа снимка?",
+    "captureRecordingSeparateMessage": "{recording} ќе се прикажува како посебен разговор и повеќе нема да се групира со овој настан.",
+    "captureRecordingSeparateConfirm": "Одвои",
+    "captureRecordingSeparateFailed": "Одвојувањето не успеа. Обидете се повторно.",
+    "captureRecordingOpenFailed": "Оваа снимка не можеше да се отвори.",
+    "captureRecordingViewing": "Ја гледате оваа снимка",
+    "captureRecordedBy": "Снимено од {devices}",
+    "captureSourceDesktop": "Компјутер",
+    "renameConversation": "Преименувај",
+    "captureRecordingsCount": "{count, plural, =1{1 снимка} other{{count} снимки}}"
 }

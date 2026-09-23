@@ -10151,4 +10151,52 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get clearSearch => 'অনুসন্ধান মুছুন';
+
+  @override
+  String get captureRecordingsSheetTitle => 'এই কথোপকথনের রেকর্ডিং';
+
+  @override
+  String get captureRecordingSeparate => 'আলাদা করুন…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'এই রেকর্ডিং আলাদা করবেন?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording একটি আলাদা কথোপকথন হিসেবে দেখাবে এবং আর এই ইভেন্টের সাথে একত্র হবে না।';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'আলাদা করুন';
+
+  @override
+  String get captureRecordingSeparateFailed => 'আলাদা করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get captureRecordingOpenFailed => 'এই রেকর্ডিংটি খোলা যায়নি।';
+
+  @override
+  String get captureRecordingViewing => 'আপনি এই রেকর্ডিংটি দেখছেন';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices দ্বারা রেকর্ড করা';
+  }
+
+  @override
+  String get captureSourceDesktop => 'ডেস্কটপ';
+
+  @override
+  String get renameConversation => 'নাম পরিবর্তন';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেকর্ডিং',
+      one: '1টি রেকর্ডিং',
+    );
+    return '$_temp0';
+  }
 }

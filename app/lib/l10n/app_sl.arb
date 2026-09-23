@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Kaj lahko narediš zame?} goal{Pomagaj mi postaviti cilj} activity{Povzemi moje nedavne dejavnosti} improve{Kako lahko napredujem?} other{}}",
     "nextWeek": "Naslednji teden",
-    "clearSearch": "Počisti iskanje"
+    "clearSearch": "Počisti iskanje",
+    "captureRecordingsSheetTitle": "Posnetki tega pogovora",
+    "captureRecordingSeparate": "Loči…",
+    "captureRecordingSeparateTitle": "Ločim ta posnetek?",
+    "captureRecordingSeparateMessage": "{recording} bo prikazan kot samostojen pogovor in ne bo več združen s tem dogodkom.",
+    "captureRecordingSeparateConfirm": "Loči",
+    "captureRecordingSeparateFailed": "Ločevanje ni uspelo. Poskusite znova.",
+    "captureRecordingOpenFailed": "Tega posnetka ni bilo mogoče odpreti.",
+    "captureRecordingViewing": "Ogledujete si ta posnetek",
+    "captureRecordedBy": "Posnel: {devices}",
+    "captureSourceDesktop": "Računalnik",
+    "renameConversation": "Preimenuj",
+    "captureRecordingsCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}"
 }

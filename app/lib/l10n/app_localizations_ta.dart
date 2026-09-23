@@ -10216,4 +10216,52 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get clearSearch => 'தேடலை அழி';
+
+  @override
+  String get captureRecordingsSheetTitle => 'இந்த உரையாடலின் பதிவுகள்';
+
+  @override
+  String get captureRecordingSeparate => 'பிரி…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'இந்தப் பதிவைப் பிரிக்கவா?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording தனி உரையாடலாகக் காட்டப்படும், இந்த நிகழ்வுடன் மீண்டும் குழுவாக்கப்படாது.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'பிரி';
+
+  @override
+  String get captureRecordingSeparateFailed => 'பிரிக்க முடியவில்லை. மீண்டும் முயலவும்.';
+
+  @override
+  String get captureRecordingOpenFailed => 'இந்தப் பதிவைத் திறக்க முடியவில்லை.';
+
+  @override
+  String get captureRecordingViewing => 'இந்தப் பதிவைப் பார்க்கிறீர்கள்';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices பதிவு செய்தது';
+  }
+
+  @override
+  String get captureSourceDesktop => 'டெஸ்க்டாப்';
+
+  @override
+  String get renameConversation => 'பெயர்மாற்று';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள்',
+      one: '1 பதிவு',
+    );
+    return '$_temp0';
+  }
 }

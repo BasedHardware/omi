@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{ನೀನು ನನಗಾಗಿ ಏನು ಮಾಡಬಲ್ಲೆ?} goal{ಗುರಿಯನ್ನು ಹೊಂದಿಸಲು ನನಗೆ ಸಹಾಯ ಮಾಡು} activity{ನನ್ನ ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳನ್ನು ಸಂಕ್ಷಿಪ್ತಗೊಳಿಸು} improve{ನಾನು ಹೇಗೆ ಸುಧಾರಿಸಬಹುದು?} other{}}",
     "nextWeek": "ಮುಂದಿನ ವಾರ",
-    "clearSearch": "ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ"
+    "clearSearch": "ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ",
+    "captureRecordingsSheetTitle": "ಈ ಸಂಭಾಷಣೆಯ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು",
+    "captureRecordingSeparate": "ಬೇರ್ಪಡಿಸಿ…",
+    "captureRecordingSeparateTitle": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಬೇರ್ಪಡಿಸುವುದೇ?",
+    "captureRecordingSeparateMessage": "{recording} ಪ್ರತ್ಯೇಕ ಸಂಭಾಷಣೆಯಾಗಿ ತೋರಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಈ ಈವೆಂಟ್‌ನೊಂದಿಗೆ ಮತ್ತೆ ಗುಂಪುಗೊಳ್ಳುವುದಿಲ್ಲ.",
+    "captureRecordingSeparateConfirm": "ಬೇರ್ಪಡಿಸಿ",
+    "captureRecordingSeparateFailed": "ಬೇರ್ಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "captureRecordingOpenFailed": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    "captureRecordingViewing": "ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ನೋಡುತ್ತಿದ್ದೀರಿ",
+    "captureRecordedBy": "{devices} ರೆಕಾರ್ಡ್ ಮಾಡಿದೆ",
+    "captureSourceDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್",
+    "renameConversation": "ಮರುಹೆಸರಿಸಿ",
+    "captureRecordingsCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}"
 }

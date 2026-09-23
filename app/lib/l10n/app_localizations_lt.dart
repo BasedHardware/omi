@@ -10165,4 +10165,52 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get clearSearch => 'Išvalyti paiešką';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Šio pokalbio įrašai';
+
+  @override
+  String get captureRecordingSeparate => 'Atskirti…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Atskirti šį įrašą?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording bus rodomas kaip atskiras pokalbis ir daugiau nebus grupuojamas su šiuo įvykiu.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Atskirti';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Nepavyko atskirti. Bandykite dar kartą.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Nepavyko atidaryti šio įrašo.';
+
+  @override
+  String get captureRecordingViewing => 'Peržiūrite šį įrašą';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Įrašė $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Kompiuteris';
+
+  @override
+  String get renameConversation => 'Pervadinti';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Įrašų: $count',
+      one: '1 įrašas',
+    );
+    return '$_temp0';
+  }
 }

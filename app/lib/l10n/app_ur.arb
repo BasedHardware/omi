@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{تم میرے لیے کیا کر سکتے ہو؟} goal{مجھے ایک مقصد طے کرنے میں مدد کرو} activity{میری حالیہ سرگرمیوں کا خلاصہ دو} improve{میں کیسے بہتر ہو سکتا ہوں؟} other{}}",
     "nextWeek": "اگلے ہفتے",
-    "clearSearch": "تلاش صاف کریں"
+    "clearSearch": "تلاش صاف کریں",
+    "captureRecordingsSheetTitle": "اس گفتگو کی ریکارڈنگز",
+    "captureRecordingSeparate": "الگ کریں…",
+    "captureRecordingSeparateTitle": "اس ریکارڈنگ کو الگ کریں؟",
+    "captureRecordingSeparateMessage": "{recording} ایک الگ گفتگو کے طور پر دکھائی دے گی اور اس ایونٹ کے ساتھ دوبارہ گروپ نہیں ہوگی۔",
+    "captureRecordingSeparateConfirm": "الگ کریں",
+    "captureRecordingSeparateFailed": "الگ نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
+    "captureRecordingOpenFailed": "یہ ریکارڈنگ نہیں کھل سکی۔",
+    "captureRecordingViewing": "آپ یہ ریکارڈنگ دیکھ رہے ہیں",
+    "captureRecordedBy": "{devices} نے ریکارڈ کیا",
+    "captureSourceDesktop": "ڈیسک ٹاپ",
+    "renameConversation": "نام تبدیل کریں",
+    "captureRecordingsCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}"
 }

@@ -92,7 +92,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 CustomScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
                   slivers: [
-                    const SliverToBoxAdapter(child: GetSummaryWidgets()),
+                    // Title and facts live in the page header, shared by every tab.
+                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
                     discarded
                         ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                         : GetAppsWidgets(

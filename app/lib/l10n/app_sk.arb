@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Čo pre mňa môžeš urobiť?} goal{Pomôž mi stanoviť cieľ} activity{Zhrň moje nedávne aktivity} improve{Ako sa môžem zlepšiť?} other{}}",
     "nextWeek": "Budúci týždeň",
-    "clearSearch": "Vymazať vyhľadávanie"
+    "clearSearch": "Vymazať vyhľadávanie",
+    "captureRecordingsSheetTitle": "Nahrávky tohto rozhovoru",
+    "captureRecordingSeparate": "Oddeliť…",
+    "captureRecordingSeparateTitle": "Oddeliť túto nahrávku?",
+    "captureRecordingSeparateMessage": "{recording} sa zobrazí ako samostatný rozhovor a s touto udalosťou sa už nezoskupí.",
+    "captureRecordingSeparateConfirm": "Oddeliť",
+    "captureRecordingSeparateFailed": "Oddelenie zlyhalo. Skúste to znova.",
+    "captureRecordingOpenFailed": "Túto nahrávku sa nepodarilo otvoriť.",
+    "captureRecordingViewing": "Prezeráte si túto nahrávku",
+    "captureRecordedBy": "Nahrané: {devices}",
+    "captureSourceDesktop": "Počítač",
+    "renameConversation": "Premenovať",
+    "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávok: {count}}}"
 }

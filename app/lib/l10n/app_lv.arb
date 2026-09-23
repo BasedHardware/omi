@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ko tu vari manā labā darīt?} goal{Palīdzi man izvirzīt mērķi} activity{Apkopo manas nesenās aktivitātes} improve{Kā es varu pilnveidoties?} other{}}",
     "nextWeek": "Nākamnedēļ",
-    "clearSearch": "Notīrīt meklēšanu"
+    "clearSearch": "Notīrīt meklēšanu",
+    "captureRecordingsSheetTitle": "Šīs sarunas ieraksti",
+    "captureRecordingSeparate": "Atdalīt…",
+    "captureRecordingSeparateTitle": "Atdalīt šo ierakstu?",
+    "captureRecordingSeparateMessage": "{recording} tiks rādīts kā atsevišķa saruna un vairs netiks grupēts ar šo notikumu.",
+    "captureRecordingSeparateConfirm": "Atdalīt",
+    "captureRecordingSeparateFailed": "Neizdevās atdalīt. Mēģiniet vēlreiz.",
+    "captureRecordingOpenFailed": "Neizdevās atvērt šo ierakstu.",
+    "captureRecordingViewing": "Jūs skatāt šo ierakstu",
+    "captureRecordedBy": "Ierakstīja {devices}",
+    "captureSourceDesktop": "Dators",
+    "renameConversation": "Pārdēvēt",
+    "captureRecordingsCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}"
 }

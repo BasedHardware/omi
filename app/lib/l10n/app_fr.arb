@@ -3291,5 +3291,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Que peux-tu faire pour moi ?} goal{Aide-moi à me fixer un objectif} activity{Résume mon activité récente} improve{Comment puis-je m’améliorer ?} other{}}",
     "nextWeek": "La semaine prochaine",
-    "clearSearch": "Effacer la recherche"
+    "clearSearch": "Effacer la recherche",
+    "captureRecordingsSheetTitle": "Enregistrements de cette conversation",
+    "captureRecordingSeparate": "Séparer…",
+    "captureRecordingSeparateTitle": "Séparer cet enregistrement ?",
+    "captureRecordingSeparateMessage": "{recording} apparaîtra comme une conversation distincte et ne sera plus regroupé avec cet événement.",
+    "captureRecordingSeparateConfirm": "Séparer",
+    "captureRecordingSeparateFailed": "Impossible de séparer. Réessayez.",
+    "captureRecordingOpenFailed": "Impossible d'ouvrir cet enregistrement.",
+    "captureRecordingViewing": "Vous consultez cet enregistrement",
+    "captureRecordedBy": "Enregistré par {devices}",
+    "captureSourceDesktop": "Ordinateur",
+    "renameConversation": "Renommer",
+    "captureRecordingsCount": "{count, plural, =1{1 enregistrement} other{{count} enregistrements}}"
 }

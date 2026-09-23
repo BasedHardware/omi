@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Wat kun je voor me doen?} goal{Help me een doel te stellen} activity{Vat mijn recente activiteiten samen} improve{Hoe kan ik me verbeteren?} other{}}",
     "nextWeek": "Volgende week",
-    "clearSearch": "Zoekopdracht wissen"
+    "clearSearch": "Zoekopdracht wissen",
+    "captureRecordingsSheetTitle": "Opnamen van dit gesprek",
+    "captureRecordingSeparate": "Scheiden…",
+    "captureRecordingSeparateTitle": "Deze opname scheiden?",
+    "captureRecordingSeparateMessage": "{recording} wordt als apart gesprek getoond en niet opnieuw met deze gebeurtenis gegroepeerd.",
+    "captureRecordingSeparateConfirm": "Scheiden",
+    "captureRecordingSeparateFailed": "Scheiden mislukt. Probeer het opnieuw.",
+    "captureRecordingOpenFailed": "Kan deze opname niet openen.",
+    "captureRecordingViewing": "Je bekijkt deze opname",
+    "captureRecordedBy": "Opgenomen door {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Naam wijzigen",
+    "captureRecordingsCount": "{count, plural, =1{1 opname} other{{count} opnamen}}"
 }

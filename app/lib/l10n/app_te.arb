@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{నువ్వు నా కోసం ఏమి చేయగలవు?} goal{లక్ష్యాన్ని నిర్దేశించుకోవడంలో నాకు సహాయం చేయి} activity{నా ఇటీవలి కార్యకలాపాలను సంక్షిప్తంగా చెప్పు} improve{నేను ఎలా మెరుగుపడగలను?} other{}}",
     "nextWeek": "వచ్చే వారం",
-    "clearSearch": "శోధనను క్లియర్ చేయండి"
+    "clearSearch": "శోధనను క్లియర్ చేయండి",
+    "captureRecordingsSheetTitle": "ఈ సంభాషణ రికార్డింగ్‌లు",
+    "captureRecordingSeparate": "వేరు చేయి…",
+    "captureRecordingSeparateTitle": "ఈ రికార్డింగ్‌ను వేరు చేయాలా?",
+    "captureRecordingSeparateMessage": "{recording} ప్రత్యేక సంభాషణగా కనిపిస్తుంది, ఈ ఈవెంట్‌తో మళ్లీ సమూహం చేయబడదు.",
+    "captureRecordingSeparateConfirm": "వేరు చేయి",
+    "captureRecordingSeparateFailed": "వేరు చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
+    "captureRecordingOpenFailed": "ఈ రికార్డింగ్‌ను తెరవలేకపోయాం.",
+    "captureRecordingViewing": "మీరు ఈ రికార్డింగ్‌ను చూస్తున్నారు",
+    "captureRecordedBy": "{devices} రికార్డ్ చేసింది",
+    "captureSourceDesktop": "డెస్క్‌టాప్",
+    "renameConversation": "పేరు మార్చు",
+    "captureRecordingsCount": "{count, plural, =1{1 రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}"
 }

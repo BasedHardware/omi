@@ -33,6 +33,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_sheet.dart';
@@ -40,11 +41,14 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'capture_group_separation.dart';
 import 'conversation_detail_provider.dart';
 import 'conversation_summary_selection.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
+import 'widgets/capture_recordings.dart';
+import 'widgets/conversation_detail_header.dart';
 import 'widgets/edit_segment_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
 import 'widgets/summary_tab.dart';
@@ -134,6 +138,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   int _totalSearchResults = 0;
   List<int> _searchResultPositions = []; // Track positions of search results
   final List<(Timer, Completer<void>)> _ownedDelays = [];
+  final _separation = CaptureGroupSeparationController();
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
@@ -367,6 +372,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void dispose() {
     _cancelOwnedTimers();
+    _separation.dispose();
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
@@ -483,6 +489,53 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     );
   }
 
+  void _openRecordings(List<CaptureRecording> recordings) {
+    showCaptureRecordingsSheet(
+      context,
+      recordings: recordings,
+      controller: _separation,
+      onOpen: _openRecording,
+      onSeparate: _separateRecording,
+    );
+  }
+
+  /// Opens another device's recording of this event: the loaded row when the
+  /// list has it (even hidden behind the event's row), otherwise a fetch.
+  Future<void> _openRecording(CaptureRecording recording) async {
+    final list = context.read<ConversationProvider>();
+    final target = await CaptureGroupPresentation.resolveMember(
+      recording.id,
+      loaded: list.conversations.followedBy(list.searchedConversations),
+      fetch: getConversationById,
+    );
+    if (!mounted) return;
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.captureRecordingOpenFailed)));
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ConversationDetailPage(
+          conversation: target,
+          isFromOnboarding: widget.isFromOnboarding,
+          initialTabIndex: _controller?.index,
+        ),
+      ),
+    );
+  }
+
+  /// Separation is sticky on the server; afterwards the detail and the list
+  /// reload so both show the new membership.
+  Future<bool> _separateRecording(CaptureRecording recording) {
+    final detail = context.read<ConversationDetailProvider>();
+    final list = context.read<ConversationProvider>();
+    return _separation.separate(recording.id, reload: () async {
+      await detail.refreshConversation();
+      await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
+    });
+  }
+
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
@@ -516,6 +569,15 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         Clipboard.setData(ClipboardData(text: provider.conversation.id));
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.conversationIdCopied)));
         HapticFeedback.lightImpact();
+        break;
+      case 'rename':
+        final controller = provider.titleController;
+        provider.titleFocusNode?.requestFocus();
+        if (controller != null)
+          controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+        break;
+      case 'move_to_folder':
+        await showConversationFolderSheet(context, provider.conversation, source: 'detail_page_menu');
         break;
       case 'delete':
         _handleDelete(context, provider);
@@ -1027,6 +1089,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                                     HapticFeedback.mediumImpact();
                                   },
                                 ),
+                              if (!provider.conversation.discarded)
+                                PullDownMenuItem(
+                                  title: context.l10n.renameConversation,
+                                  iconWidget: const FaIcon(FontAwesomeIcons.pen, size: 16),
+                                  onTap: () => _handleMenuSelection(context, 'rename', provider),
+                                ),
+                              PullDownMenuItem(
+                                title: context.l10n.moveToFolder,
+                                iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'move_to_folder', provider),
+                              ),
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
                                 iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
@@ -1163,6 +1236,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                     : null,
                 child: Column(
                   children: [
+                    ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),

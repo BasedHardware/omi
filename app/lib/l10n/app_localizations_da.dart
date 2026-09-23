@@ -10130,4 +10130,52 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get clearSearch => 'Ryd søgning';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Optagelser af denne samtale';
+
+  @override
+  String get captureRecordingSeparate => 'Adskil…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Adskil denne optagelse?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording vises som sin egen samtale og grupperes ikke med denne begivenhed igen.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Adskil';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Kunne ikke adskille. Prøv igen.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Kunne ikke åbne denne optagelse.';
+
+  @override
+  String get captureRecordingViewing => 'Du ser denne optagelse';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Optaget af $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Computer';
+
+  @override
+  String get renameConversation => 'Omdøb';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser',
+      one: '1 optagelse',
+    );
+    return '$_temp0';
+  }
 }

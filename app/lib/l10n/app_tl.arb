@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ano ang magagawa mo para sa akin?} goal{Tulungan mo akong magtakda ng layunin} activity{Ibuod ang mga kamakailan kong aktibidad} improve{Paano pa ako mapapabuti?} other{}}",
     "nextWeek": "Sa susunod na linggo",
-    "clearSearch": "I-clear ang paghahanap"
+    "clearSearch": "I-clear ang paghahanap",
+    "captureRecordingsSheetTitle": "Mga recording ng usapang ito",
+    "captureRecordingSeparate": "Ihiwalay…",
+    "captureRecordingSeparateTitle": "Ihiwalay ang recording na ito?",
+    "captureRecordingSeparateMessage": "Ipapakita ang {recording} bilang sariling usapan at hindi na muling ipapangkat sa event na ito.",
+    "captureRecordingSeparateConfirm": "Ihiwalay",
+    "captureRecordingSeparateFailed": "Hindi maihiwalay. Subukang muli.",
+    "captureRecordingOpenFailed": "Hindi mabuksan ang recording na ito.",
+    "captureRecordingViewing": "Tinitingnan mo ang recording na ito",
+    "captureRecordedBy": "Ni-record ng {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Palitan ang pangalan",
+    "captureRecordingsCount": "{count, plural, =1{1 recording} other{{count} recording}}"
 }

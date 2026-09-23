@@ -18734,6 +18734,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear search'**
   String get clearSearch;
+
+  /// Title of the sheet listing each device recording of one conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings of this conversation'**
+  String get captureRecordingsSheetTitle;
+
+  /// Button that splits one device recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate…'**
+  String get captureRecordingSeparate;
+
+  /// Confirmation title before splitting a recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate this recording?'**
+  String get captureRecordingSeparateTitle;
+
+  /// Confirmation body; recording is a device name and time range such as Desktop · 1:57 PM
+  ///
+  /// In en, this message translates to:
+  /// **'{recording} will show as its own conversation and won\'t be grouped with this event again.'**
+  String captureRecordingSeparateMessage(String recording);
+
+  /// Confirm button that splits a recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate'**
+  String get captureRecordingSeparateConfirm;
+
+  /// Error after splitting a recording out of a grouped conversation failed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t separate. Try again.'**
+  String get captureRecordingSeparateFailed;
+
+  /// Error when another device recording of the conversation could not be loaded
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open this recording.'**
+  String get captureRecordingOpenFailed;
+
+  /// Accessibility label for the check mark on the recording currently open
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re viewing this recording'**
+  String get captureRecordingViewing;
+
+  /// Accessibility label for the device icons on a conversation recorded by several devices
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded by {devices}'**
+  String captureRecordedBy(String devices);
+
+  /// The Omi desktop app as the device that recorded a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop'**
+  String get captureSourceDesktop;
+
+  /// Menu item that edits the conversation title
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get renameConversation;
+
+  /// How many devices recorded this conversation, on the conversation header
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String captureRecordingsCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

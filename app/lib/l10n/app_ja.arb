@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{どんなことを手伝ってくれる？} goal{目標を立てるのを手伝って} activity{最近の活動をまとめて} improve{どうすればもっと成長できる？} other{}}",
     "nextWeek": "来週",
-    "clearSearch": "検索をクリア"
+    "clearSearch": "検索をクリア",
+    "captureRecordingsSheetTitle": "この会話の録音",
+    "captureRecordingSeparate": "分離…",
+    "captureRecordingSeparateTitle": "この録音を分離しますか？",
+    "captureRecordingSeparateMessage": "{recording} は個別の会話として表示され、このイベントと再びまとめられることはありません。",
+    "captureRecordingSeparateConfirm": "分離",
+    "captureRecordingSeparateFailed": "分離できませんでした。もう一度お試しください。",
+    "captureRecordingOpenFailed": "この録音を開けませんでした。",
+    "captureRecordingViewing": "この録音を表示中",
+    "captureRecordedBy": "{devices} で録音",
+    "captureSourceDesktop": "デスクトップ",
+    "renameConversation": "名前を変更",
+    "captureRecordingsCount": "{count, plural, =1{1件の録音} other{{count}件の録音}}"
 }

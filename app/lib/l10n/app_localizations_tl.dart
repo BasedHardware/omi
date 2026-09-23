@@ -10236,4 +10236,52 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get clearSearch => 'I-clear ang paghahanap';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Mga recording ng usapang ito';
+
+  @override
+  String get captureRecordingSeparate => 'Ihiwalay…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Ihiwalay ang recording na ito?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return 'Ipapakita ang $recording bilang sariling usapan at hindi na muling ipapangkat sa event na ito.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Ihiwalay';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Hindi maihiwalay. Subukang muli.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Hindi mabuksan ang recording na ito.';
+
+  @override
+  String get captureRecordingViewing => 'Tinitingnan mo ang recording na ito';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Ni-record ng $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Desktop';
+
+  @override
+  String get renameConversation => 'Palitan ang pangalan';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
 }

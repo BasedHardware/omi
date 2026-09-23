@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mida sa minu heaks teha saad?} goal{Aita mul eesmärk seada} activity{Tee kokkuvõte minu hiljutisest tegevusest} improve{Kuidas saan end parandada?} other{}}",
     "nextWeek": "Järgmisel nädalal",
-    "clearSearch": "Tühjenda otsing"
+    "clearSearch": "Tühjenda otsing",
+    "captureRecordingsSheetTitle": "Selle vestluse salvestised",
+    "captureRecordingSeparate": "Eralda…",
+    "captureRecordingSeparateTitle": "Kas eraldada see salvestis?",
+    "captureRecordingSeparateMessage": "{recording} kuvatakse eraldi vestlusena ja seda ei rühmitata enam selle sündmusega.",
+    "captureRecordingSeparateConfirm": "Eralda",
+    "captureRecordingSeparateFailed": "Eraldamine ebaõnnestus. Proovi uuesti.",
+    "captureRecordingOpenFailed": "Seda salvestist ei saanud avada.",
+    "captureRecordingViewing": "Vaatad seda salvestist",
+    "captureRecordedBy": "Salvestas {devices}",
+    "captureSourceDesktop": "Arvuti",
+    "renameConversation": "Nimeta ümber",
+    "captureRecordingsCount": "{count, plural, =1{1 salvestis} other{{count} salvestist}}"
 }
