@@ -885,7 +885,7 @@ def cancel_subscription_endpoint(
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not cancel subscription. Please contact support.")
     except Exception as e:
         logger.error(f"Error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
