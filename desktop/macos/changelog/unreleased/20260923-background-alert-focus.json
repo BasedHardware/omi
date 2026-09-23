@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Omi no longer pulls its window in front of what you are working in to show a microphone or transcription warning. The alert waits and appears the next time you come back to Omi."
+  ]
+}
