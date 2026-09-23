@@ -33,8 +33,15 @@ def _load_main():
     saved = {
         name: sys.modules.get(name)
         for name in (
-            "requests", "dotenv", "fastapi", "fastapi.responses",
-            "tweepy", "simple_storage", "twitter_client", "tweet_detector", "main_simple"
+            "requests",
+            "dotenv",
+            "fastapi",
+            "fastapi.responses",
+            "tweepy",
+            "simple_storage",
+            "twitter_client",
+            "tweet_detector",
+            "main_simple",
         )
     }
 
@@ -55,6 +62,7 @@ def _load_main():
         def _decorator(self, *a, **k):
             def wrap(fn):
                 return fn
+
             return wrap
 
         get = post = put = delete = on_event = middleware = _decorator
@@ -120,8 +128,11 @@ class TestTwitterAppErrorSanitization(unittest.TestCase):
                 sys.modules[name] = mod
 
     def test_auth_start_sanitizes_exception(self):
-        with patch.object(self.main_mod.twitter_client, "get_authorization_url",
-                          side_effect=RuntimeError("Sensitive AWS key leaked: AKIAIOSFODNN7EXAMPLE")):
+        with patch.object(
+            self.main_mod.twitter_client,
+            "get_authorization_url",
+            side_effect=RuntimeError("Sensitive AWS key leaked: AKIAIOSFODNN7EXAMPLE"),
+        ):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(self.main_mod.auth_start(uid="test_uid"))
             self.assertEqual(ctx.exception.status_code, 500)
@@ -131,8 +142,9 @@ class TestTwitterAppErrorSanitization(unittest.TestCase):
     def test_webhook_sanitizes_json_parsing_exception(self):
         req = MagicMock()
         req.json = AsyncMock(side_effect=ValueError("Unexpected token at /etc/shadow:1"))
-        with patch.object(self.main_mod.SimpleUserStorage, "get_user", return_value={"access_token": "token"}), \
-             patch.object(self.main_mod.SimpleUserStorage, "is_token_expired", return_value=False):
+        with patch.object(
+            self.main_mod.SimpleUserStorage, "get_user", return_value={"access_token": "token"}
+        ), patch.object(self.main_mod.SimpleUserStorage, "is_token_expired", return_value=False):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(self.main_mod.webhook(req, uid="test_uid"))
             self.assertEqual(ctx.exception.status_code, 400)
