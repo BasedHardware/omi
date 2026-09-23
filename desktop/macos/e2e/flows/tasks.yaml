@@ -4,6 +4,7 @@ tier: manual
 description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentStatusRegistry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   # The exact-record handoff TasksPage consumes on arrival.
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/TaskNavigationRequestStore.swift

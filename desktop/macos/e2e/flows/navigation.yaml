@@ -20,7 +20,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
   - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift

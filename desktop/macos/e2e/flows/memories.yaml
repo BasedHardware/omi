@@ -4,6 +4,16 @@ tier: manual
 description: Memory menu — navigate full-width Activity, Memories, Conversations, and Brain Map destinations
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowPrompts.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/NavigationControls.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiDateFormat.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiIconButton.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiToast.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/PointingHandOnHover.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/SpeakerLabelFormatter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TextPromptSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/GlassShellChrome.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
   # The hub page itself: it branches to the four views S1/S2/S3/S5/S6 walk, carries the "‹ Activity"
@@ -14,7 +24,6 @@ covers:
   # the bar's pill opens, with its own search bar and the chip row that reaches the other three.
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+SearchAnalytics.swift

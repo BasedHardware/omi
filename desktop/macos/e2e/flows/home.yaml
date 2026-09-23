@@ -4,6 +4,8 @@ tier: manual
 description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign; the only Home flow since dashboard.yaml was retired with DashboardPage)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeAskBarControls.swift
+  - desktop/macos/Desktop/Sources/WhatsNewToast.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
