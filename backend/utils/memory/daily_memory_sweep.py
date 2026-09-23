@@ -219,8 +219,7 @@ QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # The deployed memories route is gpt-6-luna at $0.10/M input and $0.60/M
-# output (half of gpt-5.6-luna, David Zhang 2026-09-23). The parser
-# instructions alone are about 9.6K UTF-8 bytes and the
+# output (half of 5.6-luna, David Zhang 2026-09-23). The parser instructions alone are about 9.6K UTF-8 bytes and the
 # profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
 # with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
 # and 256 completion tokens cannot hold a reasoning model's structured output.
