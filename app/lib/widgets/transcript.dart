@@ -17,6 +17,7 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
@@ -1193,23 +1194,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildTranslationNotice() {
     return GestureDetector(
       onTap: () {
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text(context.l10n.translationNotice),
-              content: Text(context.l10n.translationNoticeMessage, style: const TextStyle(fontSize: 14)),
-              actions: [
-                TextButton(
-                  child: Text(context.l10n.ok),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            );
-          },
-        );
+        showOmiAlert(context, title: context.l10n.translationNotice, message: context.l10n.translationNoticeMessage);
       },
       child: const Opacity(
         opacity: 0.5,
