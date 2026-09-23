@@ -639,15 +639,15 @@ async def tool_create_event(request: Request):
             start_dt, is_all_day = parse_datetime(start_str)
             if all_day:
                 is_all_day = True
-        except ValueError as e:
-            return ChatToolResponse(error=str(e))
+        except ValueError:
+            return ChatToolResponse(error="Invalid start time. Could not parse datetime.")
 
         # Parse or calculate end time
         if end_str:
             try:
                 end_dt, _ = parse_datetime(end_str)
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid end time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid end time. Could not parse datetime.")
             if end_dt <= start_dt:
                 return ChatToolResponse(error="End time must be after start time")
         else:
@@ -737,7 +737,7 @@ async def tool_get_event(request: Request):
         result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Event not found: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Event not found.")
 
         summary = result.get("summary", "No title")
         description = result.get("description", "")
@@ -841,8 +841,8 @@ async def tool_update_event(request: Request):
                 else:
                     update_data["start"] = {"dateTime": start_dt.isoformat(), "timeZone": "UTC"}
                 updates.append(f"Start: {start_str}")
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid start time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid start time. Could not parse datetime.")
 
         if end_str:
             try:
@@ -852,8 +852,8 @@ async def tool_update_event(request: Request):
                 else:
                     update_data["end"] = {"dateTime": end_dt.isoformat(), "timeZone": "UTC"}
                 updates.append(f"End: {end_str}")
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid end time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid end time. Could not parse datetime.")
 
         if start_dt and end_dt and end_dt <= start_dt:
             return ChatToolResponse(error="End time must be after start time")

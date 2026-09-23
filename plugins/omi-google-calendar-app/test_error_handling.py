@@ -183,6 +183,28 @@ class GoogleCalendarErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(self.sensitive_leak, resp.content)
             self.assertNotIn("192.168.1.100", resp.content)
 
+    async def test_tool_create_event_masks_invalid_datetime_format(self):
+        with patch.object(app, "get_valid_access_token", return_value="fake-token"):
+            req_start = FakeChatRequest({"uid": "user123", "title": "Meeting", "start": "not-a-valid-date"})
+            resp_start = await app.tool_create_event(req_start)
+            self.assertEqual(resp_start.error, "Invalid start time. Could not parse datetime.")
+
+            req_end = FakeChatRequest({"uid": "user123", "title": "Meeting", "start": "2026-09-25T10:00:00Z", "end": "bad-end-date"})
+            resp_end = await app.tool_create_event(req_end)
+            self.assertEqual(resp_end.error, "Invalid end time. Could not parse datetime.")
+
+    async def test_tool_update_event_masks_invalid_datetime_format(self):
+        with patch.object(app, "get_valid_access_token", return_value="fake-token"):
+            with patch.object(app, "get_default_calendar", return_value="primary"):
+                with patch.object(app, "calendar_api_request", return_value={"id": "evt1", "summary": "Meeting"}):
+                    req_start = FakeChatRequest({"uid": "user123", "event_id": "evt1", "start": "bad-start-date"})
+                    resp_start = await app.tool_update_event(req_start)
+                    self.assertEqual(resp_start.error, "Invalid start time. Could not parse datetime.")
+
+                    req_end = FakeChatRequest({"uid": "user123", "event_id": "evt1", "end": "bad-end-date"})
+                    resp_end = await app.tool_update_event(req_end)
+                    self.assertEqual(resp_end.error, "Invalid end time. Could not parse datetime.")
+
 
 if __name__ == "__main__":
     unittest.main()
