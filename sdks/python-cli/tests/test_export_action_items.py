@@ -46,8 +46,8 @@ if mode == "badpage2" and page_index == 1:
     sys.stdout.write("{not json")
     sys.exit(0)
 if page_index >= len(pages):
-    print("page out of range", file=sys.stderr)
-    sys.exit(4)
+    json.dump([], sys.stdout)
+    sys.exit(0)
 page = pages[page_index]
 if mode == "badrecord":
     json.dump(page + ["not-an-object"], sys.stdout)
@@ -155,6 +155,21 @@ class TestExportActionItems(unittest.TestCase):
             self.assertEqual(Path(dest).read_text(encoding="utf-8"), '{"id": "previous"}\n')
             leftovers = [f for f in os.listdir(tmp_dir) if f.startswith(".export_action_items.")]
             self.assertEqual(leftovers, [])
+
+    def test_short_page_followed_by_data_page_continues_until_empty(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            page1 = [dict(ITEM, id="p1_1"), dict(ITEM, id="p1_2")]
+            page2 = [dict(ITEM, id="p2_1")]
+            page3 = []
+            env = self._fake_omi(tmp_dir, [page1, page2, page3])
+            dest = os.path.join(tmp_dir, "out.jsonl")
+
+            count = self._run(dest, env)
+            self.assertEqual(count, 3)
+            with open(dest, encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+            self.assertEqual(len(lines), 3)
+            self.assertEqual([json.loads(line)["id"] for line in lines], ["p1_1", "p1_2", "p2_1"])
 
 
 if __name__ == "__main__":

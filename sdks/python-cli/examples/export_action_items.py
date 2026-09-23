@@ -2,22 +2,25 @@
 """Export every action item (open and completed) from omi-cli to a UTF-8 JSON Lines (.jsonl) file.
 
 `omi action-item list` caps out at --limit 500, so a full-account export
-needs pagination. This is a full-account backup: it fetches both open and
-completed items (unlike the --open-only export in export_open_action_items.py),
-driving the CLI as a subprocess and paging through:
+needs pagination. This is a full-account backup across all states (open
+and completed), driving the CLI as a subprocess and paging through:
 
     omi --json action-item list --limit 500 --offset N
 
-until a short (or empty) page is returned, validating every page strictly,
-and streaming one JSON object per line to the destination. The destination is
+until an empty page is returned, validating every page strictly, and
+streaming one JSON object per line to the destination. The destination is
 written atomically: records go to a temporary file beside it, which replaces
 the destination only after every page has been fetched and validated — a
 failed export never truncates a previous file.
 
-Caveat: offset pagination is not a consistent snapshot. If action items are
-created or completed while the export runs, pages can shift and the result
-may skip or repeat an item. Run the export while the account is quiet, or
-re-run it, if you need a guaranteed-complete set.
+Caveats:
+- Offset pagination is not a consistent snapshot: if action items are
+  created or completed while the export runs, pages can shift and the result
+  may skip or repeat an item.
+- Short pages do not signal the end of data: the API filters locked or
+  malformed records after pagination, so a page can legitimately have fewer
+  than 500 items while more items exist on later pages. The exporter continues
+  until an empty page is reached.
 
 Usage:
     python export_action_items.py OUTPUT.jsonl
@@ -131,11 +134,11 @@ def export_action_items(destination):
             tmp_path = tmp.name
             for _ in range(MAX_PAGES):
                 page = _fetch_page(offset)
+                if not page:
+                    break
                 for record in page:
                     tmp.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
                     count += 1
-                if len(page) < PAGE_SIZE:
-                    break
                 offset += PAGE_SIZE
             else:
                 raise ExportError(f"export aborted: exceeded {MAX_PAGES} pages")
