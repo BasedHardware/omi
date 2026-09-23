@@ -2040,7 +2040,10 @@ async def mcp_oauth_callback(code: str, state: str):
         )
     except Exception as e:
         logger.error(f'mcp_oauth_callback: token exchange failed: {e}')
-        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code. Please try again.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code. Please try again.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2053,7 +2056,10 @@ async def mcp_oauth_callback(code: str, state: str):
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
         logger.error(f'mcp_oauth_callback: tool discovery failed: {e}')
-        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools from the specified server. Please try again.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools from the specified server. Please try again.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2077,7 +2083,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(escape(t.name) for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -2094,7 +2101,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'], response_model=McpRefreshToolsResponse)
