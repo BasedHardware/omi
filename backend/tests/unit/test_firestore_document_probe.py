@@ -1295,39 +1295,34 @@ def test_sdk_read_surface_matches_the_installed_package():
 
 
 def test_product_code_does_not_call_on_snapshot():
-    import shutil
     import subprocess
 
-    rg = shutil.which('rg')
-    assert rg, 'rg is required to assert product code has no on_snapshot call'
     root = Path(__file__).resolve().parents[3]
     result = subprocess.run(
         [
-            rg,
+            'git',
+            'grep',
             '-l',
-            '--glob',
-            '!**/tests/**',
-            '--glob',
-            '!**/testing/**',
-            '--glob',
-            '!**/node_modules/**',
-            '--glob',
-            '!firestore_document_probe.py',
-            '--glob',
-            '!*.md',
+            '-E',
             r'\.on_snapshot\(|\.onSnapshot\(',
+            '--',
             'backend',
             'web',
             'app',
             'desktop',
             'plugins',
             'omi',
+            ':(exclude)**/tests/**',
+            ':(exclude)**/testing/**',
+            ':(exclude)**/node_modules/**',
+            ':(exclude)**/*.md',
+            ':(exclude)backend/database/firestore_document_probe.py',
         ],
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
     )
-    # rg exits 1 when nothing matches.
+    # git grep exits 1 when nothing matches.
     assert result.returncode in (0, 1), result.stderr
     assert result.stdout.strip() == ''
