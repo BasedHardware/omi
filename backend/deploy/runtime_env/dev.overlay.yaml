@@ -204,10 +204,6 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: TYPESENSE_API_KEY
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: dev-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         METRICS_SECRET:
