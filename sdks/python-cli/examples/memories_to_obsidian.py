@@ -1,7 +1,9 @@
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
+
 
 def convert(source, destination):
     raw = Path(source).read_bytes()
@@ -36,9 +38,9 @@ def convert(source, destination):
             category = mem.get("category") or "general"
             created_at = mem.get("created_at") or ""
 
-            # Ensure multiline blockquote preserves '>'
-            quote_lines = [f"> {line}" for line in content.splitlines()]
-            lines.extend(quote_lines)
+            # Ensure multiline blockquote preserves '>' on every line
+            for line in content.splitlines():
+                lines.append(f"> {line}")
             lines.append(f"> — [[{category.title()}]] · *{created_at}*")
             lines.append("")
 
@@ -53,12 +55,29 @@ def convert(source, destination):
             except OSError:
                 pass
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python memories_to_obsidian.py <source.json> <destination.md>", file=sys.stderr)
-        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convert Omi memories into Obsidian Markdown notes with wikilinks."
+    )
+    parser.add_argument("source", help="Path to input JSON file from 'omi --json memory list'.")
+    parser.add_argument("destination", nargs="?", default=None, help="Path to output Markdown file.")
+    parser.add_argument("-o", "--output", dest="output_flag", default=None, help="Path to output Markdown file.")
+
+    args = parser.parse_args()
+    dest = args.output_flag or args.destination
+    if not dest:
+        parser.error("Destination path must be provided either as a positional argument or via -o/--output flag.")
+
     try:
-        convert(sys.argv[1], sys.argv[2])
+        convert(args.source, dest)
     except FileExistsError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
