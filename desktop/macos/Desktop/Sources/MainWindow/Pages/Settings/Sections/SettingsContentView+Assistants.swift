@@ -835,36 +835,6 @@ extension SettingsContentView {
 
   var preferencesSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
-      // Multiple Chat Sessions toggle
-      settingsCard(settingId: "advanced.preferences.multichat") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "bubble.left.and.bubble.right")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Multiple Chat Sessions")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text(
-              multiChatEnabled
-                ? "Create separate chat threads"
-                : "Single chat synced with mobile app"
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          Toggle("", isOn: $multiChatEnabled)
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-        }
-      }
-
       settingsCard(settingId: "advanced.preferences.speaknotifications") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "speaker.wave.2")

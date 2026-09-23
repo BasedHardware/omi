@@ -3919,7 +3919,6 @@ final class DesktopAutomationActionRegistry {
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
         "audio_recording_mode": assistant.audioRecordingMode.rawValue,
-        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }
 
@@ -3930,11 +3929,9 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
       let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
-      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
       return [
         "bridge_mode": bridgeMode,
         "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
-        "multi_chat_enabled": multiChat ? "true" : "false",
       ]
     }
 

@@ -360,8 +360,6 @@ struct SettingsContentView: View {
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
 
-  // Multi-chat mode setting
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true

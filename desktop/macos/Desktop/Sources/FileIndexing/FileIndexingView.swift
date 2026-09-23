@@ -499,15 +499,6 @@ struct FileIndexingView: View {
 
   /// Send the exploration prompt to the chat
   private func startExplorationChat() async {
-    // Multi-chat users get a dedicated session; single-chat users stay in default chat
-    if chatProvider.multiChatEnabled {
-      let session = await chatProvider.createNewSession(skipGreeting: true)
-      guard session != nil else {
-        log("FileIndexingView: Failed to create session for file exploration")
-        return
-      }
-    }
-
     let prompt = """
       I just indexed \(totalFilesScanned) files on your computer. Explore them to learn about me, then build my knowledge graph.
 
