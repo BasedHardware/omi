@@ -5,6 +5,7 @@ PR: fix(desktop_chat): sanitize exception detail leakage in chat endpoint handle
 Verifies that RuntimeError from metering/gateway and ValueError from JIT header
 parsing do NOT leak internal Redis errors, server hostnames, or schema details in HTTP responses.
 """
+
 from fastapi import HTTPException
 
 
@@ -17,7 +18,9 @@ def _simulate_desktop_chat_error_handler(exc: Exception, phase: str):
         if isinstance(exc, HTTPException):
             raise exc
         if isinstance(exc, RuntimeError):
-            raise HTTPException(status_code=503, detail='Desktop chat service is temporarily unavailable. Please try again.') from exc
+            raise HTTPException(
+                status_code=503, detail='Desktop chat service is temporarily unavailable. Please try again.'
+            ) from exc
         if isinstance(exc, ValueError):
             raise HTTPException(status_code=400, detail='Invalid desktop chat request parameters.') from exc
     raise exc
