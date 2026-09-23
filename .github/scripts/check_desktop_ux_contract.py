@@ -117,7 +117,9 @@ RULES: tuple[Rule, ...] = (
         # `ProgressView(…)` followed, through any chain of simple modifiers, by `.scaleEffect(`.
         re.compile(
             r"ProgressView\([^()\n]*\)"
-            r"(?:\s*\.(?:progressViewStyle|tint|controlSize|frame|padding)\([^()\n]*(?:\([^()\n]*\))?[^()\n]*\))*"
+            # Each argument list is a run of non-paren characters or one nested `(…)`; the two alternatives
+            # never overlap, so the match has one parse and cannot backtrack exponentially (CodeQL py/redos).
+            r"(?:\s*\.(?:progressViewStyle|tint|controlSize|frame|padding)\((?:[^()\n]|\([^()\n]*\))*\))*"
             r"\s*\.scaleEffect\("
         ),
         "Use `GlassLoadingState(label:)` for a page state, or `ProgressView().controlSize(.small)` for an "
