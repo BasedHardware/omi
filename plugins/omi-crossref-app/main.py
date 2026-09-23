@@ -23,8 +23,14 @@ app = FastAPI(
 )
 
 
-def clamp_max_results(value: int) -> int:
-    return max(1, min(10, value))
+def clamp_max_results(value: Any) -> int:
+    if isinstance(value, bool) or value is None:
+        return 5
+    try:
+        val = int(value)
+    except (TypeError, ValueError):
+        return 5
+    return max(1, min(10, val))
 
 
 _DOI_PREFIX_RE = re.compile(r"^10\.[0-9]{4,9}(?:\.[0-9]+)*/")
@@ -106,10 +112,34 @@ def clean(text: Any) -> str:
     return value.strip()
 
 
-def extract_year(item: dict[str, Any]) -> str:
+def _extract_title(title_raw: Any) -> str:
+    """Safely extract and clean paper title from Crossref record.
+
+    Crossref typically specifies title as a list of strings, but
+    malformed records or alternate formats can return a single string,
+    empty lists, or non-string values. A string title must be preserved
+    intact rather than truncated to its first character by [0].
+    """
+    if isinstance(title_raw, str):
+        cleaned = clean(title_raw)
+        return cleaned if cleaned else "Untitled"
+    if isinstance(title_raw, (list, tuple)):
+        for part in title_raw:
+            cleaned = clean(part)
+            if cleaned:
+                return cleaned
+    return "Untitled"
+
+
+def extract_year(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
     for key in ("published-print", "published-online", "issued"):
-        date_parts = (item.get(key) or {}).get("date-parts", [])
-        if date_parts and date_parts[0]:
+        val = item.get(key)
+        if not isinstance(val, dict):
+            continue
+        date_parts = val.get("date-parts")
+        if isinstance(date_parts, (list, tuple)) and date_parts and isinstance(date_parts[0], (list, tuple)) and date_parts[0]:
             return clean(date_parts[0][0])
     return ""
 
@@ -245,13 +275,16 @@ async def search_crossref_works(payload: SearchWorksInput):
     except Exception as exc:
         logger.warning("Crossref search request failed: %s", type(exc).__name__)
         return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
-    items = payload.get("message", {}).get("items", [])
+    message = payload.get("message") if isinstance(payload.get("message"), dict) else {}
+    items = message.get("items") if isinstance(message.get("items"), list) else []
     if not items:
         return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
 
     lines = [f"Top {len(items)} Crossref results for '{query}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
+        if not isinstance(item, dict):
+            item = {}
+        title = _extract_title(item.get("title"))
         doi = clean(item.get("DOI"))
         year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")
@@ -275,8 +308,8 @@ async def get_crossref_work(payload: GetWorkInput):
     except Exception as exc:
         logger.warning("Crossref work request failed: %s", type(exc).__name__)
         return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
-    item = payload.get("message", {})
-    title = clean((item.get("title") or ["Untitled"])[0])
+    item = payload.get("message") if isinstance(payload.get("message"), dict) else {}
+    title = _extract_title(item.get("title"))
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
@@ -314,13 +347,16 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
     except Exception as exc:
         logger.warning("Crossref author request failed: %s", type(exc).__name__)
         return ChatToolResponse(error=_REQUEST_FAILED_MESSAGE)
-    items = payload.get("message", {}).get("items", [])
+    message = payload.get("message") if isinstance(payload.get("message"), dict) else {}
+    items = message.get("items") if isinstance(message.get("items"), list) else []
     if not items:
         return ChatToolResponse(result=f"No recent works found for author '{author}'.")
 
     lines = [f"Recent works for '{author}':"]
     for idx, item in enumerate(items, 1):
-        title = clean((item.get("title") or ["Untitled"])[0])
+        if not isinstance(item, dict):
+            item = {}
+        title = _extract_title(item.get("title"))
         doi = clean(item.get("DOI"))
         year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")
