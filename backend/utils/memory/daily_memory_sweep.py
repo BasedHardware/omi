@@ -33,11 +33,13 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 import atexit
+import hashlib
 import importlib
 import logging
 import os
 import re
 import threading
+import time as _time_mod
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -190,6 +192,7 @@ DAILY_MEMORY_SWEEP_COHORT_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME"
 DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
 DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS"
 DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED"
+DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV = "MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS"
 
 # The QA run seam is intentionally separate from the ordinary scheduler
 # controls.  A caller must provide every QA-only gate below; setting a run id
@@ -6361,6 +6364,64 @@ def _pending_completed_dates(
     )
 
 
+def daily_memory_sweep_stagger_spread_seconds(environ: Optional[Mapping[str, str]] = None) -> int:
+    """Read the per-user stagger window. ``0`` and any non-integer keep today's pileup."""
+
+    source = os.environ if environ is None else environ
+    raw = str(source.get(DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV, "0") or "0").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def daily_memory_sweep_stagger_delay_seconds(uid: str, spread_seconds: int) -> int:
+    """Stable slot in ``[0, spread_seconds)`` for one uid. Disabled at ``0``.
+
+    Uses SHA-256 so the slot does not change across processes (``hash()`` is
+    salted per interpreter).
+    """
+
+    if spread_seconds <= 0:
+        return 0
+    normalized = (uid or "").strip()
+    if not normalized:
+        return 0
+    digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % spread_seconds
+
+
+def _sweep_monotonic() -> float:
+    return _time_mod.monotonic()
+
+
+def _sweep_sleep(seconds: float) -> None:
+    _time_mod.sleep(seconds)
+
+
+def _sleep_until_sweep_stagger_slot(
+    uid: str,
+    *,
+    spread_seconds: int,
+    started_monotonic: float,
+) -> None:
+    """Wait until this uid's slot, measured from the scheduler start.
+
+    A sequential drain must not sleep ``hash(uid) % spread`` in full for every
+    user. The slot is an offset from ``started_monotonic``, so added wait stays
+    inside one spread window. Receipts make a late or replayed start an exact
+    no-op when that uid's day already committed.
+    """
+
+    delay = daily_memory_sweep_stagger_delay_seconds(uid, spread_seconds)
+    if delay <= 0:
+        return
+    remaining = delay - (_sweep_monotonic() - started_monotonic)
+    if remaining > 0:
+        _sweep_sleep(remaining)
+
+
 def run_daily_memory_sweep_scheduler(
     *,
     db_client: Any,
@@ -6413,6 +6474,21 @@ def run_daily_memory_sweep_scheduler(
     _ = cohort_authority, cohort_authorizer
     if belief_model_enabled() and not belief_automation_enabled():
         return DailySweepSchedulerSummary(errors=("belief_automation_paused",))
+    stagger_spread_seconds = daily_memory_sweep_stagger_spread_seconds()
+    stagger_started = _sweep_monotonic()
+    scheduled_uids = bounded_uids
+    if stagger_spread_seconds > 0:
+        logger.info(
+            "daily-memory-sweep staggering %s users across %ss",
+            len(bounded_uids),
+            stagger_spread_seconds,
+        )
+        scheduled_uids = tuple(
+            sorted(
+                bounded_uids,
+                key=lambda uid: (daily_memory_sweep_stagger_delay_seconds(uid, stagger_spread_seconds), uid),
+            )
+        )
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
@@ -6422,6 +6498,11 @@ def run_daily_memory_sweep_scheduler(
 
     def process_one(uid: str) -> ProcessOutcome:
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
+        _sleep_until_sweep_stagger_slot(
+            uid,
+            spread_seconds=stagger_spread_seconds,
+            started_monotonic=stagger_started,
+        )
         attempted += 1
         try:
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
@@ -6566,7 +6647,7 @@ def run_daily_memory_sweep_scheduler(
             errors.append(f"uid={uid}:{type(exc).__name__}")
             return ProcessOutcome.reject(type(exc).__name__, reason="processor_exception")
 
-    drain_sweep_uids(bounded_uids, process_one)
+    drain_sweep_uids(scheduled_uids, process_one)
     return DailySweepSchedulerSummary(
         attempted_users=attempted,
         committed_users=committed_users,
@@ -6619,6 +6700,7 @@ __all__ = [
     "DAILY_MEMORY_SWEEP_COHORT_NAME_ENV",
     "DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV",
     "DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV",
+    "DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV",
     "QA_SWEEP_RUN_ID_ENV",
     "QA_SWEEP_ADMISSION_ENV",
     "QA_SWEEP_PROJECT",

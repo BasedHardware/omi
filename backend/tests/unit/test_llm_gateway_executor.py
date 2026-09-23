@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from functools import cache
 
 import pytest
@@ -16,15 +17,22 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.accounting import AttemptTrace
+from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
+    execute_embedding,
+    provider_429_backoff_seconds,
     provider_request_for,
     selected_serving_route_artifact_id,
 )
-from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
-from llm_gateway.gateway.resolver import resolve_chat_completion_route
+from llm_gateway.gateway.providers import (
+    FakeChatCompletionProvider,
+    ProviderFailure,
+    ProviderResponse,
+    fake_success_response,
+)
+from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_embedding_route
 from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.schemas import (
     CredentialMode,
@@ -972,6 +980,197 @@ async def test_canary_route_at_100_percent_serves_active():
     assert not result.used_lkg
     assert not result.fallback_used
     assert result.route_serving_class == RouteServingClass.CANARY
+
+
+def test_provider_429_backoff_grows_exponentially_and_caps():
+    delays = [
+        provider_429_backoff_seconds(
+            attempt=attempt,
+            retry_after_seconds=None,
+            remaining_budget_seconds=1_000,
+            random_uniform=lambda _low, _high: 0.0,
+        )
+        for attempt in range(1, 8)
+    ]
+
+    assert delays == [2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+
+
+def test_provider_429_backoff_jitter_stays_inside_half_base():
+    base = executor.PROVIDER_429_BACKOFF_BASE_SECONDS
+    high = provider_429_backoff_seconds(
+        attempt=2,
+        retry_after_seconds=None,
+        remaining_budget_seconds=1_000,
+        random_uniform=lambda _low, high: high,
+    )
+    low = provider_429_backoff_seconds(
+        attempt=2,
+        retry_after_seconds=None,
+        remaining_budget_seconds=1_000,
+        random_uniform=lambda low, _high: low,
+    )
+
+    assert low == base * 2
+    assert high == base * 2 + base / 2
+    for _ in range(40):
+        delay = provider_429_backoff_seconds(
+            attempt=1,
+            retry_after_seconds=None,
+            remaining_budget_seconds=1_000,
+        )
+        assert base <= delay <= base + base / 2
+
+
+def test_provider_429_backoff_honors_retry_after_and_deadline():
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=15, remaining_budget_seconds=100) == 15
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=120, remaining_budget_seconds=100) == 60
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=30, remaining_budget_seconds=3) == 3
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=15, remaining_budget_seconds=0) == 0
+
+
+class _FrozenClock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _install_retry_clock(monkeypatch):
+    clock = _FrozenClock()
+    slept: list[float] = []
+
+    async def sleeper(seconds: float) -> None:
+        slept.append(seconds)
+        clock.t += seconds
+
+    monkeypatch.setattr(executor, 'monotonic', clock)
+    monkeypatch.setattr(executor, 'sleep_for_provider_retry', sleeper)
+    return slept
+
+
+def _route_with_attempts(max_attempts: int, request_ms: int = 120_000):
+    route = active_route_with_fallbacks([]).model_copy(
+        update={
+            'retry': type(active_route_with_fallbacks([]).retry)(max_attempts=max_attempts),
+            'timeouts': active_route_with_fallbacks([]).timeouts.model_copy(update={'request_ms': request_ms}),
+        }
+    )
+    return resolve_chat_completion_route(config_with_active_route(route), valid_request())
+
+
+@pytest.mark.asyncio
+async def test_executor_429_retry_honors_retry_after_and_stays_accounted(monkeypatch):
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=7),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"retried"}'),
+        ]
+    )
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+        attempt_trace=trace,
+    )
+
+    assert slept == [7]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.configured_model for attempt in trace.attempts] == [LUNA_MODEL, LUNA_MODEL]
+    assert trace.attempts[0].error_class == FailureClass.PROVIDER_429_OMI_PAID.value
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.response['choices'][0]['message']['content'] == '{"answer":"retried"}'
+
+
+@pytest.mark.asyncio
+async def test_executor_429_backoff_uses_exponential_delay_inside_deadline(monkeypatch):
+    resolved = _route_with_attempts(3, request_ms=3_000)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    monkeypatch.setattr(executor.random, 'uniform', lambda _low, _high: 0.0)
+    slept = _install_retry_clock(monkeypatch)
+
+    with pytest.raises(GatewayProviderFailureError, match='deadline exhausted'):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+        )
+
+    # First sleep is base*2**0 = 2s. The 3s route budget then caps the next pause,
+    # and the following attempt finds the deadline already spent.
+    assert slept == [2.0, 1.0]
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_executor_non_429_retries_do_not_sleep(monkeypatch):
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert slept == []
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_embedding_429_retry_sleeps_and_stays_on_the_same_provider(monkeypatch):
+    config = gateway_config()
+    resolved = resolve_embedding_route(config, {'model': 'omi:auto:openai-embeddings', 'input': 'hello'})
+    route = resolved.route.model_copy(update={'retry': type(resolved.route.retry)(max_attempts=2)})
+    resolved = replace(resolved, route=route)
+    calls: list[str] = []
+
+    class _EmbeddingProvider:
+        async def create_embedding(self, request, *, provider_ref, credentials, timeout_ms):
+            del request, credentials, timeout_ms
+            calls.append(provider_ref.model)
+            if len(calls) == 1:
+                raise ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=4)
+            return ProviderResponse(
+                response={
+                    'object': 'list',
+                    'data': [{'object': 'embedding', 'embedding': [0.25], 'index': 0}],
+                    'model': provider_ref.model,
+                    'usage': {'prompt_tokens': 1, 'total_tokens': 1},
+                },
+                accounting=ProviderResponseMetadata(),
+            )
+
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+    result = await execute_embedding(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({resolved.route.primary.provider: _EmbeddingProvider()}),
+        attempt_trace=trace,
+    )
+
+    assert slept == [4]
+    assert calls == [resolved.route.primary.model, resolved.route.primary.model]
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert result['data'][0]['embedding'] == [0.25]
 
 
 def valid_request(**overrides):
