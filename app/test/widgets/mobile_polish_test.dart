@@ -115,12 +115,12 @@ void main() {
     await tester.tap(save);
     expect(tasks.writes, 1);
     expect(find.byType(ActionItemFormSheet), findsOneWidget);
-    expect(find.text('Action item created'), findsNothing);
+    expect(find.text('Task created'), findsNothing);
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     expect(tasks.savedDueDate!.day, tomorrow.day);
     tasks.result.complete(null);
     await tester.pumpAndSettle();
-    expect(find.text('Failed to create action item'), findsOneWidget);
+    expect(find.text('Failed to create task'), findsOneWidget);
     expect(tester.widget<TextField>(find.byKey(const Key('task_description'))).controller!.text, 'Send notes');
     tasks.result = Completer();
     await tester.tap(save);
@@ -129,6 +129,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(tasks.writes, 2);
     expect(find.byType(ActionItemFormSheet), findsNothing);
-    expect(find.text('Action item created'), findsOneWidget);
+    expect(find.text('Task created'), findsOneWidget);
   });
 }

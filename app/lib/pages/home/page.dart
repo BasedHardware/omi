@@ -78,6 +78,7 @@ import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/battery_info_widget.dart';
+import 'package:omi/ui/feedback/omi_feedback.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -639,6 +640,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _checkForAnnouncements();
     _registerAutoSyncCallback();
     _initQuickActions();
+    // Toasts float above the tab bar (and the chat bar on Home) while this shell is the visible route.
+    OmiFeedback.bottomClearance = (ctx) {
+      final onHome = ctx.read<HomeProvider>().selectedIndex == 0;
+      final clearance = onHome ? homeChatBarClearance(ctx) : bottomNavBarClearance(ctx);
+      return clearance - bottomNavBarReservedInset(ctx);
+    };
     super.initState();
 
     // After init
@@ -1191,6 +1198,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    OmiFeedback.bottomClearance = null;
     _announcementTimer?.cancel();
     _announcementTimer = null;
     for (final timer in _prewarmTimers) {

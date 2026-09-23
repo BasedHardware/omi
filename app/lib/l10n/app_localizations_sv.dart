@@ -21,7 +21,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptTab => 'Transkription';
 
   @override
-  String get actionItemsTab => 'Åtgärder';
+  String get actionItemsTab => 'Uppgifter';
 
   @override
   String get deleteConversationTitle => 'Ta bort konversation?';
@@ -112,10 +112,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get remaining => 'Återstår';
 
   @override
-  String get loading => 'Läser in...';
+  String get loading => 'Läser in…';
 
   @override
-  String get loadingDuration => 'Läser in längd...';
+  String get loadingDuration => 'Läser in längd…';
 
   @override
   String secondsCount(int count) {
@@ -152,7 +152,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectLanguage => 'Välj språk';
 
   @override
-  String get deleting => 'Tar bort...';
+  String get deleting => 'Tar bort…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -180,7 +180,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get disconnected => 'Frånkopplad';
 
   @override
-  String get searching => 'Söker...';
+  String get searching => 'Söker';
 
   @override
   String get connectDevice => 'Anslut enhet';
@@ -241,7 +241,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'För att stjärnmärka en konversation, öppna den och tryck på stjärnikonen i sidhuvudet.';
 
   @override
-  String get searchConversations => 'Sök konversationer...';
+  String get searchConversations => 'Sök konversationer';
 
   @override
   String selectedCount(int count) {
@@ -272,7 +272,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noMessagesYet => 'Inga meddelanden ännu!\nVarför inte starta en konversation?';
 
   @override
-  String get deletingMessages => 'Raderar dina meddelanden från Omis minne...';
+  String get deletingMessages => 'Raderar dina meddelanden från Omis minne…';
 
   @override
   String get messageCopied => '✨ Meddelande kopierat till urklipp';
@@ -320,7 +320,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get buildAndShareApp => 'Bygg och dela din anpassade app';
 
   @override
-  String get searchApps => 'Sök appar...';
+  String get searchApps => 'Sök appar';
 
   @override
   String get myApps => 'Skapad av mig';
@@ -478,7 +478,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'På Omi är vi engagerade i att skydda din integritet. Denna sida låter dig kontrollera hur din data lagras och används.';
 
   @override
-  String get learnMore => 'Läs mer...';
+  String get learnMore => 'Läs mer…';
 
   @override
   String get dataProtectionLevel => 'Dataskyddsnivå';
@@ -652,7 +652,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get developerSettingsTitle => 'Utvecklarinställningar';
 
   @override
-  String get saving => 'Sparar...';
+  String get saving => 'Sparar…';
 
   @override
   String get beta => 'BETA';
@@ -731,7 +731,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get providing => 'Tillhandahåller';
 
   @override
-  String get providingSubtitle => 'Åtgärder och anteckningar automatiskt fångade.';
+  String get providingSubtitle => 'Uppgifter och anteckningar, automatiskt fångade.';
 
   @override
   String get remembering => 'Kommer ihåg';
@@ -832,7 +832,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get debugLogCleared => 'Felsökningslogg rensad';
 
   @override
-  String get exportStarted => 'Export har startat. Detta kan ta några sekunder...';
+  String get exportStarted => 'Export har startat. Detta kan ta några sekunder…';
 
   @override
   String get exportAllData => 'Exportera all data';
@@ -1331,7 +1331,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'Dina åtgärder kommer att synkroniseras till ditt $appName-konto';
+    return 'Dina uppgifter kommer att synkroniseras till ditt $appName-konto';
   }
 
   @override
@@ -1625,7 +1625,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get viewTemplate => 'Visa mall';
 
   @override
-  String get trySomethingLike => 'Prova något som...';
+  String get trySomethingLike => 'Prova något som…';
 
   @override
   String get tryIt => 'Prova det';
@@ -1652,10 +1652,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get features => 'Funktioner';
 
   @override
-  String get creatingYourApp => 'Skapar din app...';
+  String get creatingYourApp => 'Skapar din app…';
 
   @override
-  String get generatingIcon => 'Genererar ikon...';
+  String get generatingIcon => 'Genererar ikon…';
 
   @override
   String get whatShouldWeMake => 'Vad ska vi skapa?';
@@ -1706,13 +1706,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get perMonthLabel => '/ månad';
 
   @override
-  String get creating => 'Skapar...';
+  String get creating => 'Skapar…';
 
   @override
   String get createApp => 'Skapa App';
 
   @override
-  String get searchingForDevices => 'Söker efter enheter...';
+  String get searchingForDevices => 'Söker efter enheter';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1948,7 +1948,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get personalGrowthJourney => 'Din personliga tillväxtresa med AI som lyssnar på varje ord.';
 
   @override
-  String get actionItemsTitle => 'Att göra';
+  String get actionItemsTitle => 'Uppgifter';
 
   @override
   String get actionItemsDescription => 'Tryck för att redigera • Långtryck för att välja • Svep för åtgärder';
@@ -1963,7 +1963,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tabOld => 'Gamla';
 
   @override
-  String get emptyTodoMessage => '🎉 Allt klart!\nInga väntande åtgärder';
+  String get emptyTodoMessage => '🎉 Allt klart!\nInga väntande uppgifter';
 
   @override
   String get emptyDoneMessage => 'Inga avslutade objekt ännu';
@@ -1975,37 +1975,37 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noItems => 'Inga objekt';
 
   @override
-  String get actionItemMarkedIncomplete => 'Åtgärd markerad som ofullständig';
+  String get actionItemMarkedIncomplete => 'Uppgift markerad som ofullständig';
 
   @override
-  String get actionItemCompleted => 'Åtgärd slutförd';
+  String get actionItemCompleted => 'Uppgift slutförd';
 
   @override
-  String get deleteActionItemTitle => 'Ta bort åtgärdspost';
+  String get deleteActionItemTitle => 'Ta bort uppgift';
 
   @override
-  String get deleteActionItemMessage => 'Är du säker på att du vill ta bort denna åtgärdspost?';
+  String get deleteActionItemMessage => 'Är du säker på att du vill ta bort denna uppgift?';
 
   @override
   String get deleteSelectedItemsTitle => 'Ta bort valda objekt';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Är du säker på att du vill ta bort $count vald$s åtgärd$s?';
+    return 'Är du säker på att du vill ta bort $count markerade uppgift$s?';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'Åtgärd \"$description\" borttagen';
+    return 'Uppgift \"$description\" borttagen';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count åtgärd$s borttagen$s';
+    return '$count uppgift$s borttagna';
   }
 
   @override
-  String get failedToDeleteItem => 'Det gick inte att ta bort åtgärd';
+  String get failedToDeleteItem => 'Det gick inte att ta bort uppgiften';
 
   @override
   String get failedToDeleteItems => 'Det gick inte att ta bort objekt';
@@ -2014,11 +2014,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get failedToDeleteSomeItems => 'Det gick inte att ta bort vissa objekt';
 
   @override
-  String get welcomeActionItemsTitle => 'Redo för åtgärder';
+  String get welcomeActionItemsTitle => 'Redo för uppgifter';
 
   @override
   String get welcomeActionItemsDescription =>
-      'Din AI kommer automatiskt att extrahera uppgifter och att-göra-saker från dina konversationer. De kommer att visas här när de skapas.';
+      'Din AI hämtar automatiskt uppgifter från dina konversationer. De visas här när de skapas.';
 
   @override
   String get autoExtractionFeature => 'Automatiskt extraherat från konversationer';
@@ -2038,10 +2038,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deleteSelected => 'Ta bort valda';
 
   @override
-  String get searchMemories => 'Sök minnen...';
+  String get searchMemories => 'Sök minnen';
 
   @override
-  String get memoryDeleted => 'Minne borttaget.';
+  String get memoryDeleted => 'Minne borttaget';
 
   @override
   String get memoryHistoryPartial =>
@@ -2096,7 +2096,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createMemoryTooltip => 'Skapa nytt minne';
 
   @override
-  String get createActionItemTooltip => 'Skapa ny åtgärd';
+  String get createActionItemTooltip => 'Skapa ny uppgift';
 
   @override
   String get memoryManagement => 'Minneshantering';
@@ -2161,28 +2161,28 @@ class AppLocalizationsSv extends AppLocalizations {
   String get retry => 'Försök igen';
 
   @override
-  String get createActionItem => 'Skapa åtgärd';
+  String get createActionItem => 'Skapa uppgift';
 
   @override
-  String get editActionItem => 'Redigera åtgärd';
+  String get editActionItem => 'Redigera uppgift';
 
   @override
   String get actionItemDescriptionHint => 'Vad behöver göras?';
 
   @override
-  String get actionItemDescriptionEmpty => 'Åtgärdsbeskrivning kan inte vara tom.';
+  String get actionItemDescriptionEmpty => 'Uppgiftsbeskrivningen kan inte vara tom.';
 
   @override
-  String get actionItemUpdated => 'Åtgärd uppdaterad';
+  String get actionItemUpdated => 'Uppgift uppdaterad';
 
   @override
-  String get failedToUpdateActionItem => 'Misslyckades med att uppdatera åtgärd';
+  String get failedToUpdateActionItem => 'Misslyckades med att uppdatera uppgift';
 
   @override
-  String get actionItemCreated => 'Åtgärd skapad';
+  String get actionItemCreated => 'Uppgift skapad';
 
   @override
-  String get failedToCreateActionItem => 'Misslyckades med att skapa åtgärd';
+  String get failedToCreateActionItem => 'Misslyckades med att skapa uppgift';
 
   @override
   String get dueDate => 'Förfallodatum';
@@ -2218,16 +2218,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get markComplete => 'Markera som slutförd';
 
   @override
-  String get actionItemDeleted => 'Åtgärdspost borttagen';
+  String get actionItemDeleted => 'Uppgift borttagen';
 
   @override
-  String get failedToDeleteActionItem => 'Misslyckades med att radera åtgärd';
+  String get failedToDeleteActionItem => 'Misslyckades med att radera uppgift';
 
   @override
-  String get deleteActionItemConfirmTitle => 'Ta bort åtgärd';
+  String get deleteActionItemConfirmTitle => 'Ta bort uppgift';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Är du säker på att du vill ta bort denna åtgärd?';
+  String get deleteActionItemConfirmMessage => 'Är du säker på att du vill ta bort denna uppgift?';
 
   @override
   String get appLanguage => 'Appspråk';
@@ -2256,7 +2256,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get pleaseSelectReason => 'Vänligen välj en anledning';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Berätta mer om vad som gick fel...';
+  String get tellUsMoreWhatWentWrong => 'Berätta mer om vad som gick fel…';
 
   @override
   String get selectText => 'Välj text';
@@ -2315,7 +2315,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get exportButton => 'Exportera';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Åtgärdspunkter kopierade till urklipp';
+  String get actionItemsCopiedToClipboard => 'Uppgifter kopierade till urklipp';
 
   @override
   String get summarize => 'Sammanfatta';
@@ -2462,7 +2462,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Hjälper till att diagnostisera problem';
 
   @override
-  String get exportStartedMessage => 'Export startad. Detta kan ta några sekunder...';
+  String get exportStartedMessage => 'Export startad. Detta kan ta några sekunder…';
 
   @override
   String get exportConversationsToJson => 'Exportera konversationer till en JSON-fil';
@@ -2518,7 +2518,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Spåra dina personliga mål på startsidan';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Åtgärdspostbeskrivning kan inte vara tom';
+  String get actionItemDescriptionCannotBeEmpty => 'Uppgiftsbeskrivningen kan inte vara tom';
 
   @override
   String get saved => 'Sparad';
@@ -2601,7 +2601,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get toggleControlBar => 'Växla kontrollfält';
 
   @override
-  String get pressKeys => 'Tryck på tangenter...';
+  String get pressKeys => 'Tryck på tangenter…';
 
   @override
   String get cmdRequired => '⌘ krävs';
@@ -2616,7 +2616,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get search => 'Sök';
 
   @override
-  String get searchPlaceholder => 'Sök...';
+  String get searchPlaceholder => 'Sök';
 
   @override
   String get untitledConversation => 'Namnlös konversation';
@@ -2689,7 +2689,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchResults => 'Sökresultat';
 
   @override
-  String get actionItems => 'Åtgärdspunkter';
+  String get actionItems => 'Uppgifter';
 
   @override
   String get tasksToday => 'Idag';
@@ -2704,7 +2704,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tasksLater => 'Senare';
 
   @override
-  String get loadingTasks => 'Laddar uppgifter...';
+  String get loadingTasks => 'Laddar uppgifter…';
 
   @override
   String get tasks => 'Uppgifter';
@@ -2765,23 +2765,23 @@ class AppLocalizationsSv extends AppLocalizations {
   String get timeAM => 'FM';
 
   @override
-  String get actionItemUpdatedSuccessfully => 'Åtgärd uppdaterades framgångsrikt';
+  String get actionItemUpdatedSuccessfully => 'Uppgift uppdaterades framgångsrikt';
 
   @override
-  String get actionItemCreatedSuccessfully => 'Åtgärd skapades framgångsrikt';
+  String get actionItemCreatedSuccessfully => 'Uppgift skapades framgångsrikt';
 
   @override
-  String get actionItemDeletedSuccessfully => 'Åtgärd raderades framgångsrikt';
+  String get actionItemDeletedSuccessfully => 'Uppgift raderades framgångsrikt';
 
   @override
-  String get deleteActionItem => 'Radera åtgärd';
+  String get deleteActionItem => 'Radera uppgift';
 
   @override
   String get deleteActionItemConfirmation =>
-      'Är du säker på att du vill radera denna åtgärd? Denna handling kan inte ångras.';
+      'Är du säker på att du vill radera denna uppgift? Denna handling kan inte ångras.';
 
   @override
-  String get enterActionItemDescription => 'Ange beskrivning av åtgärd...';
+  String get enterActionItemDescription => 'Ange beskrivning av uppgift';
 
   @override
   String get markAsCompleted => 'Markera som slutförd';
@@ -2790,10 +2790,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get setDueDateAndTime => 'Ange förfallodatum och tid';
 
   @override
-  String get reloadingApps => 'Laddar om appar...';
+  String get reloadingApps => 'Laddar om appar…';
 
   @override
-  String get loadingApps => 'Laddar appar...';
+  String get loadingApps => 'Laddar appar…';
 
   @override
   String get browseInstallCreateApps => 'Bläddra, installera och skapa appar';
@@ -2829,10 +2829,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Bygg och skicka in din anpassade Omi-app';
 
   @override
-  String get submittingYourApp => 'Skickar in din app...';
+  String get submittingYourApp => 'Skickar in din app…';
 
   @override
-  String get preparingFormForYou => 'Förbereder formuläret för dig...';
+  String get preparingFormForYou => 'Förbereder formuläret för dig…';
 
   @override
   String get appDetails => 'Appdetaljer';
@@ -2854,14 +2854,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Du är en fantastisk app, ditt jobb är att svara på användarfrågor och få dem att må bra...';
+      'Du är en fantastisk app, ditt jobb är att svara på användarfrågor och få dem att må bra…';
 
   @override
   String get conversationPrompt => 'Samtalsprompt';
 
   @override
   String get conversationPromptPlaceholder =>
-      'Du är en fantastisk app, du kommer att få en transkription och sammanfattning av ett samtal...';
+      'Du är en fantastisk app, du kommer att få en transkription och sammanfattning av ett samtal…';
 
   @override
   String get notificationScopes => 'Aviseringsomfång';
@@ -3020,7 +3020,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get pricingPaid => 'Betald';
 
   @override
-  String get loadingCapabilities => 'Laddar funktioner...';
+  String get loadingCapabilities => 'Laddar funktioner…';
 
   @override
   String get filterInstalled => 'Installerade';
@@ -3160,7 +3160,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get failedToTranscribeAudio => 'Kunde inte transkribera ljud';
 
   @override
-  String get transcribing => 'Transkriberar...';
+  String get transcribing => 'Transkriberar…';
 
   @override
   String get discardedConversation => 'Kasserat samtal';
@@ -3172,7 +3172,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get from => 'från';
 
   @override
-  String get copied => 'Kopierat!';
+  String get copied => 'Kopierat';
 
   @override
   String get copyLink => 'Kopiera länk';
@@ -3210,7 +3210,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get failedToGenerateShareLink => 'Misslyckades generera delningslänk';
 
   @override
-  String get reloadingConversations => 'Laddar om konversationer...';
+  String get reloadingConversations => 'Laddar om konversationer…';
 
   @override
   String get user => 'Användare';
@@ -3269,7 +3269,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get wearableAiCompanion => 'Bärbar AI-följeslagare';
 
   @override
-  String get loadingMemories => 'Laddar minnen...';
+  String get loadingMemories => 'Laddar minnen…';
 
   @override
   String get allMemories => 'Alla minnen';
@@ -3281,7 +3281,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get manual => 'Manuell';
 
   @override
-  String get loadingYourMemories => 'Laddar dina minnen...';
+  String get loadingYourMemories => 'Laddar dina minnen…';
 
   @override
   String get createYourFirstMemory => 'Skapa ditt första minne för att komma igång';
@@ -3399,7 +3399,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => 'Välj ditt föredragna språk för den bästa Omi-upplevelsen';
 
   @override
-  String get searchLanguages => 'Sök språk...';
+  String get searchLanguages => 'Sök språk';
 
   @override
   String get selectALanguage => 'Välj ett språk';
@@ -3456,13 +3456,13 @@ class AppLocalizationsSv extends AppLocalizations {
       'Omi behöver tillgänglighetstillstånd för att upptäcka när du ansluter till Zoom-, Meet- eller Teams-möten i din webbläsare.';
 
   @override
-  String get pleaseWait => 'Vänta...';
+  String get pleaseWait => 'Vänta…';
 
   @override
   String get joinTheCommunity => 'Gå med i communityn!';
 
   @override
-  String get loadingProfile => 'Laddar profil...';
+  String get loadingProfile => 'Laddar profil…';
 
   @override
   String get profileSettings => 'Profilinställningar';
@@ -3590,7 +3590,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get saveSettings => 'Spara Inställningar';
 
   @override
-  String get syncingDeveloperSettings => 'Synkroniserar utvecklarinställningar...';
+  String get syncingDeveloperSettings => 'Synkroniserar utvecklarinställningar…';
 
   @override
   String get summary => 'Sammanfattning';
@@ -3644,7 +3644,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get conversationDeleted => 'Konversation raderad';
 
   @override
-  String get generatingLink => 'Genererar länk...';
+  String get generatingLink => 'Genererar länk…';
 
   @override
   String get editConversation => 'Redigera konversation';
@@ -3665,7 +3665,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get conversationTitle => 'Konversationstitel';
 
   @override
-  String get enterConversationTitle => 'Ange konversationstitel...';
+  String get enterConversationTitle => 'Ange konversationstitel…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Konversationstitel uppdaterad';
@@ -3677,7 +3677,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Fel vid uppdatering av konversationstitel';
 
   @override
-  String get settingUp => 'Konfigurerar...';
+  String get settingUp => 'Konfigurerar…';
 
   @override
   String get startYourFirstRecording => 'Starta din första inspelning';
@@ -3686,7 +3686,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Förbereder systemljudupptagning';
 
   @override
-  String get reconnecting => 'Återansluter...';
+  String get reconnecting => 'Återansluter…';
 
   @override
   String get recordingPaused => 'Inspelning pausad';
@@ -3699,14 +3699,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Återupptar om ${countdown}s...';
+    return 'Återupptar om ${countdown}s…';
   }
 
   @override
   String get tapPlayToResume => 'Tryck på spela upp för att fortsätta';
 
   @override
-  String get listeningForAudio => 'Lyssnar efter ljud...';
+  String get listeningForAudio => 'Lyssnar efter ljud…';
 
   @override
   String get preparingAudioCapture => 'Förbereder ljudupptagning';
@@ -3734,7 +3734,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paused => 'Pausad';
 
   @override
-  String get initializing => 'Initialiserar...';
+  String get initializing => 'Initialiserar…';
 
   @override
   String get recording => 'Spelar in';
@@ -3762,7 +3762,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'översatt av omi';
+  String get translatedByOmi => 'översatt av Omi';
 
   @override
   String get backToConversations => 'Tillbaka till samtal';
@@ -3787,7 +3787,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectAudioInput => 'Välj ljudingång';
 
   @override
-  String get loadingDevices => 'Laddar enheter...';
+  String get loadingDevices => 'Laddar enheter…';
 
   @override
   String get settingsHeader => 'INSTÄLLNINGAR';
@@ -3895,7 +3895,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get exportConversationsDescription => 'Exportera konversationer till JSON';
 
   @override
-  String get exportingConversations => 'Exporterar konversationer...';
+  String get exportingConversations => 'Exporterar konversationer…';
 
   @override
   String get clearNodesDescription => 'Rensa alla noder och anslutningar';
@@ -3988,7 +3988,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ny version tillgänglig  🎉';
+  String get newVersionAvailable => 'Ny version tillgänglig';
 
   @override
   String get no => 'Nej';
@@ -4038,7 +4038,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get cancelSubscriptionButton => 'Avbryt prenumeration';
 
   @override
-  String get cancelling => 'Avbryter...';
+  String get cancelling => 'Avbryter…';
 
   @override
   String get betaTesterMessage =>
@@ -4156,7 +4156,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Lägger till i $serviceName...';
+    return 'Lägger till i $serviceName…';
   }
 
   @override
@@ -4193,7 +4193,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API-nycklar används för autentisering när din app kommunicerar med OMI-servern. De låter din applikation skapa minnen och få säker åtkomst till andra OMI-tjänster.';
+      'API-nycklar används för autentisering när din app kommunicerar med Omi-servern. De låter din applikation skapa minnen och få säker åtkomst till andra Omi-tjänster.';
 
   @override
   String get aboutOmiApiKeys => 'Om Omi API-nycklar';
@@ -4667,7 +4667,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Kunskapsgraf borttagen';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Export startad. Detta kan ta några sekunder...';
+  String get exportStartedMayTakeFewSeconds => 'Export startad. Detta kan ta några sekunder…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
@@ -4905,7 +4905,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get checkingForUpdates => 'Söker efter uppdateringar';
 
   @override
-  String get checkingFirmwareVersion => 'Kontrollerar firmware-version...';
+  String get checkingFirmwareVersion => 'Kontrollerar firmware-version…';
 
   @override
   String get firmwareUpdate => 'Firmwareuppdatering';
@@ -5088,19 +5088,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get showLess => 'visa mindre ↑';
 
   @override
-  String get loadingYourRecording => 'Laddar din inspelning...';
+  String get loadingYourRecording => 'Laddar din inspelning…';
 
   @override
   String get photoDiscardedMessage => 'Detta foto kasserades eftersom det inte var betydelsefullt.';
 
   @override
-  String get analyzing => 'Analyserar...';
+  String get analyzing => 'Analyserar…';
 
   @override
   String get searchCountries => 'Sök länder...';
 
   @override
-  String get checkingAppleWatch => 'Kontrollerar Apple Watch...';
+  String get checkingAppleWatch => 'Kontrollerar Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'Installera Omi på din\nApple Watch';
@@ -5163,7 +5163,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dontAskAgain => 'Fråga inte igen';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Väntar på transkription eller foton...';
+  String get waitingForTranscriptOrPhotos => 'Väntar på transkription eller foton…';
 
   @override
   String get noSummaryYet => 'Ingen sammanfattning än';
@@ -5362,10 +5362,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Generera min Wrapped';
 
   @override
-  String get wrappedProcessingDefault => 'Bearbetar...';
+  String get wrappedProcessingDefault => 'Bearbetar…';
 
   @override
-  String get wrappedCreatingYourStory => 'Skapar din\n2025-historia...';
+  String get wrappedCreatingYourStory => 'Skapar din\n2025-historia…';
 
   @override
   String get wrappedSomethingWentWrong => 'Något gick\nfel';
@@ -5395,7 +5395,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Kunde inte starta generering. Försök igen.';
 
   @override
-  String get wrappedStarting => 'Startar...';
+  String get wrappedStarting => 'Startar…';
 
   @override
   String get wrappedShare => 'Dela';
@@ -5601,13 +5601,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Något gick fel! Försök igen senare.';
 
   @override
-  String get uploadingVoiceProfile => 'Laddar upp din röstprofil....';
+  String get uploadingVoiceProfile => 'Laddar upp din röstprofil….';
 
   @override
-  String get memorizingYourVoice => 'Memorerar din röst...';
+  String get memorizingYourVoice => 'Memorerar din röst…';
 
   @override
-  String get personalizingExperience => 'Anpassar din upplevelse...';
+  String get personalizingExperience => 'Anpassar din upplevelse…';
 
   @override
   String get keepSpeakingUntil100 => 'Fortsätt prata tills du når 100%.';
@@ -5733,7 +5733,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get clearChatQuestion => 'Rensa chatt?';
 
   @override
-  String get syncingMessages => 'Synkroniserar meddelanden med servern...';
+  String get syncingMessages => 'Synkroniserar meddelanden med servern…';
 
   @override
   String get chatAppsTitle => 'Chattappar';
@@ -5893,10 +5893,10 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Sammanfattar samtal...\nDetta kan ta några sekunder';
+  String get summarizingConversation => 'Sammanfattar samtal…\nDetta kan ta några sekunder';
 
   @override
-  String get resummarizingConversation => 'Sammanfattar samtal igen...\nDetta kan ta några sekunder';
+  String get resummarizingConversation => 'Sammanfattar samtal igen…\nDetta kan ta några sekunder';
 
   @override
   String get nothingInterestingRetry => 'Inget intressant hittades,\nvill du försöka igen?';
@@ -6028,7 +6028,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get doNotCloseApp => 'Stäng inte appen.';
 
   @override
-  String get downloading => 'Laddar ner...';
+  String get downloading => 'Laddar ner…';
 
   @override
   String get downloadModel => 'Ladda ner modell';
@@ -6108,7 +6108,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Förbereder $model...';
+    return 'Förbereder $model…';
   }
 
   @override
@@ -6137,7 +6137,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get useTemplateFrom => 'Använd mall från';
 
   @override
-  String get selectProviderTemplate => 'Välj en leverantörsmall...';
+  String get selectProviderTemplate => 'Välj en leverantörsmall…';
 
   @override
   String get quicklyPopulateResponse => 'Fyll snabbt i med känt leverantörssvarsformat';
@@ -6339,13 +6339,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signUpSuccess => 'Registrering lyckades!';
 
   @override
-  String get loadingKnowledgeGraph => 'Laddar kunskapsgraf...';
+  String get loadingKnowledgeGraph => 'Laddar kunskapsgraf…';
 
   @override
   String get noKnowledgeGraphYet => 'Ingen kunskapsgraf ännu';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Bygger kunskapsgraf från minnen...';
+  String get buildingKnowledgeGraphFromMemories => 'Bygger kunskapsgraf från minnen…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6362,7 +6362,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Öppnar $appName...';
+    return 'Öppnar $appName…';
   }
 
   @override
@@ -6396,7 +6396,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get moneyEarned => 'Intjänade pengar';
 
   @override
-  String get writeYourReply => 'Skriv ditt svar...';
+  String get writeYourReply => 'Skriv ditt svar…';
 
   @override
   String get replySentSuccessfully => 'Svaret skickades';
@@ -6543,7 +6543,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectContactsToShareSummary => 'Välj kontakter för att dela din samtalssammanfattning';
 
   @override
-  String get searchContactsHint => 'Sök kontakter...';
+  String get searchContactsHint => 'Sök kontakter';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6631,7 +6631,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Överför...';
+  String get transferring => 'Överför…';
 
   @override
   String get transferRequired => 'Överföring krävs';
@@ -6656,7 +6656,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get recordingInfo => 'Inspelningsinformation';
 
   @override
-  String get transferInProgress => 'Överföring pågår...';
+  String get transferInProgress => 'Överföring pågår…';
 
   @override
   String get shareRecording => 'Dela inspelning';
@@ -6777,7 +6777,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Ett fel uppstod vid uppdatering av appstatus.';
 
   @override
-  String get calculatingETA => 'Beräknar...';
+  String get calculatingETA => 'Beräknar…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6788,29 +6788,29 @@ class AppLocalizationsSv extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Ungefär en minut kvar';
 
   @override
-  String get almostDone => 'Nästan klart...';
+  String get almostDone => 'Nästan klart…';
 
   @override
-  String get omiSays => 'omi säger';
+  String get omiSays => 'Omi säger';
 
   @override
-  String get analyzingYourData => 'Analyserar dina data...';
+  String get analyzingYourData => 'Analyserar dina data…';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrerar till $level-skydd...';
+    return 'Migrerar till $level-skydd…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Ingen data att migrera. Slutför...';
+  String get noDataToMigrateFinalizing => 'Ingen data att migrera. Slutför…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrerar $itemType... $percentage%';
+    return 'Migrerar $itemType… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Alla objekt migrerade. Slutför...';
+  String get allObjectsMigratedFinalizing => 'Alla objekt migrerade. Slutför…';
 
   @override
   String get migrationErrorOccurred => 'Ett fel uppstod under migreringen. Försök igen.';
@@ -6845,14 +6845,14 @@ class AppLocalizationsSv extends AppLocalizations {
   String get templateName => 'Mallnamn';
 
   @override
-  String get templateNameHint => 't.ex. Mötesåtgärdspunkter Extraktor';
+  String get templateNameHint => 't.ex. Mötesuppgiftsextraktor';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Namnet måste vara minst 3 tecken';
 
   @override
   String get conversationPromptHint =>
-      't.ex., Extrahera åtgärdspunkter, fattade beslut och viktiga slutsatser från samtalet.';
+      't.ex., Extrahera uppgifter, fattade beslut och viktiga slutsatser från samtalet.';
 
   @override
   String get pleaseEnterAppPrompt => 'Ange en prompt för din app';
@@ -6867,13 +6867,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Endast du kan använda denna mall';
 
   @override
-  String get generatingDescription => 'Genererar beskrivning...';
+  String get generatingDescription => 'Genererar beskrivning…';
 
   @override
-  String get creatingAppIcon => 'Skapar appikon...';
+  String get creatingAppIcon => 'Skapar appikon…';
 
   @override
-  String get installingApp => 'Installerar app...';
+  String get installingApp => 'Installerar app…';
 
   @override
   String get appCreatedAndInstalled => 'App skapad och installerad!';
@@ -7002,7 +7002,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Ange en beskrivning för din app';
 
   @override
-  String get aiGenCreatingAppIcon => 'Skapar appikon...';
+  String get aiGenCreatingAppIcon => 'Skapar appikon…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7060,7 +7060,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Kunde inte öppna uppgraderingssidan. Försök igen.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Klistra in din JSON-konfiguration här...';
+  String get transcriptionJsonPlaceholder => 'Klistra in din JSON-konfiguration här…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7130,7 +7130,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onboardingYoureAllSet => 'Du är redo';
 
   @override
-  String get searchTranscriptOrSummary => 'Sök i transkription eller sammanfattning...';
+  String get searchTranscriptOrSummary => 'Sök i transkription eller sammanfattning';
 
   @override
   String get myGoal => 'Mitt mål';
@@ -7362,10 +7362,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get msgUploadFileFailed => 'Kunde inte ladda upp fil, försök igen senare';
 
   @override
-  String get msgReadingMemories => 'Läser dina minnen...';
+  String get msgReadingMemories => 'Läser dina minnen…';
 
   @override
-  String get msgLearningMemories => 'Lär sig från dina minnen...';
+  String get msgLearningMemories => 'Lär sig från dina minnen…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Kunde inte ladda upp bifogad fil.';
@@ -7430,7 +7430,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Sammanfogar...';
+  String get mergingStatus => 'Sammanfogar…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7525,10 +7525,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get color => 'Färg';
 
   @override
-  String get waitingForDevice => 'Väntar på enhet...';
+  String get waitingForDevice => 'Väntar på enhet…';
 
   @override
-  String get saySomething => 'Säg något...';
+  String get saySomething => 'Säg något…';
 
   @override
   String get initialisingSystemAudio => 'Initierar systemljud';
@@ -7577,7 +7577,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get audioDownloadFailed => 'Misslyckades att ladda ner ljud';
 
   @override
-  String get downloadingAudio => 'Laddar ner ljud...';
+  String get downloadingAudio => 'Laddar ner ljud…';
 
   @override
   String get shareAudio => 'Dela ljud';
@@ -7586,7 +7586,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get preparingAudio => 'Förbereder ljud';
 
   @override
-  String get gettingAudioFiles => 'Hämtar ljudfiler...';
+  String get gettingAudioFiles => 'Hämtar ljudfiler…';
 
   @override
   String get downloadingAudioProgress => 'Laddar ner ljud';
@@ -7595,13 +7595,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get processingAudio => 'Bearbetar ljud';
 
   @override
-  String get combiningAudioFiles => 'Kombinerar ljudfiler...';
+  String get combiningAudioFiles => 'Kombinerar ljudfiler…';
 
   @override
   String get audioReady => 'Ljud klart';
 
   @override
-  String get openingShareSheet => 'Öppnar delningsblad...';
+  String get openingShareSheet => 'Öppnar delningsblad…';
 
   @override
   String get audioShareFailed => 'Delning misslyckades';
@@ -7786,7 +7786,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get mcpConnectionFailed => 'Kunde inte ansluta till MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Auktoriserar...';
+  String get authorizingMcpServer => 'Auktoriserar…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Hur hittade du oss?';
@@ -7919,7 +7919,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get downloadingFromDevice => 'Laddar ner från enhet';
 
   @override
-  String get reconnectingToInternet => 'Återansluter till internet...';
+  String get reconnectingToInternet => 'Återansluter till internet…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7927,11 +7927,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Bearbetar på servern...';
+  String get processingOnServer => 'Bearbetar på servern…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Bearbetar... $current/$total segment';
+    return 'Bearbetar… $current/$total segment';
   }
 
   @override
@@ -8112,7 +8112,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get followTheVoiceInstructions => 'Folj rostinstruktionerna';
 
   @override
-  String get statusCalling => 'Ringer...';
+  String get statusCalling => 'Ringer…';
 
   @override
   String get statusCallInProgress => 'Samtal pagar';
@@ -8157,10 +8157,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get failedToStartCall => 'Kunde inte starta samtalet';
 
   @override
-  String get callStateConnecting => 'Ansluter...';
+  String get callStateConnecting => 'Ansluter…';
 
   @override
-  String get callStateRinging => 'Ringer...';
+  String get callStateRinging => 'Ringer…';
 
   @override
   String get callStateEnded => 'Samtal avslutat';
@@ -8169,7 +8169,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get callStateFailed => 'Samtal misslyckades';
 
   @override
-  String get transcriptPlaceholder => 'Transkription visas har...';
+  String get transcriptPlaceholder => 'Transkription visas har…';
 
   @override
   String get phoneUnmute => 'Sla pa ljud';
@@ -8408,7 +8408,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptionPaused => 'Spelar in, återansluter';
 
   @override
-  String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription...';
+  String get transcriptionPausedReconnecting => 'Spelar fortfarande in — återansluter till transkription…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8561,7 +8561,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tellUsMore => 'Berätta mer (valfritt)';
 
   @override
-  String get cancelReasonDetailHint => 'Vi uppskattar all feedback...';
+  String get cancelReasonDetailHint => 'Vi uppskattar all feedback…';
 
   @override
   String get justAMoment => 'Ett ögonblick, tack';
@@ -8657,7 +8657,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get diagnostics => 'Diagnostik';
 
   @override
-  String get waitingForData => 'Väntar på data...';
+  String get waitingForData => 'Väntar på data…';
 
   @override
   String get liveRssiOverTime => 'RSSI i realtid över tid';
@@ -8666,7 +8666,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noRssiDataYet => 'Ingen RSSI-data ännu';
 
   @override
-  String get collectingData => 'Samlar in data...';
+  String get collectingData => 'Samlar in data…';
 
   @override
   String get cleanDisconnect => 'Ren frånkoppling';
@@ -8747,7 +8747,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get stableFirmware => 'Stabil firmware';
 
   @override
-  String get fetchingStableFirmware => 'Hämtar senaste stabila firmware...';
+  String get fetchingStableFirmware => 'Hämtar senaste stabila firmware…';
 
   @override
   String get noStableFirmwareFound => 'Kunde inte hitta en stabil firmwareversion för din enhet.';
@@ -8765,40 +8765,40 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'Laddar upp $duration ljud för transkribering…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'Försöker ladda upp igen… $duration ljud finns kvar på din telefon';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'Uppladdningen misslyckades — $duration ljud finns kvar på din telefon. Tryck för att försöka igen.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'Uppladdningen misslyckades — $duration ljud finns kvar på din telefon.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'Lyssnar… en transkription visas här.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'Spelar in offline — transkriptionen kommer ikapp när du är online igen.';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'Transkribering är inte tillgänglig — inspelningen fortsätter och ditt ljud sparas.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'Spelar in';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'Tar foton';
 
   @override
   String get willSyncAutomatically => 'synkroniseras automatiskt';
@@ -8813,10 +8813,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get voiceRecordingFound => 'Inspelning hittad';
 
   @override
-  String get transcriptionConnecting => 'Ansluter transkription...';
+  String get transcriptionConnecting => 'Ansluter transkription…';
 
   @override
-  String get transcriptionReconnecting => 'Återansluter transkription...';
+  String get transcriptionReconnecting => 'Återansluter transkription…';
 
   @override
   String get transcriptionUnavailable => 'Transkription otillgänglig';
@@ -9125,7 +9125,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get phoneCallSubtitle => 'Spela in samtal med live-transkribering';
 
   @override
-  String get searchActionItems => 'Sök åtgärdspunkter';
+  String get searchActionItems => 'Sök uppgifter';
 
   @override
   String get selectActionItems => 'Välj flera';
@@ -9435,7 +9435,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Bra jobbat!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Börja prata...';
+  String get deviceOnboardingStartSpeaking => 'Börja prata…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Ställ en fråga till Omi';
@@ -9445,10 +9445,10 @@ class AppLocalizationsSv extends AppLocalizations {
       'Tryck en gång på knappen, ställ din fråga och tryck igen när du är klar';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Bearbetar din fråga...';
+  String get deviceOnboardingProcessingQuestion => 'Bearbetar din fråga…';
 
   @override
-  String get deviceOnboardingListening => 'Lyssnar...';
+  String get deviceOnboardingListening => 'Lyssnar…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Stäng av';
@@ -9475,7 +9475,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Frånkopplad';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Stänger av...';
+  String get deviceOnboardingStatusTurningOff => 'Stänger av…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Anpassa dubbeltryck';
@@ -9782,7 +9782,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get copyMessage => 'Kopiera meddelande';
 
   @override
-  String get searchSettings => 'Sök inställningar…';
+  String get searchSettings => 'Sök inställningar';
 
   @override
   String get errorLoadingAudio => 'Det gick inte att läsa in ljudet';
@@ -10150,4 +10150,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get clearSearch => 'Rensa sökning';
+
+  @override
+  String get filterBySpeaker => 'Filtrera efter talare';
+
+  @override
+  String get notNow => 'Inte nu';
+
+  @override
+  String get discard => 'Förkasta';
+
+  @override
+  String get keepEditing => 'Fortsätt redigera';
+
+  @override
+  String get discardChangesTitle => 'Förkasta ändringar?';
+
+  @override
+  String get discardChangesMessage => 'Dina osparade ändringar går förlorade.';
 }

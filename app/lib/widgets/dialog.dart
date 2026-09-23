@@ -1,10 +1,16 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import 'package:omi/ui/feedback/omi_dialogs.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
-getDialog(
+/// Legacy adapter over [OmiAlertDialog]; new code calls `showOmiConfirm` / `showOmiAlert`
+/// (docs/ux-contract.md §4).
+///
+/// Two buttons: Cancel ([onCancel]) and [okButtonText] ([onConfirm]); pass a verb for
+/// [okButtonText] ("Delete", "Sign Out") and set [destructive] when the action destroys something.
+/// With [singleButton] it is an information alert whose one button ([okButtonText], default OK)
+/// calls [onCancel]. Callers pop the dialog themselves in both callbacks.
+Widget getDialog(
   BuildContext context,
   Function onCancel,
   Function onConfirm,
@@ -13,29 +19,23 @@ getDialog(
   bool singleButton = false,
   String? okButtonText,
   String? cancelButtonText,
+  bool destructive = false,
 }) {
   final okText = okButtonText ?? context.l10n.ok;
   final cancelText = cancelButtonText ?? context.l10n.cancel;
-
-  var actions = singleButton
-      ? [
-          TextButton(
-            onPressed: () => onCancel(),
-            child: Text(okText, style: const TextStyle(color: Colors.white)),
-          ),
-        ]
-      : [
-          TextButton(
-            onPressed: () => onCancel(),
-            child: Text(cancelText, style: const TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => onConfirm(),
-            child: Text(okText, style: const TextStyle(color: Colors.white)),
-          ),
-        ];
-  if (PlatformService.isApple) {
-    return CupertinoAlertDialog(title: Text(title), content: Text(content), actions: actions);
-  }
-  return AlertDialog(title: Text(title), content: Text(content), actions: actions);
+  return OmiAlertDialog(
+    title: title,
+    message: content,
+    actions: singleButton
+        ? [OmiDialogAction(label: okText, isDefault: true, onPressed: () => onCancel())]
+        : [
+            OmiDialogAction(label: cancelText, isDefault: destructive, onPressed: () => onCancel()),
+            OmiDialogAction(
+              label: okText,
+              isDestructive: destructive,
+              isDefault: !destructive,
+              onPressed: () => onConfirm(),
+            ),
+          ],
+  );
 }

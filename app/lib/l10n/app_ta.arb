@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "கர்ம பணிகள்",
+    "actionItemsTab": "பணிகள்",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "ஏற்றுகிறது...",
+    "loading": "ஏற்றுகிறது…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "கால அளவு ஏற்றுகிறது...",
+    "loadingDuration": "கால அளவு ஏற்றுகிறது…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "நீக்குகிறது...",
+    "deleting": "நீக்குகிறது…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "தேடுகிறது...",
+    "searching": "தேடுகிறது",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "உரையாடல்களைத் தேடுங்கள்...",
+    "searchConversations": "உரையாடல்களைத் தேடுங்கள்",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "Omi இன் நினைவலிருந்து உங்கள் செய்திகளை நீக்குகிறது...",
+    "deletingMessages": "Omi இன் நினைவலிருந்து உங்கள் செய்திகளை நீக்குகிறது…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "பயன்பாடுகளைத் தேடுங்கள்...",
+    "searchApps": "பயன்பாடுகளைத் தேடுங்கள்",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -609,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "மேலும் அறியவும்...",
+    "learnMore": "மேலும் அறியவும்…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -833,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "சேமிக்கிறது...",
+    "saving": "சேமிக்கிறது…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -937,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "நடவடிக்கை பணிகள் மற்றும் குறிப்புகள் தன்னாக பிடிபடுந்த.",
+    "providingSubtitle": "பணிகள் மற்றும் குறிப்புகள், தானாகவே பதிவுசெய்யப்படுகின்றன.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1007,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "இன்று, omi::",
+    "sharePeriodToday": "இன்று, Omi::",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "இந்த மாதம், omi::",
+    "sharePeriodMonth": "இந்த மாதம், Omi::",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "இந்த ஆண்டு, omi::",
+    "sharePeriodYear": "இந்த ஆண்டு, Omi::",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "இதுவரை, omi::",
+    "sharePeriodAllTime": "இதுவரை, Omi::",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1072,7 +1072,7 @@
     "selectLogFile": "பதிவு கோப்பு தேர்ந்தெடுக்கவும்",
     "shareLogs": "பதிவுகள் பகிர்ந்து",
     "debugLogCleared": "பிழைத்திருத்தம் பதிவு துடைக்கப்பட்டது",
-    "exportStarted": "ஏற்றுமதி தொடங்கியது. இது சில வினாடிகள் ஆனலாம்...",
+    "exportStarted": "ஏற்றுமதி தொடங்கியது. இது சில வினாடிகள் ஆனலாம்…",
     "exportAllData": "அனைத்து தரவு ஏற்றுமதி",
     "exportDataDesc": "உரையாடல்களை JSON கோப்பிற்கு ஏற்றுமதி",
     "exportedConversations": "Omi இலிருந்து ஏற்றுமதி செய்யப்பட்ட உரையாடல்கள்",
@@ -1359,7 +1359,7 @@
         }
     },
     "account": "கணக்கு",
-    "actionItemsSyncedTo": "உங்கள் செயல் பணிகள் உங்கள் {appName} கணக்குக்கு ஒத்திசைக்கப்படும்",
+    "actionItemsSyncedTo": "உங்கள் பணிகள் உங்கள் {appName} கணக்குக்கு ஒத்திசைக்கப்படும்",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1556,7 +1556,7 @@
     "saveChanges": "மாற்றங்களைச் சேமிக்கவும்",
     "resetToDefault": "இயல்புநிலைக்கு மீட்டமை",
     "viewTemplate": "வார்ப்பை பாருங்கள்",
-    "trySomethingLike": "போன்ற ஒன்றை முயற்சி செய்யவும்...",
+    "trySomethingLike": "போன்ற ஒன்றை முயற்சி செய்யவும்…",
     "tryIt": "இதை முயற்சி செய்யவும்",
     "creatingPlan": "திட்டம் உருவாக்குகிறது",
     "developingLogic": "தர்க்கத்தை வளர்த்து வருகிறது",
@@ -1565,8 +1565,8 @@
     "finalTouches": "চূড়ান்த தொடர்பு",
     "processing": "செயலாக்கப்படுகிறது",
     "features": "பண்புகள்",
-    "creatingYourApp": "உங்கள் பயன்பாட்டை உருவாக்கிறது...",
-    "generatingIcon": "சின்னம் உருவாக்குகிறது...",
+    "creatingYourApp": "உங்கள் பயன்பாட்டை உருவாக்கிறது…",
+    "generatingIcon": "சின்னம் உருவாக்குகிறது…",
     "whatShouldWeMake": "நாம் என்ன உருவாக்க வேண்டும்?",
     "appName": "பயன்பாட்டின் பெயர்",
     "description": "விளக்கம்",
@@ -1583,7 +1583,7 @@
     "usersPayToUse": "பயனர்கள் உங்கள் பயன்பாட்டைப் பயன்படுத்த பணம் செலுத்துகிறார்கள்",
     "freeForEveryone": "அனைவருக்கும் இலவசம்",
     "perMonthLabel": "/ மாதம்",
-    "creating": "உருவாக்குகிறது...",
+    "creating": "உருவாக்குகிறது…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1594,7 +1594,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "சாதனங்களைத் தேடிக்கொண்டிருக்கிறது...",
+    "searchingForDevices": "சாதனங்களைத் தேடிக்கொண்டிருக்கிறது",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1904,7 +1904,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "செய்ய வேண்டிய பணிகள்",
+    "actionItemsTitle": "பணிகள்",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1924,7 +1924,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 அனைத்தும் சரியாக உள்ளன!\nபண்பில் செயல் பணிகள் இல்லை",
+    "emptyTodoMessage": "🎉 அனைத்தும் சரியாக உள்ளன!\nநிலுவையில் உள்ள பணிகள் இல்லை",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1940,19 +1940,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "செயல் பணி முழுமையற்றதாக குறிக்கப்பட்டுள்ளது",
+    "actionItemMarkedIncomplete": "பணி முழுமையற்றதாக குறிக்கப்பட்டுள்ளது",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "செயல் பணி முடிந்துவிட்டது",
+    "actionItemCompleted": "பணி முடிந்துவிட்டது",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "செயல் பணியைத் நீக்கவும்",
+    "deleteActionItemTitle": "பணியை நீக்கவும்",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "இந்த செயல் பணியை நீக்க விரும்புகிறீர்களா?",
+    "deleteActionItemMessage": "இந்த பணியை நீக்க விரும்புகிறீர்களா?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1960,7 +1960,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "{count} தேர்ந்தெடுக்கப்பட்ட செயல் பணி{s} நீக்க விரும்புகிறீர்களா?",
+    "deleteSelectedItemsMessage": "{count} தேர்ந்தெடுக்கப்பட்ட பணி{s} நீக்க விரும்புகிறீர்களா?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1973,7 +1973,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "செயல் பணி \"{description}\" நீக்கப்பட்டுள்ளது",
+    "actionItemDeletedResult": "பணி \"{description}\" நீக்கப்பட்டுள்ளது",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1982,7 +1982,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} செயல் பணி{s} நீக்கப்பட்டுள்ளது",
+    "itemsDeletedResult": "{count} பணி{s} நீக்கப்பட்டுள்ளது",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1994,7 +1994,7 @@
             }
         }
     },
-    "failedToDeleteItem": "செயல் பணியை நீக்க முடியவில்லை",
+    "failedToDeleteItem": "பணியை நீக்க முடியவில்லை",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2006,11 +2006,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "செயல் பணிகளுக்கு தயாரிக்கப்பட்டுள்ளது",
+    "welcomeActionItemsTitle": "பணிகளுக்கு தயாராக உள்ளது",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "உங்கள் AI தானாகவே உரையாடல்களிலிருந்து பணிகள் மற்றும் செய்ய வேண்டிய பணிகளை எழுப்பும். அவை உருவாக்கப்பட்டுள்ளபோது இங்கே தோன்றும்.",
+    "welcomeActionItemsDescription": "உங்கள் AI தானாகவே உங்கள் உரையாடல்களிலிருந்து பணிகளைப் பிரித்தெடுக்கும். அவை உருவாக்கப்படும்போது இங்கே தோன்றும்.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2039,11 +2039,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "பதிவுகளைத் தேடவும்...",
+    "searchMemories": "பதிவுகளைத் தேடவும்",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "பதிவு நீக்கப்பட்டுள்ளது.",
+    "memoryDeleted": "பதிவு நீக்கப்பட்டுள்ளது",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2099,7 +2099,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "புதிய செயல் பணியை உருவாக்கவும்",
+    "createActionItemTooltip": "புதிய பணியை உருவாக்கவும்",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2172,11 +2172,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "செயல் பணியை உருவாக்கவும்",
+    "createActionItem": "பணியை உருவாக்கவும்",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "செயல் பணியை திருத்தவும்",
+    "editActionItem": "பணியை திருத்தவும்",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2184,23 +2184,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "செயல் பணி விளக்கம் வெற்றிடமாக இருக்க முடியாது.",
+    "actionItemDescriptionEmpty": "பணி விளக்கம் வெற்றிடமாக இருக்க முடியாது.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "செயல் பணி புதுப்பிக்கப்பட்டுள்ளது",
+    "actionItemUpdated": "பணி புதுப்பிக்கப்பட்டுள்ளது",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "செயல் பணியைப் புதுப்பிக்க முடியவில்லை",
+    "failedToUpdateActionItem": "பணியைப் புதுப்பிக்க முடியவில்லை",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "செயல் பணி உருவாக்கப்பட்டுள்ளது",
+    "actionItemCreated": "பணி உருவாக்கப்பட்டுள்ளது",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "செயல் பணியை உருவாக்க முடியவில்லை",
+    "failedToCreateActionItem": "பணியை உருவாக்க முடியவில்லை",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2248,19 +2248,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "செயல் பணி நீக்கப்பட்டுள்ளது",
+    "actionItemDeleted": "பணி நீக்கப்பட்டுள்ளது",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "செயல் பணியை நீக்க முடியவில்லை",
+    "failedToDeleteActionItem": "பணியை நீக்க முடியவில்லை",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "செயல் பணியைத் நீக்கவும்",
+    "deleteActionItemConfirmTitle": "பணியை நீக்கவும்",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "இந்த செயல் பணியை நீக்க விரும்புகிறீர்களா?",
+    "deleteActionItemConfirmMessage": "இந்த பணியை நீக்க விரும்புகிறீர்களா?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2296,7 +2296,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "என்ன தவறு நேற்றது என்பதுமாக மேலும் சொல்லுங்கள்...",
+    "tellUsMoreWhatWentWrong": "என்ன தவறு நேற்றது என்பதுமாக மேலும் சொல்லுங்கள்…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2377,7 +2377,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "செயல் உருப்படிகள் க்ளிப்போர்டுக்கு நகலெடுக்கப்பட்டது",
+    "actionItemsCopiedToClipboard": "பணிகள் க்ளிப்போர்டுக்கு நகலெடுக்கப்பட்டன",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2593,7 +2593,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "ஏற்றுமதி தொடங்கியுள்ளது. இது சில வினாடிகளை எடுக்கலாம்...",
+    "exportStartedMessage": "ஏற்றுமதி தொடங்கியுள்ளது. இது சில வினாடிகளை எடுக்கலாம்…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2745,7 +2745,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "செயல் உருப்படி விளக்கம் காலியாக இருக்க முடியாது",
+    "actionItemDescriptionCannotBeEmpty": "பணி விளக்கம் காலியாக இருக்க முடியாது",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2862,7 +2862,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "விசைகளை அழுத்தவும்...",
+    "pressKeys": "விசைகளை அழுத்தவும்…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2882,7 +2882,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "தேடவும்...",
+    "searchPlaceholder": "தேடவும்",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2952,10 +2952,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "உங்கள் Omi சாதனம் உடன் உரையாடல்களை கைப்பற்ற தொடங்கவும் அவற்றை இங்கே காண.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "ஆடியோ கைப்பற்ற உங்கள் மொபைல் ஆப்பைப் பயன்படுத்தவும்",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2988,7 +2984,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "செயல் உருப்படிகள்",
+    "actionItems": "பணிகள்",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3008,7 +3004,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "பணிகள் ஏற்றுகிறது...",
+    "loadingTasks": "பணிகள் ஏற்றுகிறது…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3088,30 +3084,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "செயல் உருப்படி வெற்றிகரமாக புதுப்பிக்கப்பட்டது",
+    "actionItemUpdatedSuccessfully": "பணி வெற்றிகரமாக புதுப்பிக்கப்பட்டது",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "செயல் உருப்படி வெற்றிகரமாக உருவாக்கப்பட்டது",
+    "actionItemCreatedSuccessfully": "பணி வெற்றிகரமாக உருவாக்கப்பட்டது",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "செயல் உருப்படி வெற்றிகரமாக நீக்கப்பட்டது",
+    "actionItemDeletedSuccessfully": "பணி வெற்றிகரமாக நீக்கப்பட்டது",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "செயல் உருப்படியை நீக்கு",
+    "deleteActionItem": "பணியை நீக்கு",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "இந்த செயல் உருப்படியை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
+    "deleteActionItemConfirmation": "இந்த பணியை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்நீக்கம் செய்ய முடியாது.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "செயல் உருப்படி விளக்கம் உள்ளிடவும்...",
+    "enterActionItemDescription": "பணி விளக்கத்தை உள்ளிடவும்",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3123,11 +3119,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "பயன்பாடுகளை மீண்டும் ஏற்றுகிறது...",
+    "reloadingApps": "பயன்பாடுகளை மீண்டும் ஏற்றுகிறது…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "பயன்பாடுகள் ஏற்றுகிறது...",
+    "loadingApps": "பயன்பாடுகள் ஏற்றுகிறது…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3175,11 +3171,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "உங்கள் பயன்பாடு சமர்ப்பிக்கப்படுகிறது...",
+    "submittingYourApp": "உங்கள் பயன்பாடு சமர்ப்பிக்கப்படுகிறது…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "உங்களுக்கான படிவம் தயாரிக்கப்படுகிறது...",
+    "preparingFormForYou": "உங்களுக்கான படிவம் தயாரிக்கப்படுகிறது…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3207,7 +3203,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "நீங்கள் ஒரு அற்புத பயன்பாடு உள்ளீர், உபயோகி வினாக்களுக்கு பதிலளிப்பது மற்றும் அவர்களை நன்றாக உணர்வது உங்கள் வேலை...",
+    "chatPromptPlaceholder": "நீங்கள் ஒரு அற்புத பயன்பாடு உள்ளீர், உபயோகி வினாக்களுக்கு பதிலளிப்பது மற்றும் அவர்களை நன்றாக உணர்வது உங்கள் வேலை…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3215,7 +3211,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "நீங்கள் ஒரு அற்புத பயன்பாடு உள்ளீர், உரையாடலின் மொழிபெயர்ப்பு மற்றும் சுருக்கம் உங்களுக்கு கொடுக்கப்படும்...",
+    "conversationPromptPlaceholder": "நீங்கள் ஒரு அற்புத பயன்பாடு உள்ளீர், உரையாடலின் மொழிபெயர்ப்பு மற்றும் சுருக்கம் உங்களுக்கு கொடுக்கப்படும்…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3420,7 +3416,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "திறன்கள் ஏற்றுகிறது...",
+    "loadingCapabilities": "திறன்கள் ஏற்றுகிறது…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3610,13 +3606,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "மொழிபெயர்க்கிறது...",
+    "transcribing": "மொழிபெயர்க்கிறது…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "மொழிபெயர்ப்பு தோல்வியுற்றது",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "கைவிடப்பட்ட உரையாடல்",
     "@discardedConversation": {
@@ -3630,7 +3622,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "நகলெடுக்கப்பட்டது!",
+    "copied": "நகলெடுக்கப்பட்டது",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3683,7 +3675,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "உரையாடல்கள் மீண்டும் ஏற்றுகிறது...",
+    "reloadingConversations": "உரையாடல்கள் மீண்டும் ஏற்றுகிறது…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3767,7 +3759,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "நினைவுகள் ஏற்றுகிறது...",
+    "loadingMemories": "நினைவுகள் ஏற்றுகிறது…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3786,7 +3778,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "உங்கள் நினைவுகள் ஏற்றுகிறது...",
+    "loadingYourMemories": "உங்கள் நினைவுகள் ஏற்றுகிறது…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3946,7 +3938,7 @@
     "pleaseSelectYourPrimaryLanguage": "உங்கள் முதன்மை மொழியைத் தேர்ந்தெடுக்கவும்",
     "chooseYourLanguage": "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்",
     "selectPreferredLanguageForBestExperience": "சிறந்த Omi அভிজ্ঞதைக்கான உங்கள் விரும்பிய மொழியைத் தேர்ந்தெடுக்கவும்",
-    "searchLanguages": "மொழிகளைத் தேடவும்...",
+    "searchLanguages": "மொழிகளைத் தேடவும்",
     "selectALanguage": "ஒரு மொழியைத் தேர்ந்தெடுக்கவும்",
     "tryDifferentSearchTerm": "வேறு தேடல் சொல்லை முயற்சி செய்யவும்",
     "pleaseEnterYourName": "உங்கள் பெயரை உள்ளிடவும்",
@@ -3970,9 +3962,9 @@
     "accessibility": "அணுகல்தன்மை",
     "detectBrowserBasedMeetings": "உலாவி-அடிப்படையிலான சந்திப்புகளைக் கண்டறியவும்",
     "accessibilityDescription": "நீங்கள் உங்கள் உலாவியில் Zoom, Meet அல்லது Teams சந்திப்புகளில் சேரும்போது கண்டறிய Omi அணுகல்தன்மை அனுமதி தேவை.",
-    "pleaseWait": "தயவு செய்து காத்திருங்கள்...",
+    "pleaseWait": "தயவு செய்து காத்திருங்கள்…",
     "joinTheCommunity": "சமூகத்தில் சேரவும்!",
-    "loadingProfile": "சுயவிவரம் ஏற்றப்படுகிறது...",
+    "loadingProfile": "சுயவிவரம் ஏற்றப்படுகிறது…",
     "profileSettings": "சுயவிவர அமைப்புகள்",
     "noEmailSet": "மின்னஞ்சல் அமைக்கப்படவில்லை",
     "userIdCopiedToClipboard": "பயனர் ID கிளிப்போர்டில் நகல் செய்யப்பட்டது",
@@ -4020,7 +4012,7 @@
     "pilotFeaturesDescription": "இந்த அம்சங்கள் சோதனைகள் மற்றும் உதவி உத்தரவாதம் இல்லை.",
     "suggestFollowUpQuestion": "பின்தொடர்ந்து கேள்வியை பரிந்துரைக்கவும்",
     "saveSettings": "அமைப்புகளைச் சேமிக்கவும்",
-    "syncingDeveloperSettings": "டெவலப்பர் அமைப்புகளை ஒத்திசைக்கிறது...",
+    "syncingDeveloperSettings": "டெவலப்பர் அமைப்புகளை ஒத்திசைக்கிறது…",
     "summary": "சுருக்கம்",
     "auto": "தானாக",
     "noSummaryForApp": "இந்த பயன்பாட்டிற்கு சுருக்கம் கிடைக்கவில்லை. சிறந்த முடிவுக்கு மற்றொரு பயன்பாட்டை முயற்சி செய்யவும்.",
@@ -4050,18 +4042,18 @@
     "letOmiChooseAutomatically": "Omi சிறந்த பயன்பாட்டைத் தானாக தேர்ந்தெடுக்க அனுமதிக்கவும்",
     "deleteConversationConfirmation": "இந்த உரையாடலை நீக்க விரும்புகிறீர்களா? இந்த செயலை செயல்தவிர்க்க முடியாது.",
     "conversationDeleted": "உரையாடல் நீக்கப்பட்டது",
-    "generatingLink": "இணைப்பை உருவாக்கிறது...",
+    "generatingLink": "இணைப்பை உருவாக்கிறது…",
     "editConversation": "உரையாடலை திருத்தவும்",
     "conversationLinkCopiedToClipboard": "உரையாடல் இணைப்பு கிளிப்போர்டில் நகல் செய்யப்பட்டது",
     "conversationTranscriptCopiedToClipboard": "உரையாடல் எழுத்தாக்கம் கிளிப்போர்டில் நகல் செய்யப்பட்டது",
     "editConversationDialogTitle": "உரையாடலை திருத்தவும்",
     "changeTheConversationTitle": "உரையாடல் பெயரை மாற்றவும்",
     "conversationTitle": "உரையாடல் பெயர்",
-    "enterConversationTitle": "உரையாடல் பெயரை உள்ளிடவும்...",
+    "enterConversationTitle": "உரையாடல் பெயரை உள்ளிடவும்…",
     "conversationTitleUpdatedSuccessfully": "உரையாடல் பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது",
     "failedToUpdateConversationTitle": "உரையாடல் பெயரைப் புதுப்பிக்க தவறிவிட்டது",
     "errorUpdatingConversationTitle": "உரையாடல் பெயரைப் புதுப்பிப்பதில் பிழை",
-    "settingUp": "அமைக்கப்படுகிறது...",
+    "settingUp": "அமைக்கப்படுகிறது…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4073,11 +4065,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "நிகழ்நேர எழுத்தாக்கம், AI நுண்ணறிவுகள் மற்றும் தானாக சேமிக்கத்திற்கான ஆடியோவைப் பிடிக்க பொத்தானைக் கிளிக் செய்யவும்.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "மீண்டும் இணைக்கிறது...",
+    "reconnecting": "மீண்டும் இணைக்கிறது…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4093,7 +4081,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "{countdown}s இல் மீண்டும் தொடங்குகிறது...",
+    "resumingInCountdown": "{countdown}s இல் மீண்டும் தொடங்குகிறது…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4106,7 +4094,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "ஆடியோவுக்கு கேட்டறிதல் செய்யப்படுகிறது...",
+    "listeningForAudio": "ஆடியோவுக்கு கேட்டறிதல் செய்யப்படுகிறது…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4144,15 +4132,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "நிகழ்நேர எழுத்தாக்கம் பார்க்க பதிவை தொடங்கவும்",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "இடைநிறுத்தப்பட்டுள்ளது",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "தொடக்கம் செய்யப்படுகிறது...",
+    "initializing": "தொடக்கம் செய்யப்படுகிறது…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4177,10 +4161,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "ஆடியோவைப் பிடித்து எழுத்தாக்கத்தை உருவாக்கிறது",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "கணினி ஆடியோவைப் பதிவு செய்ய தொடங்க கிளிக் செய்யவும்",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4198,7 +4178,7 @@
             }
         }
     },
-    "translatedByOmi": "omi மூலம் மொழிபெயர்க்கப்பட்டது",
+    "translatedByOmi": "Omi மூலம் மொழிபெயர்க்கப்பட்டது",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4236,7 +4216,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "சாதனங்கள் ஏற்றப்படுகிறது...",
+    "loadingDevices": "சாதனங்கள் ஏற்றப்படுகிறது…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4371,7 +4351,7 @@
     "setConversationEndDescription": "உரையாடல்கள் தானாக முடியும் நேரத்தை அமைக்கவும்",
     "importDataDescription": "மற்ற மூலங்களிலிருந்து தரவை இறக்குமதி செய்யவும்",
     "exportConversationsDescription": "உரையாடல்களை JSON இல் ஏற்றுமதி செய்யவும்",
-    "exportingConversations": "உரையாடல்களை ஏற்றுமதி செய்கிறது...",
+    "exportingConversations": "உரையாடல்களை ஏற்றுமதி செய்கிறது…",
     "clearNodesDescription": "அனைத்து முனைகள் மற்றும் இணைப்புகளைத் துடைக்கவும்",
     "deleteKnowledgeGraphQuestion": "அறிவு வரைபடத்தை நீக்கவா?",
     "deleteKnowledgeGraphWarning": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவையும் நீக்கும். உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும்.",
@@ -4459,7 +4439,7 @@
             }
         }
     },
-    "newVersionAvailable": "புதிய பதிப்பு கிடைக்கிறது 🎉",
+    "newVersionAvailable": "புதிய பதிப்பு கிடைக்கிறது",
     "@newVersionAvailable": {
         "description": "Dialog title when a new app version is available"
     },
@@ -4523,7 +4503,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "ரத்து செய்யப்படுகிறது...",
+    "cancelling": "ரத்து செய்யப்படுகிறது…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4682,7 +4662,7 @@
             }
         }
     },
-    "addingToService": "{serviceName} உக்கு சேர்க்கிறது...",
+    "addingToService": "{serviceName} உக்கு சேர்க்கிறது…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4743,7 +4723,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "API விசைகள் உங்கள் பயன்பாடு OMI சர்வருடன் தொடர்பு கொள்ளும்போது அங்கீகாரத்திற்கு பயன்படுத்தப்படுகிறது. அவை உங்கள் பயன்பாடு நினைவுகளை உருவாக்கவும் மற்ற OMI சேவைகளுக்கு அணுக வாய்ப்பளிக்கிறது.",
+    "apiKeysDescription": "API விசைகள் உங்கள் பயன்பாடு Omi சர்வருடன் தொடர்பு கொள்ளும்போது அங்கீகாரத்திற்கு பயன்படுத்தப்படுகிறது. அவை உங்கள் பயன்பாடு நினைவுகளை உருவாக்கவும் மற்ற Omi சேவைகளுக்கு அணுக வாய்ப்பளிக்கிறது.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -5422,7 +5402,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "ஏற்றுமதி தொடங்கியது. இது சில நொடிகள் ஆகலாம்...",
+    "exportStartedMayTakeFewSeconds": "ஏற்றுமதி தொடங்கியது. இது சில நொடிகள் ஆகலாம்…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5430,7 +5410,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "உங்கள் தினசரி செயல்பாட்டு உருப்பொறிப்பு செய்திகளை கட்டமைக்கவும்",
+    "configureDailySummaryDigest": "உங்கள் தினசரி பணிகள் சுருக்கத்தை கட்டமைக்கவும்",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5756,7 +5736,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "ஃபார்மூவேர் பதிப்பைச் சரிபார்க்கப்படுகிறது...",
+    "checkingFirmwareVersion": "ஃபார்மூவேர் பதிப்பைச் சரிபார்க்கப்படுகிறது…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5991,7 +5971,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "உங்கள் பதிவைச் சரிசெய்கப்படுகிறது...",
+    "loadingYourRecording": "உங்கள் பதிவைச் சரிசெய்கப்படுகிறது…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -5999,7 +5979,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "பகுப்பாய்வு செய்யப்படுகிறது...",
+    "analyzing": "பகுப்பாய்வு செய்யப்படுகிறது…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6007,7 +5987,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Apple Watch சரிபார்க்கப்படுகிறது...",
+    "checkingAppleWatch": "Apple Watch சரிபார்க்கப்படுகிறது…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6095,7 +6075,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "பதிவுமுறை அல்லது புகைப்படங்களுக்கு பொறுத்து வைக்கப்படுகிறது...",
+    "waitingForTranscriptOrPhotos": "பதிவுமுறை அல்லது புகைப்படங்களுக்கு பொறுத்து வைக்கப்படுகிறது…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6161,7 +6141,7 @@
     "@noSummary": {
         "description": "Message when no summary is available"
     },
-    "updateOmiFirmware": "omi ஃபார்மூவேர் புதுப்பிக்கவும்",
+    "updateOmiFirmware": "Omi ஃபார்மூவேர் புதுப்பிக்கவும்",
     "@updateOmiFirmware": {
         "description": "Button text to update Omi device firmware"
     },
@@ -6257,7 +6237,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "செயல் பொருட்கள்",
+    "wrappedActionItems": "பணிகள்",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6382,11 +6362,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "செயலாக்கம் செய்யப்படுகிறது...",
+    "wrappedProcessingDefault": "செயலாக்கம் செய்யப்படுகிறது…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "உங்கள் உருவாக்கம்\n2025 கதை...",
+    "wrappedCreatingYourStory": "உங்கள் உருவாக்கம்\n2025 கதை…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6426,7 +6406,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "தொடங்குகிறது...",
+    "wrappedStarting": "தொடங்குகிறது…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6698,15 +6678,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "உங்கள் குரல் சுயவிவரத்தை பதிவேற்றுகிறது....",
+    "uploadingVoiceProfile": "உங்கள் குரல் சுயவிவரத்தை பதிவேற்றுகிறது….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "உங்கள் குரலை நினைவில் வைத்துக்கொள்ளுதல்...",
+    "memorizingYourVoice": "உங்கள் குரலை நினைவில் வைத்துக்கொள்ளுதல்…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "உங்கள் அனுபவத்தை தனிப்பட்டதாக்குதல்...",
+    "personalizingExperience": "உங்கள் அனுபவத்தை தனிப்பட்டதாக்குதல்…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6877,7 +6857,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "செய்திகளை சர்வரின் ஒத்திசைப்பு செய்கிறது...",
+    "syncingMessages": "செய்திகளை சர்வரின் ஒத்திசைப்பு செய்கிறது…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7113,11 +7093,11 @@
             }
         }
     },
-    "summarizingConversation": "உரையாடலை சுருக்குகிறது...\nஇது சில நொடிகள் ஆகலாம்",
+    "summarizingConversation": "உரையாடலை சுருக்குகிறது…\nஇது சில நொடிகள் ஆகலாம்",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "உரையாடலை மீண்டும் சுருக்குகிறது...\nஇது சில நொடிகள் ஆகலாம்",
+    "resummarizingConversation": "உரையாடலை மீண்டும் சுருக்குகிறது…\nஇது சில நொடிகள் ஆகலாம்",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7296,7 +7276,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "பதிவிறக்குகிறது...",
+    "downloading": "பதிவிறக்குகிறது…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7415,7 +7395,7 @@
             }
         }
     },
-    "preparingModel": "{model} தயாரிக்கிறது...",
+    "preparingModel": "{model} தயாரிக்கிறது…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7463,7 +7443,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "ஒரு சேவை வழங்குநர் வடிவமாக தேர்ந்தெடுக்கவும்...",
+    "selectProviderTemplate": "ஒரு சேவை வழங்குநர் வடிவமாக தேர்ந்தெடுக்கவும்…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7737,7 +7717,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "ஞ்ஞான வரைபடத்தை லோடுசெய்கிறது...",
+    "loadingKnowledgeGraph": "ஞ்ஞான வரைபடத்தை லோடுசெய்கிறது…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7745,7 +7725,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "நினைவுகளிலிருந்து உங்கள் ஞ்ஞான வரைபடத்தை உருவாக்குகிறது...",
+    "buildingKnowledgeGraphFromMemories": "நினைவுகளிலிருந்து உங்கள் ஞ்ஞான வரைபடத்தை உருவாக்குகிறது…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7765,7 +7745,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "{appName} ஐ திறக்கிறது...",
+    "openingApp": "{appName} ஐ திறக்கிறது…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7815,7 +7795,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "உங்கள் பதிலை எழுதவும்...",
+    "writeYourReply": "உங்கள் பதிலை எழுதவும்…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7954,7 +7934,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "பொருத்தப்பட்ட தொடர்பைத் தேடவும்...",
+    "searchContactsHint": "பொருத்தப்பட்ட தொடர்பைத் தேடவும்",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8093,7 +8073,7 @@
             }
         }
     },
-    "transferring": "பரிமாற்றுகிறது...",
+    "transferring": "பரிமாற்றுகிறது…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8125,7 +8105,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "பரிமாற்றம் நடந்து கொண்டிருக்கிறது...",
+    "transferInProgress": "பரிமாற்றம் நடந்து கொண்டிருக்கிறது…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8283,7 +8263,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "கணக்கிடப்படுகிறது...",
+    "calculatingETA": "கணக்கிடப்படுகிறது…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8300,19 +8280,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "கிட்டத்தட்ட முடிந்துவிட்டது...",
+    "almostDone": "கிட்டத்தட்ட முடிந்துவிட்டது…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "omi கூறுகிறது",
+    "omiSays": "Omi கூறுகிறது",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "உங்கள் தரவை பகுப்பாய்வு செய்யப்படுகிறது...",
+    "analyzingYourData": "உங்கள் தரவை பகுப்பாய்வு செய்யப்படுகிறது…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "{level} பாதுகாப்பிற்கு இடம்பெயர்ப்பு செய்யப்படுகிறது...",
+    "migratingToProtection": "{level} பாதுகாப்பிற்கு இடம்பெயர்ப்பு செய்யப்படுகிறது…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8321,11 +8301,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "இடம்பெயர்ப்பு செய்ய தரவு இல்லை. இறுதிசெய்யப்படுகிறது...",
+    "noDataToMigrateFinalizing": "இடம்பெயர்ப்பு செய்ய தரவு இல்லை. இறுதிசெய்யப்படுகிறது…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "{itemType} இடம்பெயர்ப்பு செய்யப்படுகிறது... {percentage}%",
+    "migratingItemsProgress": "{itemType} இடம்பெயர்ப்பு செய்யப்படுகிறது… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8337,7 +8317,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "அனைத்து பொருட்கள் இடம்பெயர்ப்பு செய்யப்பட்டுள்ளன. இறுதிசெய்யப்படுகிறது...",
+    "allObjectsMigratedFinalizing": "அனைத்து பொருட்கள் இடம்பெயர்ப்பு செய்யப்பட்டுள்ளன. இறுதிசெய்யப்படுகிறது…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8386,7 +8366,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "எ.கா., மீட்டிங் செயல் பணிகள் சேகரிப்பான்",
+    "templateNameHint": "எ.கா., மீட்டிங் பணி பிரித்தெடுப்பான்",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8394,7 +8374,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "எ.கா., வழங்கப்பட்ட உரையாடலிலிருந்து செயல் பணிகள், சிদ்ധாந்த முடிவுகள் மற்றும் முக்கிய கருத்துக்களை பிரித்தெடுக்கவும்.",
+    "conversationPromptHint": "எ.கா., வழங்கப்பட்ட உரையாடலிலிருந்து பணிகள், எடுக்கப்பட்ட முடிவுகள் மற்றும் முக்கிய கருத்துக்களை பிரித்தெடுக்கவும்.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8414,15 +8394,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "விளக்கம் உருவாக்கப்படுகிறது...",
+    "generatingDescription": "விளக்கம் உருவாக்கப்படுகிறது…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "பயன்பாட்டு ஐகான் உருவாக்கப்படுகிறது...",
+    "creatingAppIcon": "பயன்பாட்டு ஐகான் உருவாக்கப்படுகிறது…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "பயன்பாடு நிறுவப்படுகிறது...",
+    "installingApp": "பயன்பாடு நிறுவப்படுகிறது…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8601,7 +8581,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "பயன்பாட்டு ஐகான் உருவாக்கப்படுகிறது...",
+    "aiGenCreatingAppIcon": "பயன்பாட்டு ஐகான் உருவாக்கப்படுகிறது…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8680,7 +8660,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "உங்கள் JSON கட்டமைப்பை இங்கே ஒட்டவும்...",
+    "transcriptionJsonPlaceholder": "உங்கள் JSON கட்டமைப்பை இங்கே ஒட்டவும்…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8790,7 +8770,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "மாற்றுரையை அல்லது சுருக்கத்தைத் தேடவும்...",
+    "searchTranscriptOrSummary": "மாற்றுரையை அல்லது சுருக்கத்தைத் தேடவும்",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9128,11 +9108,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "உங்கள் நினைவுகளை வாசிப்பது...",
+    "msgReadingMemories": "உங்கள் நினைவுகளை வாசிப்பது…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "உங்கள் நினைவுகளிலிருந்து கற்றல்...",
+    "msgLearningMemories": "உங்கள் நினைவுகளிலிருந்து கற்றல்…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9215,7 +9195,7 @@
             }
         }
     },
-    "mergingStatus": "இணைக்கப்படுகிறது...",
+    "mergingStatus": "இணைக்கப்படுகிறது…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9388,11 +9368,11 @@
     },
     "newFolder": "புதிய கோப்புறை",
     "color": "நிறம்",
-    "waitingForDevice": "சாதனத்திற்காக காத்திருக்கிறது...",
+    "waitingForDevice": "சாதனத்திற்காக காத்திருக்கிறது…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "ஒன்று சொல்லவும்...",
+    "saySomething": "ஒன்று சொல்லவும்…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9444,15 +9424,15 @@
     "downloadAudio": "ஆடியோ பதிவிறக்கவும்",
     "audioDownloadSuccess": "ஆடியோ வெற்றிகரமாக பதிவிறக்கப்பட்டது",
     "audioDownloadFailed": "ஆடியோ பதிவிறக்க தோல்வியுற்றது",
-    "downloadingAudio": "ஆடியோ பதிவிறக்கப்படுகிறது...",
+    "downloadingAudio": "ஆடியோ பதிவிறக்கப்படுகிறது…",
     "shareAudio": "ஆடியோ பகிரவும்",
     "preparingAudio": "ஆடியோ தயாரிக்கப்படுகிறது",
-    "gettingAudioFiles": "ஆடியோ கோப்புகள் கொண்டு வரப்படுகிறது...",
+    "gettingAudioFiles": "ஆடியோ கோப்புகள் கொண்டு வரப்படுகிறது…",
     "downloadingAudioProgress": "ஆடியோ பதிவிறக்கப்படுகிறது",
     "processingAudio": "ஆடியோ செயல்படுத்தப்படுகிறது",
-    "combiningAudioFiles": "ஆடியோ கோப்புகள் இணைக்கப்படுகிறது...",
+    "combiningAudioFiles": "ஆடியோ கோப்புகள் இணைக்கப்படுகிறது…",
     "audioReady": "ஆடியோ தயாரம்",
-    "openingShareSheet": "பகிர்ந்தெடுக்குதல் பத்திரிகை திறக்கப்படுகிறது...",
+    "openingShareSheet": "பகிர்ந்தெடுக்குதல் பத்திரிகை திறக்கப்படுகிறது…",
     "audioShareFailed": "பகிர்ந்தெடுக்குதல் தோல்வியுற்றது",
     "dailyRecaps": "தினசரி சுருக்கங்கள்",
     "removeFilter": "வடிப்பிலை நீக்கவும்",
@@ -9529,7 +9509,7 @@
         }
     },
     "mcpConnectionFailed": "MCP சேவையகத்துடன் இணைக்க முடியவில்லை",
-    "authorizingMcpServer": "அங்கீகாரம் கொடுக்கப்படுகிறது...",
+    "authorizingMcpServer": "அங்கீகாரம் கொடுக்கப்படுகிறது…",
     "whereDidYouHearAboutOmi": "நீங்கள் எங்களை எப்படிக் கண்டுபிடித்தீர்கள்?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9632,7 +9612,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "சாதனத்தில் இருந்து பதிவிறக்குகிறது",
-    "reconnectingToInternet": "இணையத்துடன் மீண்டும் இணைக்கிறது...",
+    "reconnectingToInternet": "இணையத்துடன் மீண்டும் இணைக்கிறது…",
     "uploadingToCloud": "{current} / {total} ஐ பதிவேற்றுகிறது",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9644,8 +9624,8 @@
             }
         }
     },
-    "processingOnServer": "சேவையகத்தில் செயல்படுத்துகிறது...",
-    "processingOnServerProgress": "செயல்படுத்துகிறது... {current}/{total} பிரிவுகள்",
+    "processingOnServer": "சேவையகத்தில் செயல்படுத்துகிறது…",
+    "processingOnServerProgress": "செயல்படுத்துகிறது… {current}/{total} பிரிவுகள்",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9790,7 +9770,7 @@
     "answerTheCallFrom": "இலிருந்து அழைப்பைப் பதிலளிக்கவும்",
     "onTheCallEnterThisCode": "அழைப்பில், இந்த குறியீட்டை உள்ளிடவும்",
     "followTheVoiceInstructions": "ஆவாஸ் வழிமுறைகளை பின்பற்றவும்",
-    "statusCalling": "அழைக்கிறது...",
+    "statusCalling": "அழைக்கிறது…",
     "statusCallInProgress": "அழைப்பு நடைபெற்றுக் கொண்டிருக்கிறது",
     "statusVerifiedLabel": "சரிபார்க்கப்பட்ட",
     "statusCallMissed": "அழைப்பு தவறிவிட்ட",
@@ -9805,11 +9785,11 @@
     "phoneNoContactsFound": "தொடர்புகள் கண்டறியப்படவில்லை",
     "phoneEnterNumber": "எண்ணை உள்ளிடவும்",
     "failedToStartCall": "அழைப்பு தொடங்க முடியவில்லை",
-    "callStateConnecting": "இணைக்கிறது...",
-    "callStateRinging": "அழைக்கிறது...",
+    "callStateConnecting": "இணைக்கிறது…",
+    "callStateRinging": "அழைக்கிறது…",
     "callStateEnded": "அழைப்பு முடிந்தது",
     "callStateFailed": "அழைப்பு தோல்வி",
-    "transcriptPlaceholder": "மொழிபெயர்ப்பு இங்கு தோன்றும்...",
+    "transcriptPlaceholder": "மொழிபெயர்ப்பு இங்கு தோன்றும்…",
     "phoneUnmute": "மீண்டும் ஒலி செய்",
     "phoneMute": "ஒலி நீக்கு",
     "phoneSpeaker": "ஸ்பீக்கர்",
@@ -9888,7 +9868,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "தொலைபேசி மொழிபெயர்ப்பு மற்றும் செயல் உருபணுகள்",
+    "phoneCallsUpsellFeature2": "தானியங்கி அழைப்பு சுருக்கங்கள் மற்றும் பணிகள்",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10033,7 +10013,7 @@
         }
     },
     "transcriptionPaused": "பதிவு, மீண்டு இணையப்படுகிறது",
-    "transcriptionPausedReconnecting": "இன்னும் பதிவு செய்யப்படுகிறது — மொழிபெயர்ப்புக்கு மீண்டு இணையப்படுகிறது...",
+    "transcriptionPausedReconnecting": "இன்னும் பதிவு செய்யப்படுகிறது — மொழிபெயர்ப்புக்கு மீண்டு இணையப்படுகிறது…",
     "fairUseBannerStatus": "நியாய பயன்பாடு: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10214,7 +10194,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "நாங்கள் மற்றும் கருத்து பாராட்டுகிறோம்...",
+    "cancelReasonDetailHint": "நாங்கள் மற்றும் கருத்து பாராட்டுகிறோம்…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10322,10 +10302,10 @@
     "disconnectHistory": "விலக்கும் வரலாற்று",
     "noDisconnectsRecorded": "விலக்குவதை பிற் பதிவு செய்யப்படவில்லை",
     "diagnostics": "கண்டறியக்கூடியம்",
-    "waitingForData": "தரவுக்குக் காத்திருக்கிறது...",
+    "waitingForData": "தரவுக்குக் காத்திருக்கிறது…",
     "liveRssiOverTime": "நேரலை RSSI நேரத்தின் மீது",
     "noRssiDataYet": "இன்னும் RSSI தரவு இல்லை",
-    "collectingData": "தரவு சேகரிக்கப்படுகிறது...",
+    "collectingData": "தரவு சேகரிக்கப்படுகிறது…",
     "cleanDisconnect": "சுத்த விலக்குதல்",
     "connectionTimeout": "இணைப்பு நேர முடிய",
     "remoteDeviceTerminated": "தொலை சாதனம் முடிவாக்கப்பட்ட",
@@ -10377,7 +10357,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "கடைசி நிலையான firmware பெறப்படுகிறது...",
+    "fetchingStableFirmware": "கடைசி நிலையான firmware பெறப்படுகிறது…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10405,11 +10385,11 @@
     "enableLocationTitle": "தொடர்பிலையை இயக்கவும்",
     "enableLocationDescription": "Bluetooth சாதனங்களை கண்டறிய தொடர்பிலை அனுமதி தேவைப்படுகிறது.",
     "voiceRecordingFound": "பதிவு கண்டறியப்பட்ட",
-    "transcriptionConnecting": "மொழிபெயர்ப்பு இணைக்கப்படுகிறது...",
+    "transcriptionConnecting": "மொழிபெயர்ப்பு இணைக்கப்படுகிறது…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "மொழிபெயர்ப்பு மீண்டு இணைக்கப்படுகிறது...",
+    "transcriptionReconnecting": "மொழிபெயர்ப்பு மீண்டு இணைக்கப்படுகிறது…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10535,7 +10515,7 @@
     "connectTaskAppToExport": "ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்",
     "deselectAllTasksMenu": "அனைத்தையும் தேர்வு நீக்கு",
     "hideCompletedTasks": "முடிந்தவற்றை மறை",
-    "searchActionItems": "செயல் உருப்படிகளைத் தேடு",
+    "searchActionItems": "பணிகளைத் தேடு",
     "selectActionItems": "பலவற்றைத் தேர்ந்தெடு",
     "selectAllTasksMenu": "அனைத்தையும் தேர்ந்தெடு",
     "showCompletedTasks": "முடிந்தவற்றைக் காட்டு",
@@ -10625,11 +10605,11 @@
     "deviceOnboardingTranscriptionTitle": "உங்கள் Omi-யிடம் பேசுங்கள்",
     "deviceOnboardingTranscriptionSubtitle": "சில வார்த்தைகள் சொல்லி, அவை உடனடியாகத் தோன்றுவதைப் பாருங்கள்",
     "deviceOnboardingGoodJob": "அருமை!",
-    "deviceOnboardingStartSpeaking": "பேசத் தொடங்குங்கள்...",
+    "deviceOnboardingStartSpeaking": "பேசத் தொடங்குங்கள்…",
     "deviceOnboardingAskQuestionTitle": "Omi-யிடம் ஒரு கேள்வி கேளுங்கள்",
     "deviceOnboardingAskQuestionSubtitle": "பொத்தானை ஒருமுறை அழுத்தி, உங்கள் கேள்வியைச் சொல்லி, முடிந்ததும் மீண்டும் அழுத்துங்கள்",
-    "deviceOnboardingProcessingQuestion": "உங்கள் கேள்வி செயலாக்கப்படுகிறது...",
-    "deviceOnboardingListening": "கேட்கிறது...",
+    "deviceOnboardingProcessingQuestion": "உங்கள் கேள்வி செயலாக்கப்படுகிறது…",
+    "deviceOnboardingListening": "கேட்கிறது…",
     "deviceOnboardingTurnOffTitle": "அணைக்கவும்",
     "deviceOnboardingTurnOnTitle": "இயக்கவும்",
     "deviceOnboardingTurnOffSubtitle": "பொத்தானை 3 வினாடிகள் அழுத்திப் பிடியுங்கள்",
@@ -10638,7 +10618,7 @@
     "deviceOnboardingStatusConnected": "இணைக்கப்பட்டது",
     "deviceOnboardingStatusConnectedDone": "இணைக்கப்பட்டது!",
     "deviceOnboardingStatusDisconnected": "இணைப்பு துண்டிக்கப்பட்டது",
-    "deviceOnboardingStatusTurningOff": "அணைக்கப்படுகிறது...",
+    "deviceOnboardingStatusTurningOff": "அணைக்கப்படுகிறது…",
     "deviceOnboardingDoubleTapTitle": "இரட்டை தட்டலைத் தனிப்பயனாக்குங்கள்",
     "deviceOnboardingEndConversation": "உரையாடலை முடிக்கவும்",
     "deviceOnboardingEndConversationDesc": "தற்போதைய உரையாடலைச் சேமித்து முடிக்கவும்",
@@ -10731,7 +10711,7 @@
     "onDeviceModelSize": "மாதிரி அளவு",
     "onDeviceTranscription": "சாதனத்தில் உரையாக்கம்",
     "onDeviceTranscriptionDesc": "உரையாக்கம் உங்கள் சாதனத்திலேயே செயலாக்கப்படுகிறது",
-    "searchSettings": "அமைப்புகளில் தேடு…",
+    "searchSettings": "அமைப்புகளில் தேடு",
     "speechToTextProvider": "பேச்சு-உரை வழங்குநர்",
     "speechToTextProviderDesc": "உரையாக்கத்திற்குப் பயன்படுத்தப்படும் சேவையைத் தேர்ந்தெடுக்கவும்",
     "sttFilterAuto": "தானியங்கு",
@@ -10843,5 +10823,20 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
     "nextWeek": "அடுத்த வாரம்",
-    "clearSearch": "தேடலை அழி"
+    "clearSearch": "தேடலை அழி",
+    "audioUploadFailedKeptLocal": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது.",
+    "audioUploadFailedTapRetry": "பதிவேற்றம் தோல்வியடைந்தது — {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது. மீண்டும் முயல தட்டவும்.",
+    "audioUploadRetrying": "பதிவேற்றம் மீண்டும் முயலப்படுகிறது… {duration} ஆடியோ உங்கள் ஃபோனில் வைக்கப்பட்டுள்ளது",
+    "capturing": "பதிவுசெய்கிறது",
+    "capturingPhotos": "புகைப்படங்கள் எடுக்கப்படுகின்றன",
+    "listeningTranscriptWillAppear": "கேட்கிறது… டிரான்ஸ்கிரிப்ட் இங்கே தோன்றும்.",
+    "recordingOfflineTranscriptWillCatchUp": "ஆஃப்லைனில் பதிவுசெய்கிறது — நீங்கள் மீண்டும் ஆன்லைனுக்கு வந்ததும் டிரான்ஸ்கிரிப்ட் புதுப்பிக்கப்படும்.",
+    "transcriptionUnavailableRecordingSaved": "டிரான்ஸ்கிரிப்ஷன் கிடைக்கவில்லை — பதிவு தொடர்கிறது, உங்கள் ஆடியோ சேமிக்கப்படுகிறது.",
+    "uploadingAudioForTranscription": "டிரான்ஸ்கிரிப்ஷனுக்காக {duration} ஆடியோ பதிவேற்றப்படுகிறது…",
+    "filterBySpeaker": "பேசுபவர் வாரியாக வடிகட்டு",
+    "notNow": "இப்போது வேண்டாம்",
+    "discard": "நிராகரி",
+    "keepEditing": "தொடர்ந்து திருத்து",
+    "discardChangesTitle": "மாற்றங்களை நிராகரிக்கவா?",
+    "discardChangesMessage": "சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்."
 }

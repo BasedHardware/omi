@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/ui/feedback/omi_feedback.dart';
 
 /// Full-screen photo viewer that replaces `FullScreenImageViewer` (a single network image, e.g.
 /// app store thumbnails) and `PhotoViewerPage` (a paged gallery of base64 conversation photos).
@@ -200,9 +201,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     } catch (e) {
       Logger.debug('Failed to share media: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.somethingWentWrong)),
-        );
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
       }
     } finally {
       // The share sheet has copied what it needs by the time it returns, and every one of these is

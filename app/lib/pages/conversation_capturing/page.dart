@@ -467,7 +467,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       layoutIdentity: 'photo-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people, segments),
     );
   }
 
@@ -663,9 +663,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
+  Widget _buildTranscriptTimelineItem(
+      TranscriptSegment segment, CaptureProvider provider, List<Person> people, List<TranscriptSegment> segments) {
     final bool isUser = segment.isUser;
-    final name = speakerLabel(context, segment, personById(people, segment.personId));
+    final name = speakerLabel(context, segment, personById(people, segment.personId), segments: segments);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(

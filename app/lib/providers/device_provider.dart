@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
@@ -31,6 +30,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
 typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
@@ -204,12 +204,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) => ConfirmationDialog(
+        // One answer only (acknowledge), so an alert, not a confirmation.
+        builder: (dialogContext) => OmiAlertDialog(
           title: dialogContext.l10n.bluetooth,
-          description: dialogContext.l10n.deviceUnpairedMessage,
-          confirmText: dialogContext.l10n.gotIt,
-          onConfirm: () => Navigator.of(dialogContext).pop(),
-          onCancel: () {},
+          message: dialogContext.l10n.deviceUnpairedMessage,
+          actions: [
+            OmiDialogAction(
+              label: dialogContext.l10n.gotIt,
+              isDefault: true,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
         ),
       ).whenComplete(() => _pairingLostDialogShowing = false);
     }
@@ -950,18 +955,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final ctx = globalNavigatorKey.currentContext;
       if (ctx == null || !ctx.mounted) return;
       SharedPreferencesUtil().companionAssociationPrompted = true;
-      await showDialog(
-        context: ctx,
-        builder: (context) => AlertDialog(
-          title: Text(context.l10n.improveConnectionTitle),
-          content: Text(context.l10n.improveConnectionContent),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.l10n.improveConnectionAction, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+      await showOmiAlert(
+        ctx,
+        title: ctx.l10n.improveConnectionTitle,
+        message: ctx.l10n.improveConnectionContent,
+        okLabel: ctx.l10n.improveConnectionAction,
       );
     } catch (e) {
       if (!_isCurrent(generation)) return;
