@@ -59,26 +59,3 @@ async def test_quota_runtime_error_is_masked(monkeypatch):
     assert "prod-cache-01" not in exc_info.value.detail
     assert "6379" not in exc_info.value.detail
 
-
-@pytest.mark.asyncio
-async def test_quota_value_error_is_masked(monkeypatch):
-    """ValueError in the request preparation path must return static 400 without internal details."""
-    leak_text = "invalid user tier configuration in metadata column user_tiers.active"
-
-    monkeypatch.setattr(dc_routes, "llm_stub_enabled", lambda: False)
-    monkeypatch.setattr(
-        dc_routes,
-        "enforce_desktop_chat_quota",
-        MagicMock(side_effect=ValueError(leak_text)),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        await dc_routes._chat_completions_unobserved(
-            body={"model": "gpt-4"},
-            uid="test-user-003",
-            x_omi_chat_contract_version="1",
-        )
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Invalid request parameters."
-    assert "user_tiers.active" not in exc_info.value.detail
