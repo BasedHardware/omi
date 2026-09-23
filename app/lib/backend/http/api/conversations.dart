@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
@@ -84,22 +86,17 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   String? folderId,
   bool? starred,
 }) async {
-  String url =
-      '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
-
-  // Add date filters if provided
-  if (startDate != null) {
-    url += '&start_date=${startDate.toUtc().toIso8601String()}';
-  }
-  if (endDate != null) {
-    url += '&end_date=${endDate.toUtc().toIso8601String()}';
-  }
-  if (folderId != null) {
-    url += '&folder_id=$folderId';
-  }
-  if (starred != null) {
-    url += '&starred=$starred';
-  }
+  String url = conversationCollectionUrl(
+    Env.apiBaseUrl ?? '',
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -233,28 +230,29 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
 }
 
 /// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations), or an empty list on error.
-Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
+/// Returns capture-gap rows (never conversations) and whether the read
+/// answered, so a failed read is not read as "nothing to show".
+Future<({List<CalendarCaptureGap> items, bool ok})> getCalendarCaptureGaps({
   required DateTime start,
   required DateTime end,
 }) async {
   final url =
       '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: const <CalendarCaptureGap>[], ok: false);
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
+    final gaps = (jsonDecode(body) as List<dynamic>)
         .map(
-          (row) => CalendarCaptureGap.fromGenerated(
-            wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>),
-          ),
+          (row) =>
+              CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
         )
         .toList();
+    return (items: gaps, ok: true);
   }
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
   debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
-  return [];
+  // 400 means no connected calendar — nothing was captured, so nothing to show.
+  return (items: const <CalendarCaptureGap>[], ok: response.statusCode == 400);
 }
 
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
@@ -284,6 +282,98 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }
 
+String conversationCollectionUrl(
+  String baseUrl, {
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) {
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  var url =
+      '${root}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (startDate != null) {
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  }
+  if (folderId != null) {
+    url += '&folder_id=$folderId';
+  }
+  if (starred != null) {
+    url += '&starred=$starred';
+  }
+  return url;
+}
+
+/// Typed conversation list/detail. Legacy [getConversations]/[getConversationById]
+/// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
+class ConversationApi {
+  ConversationApi({required String baseUrl, ApiSend? send})
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
+
+  final String _baseUrl;
+  final ApiSend? _send;
+
+  Future<ApiResult<List<ServerConversation>>> list({
+    int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = true,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? folderId,
+    bool? starred,
+  }) async {
+    final sent = await executeApi<String>(
+      request: ApiRequest(
+        url: conversationCollectionUrl(
+          _baseUrl,
+          limit: limit,
+          offset: offset,
+          statuses: statuses,
+          includeDiscarded: includeDiscarded,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: folderId,
+          starred: starred,
+        ),
+        method: 'GET',
+      ),
+      send: _send,
+      decode: (body) => body,
+    );
+    return switch (sent) {
+      ApiFailure(:final problem) => ApiFailure(problem),
+      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+          data,
+          ServerConversation.fromJson,
+          fallback: recordFallback,
+        ),
+    };
+  }
+
+  Future<ApiResult<ServerConversation>> byId(String id) {
+    return executeApi<ServerConversation>(
+      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      send: _send,
+      decode: (body) {
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('conversation detail is not an object');
+        }
+        return ServerConversation.fromJson(decoded);
+      },
+    );
+  }
+}
+
 /// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
 /// inline base64 photos continue to render without a network round trip.
 Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
@@ -298,9 +388,13 @@ Future<Uint8List?> getConversationPhotoImage(String conversationId, String photo
   return response!.bodyBytes;
 }
 
+@visibleForTesting
+String conversationTitlePath(String conversationId, String title) =>
+    'v1/conversations/$conversationId/title?title=${Uri.encodeQueryComponent(title)}';
+
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
+    url: '${Env.apiBaseUrl}${conversationTitlePath(conversationId, title)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -394,6 +488,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   List<String> segmentIds, {
   bool? isUser,
   String? personId,
+  int? speakerId,
 }) async {
   String assignType;
   String? value;
@@ -406,13 +501,17 @@ Future<bool> assignBulkConversationTranscriptSegments(
   }
 
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
+    url: speakerId == null
+        ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
   );
   if (response == null) return false;
-  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -749,7 +848,36 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
 /// Convert to UTC first, matching the conversation-list date filter.
 String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
 
-Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+enum ConversationSearchResultOutcome { success, failure }
+
+/// A search response keeps transport/parse failures distinct from an empty,
+/// successful result. An empty list is valid data only when [outcome] is
+/// [ConversationSearchResultOutcome.success].
+class ConversationSearchResult {
+  final List<ServerConversation> items;
+  final int currentPage;
+  final int totalPages;
+  final ConversationSearchResultOutcome outcome;
+  final int? statusCode;
+
+  const ConversationSearchResult({
+    required this.items,
+    required this.currentPage,
+    required this.totalPages,
+    required this.outcome,
+    this.statusCode,
+  });
+
+  const ConversationSearchResult.failure({this.statusCode})
+      : items = const [],
+        currentPage = 0,
+        totalPages = 0,
+        outcome = ConversationSearchResultOutcome.failure;
+
+  bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
+}
+
+Future<ConversationSearchResult> searchConversationsServerResult(
   String query, {
   int? page,
   int? limit,
@@ -773,15 +901,51 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
-  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
-    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-    return (convos, data.currentPage, data.totalPages);
+    try {
+      final data = wire.GeneratedSearchConversationsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
+      return ConversationSearchResult(
+        items: convos,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+        outcome: ConversationSearchResultOutcome.success,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      Logger.debug('searchConversationsServer parse error: $e');
+      return ConversationSearchResult.failure(statusCode: response.statusCode);
+    }
   }
-  return (<ServerConversation>[], 0, 0);
+  return ConversationSearchResult.failure(statusCode: response.statusCode);
+}
+
+/// Compatibility tuple for callers that do not yet consume typed outcomes.
+/// New product journeys should use [searchConversationsServerResult].
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+  String query, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+}) async {
+  final result = await searchConversationsServerResult(
+    query,
+    page: page,
+    limit: limit,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    speakerId: speakerId,
+  );
+  return (result.items, result.currentPage, result.totalPages);
 }
 
 Future<String> testConversationPrompt(String prompt, String conversationId) async {

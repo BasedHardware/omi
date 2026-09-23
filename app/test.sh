@@ -5,6 +5,7 @@ set -euo pipefail
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/mobile_build_wrapper_test.sh"
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/build_provenance_dart_defines_test.sh"
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/check_hermetic_test_env_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test/shell/l10n_tool_test.sh"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
@@ -62,4 +63,7 @@ fi
 
 bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
 
+# Execute registration with the real compile-time opt-in in a separate isolate.
+# Keep the ordinary suite (including the pinned fail-closed guard) unopted-in.
+flutter test --dart-define=OMI_DEV_CONTROLS=1 test/spine
 flutter test "$@"

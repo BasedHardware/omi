@@ -12,8 +12,11 @@ unattributable population into misleading telemetry. Once those clients send
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Literal
+
+_APP_BUILD = re.compile(r'[0-9]{1,10}(?:\.[0-9]{1,3}\.[0-9]{1,5})?', re.ASCII)
 
 ClientJourneyName = Literal[
     'desktop_chat',
@@ -143,6 +146,18 @@ def bounded_client_journey_issue_class(value: object | None) -> ClientJourneyIss
 def bounded_client_kind(value: object | None) -> ClientKind:
     normalized = _bounded(value)
     return normalized if normalized in _CLIENT_KIND_SET else 'unknown'
+
+
+def bounded_app_build(value: object | None) -> str:
+    """Collapse anything that is not a sanitized numeric/dotted build to unknown."""
+
+    if not isinstance(value, str) or not value:
+        return 'unknown'
+    if value == 'unknown':
+        return 'unknown'
+    if len(value) > 32:
+        return 'unknown'
+    return value if _APP_BUILD.fullmatch(value) else 'unknown'
 
 
 def resolve_client_kind(*, x_app_platform: object | None, user_agent: object | None) -> ClientKind:

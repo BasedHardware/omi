@@ -775,6 +775,13 @@ esac
         self.assertIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
 
+    def test_product_invariants_diffs_three_dot_from_base_not_a_changed_files_list(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-invariants")
+        self.assertIn("{base}", check.command)
+        self.assertIn("{head}", check.command)
+        self.assertNotIn("{changed_files}", check.command)
+
     def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
         """Fail-closed: a main push with no body must NOT run body-requiring
         checks (they would fail on empty text), preserving the old skip."""
@@ -819,6 +826,8 @@ esac
         )
         self.assertNotIn(check, selected)
         self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
+        self.assertIn(check, resolve_checks(manifest, ["app/lib/pages/chat/page.dart"], "ci"))
+        self.assertIn("app/lib/**/*.dart", check.triggers)
 
         command = command_for_check(
             check,
@@ -868,6 +877,10 @@ esac
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -884,16 +897,16 @@ esac
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
   exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'guard-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'guard-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
@@ -902,10 +915,6 @@ chmod +x "{python}"
             guard.parent.mkdir(parents=True, exist_ok=True)
             guard.write_text("# fixture\n", encoding="utf-8")
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(
@@ -942,6 +951,10 @@ chmod +x "{python}"
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -961,25 +974,21 @@ chmod +x "{python}"
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
   exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'compose-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
             sync.chmod(0o755)
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(

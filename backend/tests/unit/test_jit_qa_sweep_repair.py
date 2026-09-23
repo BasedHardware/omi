@@ -93,13 +93,19 @@ class _AttemptQuery:
 class _InvocationQuery:
     def __init__(self, store, prefix):
         self.store, self.prefix = store, prefix
+        self.uid = None
+
+    def where(self, *, filter):
+        assert filter.field_path == "uid"
+        self.uid = filter.value
+        return self
 
     def limit(self, _count):
         return self
 
     def stream(self):
         for path, payload in sorted(self.store.items()):
-            if path.startswith(self.prefix):
+            if path.startswith(self.prefix) and (self.uid is None or payload.get("uid") == self.uid):
                 yield _SnapshotWithPath(path.rsplit("/", 1)[-1], payload)
 
 
@@ -136,6 +142,8 @@ class _Db:
     def collection(self, path):
         if path == "llm_gateway_attempts":
             return _AttemptQuery(self.attempts, self.attempt_date)
+        if path == "daily_memory_sweep_model_invocation_fences":
+            return _InvocationQuery(self.store, f"{path}/")
         if path.startswith("users/") and path.endswith("/daily_memory_sweep_model_invocations"):
             return _InvocationQuery(self.store, f"{path}/")
         raise AssertionError(f"unexpected collection {path}")
@@ -161,7 +169,7 @@ def _tombstoned_invocation(store, *, state="payload_expired", claimed_minutes_ag
         "source_generation": 4,
         "sweep_generation": 1,
         "window_id": "window-a",
-        "state": "pending",
+        "state": state,
         "claimed_at": claimed_at,
     }
     return claimed_at
@@ -179,12 +187,12 @@ def test_environment_fence_fails_closed(monkeypatch):
 def test_list_reports_tombstones_with_repair_state():
     db = _Db()
     _tombstoned_invocation(db.store)
-    db.store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-2"] = {"state": "returned"}
+    db.store["daily_memory_sweep_model_invocation_fences/inv-2"] = {"uid": UID, "state": "returned"}
     db.store[f"users/{UID}/daily_memory_sweep_model_invocations/inv-1"]["lease_expires_at"] = datetime.now(
         timezone.utc
     ) - timedelta(minutes=1)
     rows = OPERATOR.list_tombstones(db, uid=UID)
-    assert [row["invocation_id"] for row in rows] == ["inv-1"]
+    assert [row["invocation_id"] for row in rows] == ["inv-1", "inv-2"]
     assert rows[0]["state"] == "payload_expired"
     assert rows[0]["lease_expired"] is True
     assert rows[0]["repair_receipt"] is False
@@ -426,3 +434,46 @@ def test_recorded_attempt_conflicts_with_no_dispatch_attestation():
             attestation_reference="incident:wrong-assertion",
         )
     assert not any("repairs/" in key for key in db.store)
+
+
+def test_operator_skip_returned_claim_does_not_require_lost_accounting(monkeypatch):
+    db = _Db()
+    _tombstoned_invocation(db.store, state="returned")
+    db.store["daily_memory_sweep_model_invocation_fences/inv-1"].update(state="returned", claim_id="returned-claim")
+    monkeypatch.setattr(
+        OPERATOR,
+        "collect_provider_outcome_evidence",
+        lambda *_args, **_kwargs: pytest.fail("skip must not require reconstructing lost accounting"),
+    )
+    receipt = OPERATOR.repair_tombstone(
+        db,
+        invocation_id="inv-1",
+        repair_authority="operator:test",
+        uid=UID,
+        now=NOW,
+        attestation_confirmation=OPERATOR.SKIP_WINDOW_ATTESTATION_CONFIRMATION,
+        attestation_reference="incident:stage-gap",
+    )
+    assert receipt["provider_outcome_summary"] == "operator_attested_skip_window"
+    assert receipt["window_disposition"] == "abandoned"
+    assert receipt["provider_dispatch_status"] == "not_attested"
+    assert receipt["accounting_checked"] is False
+    assert "attempts" not in receipt["provider_outcome_evidence"]
+    assert receipt["provider_outcome_evidence"]["confirmation"] == "ATTEST_WORKER_TERMINATED_AND_ABANDON_WINDOW"
+    assert receipt["consumed"] is False
+
+
+@pytest.mark.parametrize("confirmation", ["ATTEST_SKIP_WINDOW_WITHOUT_DISPATCH_AND_WORKER_TERMINATED"])
+def test_obsolete_skip_assertion_cannot_attest_no_dispatch_for_returned_claim(confirmation):
+    db = _Db()
+    _tombstoned_invocation(db.store, state="returned")
+    with pytest.raises(OPERATOR.JITQASweepRepairError, match="attestation and evidence reference"):
+        OPERATOR.repair_tombstone(
+            db,
+            invocation_id="inv-1",
+            repair_authority="operator:test",
+            uid=UID,
+            now=NOW,
+            attestation_confirmation=confirmation,
+            attestation_reference="incident:stage-gap",
+        )

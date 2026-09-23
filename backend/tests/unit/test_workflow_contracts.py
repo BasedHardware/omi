@@ -472,10 +472,11 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
     # installs Flutter without this pin (or a mismatched version) fails
     # because the two counts diverge. The floor is the historical four
     # (generated-files, analyze-and-test, journeys-hermetic,
-    # android-compile-smoke); android-unit-tests adds one more.
+    # android-compile-smoke); android-unit-tests, dart-tests-kiritimati, and
+    # ios-compile-check add three more.
     action_count = mobile_checks.count("uses: subosito/flutter-action")
     assert action_count == mobile_checks.count(pinned)
-    assert action_count >= 5
+    assert action_count >= 6
 
 
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
@@ -506,7 +507,22 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
     assert "retention-days: 5" in android
     assert "${{ secrets." not in android
-    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" in android
+    # Compile-smoke is the wall: restore-only so main does not pay Gradle
+    # save+cleanup after the APK, and so it does not race the JVM writer
+    # for the same content keys (runs 35256814704 / 35268313733).
+    assert "cache-read-only: true" in android
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" not in android
+
+    # Size report is a zip breakdown of the debug APK this job already built.
+    # --analyze-size would need a second release compile; this is never a gate.
+    assert "report_debug_apk_size.py" in android
+    assert "GITHUB_STEP_SUMMARY" in android
+    assert "apk-size-${{ github.event.pull_request.head.sha || github.sha }}" in android
+    assert not any("--analyze-size" in line and not line.lstrip().startswith("#") for line in android.splitlines())
+    assert "github-script" not in android
+    assert "create-or-update-comment" not in android
+    assert "${{ secrets." not in android
+    assert "THRESHOLD" not in (repo / ".github/scripts/report_debug_apk_size.py").read_text(encoding="utf-8")
 
     assert "./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64" in unit_tests
     unit_run_lines = {line.strip() for line in unit_tests.splitlines()}
@@ -526,9 +542,81 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     # Fork PRs must keep working: debug keystore is the in-repo prebuilt file.
     assert "app/setup/prebuilt/debug.keystore" in android
     assert "app/setup/prebuilt/debug.keystore" in unit_tests
-    assert "dart-tests-kiritimati" not in jobs
-    assert "Pacific/Kiritimati" not in mobile_checks
-    assert "Pacific/Pago_Pago" not in mobile_checks
+
+
+def test_mobile_kiritimati_dart_suite_is_a_parallel_second_pass():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+
+    tz_job = jobs["dart-tests-kiritimati"]
+    journeys = jobs["journeys-hermetic"]
+    analyze = jobs["analyze-and-test"]
+
+    assert "name: Dart Tests (Pacific/Kiritimati)" in mobile_checks
+    assert "needs: changes" in tz_job
+    assert "needs: analyze-and-test" not in tz_job
+    assert "needs: android-compile-smoke" not in tz_job
+    assert "needs: journeys-hermetic" not in tz_job
+    assert "has_app_dart" in tz_job
+    assert "TZ=Pacific/Kiritimati bash app/test.sh" in tz_job
+    assert "TZ=Pacific/Pago_Pago bash app/test.sh" in tz_job
+    assert "${{ secrets." not in tz_job
+    # The UTC Dart job and the journeys lane must not grow this TZ serial
+    # dependency — a needs: edge here would lengthen the critical path.
+    assert "dart-tests-kiritimati" not in analyze
+    assert "TZ=" not in journeys
+    assert "Pacific/Kiritimati" not in journeys
+    assert "Pacific/Pago_Pago" not in journeys
+
+
+def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_free():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+    ios = jobs["ios-compile-check"]
+    changes = jobs["changes"]
+    resolver = _load_repo_script("pre_push_ci_prediction")
+
+    assert "name: iOS Compile Check" in mobile_checks
+    assert "runs-on: macos-26" in ios
+    assert "needs: changes" in ios
+    assert "has_app_ios_compile" in ios
+    assert "has_app_ios_compile" in changes
+    assert "has_app_ios_compile:" in detect_changes
+    assert "timeout-minutes: 40" in ios
+    assert "fetch-depth: 1" in ios
+    assert "run-swift-ci.sh --select-toolchain" in ios
+    assert "hashFiles('app/ios/Podfile.lock')" in ios
+    assert "GoogleService-Info-Local.plist" in ios
+    assert "flutter build ios --simulator --debug --flavor dev --no-codesign -d \"$IOS_SIMULATOR_UDID\"" in ios
+    assert "simctl" in ios
+    assert "IOS_SIMULATOR_UDID" in ios
+    assert "${{ secrets." not in ios
+    assert "ios-compile-check.yml" not in mobile_checks
+
+    dart = "app/lib/pages/chat/page.dart"
+    dart_outputs = resolver.github_outputs(
+        resolver.resolve_impact([dart], read_text=lambda path: {dart: "class ChatPage {}"}.get(path))
+    )
+    assert dart_outputs["has_app_ios_compile"] == "false"
+    assert dart_outputs["has_app_compile_smoke"] == "true"
+
+    swift = "app/ios/Runner/AppDelegate.swift"
+    swift_outputs = resolver.github_outputs(resolver.resolve_impact([swift]))
+    assert swift_outputs["has_app_ios_compile"] == "true"
+
+    workflow = ".github/workflows/mobile-app-checks.yml"
+    workflow_outputs = resolver.github_outputs(resolver.resolve_impact([workflow]))
+    assert workflow_outputs["has_app_ios_compile"] == "true"
+
+    # Stacked PRs whose base is not main must still start this workflow.
+    # `pull_request: branches: main` skipped the entire run for #14358.
+    header = mobile_checks.split("jobs:", 1)[0]
+    assert "pull_request:" in header
+    assert "push:\n    branches: main" in header
+    assert "pull_request:\n    branches:" not in header
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():

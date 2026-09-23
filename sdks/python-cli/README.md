@@ -1,6 +1,6 @@
 # omi-cli
 
-[Русский: быстрый старт](README.ru.md)
+[Русский: быстрый старт](README.ru.md) · [日本語 README](README.ja.md)
 
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
@@ -67,11 +67,17 @@ to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
 > [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), or the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), or the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md).
+> Looking for localized guides? See the [nnapulitano (Neapolitan Quickstart)](examples/quickstart.nap.md), the [vosa vakaViti (Fijian Quickstart)](examples/quickstart.fj.md), the [papiamentu (Papiamento Quickstart)](examples/quickstart.pap.md), the [mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md), the [hornjoserbšćina (Upper Sorbian Quickstart)](examples/quickstart.hsb.md), the [rumantsch (Romansh Quickstart)](examples/quickstart.rm.md), the [armãneashti (Aromanian Quickstart)](examples/quickstart.rup.md), or the [estremeñu (Extremaduran Quickstart)](examples/quickstart.ext.md).
 
-> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), or the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md).
+
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
+
+> Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md), or the [ᏣᎳᎩ (Cherokee Quickstart)](examples/quickstart.chr.md).
+> Looking for localized guides? See the [asturianu (Asturian Quickstart)](examples/quickstart.ast.md), the [vèneto (Venetian Quickstart)](examples/quickstart.vec.md), the [corsu (Corsican Quickstart)](examples/quickstart.co.md), the [gagana Samoa (Samoan Quickstart)](examples/quickstart.sm.md), the [lea faka-Tonga (Tongan Quickstart)](examples/quickstart.to.md), the [ʻōlelo Hawaiʻi (Hawaiian Quickstart)](examples/quickstart.haw.md), the [kalaallisut (Greenlandic Quickstart)](examples/quickstart.kl.md), the [মৈতৈলোন (Meitei Quickstart)](examples/quickstart.mni.md), the [ತುಳು (Tulu Quickstart)](examples/quickstart.tcy.md), the [isiNdebele (Ndebele Quickstart)](examples/quickstart.nd.md), the [Kikongo (Kongo Quickstart)](examples/quickstart.kg.md), or the [chisena (Sena Quickstart)](examples/quickstart.seh.md).
+> Looking for localized guides? See the [Kajin M̧ajeļ (Marshallese Quickstart)](examples/quickstart.mh.md), the [Chamoru (Chamorro Quickstart)](examples/quickstart.ch.md), the [Tetun (Tetum Quickstart)](examples/quickstart.tet.md), the [Tok Pisin (Tok Pisin Quickstart)](examples/quickstart.tpi.md), the [Aymar aru (Aymara Quickstart)](examples/quickstart.ay.md), or the [Macehuallahtolli (Nahuatl Quickstart)](examples/quickstart.nah.md).
 
 > Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
 
@@ -80,13 +86,21 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [डोगरी च शुरूआती मार्गदर्शिका (Dogri Quickstart)](examples/quickstart.doi.md).
 
-> Looking for localized guides? See the [🇫🇷 Guide de démarrage rapide en français (French Quickstart)](examples/quickstart.fr.md), the [🇩🇪 Deutsche Schnellstartanleitung (German Quickstart)](examples/quickstart.de.md), the [🇵🇹 Guia de início rápido em português (Portuguese Quickstart)](examples/quickstart.pt.md), or the [🇮🇹 Guida rapida in italiano (Italian Quickstart)](examples/quickstart.it.md).
+> Looking for localized guides? See the [🇫🇷 Guide de démarrage rapide en français (French Quickstart)](examples/quickstart.fr.md), the [🇩🇪 Deutsche Schnellstartanleitung (German Quickstart)](examples/quickstart.de.md), the [🇵🇹 Guia de início rápido em português (Portuguese Quickstart)](examples/quickstart.pt.md), the [🇮🇹 Guida rapida in italiano (Italian Quickstart)](examples/quickstart.it.md), or the [🇧🇹 omi-cli དང་འགོ་བཙུགས་ནི། (Dzongkha Quickstart)](examples/quickstart.dz.md).
 > Looking for localized guides? See the [🇮🇳 हिंदी में शुरुआत (Hindi Quickstart)](examples/quickstart.hi.md).
 
 > Looking for localized guides? See the [नेपालीमा सुरुवात (Nepali Quickstart)](examples/quickstart.ne.md).
 > Looking for localized guides? See the [🇵🇰 سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart)](examples/quickstart.sd.md).
+> Looking for localized guides? See the [Sängö (Sango Quickstart)](examples/quickstart.sg.md), the [Qafar af (Afar Quickstart)](examples/quickstart.aa.md), the [Te Ggana Tuuvalu (Tuvaluan Quickstart)](examples/quickstart.tvl.md), the [Vagahau Niue (Niuean Quickstart)](examples/quickstart.niu.md), the [Gagana Tokelau (Tokelauan Quickstart)](examples/quickstart.tkl.md), or the [Reo Tahiti (Tahitian Quickstart)](examples/quickstart.ty.md).
 
 > Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
+> Looking for localized guides? See the [Bislama (Bislama Quickstart)](examples/quickstart.bi.md), the [Sranan Tongo (Sranan Tongo Quickstart)](examples/quickstart.srn.md), the [Karelian (Karelian Quickstart)](examples/quickstart.krl.md), the [Võro (Võro Quickstart)](examples/quickstart.vro.md), the [Kashubian (Kashubian Quickstart)](examples/quickstart.csb.md), the [Silesian (Silesian Quickstart)](examples/quickstart.szl.md), the [Rusyn (Rusyn Quickstart)](examples/quickstart.rue.md), the [Lower Sorbian (Lower Sorbian Quickstart)](examples/quickstart.dsb.md), the [Aragonese (Aragonese Quickstart)](examples/quickstart.an.md), the [Kirundi (Kirundi Quickstart)](examples/quickstart.rn.md).
+> Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
+> Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
+> Looking for localized guides? See the [Diné bizaad (Navajo Quickstart)](examples/quickstart.nv.md).
+> Looking for localized guides? See the [føroysk byrjanarvegleiðing (Faroese Quickstart)](examples/quickstart.fo.md), the [lëtzebuergesch Ufanksguide (Luxembourgish Quickstart)](examples/quickstart.lb.md), the [Fryske flugge startgids (Frisian Quickstart)](examples/quickstart.fy.md), the [stiùireadh tòiseachaidh Gàidhlig (Scottish Gaelic Quickstart)](examples/quickstart.gd.md), or the [huanadenn deraouiñ e brezhoneg (Breton Quickstart)](examples/quickstart.br.md).
+> Looking for localized guides? See the [guida rapida n sicilianu (Sicilian Quickstart)](examples/quickstart.scn.md), the [guida de començament rapid en occitan (Occitan Quickstart)](examples/quickstart.oc.md), the [aratohu tere mō te reo Māori (Māori Quickstart)](examples/quickstart.mi.md), the [guía ñepyrũ pya'e avañe'ẽme (Guarani Quickstart)](examples/quickstart.gn.md), or the [ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart)](examples/quickstart.ug.md).
+> Looking for localized guides? See the [omi-cli ho Twi kasa mu (Twi Quickstart)](examples/quickstart.tw.md), the [pituduh kapertama basa Bali (Balinese Quickstart)](examples/quickstart.ban.md), the [mehato ea pele ka Sesotho (Southern Sotho Quickstart)](examples/quickstart.st.md), the [is primos passos in sardu (Sardinian Quickstart)](examples/quickstart.sc.md), or the [ערשטע טריט מיט omi-cli (Yiddish Quickstart)](examples/quickstart.yi.md).
 
 ## Auth
 
@@ -120,8 +134,13 @@ profile selection remain unchanged. Other HTTP errors retain the existing
 store-and-warn behavior. A transport failure leaves saved credentials unchanged;
 browser OAuth is a separate flow.
 
-You can also set `OMI_API_KEY` in the environment to bypass on-disk config
-entirely — handy in containers and CI:
+You can also set a non-empty `OMI_API_KEY` in the environment to override the
+saved authentication for cloud API requests - handy in containers and CI. The
+key is validated even when the selected profile already has credentials;
+an invalid override fails before any cloud API request. Local Desktop commands
+use their separate local token, and `auth status` reports the saved profile.
+Saved credentials are not changed, and profile settings such as the API base
+URL still apply:
 
 ```bash
 export OMI_API_KEY=omi_dev_...
@@ -206,6 +225,10 @@ Task writes should only run after the user clearly asks for that change:
 omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```
+
+### Apply the requested time window to exact screen search
+
+The exact app/window/OCR fallback for `omi --json local search-screen` honors the same rolling `--days` window as semantic search.
 
 ## Command surface
 
@@ -347,6 +370,10 @@ write. These failures return exit code `3` with an `outcome unknown` message.
 Check the resource before trying again. Connection-establishment failures and
 rate-limit responses still retry; read retries are unchanged.
 
+## Allow clearing an action item due date
+
+`omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
 (UTC), numeric offsets, and optional fractional seconds, for example
@@ -377,3 +404,5 @@ bash release.sh --build-only
 MIT — see [`LICENSE`](LICENSE).
 
 - [Кыргызча (Kyrgyz)](examples/quickstart.ky.md)
+- [Furlan (Friulian)](examples/quickstart.fur.md)
+- [Qırımtatarca (Crimean Tatar)](examples/quickstart.crh.md)

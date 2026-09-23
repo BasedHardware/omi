@@ -4,6 +4,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
@@ -13,6 +16,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -27,17 +31,31 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
 
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
+  String id, {
+  String? description,
+  bool? completed,
+  DateTime? dueAt,
+});
+
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
+    UpdateActionItemRequest? updateActionItemRequest,
+    api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
-        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
+        _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
+        _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
+  final UpdateActionItemRequest _updateActionItemRequest;
+  final api.ActionItemsApi? _actionItemsApi;
+  ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
   Future<void>? _homeTodayLoad;
@@ -85,6 +103,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
+  ApiViewState<List<ActionItemWithMetadata>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
@@ -110,10 +132,7 @@ class ActionItemsProvider extends ChangeNotifier {
     return byId.values.take(limit).toList();
   }
 
-  static List<ActionItemWithMetadata> filterTodayTasks(
-    List<ActionItemWithMetadata> items, {
-    required DateTime now,
-  }) {
+  static List<ActionItemWithMetadata> filterTodayTasks(List<ActionItemWithMetadata> items, {required DateTime now}) {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     return items.where((item) {
@@ -229,7 +248,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: false,
@@ -281,6 +300,49 @@ class ActionItemsProvider extends ChangeNotifier {
   static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
       items.isNotEmpty && items.every((item) => item.completed);
 
+  /// Shared list fetch. A typed outage returns null so Home today and
+  /// load-more keep existing rows instead of looking like an empty account.
+  Future<ActionItemsResponse?> _fetchActionItemsPage({
+    required int limit,
+    required int offset,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+    void Function(ApiResult<ActionItemsResponse> typed)? onTyped,
+  }) async {
+    final typedApi = _actionItemsApi;
+    if (typedApi != null) {
+      final typed = await typedApi.list(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+        dueStartDate: dueStartDate,
+        dueEndDate: dueEndDate,
+      );
+      onTyped?.call(typed);
+      return switch (typed) {
+        ApiSuccess(:final data) => data,
+        ApiFailure() => null,
+      };
+    }
+    return _getActionItems(
+      limit: limit,
+      offset: offset,
+      completed: completed,
+      conversationId: conversationId,
+      startDate: startDate,
+      endDate: endDate,
+      dueStartDate: dueStartDate,
+      dueEndDate: dueEndDate,
+    );
+  }
+
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     var loaded = false;
     if (showShimmer) {
@@ -290,38 +352,17 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
+        onTyped: _projectTypedList,
       );
-
       if (response != null) {
-        // Snapshot server IDs before filtering so tombstone retirement is
-        // based on the full server response, not the filtered subset.
-        final serverIds = response.actionItems.map((e) => e.id).toSet();
-        // Filter into a new list rather than mutating response.actionItems
-        // in-place: the response list may be unmodifiable, and aliasing it
-        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
-        // and retire tombstones prematurely.
-        _actionItems = _pendingDeletionIds.isEmpty
-            ? List.of(response.actionItems)
-            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-        // Lazily retire tombstones once the server confirms the item is gone:
-        // any ID still tracked as pending-deletion that did not appear in the
-        // fresh server response can be cleared, because subsequent refreshes
-        // will no longer see it.
-        if (_pendingDeletionIds.isNotEmpty) {
-          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
-        }
-        _hasMore = response.hasMore;
+        _applyFetchedActionItems(response);
         loaded = true;
-
-        if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
-          _showCompletedView = true;
-        }
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
@@ -337,13 +378,50 @@ class ActionItemsProvider extends ChangeNotifier {
     return loaded;
   }
 
+  void _projectTypedList(ApiResult<ActionItemsResponse> result) {
+    _listViewState = presentApiResult(
+      switch (result) {
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(data.actionItems, rejectedRows: rejectedRows),
+        ApiFailure(:final problem) => ApiFailure<List<ActionItemWithMetadata>>(problem),
+      },
+      previous: _actionItems.isNotEmpty ? _actionItems : null,
+      isEmpty: (rows) => rows.isEmpty,
+      fallback: recordFallback,
+    );
+  }
+
+  void _applyFetchedActionItems(ActionItemsResponse response) {
+    // Snapshot server IDs before filtering so tombstone retirement is
+    // based on the full server response, not the filtered subset.
+    final serverIds = response.actionItems.map((e) => e.id).toSet();
+    // Filter into a new list rather than mutating response.actionItems
+    // in-place: the response list may be unmodifiable, and aliasing it
+    // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+    // and retire tombstones prematurely.
+    _actionItems = _pendingDeletionIds.isEmpty
+        ? List.of(response.actionItems)
+        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+    // Lazily retire tombstones once the server confirms the item is gone:
+    // any ID still tracked as pending-deletion that did not appear in the
+    // fresh server response can be cleared, because subsequent refreshes
+    // will no longer see it.
+    if (_pendingDeletionIds.isNotEmpty) {
+      _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+    }
+    _hasMore = response.hasMore;
+
+    if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+      _showCompletedView = true;
+    }
+  }
+
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
 
     setFetching(true);
 
     try {
-      final response = await _getActionItems(
+      final response = await _fetchActionItemsPage(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
@@ -365,69 +443,86 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.taskMutation,
+      surface: ProductSurface.tasks,
+      objectId: RecordReference.fromId(item.id),
+    );
     try {
       final itemInList = _findAndUpdateItemState(item.id, newState);
       if (itemInList != null) {
         notifyListeners();
       }
 
-      final success = await api.updateActionItem(
-        item.id,
-        description: item.description,
-        completed: newState,
-        dueAt: item.dueAt,
-      );
+      final success = await _updateActionItemRequest(item.id, completed: newState);
 
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
-      } else {
-        // Cancel notification if the action item is marked as completed
-        if (newState == true) {
-          await ActionItemNotificationHandler.cancelNotification(item.id);
-        }
-        _pushUpdateToAppleReminder(item, completed: newState);
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
+        return false;
       }
+      // Cancel notification if the action item is marked as completed
+      if (newState == true) {
+        await ActionItemNotificationHandler.cancelNotification(item.id);
+      }
+      _pushUpdateToAppleReminder(item, completed: newState);
+      attempt.complete(ProductOutcome.success);
+      if (newState) {
+        ProductTelemetry.instance.value(
+          ProductValue.taskCompleted,
+          surface: ProductSurface.tasks,
+          objectId: RecordReference.fromId(item.id),
+        );
+      }
+      return true;
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
+      return false;
     }
   }
 
-  Future<void> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
     try {
       final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
       if (itemInList != null) {
         notifyListeners();
       }
 
-      final updatedItem = await api.updateActionItem(item.id, description: newDescription);
+      final updatedItem = await _updateActionItemRequest(item.id, description: newDescription);
 
-      if (updatedItem != null) {
-        // Update the local item with server response
-        final index = _actionItems.indexWhere((i) => i.id == item.id);
-        if (index != -1) {
-          _actionItems[index] = updatedItem;
-          notifyListeners();
-        }
-        _pushUpdateToAppleReminder(item, title: newDescription);
-      } else {
+      if (updatedItem == null) {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
         notifyListeners();
         Logger.debug('Failed to update action item description on server');
+        return false;
       }
+      // Update the local item with server response
+      final index = _actionItems.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        _actionItems[index] = updatedItem;
+        notifyListeners();
+      }
+      _pushUpdateToAppleReminder(item, title: newDescription);
+      return true;
     } catch (e) {
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
       Logger.debug('Error updating action item description: $e');
+      return false;
     }
   }
 
-  Future<void> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+  /// Returns whether the change reached the server; the caller decides what to tell the user.
+  Future<bool> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
     // Optimistic update: update locally first for instant UI feedback
     final index = _actionItems.indexWhere((i) => i.id == item.id);
     ActionItemWithMetadata? originalItem;
@@ -462,6 +557,7 @@ class ActionItemsProvider extends ChangeNotifier {
           notifyListeners();
         }
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
+        return true;
       } else {
         // Revert on failure — re-find index in case list changed during await
         if (originalItem != null) {
@@ -472,6 +568,7 @@ class ActionItemsProvider extends ChangeNotifier {
           }
         }
         Logger.debug('Failed to update action item due date on server');
+        return false;
       }
     } catch (e) {
       // Revert on error — re-find index in case list changed during await
@@ -483,6 +580,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
       Logger.debug('Error updating action item due date: $e');
+      return false;
     }
   }
 
@@ -551,6 +649,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.add(item.id);
 
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
+    final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
@@ -561,6 +660,7 @@ class ActionItemsProvider extends ChangeNotifier {
         Logger.debug('Failed to delete action item on server');
         // On failure, remove from pending set so a future reload can re-fetch it
         _pendingDeletionIds.remove(item.id);
+        _restoreDeletedItem(item, index);
       }
       // On success, the tombstone is intentionally retained: a refresh that
       // started before the server processed the deletion may still return the
@@ -571,8 +671,15 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error deleting action item: $e');
       // On error, remove from pending set so a future reload can re-fetch it
       _pendingDeletionIds.remove(item.id);
+      _restoreDeletedItem(item, index);
       return false;
     }
+  }
+
+  void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
+    if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
+    _actionItems.insert(index.clamp(0, _actionItems.length), item);
+    notifyListeners();
   }
 
   Future<ActionItemWithMetadata?> createActionItem({

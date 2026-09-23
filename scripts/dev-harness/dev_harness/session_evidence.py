@@ -104,8 +104,30 @@ def source_identity(repo_root: Path) -> dict[str, str]:
 
 
 def file_sha256(path: Path) -> str:
+    """Identity of a built artifact.
+
+    APKs and PNGs are files. An iOS ``.app`` is a directory (bundle); hashing
+    it as a file raises ``IsADirectoryError``. Directory identity is the
+    sha256 of each contained regular file, in sorted relative-path order,
+    length-prefixed so path/content boundaries cannot alias.
+    """
+
+    target = Path(path)
     digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
+    if target.is_dir():
+        files = sorted(
+            (candidate for candidate in target.rglob("*") if candidate.is_file() and not candidate.is_symlink()),
+            key=lambda candidate: candidate.relative_to(target).as_posix(),
+        )
+        for file in files:
+            relative = file.relative_to(target).as_posix().encode("utf-8")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            with file.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        return digest.hexdigest()
+    with target.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()

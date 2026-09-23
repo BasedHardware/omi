@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,11 +37,30 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   final ScrollController _scrollController = ScrollController();
 
   OverlayEntry? _deleteNotificationOverlay;
+  Timer? _deleteNotificationTimer;
 
   bool _isInitialLoad = true;
+  String? _highlightedMemoryId;
+  Timer? _highlightTimer;
+
+  Future<void> _createMemory(MemoriesProvider provider) async {
+    final existingIds = provider.memories.map((m) => m.id).toSet();
+    final saved = await showMemoryDialog(context, provider);
+    if (!mounted || saved != true) return;
+    final added = provider.memories.where((m) => !existingIds.contains(m.id));
+    if (added.isEmpty) return;
+    _highlightTimer?.cancel();
+    setState(() => _highlightedMemoryId = added.last.id);
+    _highlightTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _highlightedMemoryId = null);
+    });
+  }
 
   @override
   void dispose() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
+    _highlightTimer?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     _removeDeleteNotification();
@@ -48,6 +69,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   // Remove the delete notification overlay if it exists
   void _removeDeleteNotification() {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = null;
     _deleteNotificationOverlay?.remove();
     _deleteNotificationOverlay = null;
   }
@@ -116,7 +139,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     Overlay.of(context).insert(_deleteNotificationOverlay!);
 
-    Future.delayed(const Duration(seconds: 4), () {
+    _deleteNotificationTimer?.cancel();
+    _deleteNotificationTimer = Timer(const Duration(seconds: 4), () {
       if (!mounted) return;
       _removeDeleteNotification();
     });
@@ -188,10 +212,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           hintText: context.l10n.searchMemories,
                                           leading: const Padding(
                                             padding: EdgeInsets.only(left: 6.0),
-                                            child: FaIcon(
-                                              FontAwesomeIcons.magnifyingGlass,
-                                              color: Colors.white70,
-                                              size: 14,
+                                            child: ExcludeSemantics(
+                                              child: FaIcon(
+                                                FontAwesomeIcons.magnifyingGlass,
+                                                color: Colors.white70,
+                                                size: 14,
+                                              ),
                                             ),
                                           ),
                                           backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
@@ -242,10 +268,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               hintText: context.l10n.searchMemories,
                                               leading: const Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
-                                                child: FaIcon(
-                                                  FontAwesomeIcons.magnifyingGlass,
-                                                  color: Colors.white70,
-                                                  size: 14,
+                                                child: ExcludeSemantics(
+                                                  child: FaIcon(
+                                                    FontAwesomeIcons.magnifyingGlass,
+                                                    color: Colors.white70,
+                                                    size: 14,
+                                                  ),
                                                 ),
                                               ),
                                               backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
@@ -259,6 +287,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                                   ? [
                                                       IconButton(
                                                         icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                                        tooltip: context.l10n.clear,
                                                         padding: EdgeInsets.zero,
                                                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
                                                         onPressed: () {
@@ -300,36 +329,54 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     SizedBox(
                                       width: 44,
                                       height: 44,
-                                      child: ElevatedButton(
-                                        onPressed: () {
+                                      child: Semantics(
+                                        button: true,
+                                        label: context.l10n.memoryGraph,
+                                        excludeSemantics: true,
+                                        onTap: () {
                                           Navigator.of(
                                             context,
                                           ).push(MaterialPageRoute(builder: (context) => const MemoryGraphPage()));
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppStyles.backgroundSecondary,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            Navigator.of(
+                                              context,
+                                            ).push(MaterialPageRoute(builder: (context) => const MemoryGraphPage()));
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppStyles.backgroundSecondary,
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.zero,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                         ),
-                                        child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     SizedBox(
                                       width: 44,
                                       height: 44,
-                                      child: ElevatedButton(
-                                        onPressed: () {
+                                      child: Semantics(
+                                        button: true,
+                                        label: context.l10n.memoryManagement,
+                                        excludeSemantics: true,
+                                        onTap: () {
                                           _showMemoryManagementSheet(context, provider);
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppStyles.backgroundSecondary,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            _showMemoryManagementSheet(context, provider);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppStyles.backgroundSecondary,
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.zero,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                          child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                         ),
-                                        child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                       ),
                                     ),
                                   ],
@@ -360,23 +407,35 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                                         const SizedBox(height: 16),
                                         Text(
-                                          provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                              ? context.l10n.noMemoriesYet
-                                              : provider.selectedCategories.isNotEmpty
-                                                  ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                          provider.selectedCategories.length == 1
-                                                      ? context.l10n.noManualMemories
-                                                      : context.l10n.noMemoriesInCategories
-                                                  : context.l10n.noMemoriesFound,
+                                          provider.searchQuery.isNotEmpty
+                                              ? context.l10n.noMemoriesFound
+                                              : provider.memories.isEmpty && !provider.filterThisDeviceOnly
+                                                  ? context.l10n.noMemoriesYet
+                                                  : context.l10n.noMemoriesInCategories,
                                           style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                         ),
-                                        if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          TextButton(
-                                            onPressed: () => showMemoryDialog(context, provider),
-                                            child: Text(context.l10n.addFirstMemory),
-                                          ),
-                                        ],
+                                        const SizedBox(height: 8),
+                                        TextButton(
+                                          key: const Key('memories_empty_action'),
+                                          style: TextButton.styleFrom(foregroundColor: Colors.white),
+                                          onPressed: () {
+                                            if (provider.searchQuery.isNotEmpty) {
+                                              _searchController.clear();
+                                              provider.setSearchQuery('');
+                                            } else if (provider.memories.isNotEmpty || provider.filterThisDeviceOnly) {
+                                              provider.clearCategoryFilter();
+                                              provider.setFilterThisDeviceOnly(false);
+                                              provider.setCollectionView(MemoryCollectionView.all);
+                                            } else {
+                                              _createMemory(provider);
+                                            }
+                                          },
+                                          child: Text(provider.searchQuery.isNotEmpty
+                                              ? context.l10n.clearSearch
+                                              : provider.memories.isNotEmpty || provider.filterThisDeviceOnly
+                                                  ? context.l10n.resetFilters
+                                                  : context.l10n.addFirstMemory),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -390,6 +449,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     final memory = provider.filteredMemories[index];
                                     return MemoryItem(
                                       memory: memory,
+                                      highlighted: memory.id == _highlightedMemoryId,
                                       provider: provider,
                                       onTap:
                                           (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
@@ -407,15 +467,24 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                 Positioned(
                   right: 20,
                   bottom: 100,
-                  child: FloatingActionButton(
-                    heroTag: 'memories_fab',
-                    onPressed: () {
-                      showMemoryDialog(context, provider);
+                  child: Semantics(
+                    button: true,
+                    label: context.l10n.createMemoryTooltip,
+                    excludeSemantics: true,
+                    onTap: () {
+                      _createMemory(provider);
                       PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
                     },
-                    backgroundColor: Colors.deepPurple,
-                    tooltip: context.l10n.createMemoryTooltip,
-                    child: const Icon(Icons.add, color: Colors.white),
+                    child: FloatingActionButton(
+                      heroTag: 'memories_fab',
+                      onPressed: () {
+                        _createMemory(provider);
+                        PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
+                      },
+                      backgroundColor: Colors.deepPurple,
+                      tooltip: context.l10n.createMemoryTooltip,
+                      child: const Icon(Icons.add, color: Colors.white),
+                    ),
                   ),
                 ),
               ],

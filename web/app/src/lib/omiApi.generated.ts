@@ -1162,6 +1162,8 @@ export interface Conversation {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  sync_content_revision?: number | null;
+  sync_relevance?: "keep" | "review" | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
@@ -1343,6 +1345,8 @@ export interface ConversationSearchItem {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  sync_content_revision?: number | null;
+  sync_relevance?: "keep" | "review" | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
@@ -3154,6 +3158,35 @@ export interface MigrationTargetRequest {
   target_level: string;
 }
 
+export type MobileFeedbackKind = "summary_helpfulness" | "recording_quality";
+
+export type MobileFeedbackReason = "summary_inaccurate" | "summary_incomplete" | "summary_irrelevant" | "summary_wrong_context" | "summary_other" | "recording_missing_audio" | "recording_poor_transcription" | "recording_wrong_speaker" | "recording_delayed_or_stuck" | "recording_fragmented_or_duplicated" | "recording_other";
+
+export interface MobileFeedbackReceipt {
+  created: boolean;
+  event_id: string;
+  feedback_id: string;
+  persisted?: true;
+  schema_version?: "mobile_feedback_receipt.v1";
+}
+
+export interface MobileFeedbackRequest {
+  app_build?: string | null;
+  app_version?: string | null;
+  client_app_namespace?: string | null;
+  client_app_profile?: string | null;
+  comment?: string | null;
+  correlation_id?: string | null;
+  feedback_id: string;
+  kind: MobileFeedbackKind;
+  platform?: string | null;
+  reason?: MobileFeedbackReason | null;
+  schema_version?: "mobile_feedback.v1";
+  target_id: string;
+  target_kind?: "conversation" | "recording" | null;
+  value: "-1" | "1";
+}
+
 export interface MoveConversationRequest {
   folder_id?: string | null;
 }
@@ -3341,6 +3374,7 @@ export interface Person {
   speech_samples?: Array<string>;
   speech_samples_version?: number;
   updated_at?: string | null;
+  voice_readiness?: VoiceReadiness;
 }
 
 export interface PhoneCallQuota {
@@ -4788,6 +4822,8 @@ export interface VoiceMessageTranscriptionResponse {
   transcript: string;
 }
 
+export type VoiceReadiness = "ready" | "saved_sample_awaiting_embedding" | "not_learned" | "unknown";
+
 export interface WebSearchAssistantSettings {
   enabled?: boolean | null;
 }
@@ -5349,6 +5385,10 @@ export interface OmiApiSchemas {
   "MigrationRequestsResponse": MigrationRequestsResponse;
   "MigrationStatusResponse": MigrationStatusResponse;
   "MigrationTargetRequest": MigrationTargetRequest;
+  "MobileFeedbackKind": MobileFeedbackKind;
+  "MobileFeedbackReason": MobileFeedbackReason;
+  "MobileFeedbackReceipt": MobileFeedbackReceipt;
+  "MobileFeedbackRequest": MobileFeedbackRequest;
   "MoveConversationRequest": MoveConversationRequest;
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
@@ -5586,6 +5626,7 @@ export interface OmiApiSchemas {
   "VerifyPhoneNumberRequest": VerifyPhoneNumberRequest;
   "VerifyPhoneNumberResponse": VerifyPhoneNumberResponse;
   "VoiceMessageTranscriptionResponse": VoiceMessageTranscriptionResponse;
+  "VoiceReadiness": VoiceReadiness;
   "WebSearchAssistantSettings": WebSearchAssistantSettings;
   "WebhookType": WebhookType;
   "WhatMattersNowProjection": WhatMattersNowProjection;
@@ -8202,6 +8243,16 @@ export interface OmiApiPaths {
       operationId: "extract_memory_log_v1_memories_extract_post";
       responses: {
         "200": ExtractMemoryLogResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mobile/feedback": {
+    post: {
+      operationId: "submit_mobile_feedback_v1_mobile_feedback_post";
+      responses: {
+        "201": MobileFeedbackReceipt;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15121,6 +15172,28 @@ export async function extract_memory_log_v1_memories_extract_post(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function submit_mobile_feedback_v1_mobile_feedback_post(header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string }, body: MobileFeedbackRequest, init?: OmiApiClientInit): Promise<MobileFeedbackReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mobile/feedback`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function set_default_payment_method_endpoint_v1_payment_methods_default_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SetDefaultPaymentMethodRequest, init?: OmiApiClientInit): Promise<PaymentMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payment-methods/default`;
@@ -16139,7 +16212,7 @@ export async function synthesize_ai_profile_v1_users_ai_profile_synthesize_post(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function set_chat_message_analytics_v1_users_analytics_chat_message_post(query: { message_id: string, value: number, reason?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function set_chat_message_analytics_v1_users_analytics_chat_message_post(query: { message_id: string, value: number, reason?: string }, header: { X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/analytics/chat_message`;
   const _params = query ? Object.entries(query)
@@ -16151,10 +16224,11 @@ export async function set_chat_message_analytics_v1_users_analytics_chat_message
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
@@ -18206,7 +18280,7 @@ export async function get_shared_chat_messages_v2_messages_shared__token__get(pa
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function rate_message_v2_messages__message_id__rating_patch(path: { message_id: string }, header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RateMessageRequest, init?: OmiApiClientInit): Promise<ChatRatingResponse> {
+export async function rate_message_v2_messages__message_id__rating_patch(path: { message_id: string }, header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string }, body: RateMessageRequest, init?: OmiApiClientInit): Promise<ChatRatingResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages/${path.message_id}/rating`;
   const _search = "";
@@ -18217,9 +18291,10 @@ export async function rate_message_v2_messages__message_id__rating_patch(path: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -18837,4 +18912,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 442 client methods generated.
+// Total: 443 client methods generated.

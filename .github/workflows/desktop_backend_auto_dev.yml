@@ -210,6 +210,19 @@ jobs:
             --region="${{ env.REGION }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      # See desktop_backend_prod.yml: the expectation is rendered from the
+      # manifest so it cannot drift from the values actually deployed.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        env:
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/render_backend_runtime_env.py \
+            --env dev \
+            --manifest backend/deploy/runtime_env.yaml \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -245,6 +258,9 @@ jobs:
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=true
             BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
+            FREE_TIER_LOCAL_PROCESSING=true
+            FREE_TIER_EMERGENCY_STOP=false
+            FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}
             BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
@@ -265,17 +281,6 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
             POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
-
-      # See desktop_backend_prod.yml: the expectation is rendered from the
-      # manifest so it cannot drift from the values actually deployed.
-      - name: Render desktop backend expected env state
-        id: desktop-expected-env
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/render_backend_runtime_env.py \
-            --env dev \
-            --manifest backend/deploy/runtime_env.yaml \
-            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
 
       - name: Attach Managed Prometheus sidecar to development candidate
         id: attach-gmp-sidecar
@@ -347,31 +352,29 @@ jobs:
             --tag="$CANDIDATE_TAG")"
           echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
 
-      - name: Stage candidate probe signer
-        if: github.event.inputs.candidate_only != 'true'
-        env:
-          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
-          trap 'rm -f "$signer_file"' ERR
-          chmod 600 "$signer_file"
-          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
-          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
-          trap - ERR
-
       - name: Mint candidate probe identity
         if: github.event.inputs.candidate_only != 'true'
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
+          # Phase C credential rotation: the probe signs its Firebase custom
+          # token via IAM signJwt as the named production-project signer
+          # (roles/iam.serviceAccountTokenCreator for the deploy identity on
+          # it), so no service-account key is staged in the runner.
+          if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then
+            echo "Set vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT (in the development environment) to the" >&2
+            echo "Firebase auth project's signer, and grant roles/iam.serviceAccountTokenCreator for" >&2
+            echo "omi-ci-deployer-dev on it, before dev release probes can mint a token." >&2
+            exit 1
+          fi
           token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
           chmod 600 "$token_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
-            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
             --token-output "$token_file"
           echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
 
@@ -555,9 +558,6 @@ jobs:
         run: |
           if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
             rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
-          fi
-          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
-            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
           fi
 
       - name: Show Output

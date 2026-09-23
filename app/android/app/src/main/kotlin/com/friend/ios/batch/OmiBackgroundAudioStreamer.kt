@@ -61,7 +61,12 @@ class OmiBackgroundAudioStreamer internal constructor(
 
     @Volatile
     private var hasNativeState = false
-    private val pendingFrames = ArrayDeque<ByteArray>()
+    private data class PendingFrame(
+        val bytes: ByteArray,
+        val admittedPolicy: CaptureAdmissionPolicy,
+    )
+
+    private val pendingFrames = ArrayDeque<PendingFrame>()
     private var socket: WebSocket? = null
     private var connecting = false
     private var connected = false
@@ -100,6 +105,15 @@ class OmiBackgroundAudioStreamer internal constructor(
     }
 
     fun handleCharacteristic(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray) {
+        val admission = CaptureAdmissionPolicy.load(preferences)
+        if (admission.muted) {
+            // Legacy booleans have revision 0 and therefore cannot identify a
+            // mute transition. Drop queued work when mute is observed so it
+            // cannot be released later if the user unmutes before a revisioned
+            // policy is written.
+            synchronized(lock) { pendingFrames.clear() }
+            return
+        }
         val inactiveReason = when {
             flutterAlive() && preferences.boolean("nativeBleForegroundReady") -> "foreground_ready"
             !preferences.boolean("nativeBleStreamingEnabled") -> "disabled"
@@ -144,8 +158,15 @@ class OmiBackgroundAudioStreamer internal constructor(
                 hasNativeState = activeSettings != null
                 return
             }
+            // Re-read immediately before admission. This protects the sink
+            // against a policy transition while config/frame extraction ran.
+            val currentAdmission = CaptureAdmissionPolicy.load(preferences)
+            if (!currentAdmission.permits(admission.revision)) {
+                hasNativeState = activeSettings != null
+                return
+            }
             ensureSocket(settings)
-            for (frame in frames) sendOrQueue(frame)
+            for (frame in frames) sendOrQueue(frame, admission)
         }
     }
 
@@ -239,9 +260,9 @@ class OmiBackgroundAudioStreamer internal constructor(
                 connected = true
                 log(Log.INFO, "Background transcription socket connected")
                 while (pendingFrames.isNotEmpty()) {
-                    val frame = pendingFrames.removeFirst()
-                    if (!sendFrame(webSocket, frame)) {
-                        pendingFrames.addFirst(frame)
+                    val pending = pendingFrames.removeFirst()
+                    if (!sendFrame(webSocket, pending.bytes, pending.admittedPolicy)) {
+                        pendingFrames.addFirst(pending)
                         break
                     }
                 }
@@ -287,24 +308,32 @@ class OmiBackgroundAudioStreamer internal constructor(
         }
     }
 
-    private fun sendOrQueue(frame: ByteArray) {
+    private fun sendOrQueue(frame: ByteArray, admittedPolicy: CaptureAdmissionPolicy) {
+        if (!CaptureAdmissionPolicy.load(preferences).permits(admittedPolicy.revision)) return
         var target: WebSocket? = null
         synchronized(lock) {
             target = if (connected) socket else null
             if (target == null) {
-                queueFrameLocked(frame)
+                queueFrameLocked(frame, admittedPolicy)
                 return
             }
         }
         val webSocket = target ?: return
-        if (!sendFrame(webSocket, frame)) {
+        if (!sendFrame(webSocket, frame, admittedPolicy)) {
             synchronized(lock) {
-                queueFrameLocked(frame)
+                queueFrameLocked(frame, admittedPolicy)
             }
         }
     }
 
-    private fun sendFrame(webSocket: WebSocket, frame: ByteArray): Boolean {
+    private fun sendFrame(
+        webSocket: WebSocket,
+        frame: ByteArray,
+        admittedPolicy: CaptureAdmissionPolicy,
+    ): Boolean {
+        // A stale frame is considered consumed (rather than a failed send) so
+        // it is never requeued after mute or a newer policy revision.
+        if (!CaptureAdmissionPolicy.load(preferences).permits(admittedPolicy.revision)) return true
         val sent = webSocket.send(frame.toByteString())
         if (sent) {
             val totalSent = synchronized(lock) {
@@ -330,11 +359,11 @@ class OmiBackgroundAudioStreamer internal constructor(
         }
     }
 
-    private fun queueFrameLocked(frame: ByteArray) {
+    private fun queueFrameLocked(frame: ByteArray, admittedPolicy: CaptureAdmissionPolicy) {
         if (pendingFrames.size >= MAX_PENDING_FRAMES) {
             pendingFrames.removeFirst()
         }
-        pendingFrames.addLast(frame.copyOf())
+        pendingFrames.addLast(PendingFrame(frame.copyOf(), admittedPolicy))
     }
 
     private fun buildRequest(url: String, settings: NativeBleStreamSettings): Request {

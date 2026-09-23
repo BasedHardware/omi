@@ -40,6 +40,7 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.relevance import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
@@ -212,6 +213,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     force_process=True,
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+                    trigger=ProcessingTrigger.FIRST_OPEN,
                 )
             # The enrichment itself succeeded here; count it now so a receipt
             # publish failure below is not misattributed to enrichment and does
@@ -573,6 +575,7 @@ def process_in_progress_conversation(
             persistence_observer=record_persistence,
             derived_effects_disposition_observer=record_derived_effects_disposition,
             client_projection=client_projection,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
         )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
@@ -764,6 +767,7 @@ def reprocess_conversation(
         conversation,
         force_process=True,
         is_reprocess=True,
+        trigger=ProcessingTrigger.USER_REPROCESS,
         bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
