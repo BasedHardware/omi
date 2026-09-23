@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "In den Einstellungen deaktiviert. Erlaube es dort, um diese Funktion zu nutzen.",
     "useDifferentAccount": "Anderes Konto verwenden",
     "onboardingStepOf": "Schritt {current} von {total}",
-    "onboardingCompleteMessage": "Lass Omi 2 Tage im Hintergrund laufen, dann gibt es dir hilfreiches Feedback."
+    "onboardingCompleteMessage": "Lass Omi 2 Tage im Hintergrund laufen, dann gibt es dir hilfreiches Feedback.",
+    "cantFindDeviceHint": "Gerät nicht gefunden? Achte darauf, dass es eingeschaltet und in der Nähe deines Telefons ist, und suche erneut.",
+    "scanAgain": "Erneut suchen",
+    "howToPair": "So koppelst du",
+    "contactSupportAction": "Support kontaktieren",
+    "deviceOfflineWakeHint": "{deviceName} ist offline. Drücke die Taste, um es aufzuwecken, und versuche es erneut.",
+    "batteryLevelSemantics": "Akku {level} %",
+    "updateOmiGlassFirmware": "OmiGlass-Firmware aktualisieren"
 }

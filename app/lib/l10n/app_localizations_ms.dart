@@ -10212,4 +10212,30 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mula memberi maklum balas yang berguna.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Tidak menjumpai peranti anda? Pastikan ia dihidupkan dan dekat dengan telefon, kemudian imbas semula.';
+
+  @override
+  String get scanAgain => 'Imbas Semula';
+
+  @override
+  String get howToPair => 'Cara Berpasangan';
+
+  @override
+  String get contactSupportAction => 'Hubungi Sokongan';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName di luar talian. Tekan butangnya untuk membangunkannya, kemudian cuba lagi.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Bateri $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Kemas Kini Perisian Tegar OmiGlass';
 }

@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "सेटिंग्जमध्ये बंद आहे. हे वापरण्यासाठी तिथे परवानगी द्या.",
     "useDifferentAccount": "दुसरे खाते वापरा",
     "onboardingStepOf": "पायरी {current} / {total}",
-    "onboardingCompleteMessage": "Omi ला 2 दिवस पार्श्वभूमीत चालू ठेवा, मग ते तुम्हाला उपयुक्त अभिप्राय देऊ लागेल."
+    "onboardingCompleteMessage": "Omi ला 2 दिवस पार्श्वभूमीत चालू ठेवा, मग ते तुम्हाला उपयुक्त अभिप्राय देऊ लागेल.",
+    "cantFindDeviceHint": "तुमचे डिव्हाइस सापडत नाही? ते चालू आहे आणि फोनजवळ आहे याची खात्री करा, मग पुन्हा स्कॅन करा.",
+    "scanAgain": "पुन्हा स्कॅन करा",
+    "howToPair": "पेअर कसे करावे",
+    "contactSupportAction": "सपोर्टशी संपर्क साधा",
+    "deviceOfflineWakeHint": "{deviceName} ऑफलाइन आहे. जागे करण्यासाठी त्याचे बटण दाबा, मग पुन्हा प्रयत्न करा.",
+    "batteryLevelSemantics": "बॅटरी {level}%",
+    "updateOmiGlassFirmware": "OmiGlass फर्मवेअर अपडेट करा"
 }

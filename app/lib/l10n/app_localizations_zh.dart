@@ -9992,4 +9992,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => '让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。';
+
+  @override
+  String get cantFindDeviceHint => '找不到设备？请确认设备已开启并靠近手机，然后重新扫描。';
+
+  @override
+  String get scanAgain => '重新扫描';
+
+  @override
+  String get howToPair => '如何配对';
+
+  @override
+  String get contactSupportAction => '联系支持';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName 已离线。按下它的按钮将其唤醒，然后重试。';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '电量 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => '更新 OmiGlass 固件';
 }

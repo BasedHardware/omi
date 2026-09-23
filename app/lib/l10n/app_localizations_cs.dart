@@ -10183,4 +10183,30 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Nechte Omi 2 dny běžet na pozadí a začne vám dávat užitečnou zpětnou vazbu.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nemůžete najít zařízení? Ujistěte se, že je zapnuté a blízko telefonu, a vyhledejte znovu.';
+
+  @override
+  String get scanAgain => 'Vyhledat znovu';
+
+  @override
+  String get howToPair => 'Jak spárovat';
+
+  @override
+  String get contactSupportAction => 'Kontaktovat podporu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName je offline. Stiskněte jeho tlačítko, aby se probudilo, a zkuste to znovu.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterie $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Aktualizovat firmware OmiGlass';
 }

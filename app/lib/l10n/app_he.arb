@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.",
     "useDifferentAccount": "שימוש בחשבון אחר",
     "onboardingStepOf": "שלב {current} מתוך {total}",
-    "onboardingCompleteMessage": "השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל."
+    "onboardingCompleteMessage": "השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל.",
+    "cantFindDeviceHint": "לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.",
+    "scanAgain": "חיפוש מחדש",
+    "howToPair": "איך לבצע צימוד",
+    "contactSupportAction": "פנייה לתמיכה",
+    "deviceOfflineWakeHint": "{deviceName} לא מחובר. לחצו על הכפתור שלו כדי להעיר אותו ונסו שוב.",
+    "batteryLevelSemantics": "סוללה {level}%",
+    "updateOmiGlassFirmware": "עדכון קושחת OmiGlass"
 }

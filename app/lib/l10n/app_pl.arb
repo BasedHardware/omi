@@ -3307,5 +3307,12 @@
     "permissionBlockedHint": "Wyłączone w Ustawieniach. Zezwól na to tam, aby z tego korzystać.",
     "useDifferentAccount": "Użyj innego konta",
     "onboardingStepOf": "Krok {current} z {total}",
-    "onboardingCompleteMessage": "Zostaw Omi działającego w tle przez 2 dni, a zacznie dawać Ci przydatne wskazówki."
+    "onboardingCompleteMessage": "Zostaw Omi działającego w tle przez 2 dni, a zacznie dawać Ci przydatne wskazówki.",
+    "cantFindDeviceHint": "Nie możesz znaleźć urządzenia? Upewnij się, że jest włączone i blisko telefonu, i wyszukaj ponownie.",
+    "scanAgain": "Szukaj ponownie",
+    "howToPair": "Jak sparować",
+    "contactSupportAction": "Skontaktuj się z pomocą",
+    "deviceOfflineWakeHint": "{deviceName} jest offline. Naciśnij jego przycisk, aby je wybudzić, i spróbuj ponownie.",
+    "batteryLevelSemantics": "Bateria {level}%",
+    "updateOmiGlassFirmware": "Zaktualizuj oprogramowanie OmiGlass"
 }

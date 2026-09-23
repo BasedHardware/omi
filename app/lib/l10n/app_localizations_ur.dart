@@ -10195,4 +10195,30 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔';
+
+  @override
+  String get cantFindDeviceHint =>
+      'اپنی ڈیوائس نہیں مل رہی؟ یقینی بنائیں کہ وہ آن ہے اور فون کے قریب ہے، پھر دوبارہ اسکین کریں۔';
+
+  @override
+  String get scanAgain => 'دوبارہ اسکین کریں';
+
+  @override
+  String get howToPair => 'جوڑنے کا طریقہ';
+
+  @override
+  String get contactSupportAction => 'سپورٹ سے رابطہ کریں';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName آف لائن ہے۔ جگانے کے لیے اس کا بٹن دبائیں، پھر دوبارہ کوشش کریں۔';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'بیٹری $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass فرم ویئر اپ ڈیٹ کریں';
 }

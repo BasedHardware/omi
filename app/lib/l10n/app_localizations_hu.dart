@@ -10224,4 +10224,30 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Hagyd az Omit 2 napig a háttérben futni, és elkezd hasznos visszajelzést adni.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nem találod az eszközt? Ellenőrizd, hogy be van-e kapcsolva és a telefon közelében van-e, majd keress újra.';
+
+  @override
+  String get scanAgain => 'Újrakeresés';
+
+  @override
+  String get howToPair => 'Párosítás módja';
+
+  @override
+  String get contactSupportAction => 'Kapcsolatfelvétel az ügyfélszolgálattal';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'A(z) $deviceName offline. Nyomd meg a gombját az ébresztéshez, majd próbáld újra.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akkumulátor $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass firmware frissítése';
 }

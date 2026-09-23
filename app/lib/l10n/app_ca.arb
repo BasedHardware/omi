@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Desactivat a Configuració. Permet-ho allà per fer-ho servir.",
     "useDifferentAccount": "Utilitza un altre compte",
     "onboardingStepOf": "Pas {current} de {total}",
-    "onboardingCompleteMessage": "Deixa que l'Omi funcioni en segon pla durant 2 dies i començarà a donar-te comentaris útils."
+    "onboardingCompleteMessage": "Deixa que l'Omi funcioni en segon pla durant 2 dies i començarà a donar-te comentaris útils.",
+    "cantFindDeviceHint": "No trobes el dispositiu? Comprova que estigui encès i a prop del telèfon i torna a cercar.",
+    "scanAgain": "Torna a cercar",
+    "howToPair": "Com vincular",
+    "contactSupportAction": "Contacta amb el suport",
+    "deviceOfflineWakeHint": "{deviceName} està fora de línia. Prem el botó per activar-lo i torna-ho a provar.",
+    "batteryLevelSemantics": "Bateria {level}%",
+    "updateOmiGlassFirmware": "Actualitza el firmware de l'OmiGlass"
 }

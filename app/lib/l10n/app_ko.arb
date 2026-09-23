@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "설정에서 꺼져 있습니다. 사용하려면 설정에서 허용하세요.",
     "useDifferentAccount": "다른 계정 사용",
     "onboardingStepOf": "{current}/{total}단계",
-    "onboardingCompleteMessage": "Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다."
+    "onboardingCompleteMessage": "Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다.",
+    "cantFindDeviceHint": "기기를 찾을 수 없나요? 전원이 켜져 있고 휴대폰 가까이에 있는지 확인한 후 다시 검색하세요.",
+    "scanAgain": "다시 검색",
+    "howToPair": "페어링 방법",
+    "contactSupportAction": "지원팀에 문의",
+    "deviceOfflineWakeHint": "{deviceName}이(가) 오프라인입니다. 버튼을 눌러 깨운 후 다시 시도하세요.",
+    "batteryLevelSemantics": "배터리 {level}%",
+    "updateOmiGlassFirmware": "OmiGlass 펌웨어 업데이트"
 }

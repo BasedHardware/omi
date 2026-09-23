@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "Naka-off sa Settings. Payagan ito doon para magamit ito.",
     "useDifferentAccount": "Gumamit ng Ibang Account",
     "onboardingStepOf": "Hakbang {current} sa {total}",
-    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback."
+    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.",
+    "cantFindDeviceHint": "Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.",
+    "scanAgain": "Mag-scan Ulit",
+    "howToPair": "Paano Mag-pair",
+    "contactSupportAction": "Makipag-ugnayan sa Suporta",
+    "deviceOfflineWakeHint": "Offline ang {deviceName}. Pindutin ang button nito para gisingin, saka subukang muli.",
+    "batteryLevelSemantics": "Baterya {level}%",
+    "updateOmiGlassFirmware": "I-update ang Firmware ng OmiGlass"
 }

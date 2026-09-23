@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Dezactivat în Setări. Permite-l acolo pentru a folosi funcția.",
     "useDifferentAccount": "Folosește alt cont",
     "onboardingStepOf": "Pasul {current} din {total}",
-    "onboardingCompleteMessage": "Lasă Omi să ruleze în fundal 2 zile și va începe să îți ofere feedback util."
+    "onboardingCompleteMessage": "Lasă Omi să ruleze în fundal 2 zile și va începe să îți ofere feedback util.",
+    "cantFindDeviceHint": "Nu găsești dispozitivul? Asigură-te că este pornit și aproape de telefon, apoi caută din nou.",
+    "scanAgain": "Caută din nou",
+    "howToPair": "Cum se asociază",
+    "contactSupportAction": "Contactează asistența",
+    "deviceOfflineWakeHint": "{deviceName} este offline. Apasă butonul său ca să-l trezești, apoi încearcă din nou.",
+    "batteryLevelSemantics": "Baterie {level}%",
+    "updateOmiGlassFirmware": "Actualizează firmware-ul OmiGlass"
 }

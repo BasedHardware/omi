@@ -7,10 +7,10 @@ import 'package:omi/pages/onboarding/wrapper.dart';
 void main() {
   testWidgets('progress dots count only real steps and speak "Step N of M"', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const Scaffold(body: OnboardingProgressDots(current: 1, total: 6)),
+      home: Scaffold(body: OnboardingProgressDots(current: 1, total: 6)),
     ));
 
     expect(find.bySemanticsLabel('Step 2 of 6'), findsOneWidget);

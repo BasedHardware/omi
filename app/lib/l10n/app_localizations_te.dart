@@ -10232,4 +10232,30 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Omiని 2 రోజులు బ్యాక్‌గ్రౌండ్‌లో నడవనివ్వండి, అప్పుడు అది ఉపయోగకరమైన ఫీడ్‌బ్యాక్ ఇవ్వడం ప్రారంభిస్తుంది.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'మీ పరికరం కనిపించడం లేదా? అది ఆన్‌లో ఉందని, ఫోన్ దగ్గర ఉందని నిర్ధారించుకుని మళ్లీ స్కాన్ చేయండి.';
+
+  @override
+  String get scanAgain => 'మళ్లీ స్కాన్ చేయండి';
+
+  @override
+  String get howToPair => 'జత చేయడం ఎలా';
+
+  @override
+  String get contactSupportAction => 'సపోర్ట్‌ను సంప్రదించండి';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ఆఫ్‌లైన్‌లో ఉంది. మేల్కొలపడానికి దాని బటన్ నొక్కి మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'బ్యాటరీ $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి';
 }

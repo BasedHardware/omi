@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Изключено в Настройки. Разрешете го там, за да го използвате.",
     "useDifferentAccount": "Използване на друг акаунт",
     "onboardingStepOf": "Стъпка {current} от {total}",
-    "onboardingCompleteMessage": "Оставете Omi да работи на заден план 2 дни и той ще започне да ви дава полезна обратна връзка."
+    "onboardingCompleteMessage": "Оставете Omi да работи на заден план 2 дни и той ще започне да ви дава полезна обратна връзка.",
+    "cantFindDeviceHint": "Не намирате устройството си? Уверете се, че е включено и близо до телефона, и сканирайте отново.",
+    "scanAgain": "Сканиране отново",
+    "howToPair": "Как да сдвоите",
+    "contactSupportAction": "Свържете се с поддръжката",
+    "deviceOfflineWakeHint": "{deviceName} е офлайн. Натиснете бутона му, за да го събудите, и опитайте отново.",
+    "batteryLevelSemantics": "Батерия {level}%",
+    "updateOmiGlassFirmware": "Актуализиране на фърмуера на OmiGlass"
 }

@@ -18806,6 +18806,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep Omi running in the background for 2 days and it will start giving you useful feedback.'**
   String get onboardingCompleteMessage;
+
+  /// Shown when no device was found after scanning for a while
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.'**
+  String get cantFindDeviceHint;
+
+  /// Button: restart the Bluetooth device search
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Again'**
+  String get scanAgain;
+
+  /// Button: opens the connection guide
+  ///
+  /// In en, this message translates to:
+  /// **'How to Pair'**
+  String get howToPair;
+
+  /// Button that opens support
+  ///
+  /// In en, this message translates to:
+  /// **'Contact Support'**
+  String get contactSupportAction;
+
+  /// Tapping a saved device that is not advertising
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is offline. Press its button to wake it, then try again.'**
+  String deviceOfflineWakeHint(String deviceName);
+
+  /// Screen-reader label for a device battery level
+  ///
+  /// In en, this message translates to:
+  /// **'Battery {level}%'**
+  String batteryLevelSemantics(int level);
+
+  /// Card on the capture screen opening the OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update OmiGlass Firmware'**
+  String get updateOmiGlassFirmware;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

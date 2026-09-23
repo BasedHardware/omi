@@ -10255,4 +10255,30 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Omi-ஐ 2 நாட்கள் பின்னணியில் இயங்க விடுங்கள்; பிறகு பயனுள்ள கருத்துகளைத் தரத் தொடங்கும்.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'உங்கள் சாதனம் கிடைக்கவில்லையா? அது இயக்கத்தில் உள்ளதா, ஃபோன் அருகில் உள்ளதா என உறுதிசெய்து மீண்டும் தேடுங்கள்.';
+
+  @override
+  String get scanAgain => 'மீண்டும் தேடு';
+
+  @override
+  String get howToPair => 'இணைப்பது எப்படி';
+
+  @override
+  String get contactSupportAction => 'ஆதரவைத் தொடர்புகொள்';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName இணைப்பில் இல்லை. எழுப்ப அதன் பொத்தானை அழுத்தி மீண்டும் முயலுங்கள்.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'பேட்டரி $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass ஃபர்ம்வேரைப் புதுப்பி';
 }

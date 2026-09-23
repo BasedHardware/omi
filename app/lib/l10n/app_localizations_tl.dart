@@ -10276,4 +10276,30 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.';
+
+  @override
+  String get scanAgain => 'Mag-scan Ulit';
+
+  @override
+  String get howToPair => 'Paano Mag-pair';
+
+  @override
+  String get contactSupportAction => 'Makipag-ugnayan sa Suporta';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'Offline ang $deviceName. Pindutin ang button nito para gisingin, saka subukang muli.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterya $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'I-update ang Firmware ng OmiGlass';
 }

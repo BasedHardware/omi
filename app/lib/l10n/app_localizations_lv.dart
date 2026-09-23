@@ -10209,4 +10209,30 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Ļaujiet Omi 2 dienas darboties fonā, un tas sāks sniegt noderīgu atgriezenisko saiti.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nevarat atrast ierīci? Pārliecinieties, ka tā ir ieslēgta un tuvu tālrunim, un meklējiet vēlreiz.';
+
+  @override
+  String get scanAgain => 'Meklēt vēlreiz';
+
+  @override
+  String get howToPair => 'Kā savienot pārī';
+
+  @override
+  String get contactSupportAction => 'Sazināties ar atbalstu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ir bezsaistē. Nospiediet tās pogu, lai to pamodinātu, un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akumulators $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Atjaunināt OmiGlass programmaparatūru';
 }

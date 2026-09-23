@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Dimatikan dalam Tetapan. Benarkan di sana untuk menggunakannya.",
     "useDifferentAccount": "Gunakan Akaun Lain",
     "onboardingStepOf": "Langkah {current} daripada {total}",
-    "onboardingCompleteMessage": "Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mula memberi maklum balas yang berguna."
+    "onboardingCompleteMessage": "Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mula memberi maklum balas yang berguna.",
+    "cantFindDeviceHint": "Tidak menjumpai peranti anda? Pastikan ia dihidupkan dan dekat dengan telefon, kemudian imbas semula.",
+    "scanAgain": "Imbas Semula",
+    "howToPair": "Cara Berpasangan",
+    "contactSupportAction": "Hubungi Sokongan",
+    "deviceOfflineWakeHint": "{deviceName} di luar talian. Tekan butangnya untuk membangunkannya, kemudian cuba lagi.",
+    "batteryLevelSemantics": "Bateri {level}%",
+    "updateOmiGlassFirmware": "Kemas Kini Perisian Tegar OmiGlass"
 }

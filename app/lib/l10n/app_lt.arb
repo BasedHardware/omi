@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Išjungta nustatymuose. Norėdami naudoti, leiskite tai ten.",
     "useDifferentAccount": "Naudoti kitą paskyrą",
     "onboardingStepOf": "{current} veiksmas iš {total}",
-    "onboardingCompleteMessage": "Leiskite Omi 2 dienas veikti fone ir jis pradės teikti naudingų atsiliepimų."
+    "onboardingCompleteMessage": "Leiskite Omi 2 dienas veikti fone ir jis pradės teikti naudingų atsiliepimų.",
+    "cantFindDeviceHint": "Nerandate įrenginio? Įsitikinkite, kad jis įjungtas ir netoli telefono, tada ieškokite dar kartą.",
+    "scanAgain": "Ieškoti dar kartą",
+    "howToPair": "Kaip susieti",
+    "contactSupportAction": "Susisiekti su pagalba",
+    "deviceOfflineWakeHint": "{deviceName} neprisijungęs. Paspauskite jo mygtuką, kad pažadintumėte, ir bandykite dar kartą.",
+    "batteryLevelSemantics": "Akumuliatorius {level} %",
+    "updateOmiGlassFirmware": "Atnaujinti OmiGlass programinę aparatinę įrangą"
 }

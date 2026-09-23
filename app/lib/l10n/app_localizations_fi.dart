@@ -10188,4 +10188,30 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Anna Omin toimia taustalla 2 päivää, niin se alkaa antaa sinulle hyödyllistä palautetta.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Etkö löydä laitetta? Varmista, että se on päällä ja lähellä puhelinta, ja hae uudelleen.';
+
+  @override
+  String get scanAgain => 'Hae uudelleen';
+
+  @override
+  String get howToPair => 'Näin muodostat pariliitoksen';
+
+  @override
+  String get contactSupportAction => 'Ota yhteyttä tukeen';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName on offline-tilassa. Herätä se painamalla sen painiketta ja yritä uudelleen.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akku $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Päivitä OmiGlassin laiteohjelmisto';
 }

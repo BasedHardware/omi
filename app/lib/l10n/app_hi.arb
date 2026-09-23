@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "सेटिंग्स में बंद है। इसे इस्तेमाल करने के लिए वहाँ अनुमति दें।",
     "useDifferentAccount": "दूसरा खाता इस्तेमाल करें",
     "onboardingStepOf": "चरण {current} / {total}",
-    "onboardingCompleteMessage": "Omi को 2 दिन बैकग्राउंड में चलने दें, फिर यह आपको उपयोगी सुझाव देना शुरू करेगा।"
+    "onboardingCompleteMessage": "Omi को 2 दिन बैकग्राउंड में चलने दें, फिर यह आपको उपयोगी सुझाव देना शुरू करेगा।",
+    "cantFindDeviceHint": "अपना डिवाइस नहीं मिल रहा? पक्का करें कि वह चालू है और फ़ोन के पास है, फिर दोबारा स्कैन करें।",
+    "scanAgain": "दोबारा स्कैन करें",
+    "howToPair": "पेयर कैसे करें",
+    "contactSupportAction": "सहायता से संपर्क करें",
+    "deviceOfflineWakeHint": "{deviceName} ऑफ़लाइन है। उसे जगाने के लिए उसका बटन दबाएँ, फिर दोबारा कोशिश करें।",
+    "batteryLevelSemantics": "बैटरी {level}%",
+    "updateOmiGlassFirmware": "OmiGlass फ़र्मवेयर अपडेट करें"
 }

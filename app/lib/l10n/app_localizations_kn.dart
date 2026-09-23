@@ -10217,4 +10217,30 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Omi ಅನ್ನು 2 ದಿನ ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಚಾಲನೆಯಲ್ಲಿಡಿ, ನಂತರ ಅದು ಉಪಯುಕ್ತ ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಲು ಆರಂಭಿಸುತ್ತದೆ.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'ನಿಮ್ಮ ಸಾಧನ ಸಿಗುತ್ತಿಲ್ಲವೇ? ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಫೋನ್ ಹತ್ತಿರವಿದೆ ಎಂದು ಖಚಿತಪಡಿಸಿ, ನಂತರ ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.';
+
+  @override
+  String get scanAgain => 'ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ';
+
+  @override
+  String get howToPair => 'ಜೋಡಿಸುವುದು ಹೇಗೆ';
+
+  @override
+  String get contactSupportAction => 'ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ಆಫ್‌ಲೈನ್ ಆಗಿದೆ. ಎಚ್ಚರಗೊಳಿಸಲು ಅದರ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'ಬ್ಯಾಟರಿ $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ';
 }

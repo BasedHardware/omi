@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Seadetes välja lülitatud. Selle kasutamiseks luba see seal.",
     "useDifferentAccount": "Kasuta teist kontot",
     "onboardingStepOf": "Samm {current}/{total}",
-    "onboardingCompleteMessage": "Lase Omil 2 päeva taustal töötada ja see hakkab sulle kasulikku tagasisidet andma."
+    "onboardingCompleteMessage": "Lase Omil 2 päeva taustal töötada ja see hakkab sulle kasulikku tagasisidet andma.",
+    "cantFindDeviceHint": "Ei leia seadet? Veendu, et see on sisse lülitatud ja telefoni lähedal, ning otsi uuesti.",
+    "scanAgain": "Otsi uuesti",
+    "howToPair": "Kuidas siduda",
+    "contactSupportAction": "Võta toega ühendust",
+    "deviceOfflineWakeHint": "{deviceName} on võrguühenduseta. Vajuta selle nuppu äratamiseks ja proovi uuesti.",
+    "batteryLevelSemantics": "Aku {level}%",
+    "updateOmiGlassFirmware": "Värskenda OmiGlassi püsivara"
 }

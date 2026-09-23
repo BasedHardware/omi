@@ -10232,4 +10232,30 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Lasă Omi să ruleze în fundal 2 zile și va începe să îți ofere feedback util.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nu găsești dispozitivul? Asigură-te că este pornit și aproape de telefon, apoi caută din nou.';
+
+  @override
+  String get scanAgain => 'Caută din nou';
+
+  @override
+  String get howToPair => 'Cum se asociază';
+
+  @override
+  String get contactSupportAction => 'Contactează asistența';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName este offline. Apasă butonul său ca să-l trezești, apoi încearcă din nou.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterie $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Actualizează firmware-ul OmiGlass';
 }

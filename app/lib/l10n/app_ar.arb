@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "متوقف في الإعدادات. اسمح به هناك لاستخدام هذه الميزة.",
     "useDifferentAccount": "استخدام حساب آخر",
     "onboardingStepOf": "الخطوة {current} من {total}",
-    "onboardingCompleteMessage": "اترك Omi يعمل في الخلفية لمدة يومين وسيبدأ في تقديم ملاحظات مفيدة لك."
+    "onboardingCompleteMessage": "اترك Omi يعمل في الخلفية لمدة يومين وسيبدأ في تقديم ملاحظات مفيدة لك.",
+    "cantFindDeviceHint": "لا تجد جهازك؟ تأكد من أنه قيد التشغيل وقريب من هاتفك، ثم ابحث مرة أخرى.",
+    "scanAgain": "البحث مرة أخرى",
+    "howToPair": "طريقة الإقران",
+    "contactSupportAction": "التواصل مع الدعم",
+    "deviceOfflineWakeHint": "{deviceName} غير متصل. اضغط على زره لتنبيهه، ثم حاول مرة أخرى.",
+    "batteryLevelSemantics": "البطارية {level}%",
+    "updateOmiGlassFirmware": "تحديث برنامج OmiGlass الثابت"
 }

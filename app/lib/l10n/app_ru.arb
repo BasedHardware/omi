@@ -3307,5 +3307,12 @@
     "permissionBlockedHint": "Отключено в Настройках. Разрешите это там, чтобы пользоваться функцией.",
     "useDifferentAccount": "Использовать другой аккаунт",
     "onboardingStepOf": "Шаг {current} из {total}",
-    "onboardingCompleteMessage": "Оставьте Omi работать в фоне 2 дня, и он начнёт давать полезные советы."
+    "onboardingCompleteMessage": "Оставьте Omi работать в фоне 2 дня, и он начнёт давать полезные советы.",
+    "cantFindDeviceHint": "Не удаётся найти устройство? Убедитесь, что оно включено и рядом с телефоном, и выполните поиск снова.",
+    "scanAgain": "Искать снова",
+    "howToPair": "Как подключить",
+    "contactSupportAction": "Связаться с поддержкой",
+    "deviceOfflineWakeHint": "{deviceName} не в сети. Нажмите его кнопку, чтобы разбудить, и повторите попытку.",
+    "batteryLevelSemantics": "Батарея {level}%",
+    "updateOmiGlassFirmware": "Обновить прошивку OmiGlass"
 }

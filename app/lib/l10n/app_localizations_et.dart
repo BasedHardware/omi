@@ -10180,4 +10180,30 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Lase Omil 2 päeva taustal töötada ja see hakkab sulle kasulikku tagasisidet andma.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Ei leia seadet? Veendu, et see on sisse lülitatud ja telefoni lähedal, ning otsi uuesti.';
+
+  @override
+  String get scanAgain => 'Otsi uuesti';
+
+  @override
+  String get howToPair => 'Kuidas siduda';
+
+  @override
+  String get contactSupportAction => 'Võta toega ühendust';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName on võrguühenduseta. Vajuta selle nuppu äratamiseks ja proovi uuesti.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Aku $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Värskenda OmiGlassi püsivara';
 }

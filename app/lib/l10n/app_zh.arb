@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "已在设置中关闭。请在设置中允许后使用。",
     "useDifferentAccount": "使用其他账号",
     "onboardingStepOf": "第 {current} 步，共 {total} 步",
-    "onboardingCompleteMessage": "让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。"
+    "onboardingCompleteMessage": "让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。",
+    "cantFindDeviceHint": "找不到设备？请确认设备已开启并靠近手机，然后重新扫描。",
+    "scanAgain": "重新扫描",
+    "howToPair": "如何配对",
+    "contactSupportAction": "联系支持",
+    "deviceOfflineWakeHint": "{deviceName} 已离线。按下它的按钮将其唤醒，然后重试。",
+    "batteryLevelSemantics": "电量 {level}%",
+    "updateOmiGlassFirmware": "更新 OmiGlass 固件"
 }

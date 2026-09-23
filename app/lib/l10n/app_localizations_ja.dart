@@ -10011,4 +10011,29 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Omiをバックグラウンドで2日間動かすと、役立つフィードバックが届き始めます。';
+
+  @override
+  String get cantFindDeviceHint => 'デバイスが見つかりませんか？電源が入っていてスマートフォンの近くにあることを確認し、もう一度スキャンしてください。';
+
+  @override
+  String get scanAgain => '再スキャン';
+
+  @override
+  String get howToPair => 'ペアリング方法';
+
+  @override
+  String get contactSupportAction => 'サポートに問い合わせる';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName はオフラインです。ボタンを押して起動してから、もう一度お試しください。';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'バッテリー $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass のファームウェアを更新';
 }

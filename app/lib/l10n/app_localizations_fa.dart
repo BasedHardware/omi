@@ -10183,4 +10183,30 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'دستگاهتان را پیدا نمی‌کنید؟ مطمئن شوید روشن و نزدیک تلفن است، سپس دوباره جستجو کنید.';
+
+  @override
+  String get scanAgain => 'جستجوی دوباره';
+
+  @override
+  String get howToPair => 'نحوه جفت‌سازی';
+
+  @override
+  String get contactSupportAction => 'تماس با پشتیبانی';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName آفلاین است. دکمه آن را فشار دهید تا بیدار شود، سپس دوباره امتحان کنید.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'باتری $level٪';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'به‌روزرسانی میان‌افزار OmiGlass';
 }

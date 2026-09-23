@@ -3368,5 +3368,12 @@
     "permissionBlockedHint": "Ki van kapcsolva a Beállításokban. A használathoz engedélyezze ott.",
     "useDifferentAccount": "Másik fiók használata",
     "onboardingStepOf": "{current}. lépés / {total}",
-    "onboardingCompleteMessage": "Hagyd az Omit 2 napig a háttérben futni, és elkezd hasznos visszajelzést adni."
+    "onboardingCompleteMessage": "Hagyd az Omit 2 napig a háttérben futni, és elkezd hasznos visszajelzést adni.",
+    "cantFindDeviceHint": "Nem találod az eszközt? Ellenőrizd, hogy be van-e kapcsolva és a telefon közelében van-e, majd keress újra.",
+    "scanAgain": "Újrakeresés",
+    "howToPair": "Párosítás módja",
+    "contactSupportAction": "Kapcsolatfelvétel az ügyfélszolgálattal",
+    "deviceOfflineWakeHint": "A(z) {deviceName} offline. Nyomd meg a gombját az ébresztéshez, majd próbáld újra.",
+    "batteryLevelSemantics": "Akkumulátor {level}%",
+    "updateOmiGlassFirmware": "OmiGlass firmware frissítése"
 }

@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "ปิดอยู่ในการตั้งค่า อนุญาตในการตั้งค่าเพื่อใช้งาน",
     "useDifferentAccount": "ใช้บัญชีอื่น",
     "onboardingStepOf": "ขั้นตอนที่ {current} จาก {total}",
-    "onboardingCompleteMessage": "ปล่อยให้ Omi ทำงานเบื้องหลัง 2 วัน แล้วจะเริ่มให้คำแนะนำที่เป็นประโยชน์"
+    "onboardingCompleteMessage": "ปล่อยให้ Omi ทำงานเบื้องหลัง 2 วัน แล้วจะเริ่มให้คำแนะนำที่เป็นประโยชน์",
+    "cantFindDeviceHint": "หาอุปกรณ์ไม่เจอใช่ไหม ตรวจสอบว่าเปิดเครื่องอยู่และอยู่ใกล้โทรศัพท์ แล้วสแกนอีกครั้ง",
+    "scanAgain": "สแกนอีกครั้ง",
+    "howToPair": "วิธีจับคู่",
+    "contactSupportAction": "ติดต่อฝ่ายสนับสนุน",
+    "deviceOfflineWakeHint": "{deviceName} ออฟไลน์อยู่ กดปุ่มเพื่อปลุก แล้วลองอีกครั้ง",
+    "batteryLevelSemantics": "แบตเตอรี่ {level}%",
+    "updateOmiGlassFirmware": "อัปเดตเฟิร์มแวร์ OmiGlass"
 }

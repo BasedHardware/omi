@@ -10178,4 +10178,30 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Hãy để Omi chạy nền trong 2 ngày và nó sẽ bắt đầu đưa ra phản hồi hữu ích.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Không tìm thấy thiết bị? Hãy đảm bảo thiết bị đang bật và ở gần điện thoại, rồi quét lại.';
+
+  @override
+  String get scanAgain => 'Quét lại';
+
+  @override
+  String get howToPair => 'Cách ghép nối';
+
+  @override
+  String get contactSupportAction => 'Liên hệ hỗ trợ';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName đang ngoại tuyến. Nhấn nút trên thiết bị để đánh thức rồi thử lại.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Pin $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Cập nhật firmware OmiGlass';
 }

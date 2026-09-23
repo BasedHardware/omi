@@ -10197,4 +10197,30 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Omi\'yi 2 gün arka planda çalışır bırakın, size faydalı geri bildirimler vermeye başlayacak.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Cihazınızı bulamıyor musunuz? Açık ve telefonunuza yakın olduğundan emin olun, sonra tekrar tarayın.';
+
+  @override
+  String get scanAgain => 'Tekrar Tara';
+
+  @override
+  String get howToPair => 'Nasıl Eşleştirilir';
+
+  @override
+  String get contactSupportAction => 'Destekle İletişime Geç';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName çevrimdışı. Uyandırmak için düğmesine basın, sonra tekrar deneyin.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Pil %$level';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass Yazılımını Güncelle';
 }

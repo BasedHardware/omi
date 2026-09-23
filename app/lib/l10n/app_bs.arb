@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "Isključeno u Postavkama. Dozvolite to tamo da biste ovo koristili.",
     "useDifferentAccount": "Koristi drugi račun",
     "onboardingStepOf": "Korak {current} od {total}",
-    "onboardingCompleteMessage": "Ostavite Omi da radi u pozadini 2 dana i počet će vam davati korisne povratne informacije."
+    "onboardingCompleteMessage": "Ostavite Omi da radi u pozadini 2 dana i počet će vam davati korisne povratne informacije.",
+    "cantFindDeviceHint": "Ne možete pronaći uređaj? Provjerite je li uključen i blizu telefona, pa ponovo skenirajte.",
+    "scanAgain": "Skeniraj ponovo",
+    "howToPair": "Kako upariti",
+    "contactSupportAction": "Kontaktiraj podršku",
+    "deviceOfflineWakeHint": "{deviceName} je van mreže. Pritisnite njegovo dugme da ga probudite, pa pokušajte ponovo.",
+    "batteryLevelSemantics": "Baterija {level}%",
+    "updateOmiGlassFirmware": "Ažuriraj OmiGlass firmver"
 }

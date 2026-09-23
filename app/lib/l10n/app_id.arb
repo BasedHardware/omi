@@ -3307,5 +3307,12 @@
     "permissionBlockedHint": "Dinonaktifkan di Pengaturan. Izinkan di sana untuk menggunakannya.",
     "useDifferentAccount": "Gunakan Akun Lain",
     "onboardingStepOf": "Langkah {current} dari {total}",
-    "onboardingCompleteMessage": "Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mulai memberi masukan yang berguna."
+    "onboardingCompleteMessage": "Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mulai memberi masukan yang berguna.",
+    "cantFindDeviceHint": "Tidak menemukan perangkat? Pastikan perangkat menyala dan dekat ponsel, lalu pindai lagi.",
+    "scanAgain": "Pindai Lagi",
+    "howToPair": "Cara Memasangkan",
+    "contactSupportAction": "Hubungi Dukungan",
+    "deviceOfflineWakeHint": "{deviceName} sedang offline. Tekan tombolnya untuk membangunkannya, lalu coba lagi.",
+    "batteryLevelSemantics": "Baterai {level}%",
+    "updateOmiGlassFirmware": "Perbarui Firmware OmiGlass"
 }

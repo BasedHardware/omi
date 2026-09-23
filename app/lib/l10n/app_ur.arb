@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "سیٹنگز میں بند ہے۔ اسے استعمال کرنے کے لیے وہاں اجازت دیں۔",
     "useDifferentAccount": "دوسرا اکاؤنٹ استعمال کریں",
     "onboardingStepOf": "مرحلہ {current} از {total}",
-    "onboardingCompleteMessage": "Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔"
+    "onboardingCompleteMessage": "Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔",
+    "cantFindDeviceHint": "اپنی ڈیوائس نہیں مل رہی؟ یقینی بنائیں کہ وہ آن ہے اور فون کے قریب ہے، پھر دوبارہ اسکین کریں۔",
+    "scanAgain": "دوبارہ اسکین کریں",
+    "howToPair": "جوڑنے کا طریقہ",
+    "contactSupportAction": "سپورٹ سے رابطہ کریں",
+    "deviceOfflineWakeHint": "{deviceName} آف لائن ہے۔ جگانے کے لیے اس کا بٹن دبائیں، پھر دوبارہ کوشش کریں۔",
+    "batteryLevelSemantics": "بیٹری {level}%",
+    "updateOmiGlassFirmware": "OmiGlass فرم ویئر اپ ڈیٹ کریں"
 }

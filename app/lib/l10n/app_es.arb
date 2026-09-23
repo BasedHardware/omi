@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Desactivado en Ajustes. Permítelo allí para usar esta función.",
     "useDifferentAccount": "Usar otra cuenta",
     "onboardingStepOf": "Paso {current} de {total}",
-    "onboardingCompleteMessage": "Deja Omi funcionando en segundo plano 2 días y empezará a darte comentarios útiles."
+    "onboardingCompleteMessage": "Deja Omi funcionando en segundo plano 2 días y empezará a darte comentarios útiles.",
+    "cantFindDeviceHint": "¿No encuentras tu dispositivo? Asegúrate de que esté encendido y cerca del teléfono, y vuelve a buscar.",
+    "scanAgain": "Buscar de nuevo",
+    "howToPair": "Cómo emparejar",
+    "contactSupportAction": "Contactar con soporte",
+    "deviceOfflineWakeHint": "{deviceName} está desconectado. Pulsa su botón para activarlo y vuelve a intentarlo.",
+    "batteryLevelSemantics": "Batería {level} %",
+    "updateOmiGlassFirmware": "Actualizar firmware de OmiGlass"
 }

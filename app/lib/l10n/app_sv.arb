@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Avstängt i Inställningar. Tillåt det där för att använda detta.",
     "useDifferentAccount": "Använd ett annat konto",
     "onboardingStepOf": "Steg {current} av {total}",
-    "onboardingCompleteMessage": "Låt Omi köras i bakgrunden i 2 dagar så börjar den ge dig användbar feedback."
+    "onboardingCompleteMessage": "Låt Omi köras i bakgrunden i 2 dagar så börjar den ge dig användbar feedback.",
+    "cantFindDeviceHint": "Hittar du inte enheten? Se till att den är påslagen och nära telefonen och sök igen.",
+    "scanAgain": "Sök igen",
+    "howToPair": "Så parkopplar du",
+    "contactSupportAction": "Kontakta support",
+    "deviceOfflineWakeHint": "{deviceName} är offline. Tryck på knappen för att väcka den och försök igen.",
+    "batteryLevelSemantics": "Batteri {level} %",
+    "updateOmiGlassFirmware": "Uppdatera OmiGlass-firmware"
 }

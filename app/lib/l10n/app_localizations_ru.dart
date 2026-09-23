@@ -10220,4 +10220,30 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Оставьте Omi работать в фоне 2 дня, и он начнёт давать полезные советы.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Не удаётся найти устройство? Убедитесь, что оно включено и рядом с телефоном, и выполните поиск снова.';
+
+  @override
+  String get scanAgain => 'Искать снова';
+
+  @override
+  String get howToPair => 'Как подключить';
+
+  @override
+  String get contactSupportAction => 'Связаться с поддержкой';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName не в сети. Нажмите его кнопку, чтобы разбудить, и повторите попытку.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Батарея $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Обновить прошивку OmiGlass';
 }

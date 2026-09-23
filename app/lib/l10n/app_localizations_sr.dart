@@ -10198,4 +10198,30 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Оставите Omi да ради у позадини 2 дана и почеће да вам даје корисне повратне информације.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Не можете да пронађете уређај? Проверите да ли је укључен и близу телефона, па поново претражите.';
+
+  @override
+  String get scanAgain => 'Претражи поново';
+
+  @override
+  String get howToPair => 'Како упарити';
+
+  @override
+  String get contactSupportAction => 'Контактирај подршку';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName није повезан. Притисните његово дугме да га пробудите, па покушајте поново.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Батерија $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Ажурирај фирмвер за OmiGlass';
 }

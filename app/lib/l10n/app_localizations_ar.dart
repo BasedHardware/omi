@@ -10120,4 +10120,29 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'اترك Omi يعمل في الخلفية لمدة يومين وسيبدأ في تقديم ملاحظات مفيدة لك.';
+
+  @override
+  String get cantFindDeviceHint => 'لا تجد جهازك؟ تأكد من أنه قيد التشغيل وقريب من هاتفك، ثم ابحث مرة أخرى.';
+
+  @override
+  String get scanAgain => 'البحث مرة أخرى';
+
+  @override
+  String get howToPair => 'طريقة الإقران';
+
+  @override
+  String get contactSupportAction => 'التواصل مع الدعم';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName غير متصل. اضغط على زره لتنبيهه، ثم حاول مرة أخرى.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'البطارية $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'تحديث برنامج OmiGlass الثابت';
 }

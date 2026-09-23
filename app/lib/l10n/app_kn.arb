@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಆಫ್ ಆಗಿದೆ. ಇದನ್ನು ಬಳಸಲು ಅಲ್ಲಿ ಅನುಮತಿಸಿ.",
     "useDifferentAccount": "ಬೇರೆ ಖಾತೆ ಬಳಸಿ",
     "onboardingStepOf": "ಹಂತ {current} / {total}",
-    "onboardingCompleteMessage": "Omi ಅನ್ನು 2 ದಿನ ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಚಾಲನೆಯಲ್ಲಿಡಿ, ನಂತರ ಅದು ಉಪಯುಕ್ತ ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಲು ಆರಂಭಿಸುತ್ತದೆ."
+    "onboardingCompleteMessage": "Omi ಅನ್ನು 2 ದಿನ ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಚಾಲನೆಯಲ್ಲಿಡಿ, ನಂತರ ಅದು ಉಪಯುಕ್ತ ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಲು ಆರಂಭಿಸುತ್ತದೆ.",
+    "cantFindDeviceHint": "ನಿಮ್ಮ ಸಾಧನ ಸಿಗುತ್ತಿಲ್ಲವೇ? ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಫೋನ್ ಹತ್ತಿರವಿದೆ ಎಂದು ಖಚಿತಪಡಿಸಿ, ನಂತರ ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.",
+    "scanAgain": "ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ",
+    "howToPair": "ಜೋಡಿಸುವುದು ಹೇಗೆ",
+    "contactSupportAction": "ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "deviceOfflineWakeHint": "{deviceName} ಆಫ್‌ಲೈನ್ ಆಗಿದೆ. ಎಚ್ಚರಗೊಳಿಸಲು ಅದರ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "batteryLevelSemantics": "ಬ್ಯಾಟರಿ {level}%",
+    "updateOmiGlassFirmware": "OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ"
 }

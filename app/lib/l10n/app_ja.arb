@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "設定でオフになっています。使用するには設定で許可してください。",
     "useDifferentAccount": "別のアカウントを使う",
     "onboardingStepOf": "ステップ {current}/{total}",
-    "onboardingCompleteMessage": "Omiをバックグラウンドで2日間動かすと、役立つフィードバックが届き始めます。"
+    "onboardingCompleteMessage": "Omiをバックグラウンドで2日間動かすと、役立つフィードバックが届き始めます。",
+    "cantFindDeviceHint": "デバイスが見つかりませんか？電源が入っていてスマートフォンの近くにあることを確認し、もう一度スキャンしてください。",
+    "scanAgain": "再スキャン",
+    "howToPair": "ペアリング方法",
+    "contactSupportAction": "サポートに問い合わせる",
+    "deviceOfflineWakeHint": "{deviceName} はオフラインです。ボタンを押して起動してから、もう一度お試しください。",
+    "batteryLevelSemantics": "バッテリー {level}%",
+    "updateOmiGlassFirmware": "OmiGlass のファームウェアを更新"
 }

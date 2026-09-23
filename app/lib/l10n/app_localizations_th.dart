@@ -10123,4 +10123,30 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'ปล่อยให้ Omi ทำงานเบื้องหลัง 2 วัน แล้วจะเริ่มให้คำแนะนำที่เป็นประโยชน์';
+
+  @override
+  String get cantFindDeviceHint =>
+      'หาอุปกรณ์ไม่เจอใช่ไหม ตรวจสอบว่าเปิดเครื่องอยู่และอยู่ใกล้โทรศัพท์ แล้วสแกนอีกครั้ง';
+
+  @override
+  String get scanAgain => 'สแกนอีกครั้ง';
+
+  @override
+  String get howToPair => 'วิธีจับคู่';
+
+  @override
+  String get contactSupportAction => 'ติดต่อฝ่ายสนับสนุน';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ออฟไลน์อยู่ กดปุ่มเพื่อปลุก แล้วลองอีกครั้ง';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'แบตเตอรี่ $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'อัปเดตเฟิร์มแวร์ OmiGlass';
 }

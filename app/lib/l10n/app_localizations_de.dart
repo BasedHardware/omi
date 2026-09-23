@@ -10268,4 +10268,30 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Lass Omi 2 Tage im Hintergrund laufen, dann gibt es dir hilfreiches Feedback.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Gerät nicht gefunden? Achte darauf, dass es eingeschaltet und in der Nähe deines Telefons ist, und suche erneut.';
+
+  @override
+  String get scanAgain => 'Erneut suchen';
+
+  @override
+  String get howToPair => 'So koppelst du';
+
+  @override
+  String get contactSupportAction => 'Support kontaktieren';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ist offline. Drücke die Taste, um es aufzuwecken, und versuche es erneut.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akku $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass-Firmware aktualisieren';
 }

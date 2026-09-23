@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "Исклучено во Поставки. Дозволете го таму за да го користите.",
     "useDifferentAccount": "Користи друга сметка",
     "onboardingStepOf": "Чекор {current} од {total}",
-    "onboardingCompleteMessage": "Оставете го Omi да работи во заднина 2 дена и ќе почне да ви дава корисни повратни информации."
+    "onboardingCompleteMessage": "Оставете го Omi да работи во заднина 2 дена и ќе почне да ви дава корисни повратни информации.",
+    "cantFindDeviceHint": "Не го наоѓате уредот? Проверете дали е вклучен и блиску до телефонот, па пребарајте повторно.",
+    "scanAgain": "Пребарај повторно",
+    "howToPair": "Како да се спари",
+    "contactSupportAction": "Контактирај поддршка",
+    "deviceOfflineWakeHint": "{deviceName} е офлајн. Притиснете го копчето за да го разбудите, па обидете се повторно.",
+    "batteryLevelSemantics": "Батерија {level}%",
+    "updateOmiGlassFirmware": "Ажурирај го фирмверот на OmiGlass"
 }

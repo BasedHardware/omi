@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Izslēgts iestatījumos. Lai to izmantotu, atļaujiet to tur.",
     "useDifferentAccount": "Izmantot citu kontu",
     "onboardingStepOf": "{current}. solis no {total}",
-    "onboardingCompleteMessage": "Ļaujiet Omi 2 dienas darboties fonā, un tas sāks sniegt noderīgu atgriezenisko saiti."
+    "onboardingCompleteMessage": "Ļaujiet Omi 2 dienas darboties fonā, un tas sāks sniegt noderīgu atgriezenisko saiti.",
+    "cantFindDeviceHint": "Nevarat atrast ierīci? Pārliecinieties, ka tā ir ieslēgta un tuvu tālrunim, un meklējiet vēlreiz.",
+    "scanAgain": "Meklēt vēlreiz",
+    "howToPair": "Kā savienot pārī",
+    "contactSupportAction": "Sazināties ar atbalstu",
+    "deviceOfflineWakeHint": "{deviceName} ir bezsaistē. Nospiediet tās pogu, lai to pamodinātu, un mēģiniet vēlreiz.",
+    "batteryLevelSemantics": "Akumulators {level}%",
+    "updateOmiGlassFirmware": "Atjaunināt OmiGlass programmaparatūru"
 }

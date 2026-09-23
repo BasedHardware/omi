@@ -10183,4 +10183,30 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'La Omi kjøre i bakgrunnen i 2 dager, så begynner den å gi deg nyttige tilbakemeldinger.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Finner du ikke enheten? Sørg for at den er slått på og nær telefonen, og søk på nytt.';
+
+  @override
+  String get scanAgain => 'Søk på nytt';
+
+  @override
+  String get howToPair => 'Slik parer du';
+
+  @override
+  String get contactSupportAction => 'Kontakt kundestøtte';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName er frakoblet. Trykk på knappen for å vekke den, og prøv igjen.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Batteri $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Oppdater OmiGlass-fastvare';
 }

@@ -10243,4 +10243,30 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Deixa que l\'Omi funcioni en segon pla durant 2 dies i començarà a donar-te comentaris útils.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'No trobes el dispositiu? Comprova que estigui encès i a prop del telèfon i torna a cercar.';
+
+  @override
+  String get scanAgain => 'Torna a cercar';
+
+  @override
+  String get howToPair => 'Com vincular';
+
+  @override
+  String get contactSupportAction => 'Contacta amb el suport';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName està fora de línia. Prem el botó per activar-lo i torna-ho a provar.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Bateria $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Actualitza el firmware de l\'OmiGlass';
 }

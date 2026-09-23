@@ -10014,4 +10014,29 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다.';
+
+  @override
+  String get cantFindDeviceHint => '기기를 찾을 수 없나요? 전원이 켜져 있고 휴대폰 가까이에 있는지 확인한 후 다시 검색하세요.';
+
+  @override
+  String get scanAgain => '다시 검색';
+
+  @override
+  String get howToPair => '페어링 방법';
+
+  @override
+  String get contactSupportAction => '지원팀에 문의';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName이(가) 오프라인입니다. 버튼을 눌러 깨운 후 다시 시도하세요.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '배터리 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass 펌웨어 업데이트';
 }

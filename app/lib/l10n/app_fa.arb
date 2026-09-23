@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "در تنظیمات خاموش است. برای استفاده، آن را آنجا مجاز کنید.",
     "useDifferentAccount": "استفاده از حساب دیگر",
     "onboardingStepOf": "مرحله {current} از {total}",
-    "onboardingCompleteMessage": "Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند."
+    "onboardingCompleteMessage": "Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند.",
+    "cantFindDeviceHint": "دستگاهتان را پیدا نمی‌کنید؟ مطمئن شوید روشن و نزدیک تلفن است، سپس دوباره جستجو کنید.",
+    "scanAgain": "جستجوی دوباره",
+    "howToPair": "نحوه جفت‌سازی",
+    "contactSupportAction": "تماس با پشتیبانی",
+    "deviceOfflineWakeHint": "{deviceName} آفلاین است. دکمه آن را فشار دهید تا بیدار شود، سپس دوباره امتحان کنید.",
+    "batteryLevelSemantics": "باتری {level}٪",
+    "updateOmiGlassFirmware": "به‌روزرسانی میان‌افزار OmiGlass"
 }

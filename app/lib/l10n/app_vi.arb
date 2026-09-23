@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Đã tắt trong Cài đặt. Hãy cho phép ở đó để sử dụng.",
     "useDifferentAccount": "Dùng tài khoản khác",
     "onboardingStepOf": "Bước {current}/{total}",
-    "onboardingCompleteMessage": "Hãy để Omi chạy nền trong 2 ngày và nó sẽ bắt đầu đưa ra phản hồi hữu ích."
+    "onboardingCompleteMessage": "Hãy để Omi chạy nền trong 2 ngày và nó sẽ bắt đầu đưa ra phản hồi hữu ích.",
+    "cantFindDeviceHint": "Không tìm thấy thiết bị? Hãy đảm bảo thiết bị đang bật và ở gần điện thoại, rồi quét lại.",
+    "scanAgain": "Quét lại",
+    "howToPair": "Cách ghép nối",
+    "contactSupportAction": "Liên hệ hỗ trợ",
+    "deviceOfflineWakeHint": "{deviceName} đang ngoại tuyến. Nhấn nút trên thiết bị để đánh thức rồi thử lại.",
+    "batteryLevelSemantics": "Pin {level}%",
+    "updateOmiGlassFirmware": "Cập nhật firmware OmiGlass"
 }

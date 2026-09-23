@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "Выключана ў Наладах. Дазвольце гэта там, каб карыстацца.",
     "useDifferentAccount": "Выкарыстаць іншы ўліковы запіс",
     "onboardingStepOf": "Крок {current} з {total}",
-    "onboardingCompleteMessage": "Пакіньце Omi працаваць у фоне 2 дні, і ён пачне даваць вам карысныя парады."
+    "onboardingCompleteMessage": "Пакіньце Omi працаваць у фоне 2 дні, і ён пачне даваць вам карысныя парады.",
+    "cantFindDeviceHint": "Не можаце знайсці прыладу? Пераканайцеся, што яна ўключана і побач з тэлефонам, і пашукайце зноў.",
+    "scanAgain": "Шукаць зноў",
+    "howToPair": "Як спалучыць",
+    "contactSupportAction": "Звязацца з падтрымкай",
+    "deviceOfflineWakeHint": "{deviceName} па-за сеткай. Націсніце яе кнопку, каб абудзіць, і паспрабуйце зноў.",
+    "batteryLevelSemantics": "Батарэя {level}%",
+    "updateOmiGlassFirmware": "Абнавіць прашыўку OmiGlass"
 }

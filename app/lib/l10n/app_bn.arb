@@ -10844,5 +10844,12 @@
     "permissionBlockedHint": "সেটিংসে বন্ধ আছে। এটি ব্যবহার করতে সেখানে অনুমতি দিন।",
     "useDifferentAccount": "অন্য অ্যাকাউন্ট ব্যবহার করুন",
     "onboardingStepOf": "ধাপ {current} / {total}",
-    "onboardingCompleteMessage": "Omi-কে ২ দিন ব্যাকগ্রাউন্ডে চলতে দিন, তারপর এটি আপনাকে কাজের মতামত দিতে শুরু করবে।"
+    "onboardingCompleteMessage": "Omi-কে ২ দিন ব্যাকগ্রাউন্ডে চলতে দিন, তারপর এটি আপনাকে কাজের মতামত দিতে শুরু করবে।",
+    "cantFindDeviceHint": "আপনার ডিভাইস খুঁজে পাচ্ছেন না? এটি চালু আছে এবং ফোনের কাছে আছে কিনা দেখুন, তারপর আবার স্ক্যান করুন।",
+    "scanAgain": "আবার স্ক্যান করুন",
+    "howToPair": "কীভাবে পেয়ার করবেন",
+    "contactSupportAction": "সাপোর্টে যোগাযোগ করুন",
+    "deviceOfflineWakeHint": "{deviceName} অফলাইন। জাগাতে এর বোতাম চাপুন, তারপর আবার চেষ্টা করুন।",
+    "batteryLevelSemantics": "ব্যাটারি {level}%",
+    "updateOmiGlassFirmware": "OmiGlass ফার্মওয়্যার আপডেট করুন"
 }

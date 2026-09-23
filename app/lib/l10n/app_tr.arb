@@ -3307,5 +3307,12 @@
     "permissionBlockedHint": "Ayarlar'da kapalı. Kullanmak için oradan izin verin.",
     "useDifferentAccount": "Başka Bir Hesap Kullan",
     "onboardingStepOf": "Adım {current}/{total}",
-    "onboardingCompleteMessage": "Omi'yi 2 gün arka planda çalışır bırakın, size faydalı geri bildirimler vermeye başlayacak."
+    "onboardingCompleteMessage": "Omi'yi 2 gün arka planda çalışır bırakın, size faydalı geri bildirimler vermeye başlayacak.",
+    "cantFindDeviceHint": "Cihazınızı bulamıyor musunuz? Açık ve telefonunuza yakın olduğundan emin olun, sonra tekrar tarayın.",
+    "scanAgain": "Tekrar Tara",
+    "howToPair": "Nasıl Eşleştirilir",
+    "contactSupportAction": "Destekle İletişime Geç",
+    "deviceOfflineWakeHint": "{deviceName} çevrimdışı. Uyandırmak için düğmesine basın, sonra tekrar deneyin.",
+    "batteryLevelSemantics": "Pil %{level}",
+    "updateOmiGlassFirmware": "OmiGlass Yazılımını Güncelle"
 }

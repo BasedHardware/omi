@@ -12014,5 +12014,43 @@
     "onboardingCompleteMessage": "Keep Omi running in the background for 2 days and it will start giving you useful feedback.",
     "@onboardingCompleteMessage": {
         "description": "Completion screen at the end of first-run onboarding"
+    },
+    "cantFindDeviceHint": "Can't find your device? Make sure it's turned on and close to your phone, then scan again.",
+    "@cantFindDeviceHint": {
+        "description": "Shown when no device was found after scanning for a while"
+    },
+    "scanAgain": "Scan Again",
+    "@scanAgain": {
+        "description": "Button: restart the Bluetooth device search"
+    },
+    "howToPair": "How to Pair",
+    "@howToPair": {
+        "description": "Button: opens the connection guide"
+    },
+    "contactSupportAction": "Contact Support",
+    "@contactSupportAction": {
+        "description": "Button that opens support"
+    },
+    "deviceOfflineWakeHint": "{deviceName} is offline. Press its button to wake it, then try again.",
+    "@deviceOfflineWakeHint": {
+        "description": "Tapping a saved device that is not advertising",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "batteryLevelSemantics": "Battery {level}%",
+    "@batteryLevelSemantics": {
+        "description": "Screen-reader label for a device battery level",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    },
+    "updateOmiGlassFirmware": "Update OmiGlass Firmware",
+    "@updateOmiGlassFirmware": {
+        "description": "Card on the capture screen opening the OmiGlass update"
     }
 }

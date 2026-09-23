@@ -10220,4 +10220,30 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Ostavite Omi da radi u pozadini 2 dana i počet će vam davati korisne povratne informacije.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Ne možete pronaći uređaj? Provjerite je li uključen i blizu telefona pa ponovno pretražite.';
+
+  @override
+  String get scanAgain => 'Ponovno pretraži';
+
+  @override
+  String get howToPair => 'Kako upariti';
+
+  @override
+  String get contactSupportAction => 'Kontaktiraj podršku';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName nije na mreži. Pritisnite njegovu tipku da ga probudite pa pokušajte ponovno.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterija $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Ažuriraj OmiGlass firmver';
 }

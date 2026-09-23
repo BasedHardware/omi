@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Vypnuté v Nastaveniach. Povoľte to tam, aby ste to mohli používať.",
     "useDifferentAccount": "Použiť iný účet",
     "onboardingStepOf": "Krok {current} z {total}",
-    "onboardingCompleteMessage": "Nechajte Omi 2 dni bežať na pozadí a začne vám dávať užitočnú spätnú väzbu."
+    "onboardingCompleteMessage": "Nechajte Omi 2 dni bežať na pozadí a začne vám dávať užitočnú spätnú väzbu.",
+    "cantFindDeviceHint": "Neviete nájsť zariadenie? Uistite sa, že je zapnuté a blízko telefónu, a vyhľadajte znova.",
+    "scanAgain": "Vyhľadať znova",
+    "howToPair": "Ako spárovať",
+    "contactSupportAction": "Kontaktovať podporu",
+    "deviceOfflineWakeHint": "{deviceName} je offline. Stlačte jeho tlačidlo, aby sa prebudilo, a skúste to znova.",
+    "batteryLevelSemantics": "Batéria {level} %",
+    "updateOmiGlassFirmware": "Aktualizovať firmvér OmiGlass"
 }

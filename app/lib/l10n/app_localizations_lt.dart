@@ -10202,4 +10202,30 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Leiskite Omi 2 dienas veikti fone ir jis pradės teikti naudingų atsiliepimų.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nerandate įrenginio? Įsitikinkite, kad jis įjungtas ir netoli telefono, tada ieškokite dar kartą.';
+
+  @override
+  String get scanAgain => 'Ieškoti dar kartą';
+
+  @override
+  String get howToPair => 'Kaip susieti';
+
+  @override
+  String get contactSupportAction => 'Susisiekti su pagalba';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName neprisijungęs. Paspauskite jo mygtuką, kad pažadintumėte, ir bandykite dar kartą.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akumuliatorius $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Atnaujinti OmiGlass programinę aparatinę įrangą';
 }

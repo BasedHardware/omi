@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Uitgeschakeld in Instellingen. Sta het daar toe om dit te gebruiken.",
     "useDifferentAccount": "Ander account gebruiken",
     "onboardingStepOf": "Stap {current} van {total}",
-    "onboardingCompleteMessage": "Laat Omi 2 dagen op de achtergrond draaien en je krijgt nuttige feedback."
+    "onboardingCompleteMessage": "Laat Omi 2 dagen op de achtergrond draaien en je krijgt nuttige feedback.",
+    "cantFindDeviceHint": "Kun je je apparaat niet vinden? Zorg dat het aan staat en dicht bij je telefoon is en zoek opnieuw.",
+    "scanAgain": "Opnieuw zoeken",
+    "howToPair": "Zo koppel je",
+    "contactSupportAction": "Contact opnemen met support",
+    "deviceOfflineWakeHint": "{deviceName} is offline. Druk op de knop om het te activeren en probeer het opnieuw.",
+    "batteryLevelSemantics": "Batterij {level}%",
+    "updateOmiGlassFirmware": "OmiGlass-firmware bijwerken"
 }

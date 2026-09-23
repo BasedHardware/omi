@@ -3272,5 +3272,12 @@
     "permissionBlockedHint": "Poistettu käytöstä asetuksissa. Salli se siellä, jotta voit käyttää tätä.",
     "useDifferentAccount": "Käytä toista tiliä",
     "onboardingStepOf": "Vaihe {current}/{total}",
-    "onboardingCompleteMessage": "Anna Omin toimia taustalla 2 päivää, niin se alkaa antaa sinulle hyödyllistä palautetta."
+    "onboardingCompleteMessage": "Anna Omin toimia taustalla 2 päivää, niin se alkaa antaa sinulle hyödyllistä palautetta.",
+    "cantFindDeviceHint": "Etkö löydä laitetta? Varmista, että se on päällä ja lähellä puhelinta, ja hae uudelleen.",
+    "scanAgain": "Hae uudelleen",
+    "howToPair": "Näin muodostat pariliitoksen",
+    "contactSupportAction": "Ota yhteyttä tukeen",
+    "deviceOfflineWakeHint": "{deviceName} on offline-tilassa. Herätä se painamalla sen painiketta ja yritä uudelleen.",
+    "batteryLevelSemantics": "Akku {level} %",
+    "updateOmiGlassFirmware": "Päivitä OmiGlassin laiteohjelmisto"
 }

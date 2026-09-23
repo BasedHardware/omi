@@ -10175,4 +10175,30 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage => 'Nechajte Omi 2 dni bežať na pozadí a začne vám dávať užitočnú spätnú väzbu.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Neviete nájsť zariadenie? Uistite sa, že je zapnuté a blízko telefónu, a vyhľadajte znova.';
+
+  @override
+  String get scanAgain => 'Vyhľadať znova';
+
+  @override
+  String get howToPair => 'Ako spárovať';
+
+  @override
+  String get contactSupportAction => 'Kontaktovať podporu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName je offline. Stlačte jeho tlačidlo, aby sa prebudilo, a skúste to znova.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Batéria $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Aktualizovať firmvér OmiGlass';
 }

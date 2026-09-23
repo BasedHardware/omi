@@ -10256,4 +10256,30 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get onboardingCompleteMessage =>
       'Αφήστε το Omi να λειτουργεί στο παρασκήνιο για 2 ημέρες και θα αρχίσει να σας δίνει χρήσιμα σχόλια.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Δεν βρίσκετε τη συσκευή σας; Βεβαιωθείτε ότι είναι ενεργοποιημένη και κοντά στο τηλέφωνο και αναζητήστε ξανά.';
+
+  @override
+  String get scanAgain => 'Νέα αναζήτηση';
+
+  @override
+  String get howToPair => 'Πώς γίνεται η σύζευξη';
+
+  @override
+  String get contactSupportAction => 'Επικοινωνία με την υποστήριξη';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'Η συσκευή $deviceName είναι εκτός σύνδεσης. Πατήστε το κουμπί της για να ενεργοποιηθεί και δοκιμάστε ξανά.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Μπαταρία $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Ενημέρωση υλικολογισμικού OmiGlass';
 }
