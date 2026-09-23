@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -71,9 +72,11 @@ const int _transcriptTabIndex = 0;
 const int _summaryTabIndex = 1;
 const int _tasksTabIndex = 2;
 
-/// Whether the overflow menu shows developer tools (Copy Conversation ID, Test Prompt).
+/// Whether the overflow menu shows developer tools (Copy Conversation ID, Test Prompt): debug
+/// builds, or the `devModeEnabled` preference (no settings row writes it yet — see the lane 1b
+/// handoff for a Developer Settings toggle).
 @visibleForTesting
-bool conversationDetailShowsDeveloperTools() => SharedPreferencesUtil().devModeEnabled;
+bool conversationDetailShowsDeveloperTools() => kDebugMode || SharedPreferencesUtil().devModeEnabled;
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
