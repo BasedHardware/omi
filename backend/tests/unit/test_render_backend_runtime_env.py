@@ -398,7 +398,11 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
     ) in text
-    assert "id-token: 'write'" not in text
+    # Development authenticates through GitHub WIF (no JSON key); prod keeps
+    # its JSON secret until the prod WIF slice replaces it.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
+    assert "credentials_json: ${{ github.event.inputs.environment == 'prod' && secrets.GCP_CREDENTIALS || '' }}" in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
