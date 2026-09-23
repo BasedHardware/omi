@@ -512,7 +512,7 @@ class _AppListItemState extends State<_AppListItem> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.amber.shade300.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: OmiRadius.smAll,
           ),
           child: Center(
             child: Row(
@@ -526,7 +526,7 @@ class _AppListItemState extends State<_AppListItem> {
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.defaultLabel,
-                  style: TextStyle(color: Colors.amber.shade300, fontSize: 9, fontWeight: FontWeight.w600),
+                  style: OmiType.caption.copyWith(color: Colors.amber.shade300, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -541,7 +541,7 @@ class _AppListItemState extends State<_AppListItem> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.grey.shade600.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: OmiRadius.smAll,
           ),
           child: Center(
             child: Row(
@@ -555,7 +555,7 @@ class _AppListItemState extends State<_AppListItem> {
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.lastUsedLabel,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 9, fontWeight: FontWeight.w600),
+                  style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                 ),
               ],
             ),

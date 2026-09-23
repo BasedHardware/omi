@@ -278,7 +278,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
             hintStyle: const TextStyle(color: Colors.grey),
             errorText: _duplicateNameError,
           ),
@@ -376,7 +376,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
                 : context.l10n.tagSpeakerIncludingLaterSpeech,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
+            style: OmiType.footnote,
           ),
           value: _applyToSpeaker,
           onChanged: (value) {
@@ -404,11 +404,10 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
                 context.l10n.managePeople,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+                style: OmiType.footnote.copyWith(
+                  color: OmiColors.textSecondary,
                   decoration: TextDecoration.underline,
-                  decorationColor: Colors.white70,
+                  decorationColor: OmiColors.textSecondary,
                 ),
               ),
             ),
@@ -430,7 +429,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         segment.text,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: OmiType.caption.copyWith(fontSize: 12),
+                        style: OmiType.caption,
                       ),
                       const SizedBox(height: 4),
                       Text(OmiDuration.offset(segment.start),
