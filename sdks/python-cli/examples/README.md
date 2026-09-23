@@ -16,7 +16,8 @@
   the most common verbs.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
-* [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
+* [`conversations_csv.md`](conversations_csv.md)
+* [`action_items_ics.md`](action_items_ics.md) — export action items to iCal (.ics) format for calendar applications. — convert a conversation-list
   JSON export to CSV for spreadsheets.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
@@ -24,7 +25,8 @@
   JSON exports into a SQLite database for SQL queries and multi-page merges.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
-* [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
+* [`action_items_markdown.md`](action_items_markdown.md)
+* [`action_items_ics.md`](action_items_ics.md) — export action items to iCal (.ics) format for calendar applications. — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
