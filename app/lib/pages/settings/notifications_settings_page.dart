@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -259,10 +260,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         title: Text(context.l10n.notifications),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         elevation: 0,
       ),
       body: _isLoading

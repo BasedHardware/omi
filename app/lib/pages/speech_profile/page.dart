@@ -25,6 +25,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/fade_in_words_text.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
@@ -477,9 +478,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
               }
             },
             child: Scaffold(
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: OmiColors.surface0,
               appBar: AppBar(
-                backgroundColor: Theme.of(context).colorScheme.primary,
+                backgroundColor: OmiColors.surface0,
                 automaticallyImplyLeading: true,
                 title: const Text('', style: TextStyle(color: Colors.white, fontSize: 20)),
                 actions: [

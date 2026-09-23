@@ -76,6 +76,7 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -833,7 +834,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           selector: (_, homeProvider) => homeProvider.selectedIndex,
           builder: (context, selectedIndex, _) {
             return Scaffold(
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: OmiColors.surface0,
               resizeToAvoidBottomInset: false,
               appBar: selectedIndex == 5 ? null : _buildAppBar(context),
               body: GestureDetector(

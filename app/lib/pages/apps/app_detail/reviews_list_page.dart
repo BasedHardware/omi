@@ -13,6 +13,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class ReviewsListPage extends StatefulWidget {
   final App app;
@@ -173,7 +174,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         elevation: 0,
         automaticallyImplyLeading: false,
         leading: Container(
@@ -192,7 +193,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

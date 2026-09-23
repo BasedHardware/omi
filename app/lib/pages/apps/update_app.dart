@@ -11,6 +11,7 @@ import 'package:omi/pages/apps/widgets/api_keys_widget.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/app_metadata_widget.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
@@ -43,11 +44,11 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
             FocusScope.of(context).unfocus();
           },
           child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             extendBody: true,
             appBar: AppBar(
               title: Text(context.l10n.manageYourApp),
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: OmiColors.surface0,
               actions: [
                 if (provider.selectedCapabilities.any((c) => c.id == 'external_integration') &&
                     provider.chatToolsManifestUrlController.text.isNotEmpty)

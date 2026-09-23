@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'found_devices.dart';
@@ -108,6 +109,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
             if (provider.deviceList.isEmpty && provider.enableInstructions) const SizedBox(height: 48),
             if (provider.deviceList.isEmpty && provider.enableInstructions)
               ElevatedButton(
+                // These read as text links on the black page. The theme's primary is now the white
+                // accent, so an unstyled ElevatedButton would paint white behind the white label.
+                style: ElevatedButton.styleFrom(backgroundColor: OmiColors.surface0),
                 onPressed: () => launchUrl(Uri.parse('mailto:team@basedhardware.com')),
                 child: Container(
                   width: double.infinity,
@@ -126,6 +130,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               ),
             if (widget.includeSkip)
               ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: OmiColors.surface0),
                 onPressed: () {
                   if (widget.isFromOnboarding) {
                     widget.onSkip!();

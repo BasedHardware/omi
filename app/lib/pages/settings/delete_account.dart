@@ -14,6 +14,7 @@ import 'package:omi/utils/auth/clear_deleted_account_session.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Full-screen 3-step account deletion flow.
 class DeleteAccount extends StatefulWidget {
@@ -136,9 +137,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios, size: 18),

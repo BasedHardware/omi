@@ -245,7 +245,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         _observeMessagesForAutoScroll(provider);
         return Scaffold(
           key: scaffoldKey,
-          backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
           onEndDrawerChanged: (isOpened) {

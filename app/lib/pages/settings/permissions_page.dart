@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class PermissionsPage extends StatefulWidget {
   const PermissionsPage({super.key});
@@ -143,10 +144,10 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         title: Text(context.l10n.permissions),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         elevation: 0,
       ),
       body: _isLoading

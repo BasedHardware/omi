@@ -14,6 +14,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_graph_page.dart';
@@ -176,7 +177,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         return PopScope(
           canPop: true,
           child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             appBar: AppBar(
               backgroundColor: Theme.of(context).colorScheme.surface,
               automaticallyImplyLeading: true,

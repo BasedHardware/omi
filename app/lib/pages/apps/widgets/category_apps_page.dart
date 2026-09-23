@@ -9,6 +9,7 @@ import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class CategoryAppsPage extends StatefulWidget {
   final Category category;
@@ -73,9 +74,9 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         title: Text(widget.category.getLocalizedTitle(context)),
         centerTitle: true,
         elevation: 0,

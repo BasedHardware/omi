@@ -32,6 +32,7 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key, this.forceAuthPage = false});
@@ -391,7 +392,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         body: _controller!.index == kAuthPage
             ? Stack(
                 children: [

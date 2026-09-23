@@ -9,6 +9,7 @@ import 'package:omi/pages/apps/widgets/capability_category_section.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
@@ -181,9 +182,9 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         title: Text(
           widget.capability.getLocalizedTitle(context),
           style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),

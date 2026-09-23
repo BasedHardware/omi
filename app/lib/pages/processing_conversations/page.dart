@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class ProcessingConversationPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -47,10 +48,10 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
           canPop: true,
           child: Scaffold(
             key: scaffoldKey,
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: OmiColors.surface0,
               title: Row(
                 mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

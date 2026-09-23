@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Renders an import job's creation timestamp for its history row.
 ///
@@ -230,7 +231,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
+          SnackBar(
+              content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
         );
       }
     }
@@ -731,9 +733,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         title: Text(context.l10n.importData, style: const TextStyle(fontWeight: FontWeight.w600)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),

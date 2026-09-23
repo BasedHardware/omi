@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:ui';
 // trigger rebuild
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -76,6 +75,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
@@ -533,34 +533,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            theme: ThemeData(
-              useMaterial3: false,
-              colorScheme: const ColorScheme.dark(
-                primary: Colors.black,
-                secondary: Color(0xFF35343B),
-                surface: Colors.black38,
-              ),
-              snackBarTheme: const SnackBarThemeData(
-                backgroundColor: Color(0xFF1F1F25),
-                contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-              textTheme: TextTheme(
-                titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-              ),
-              textSelectionTheme: const TextSelectionThemeData(
-                cursorColor: Colors.white,
-                selectionColor: Colors.white24,
-                selectionHandleColor: Colors.white,
-              ),
-              cupertinoOverrideTheme: const CupertinoThemeData(
-                primaryColor: Colors.white, // Controls the selection handles on iOS
-              ),
-            ),
+            theme: buildOmiTheme(),
             themeMode: ThemeMode.dark,
             builder: (context, child) {
+              syncIntlDefaultLocale(Localizations.localeOf(context));
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };

@@ -9,6 +9,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Full-screen 3-step cancellation flow shown as a page (not a sheet).
 class CancelSubscriptionFlow extends StatefulWidget {
@@ -123,9 +124,9 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios, size: 18),

@@ -4,6 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class MarkdownViewer extends StatefulWidget {
   final String markdown;
@@ -18,8 +19,8 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(backgroundColor: Theme.of(context).colorScheme.primary, title: Text(widget.title)),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      appBar: AppBar(backgroundColor: OmiColors.surface0, title: Text(widget.title)),
+      backgroundColor: OmiColors.surface0,
       body: ListView(
         children: [
           const SizedBox(height: 16),

@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
 
-class AnimatedLoadingButton extends StatefulWidget {
+import 'package:omi/ui/components/omi_button.dart';
+
+/// Legacy async button, now a thin shell over [OmiButton].
+///
+/// New code uses `OmiButton(label:, onPressed:)` with a variant; this class keeps its old
+/// constructor so existing call sites compile until they migrate. Behaviour inherited from
+/// [OmiButton]: the spinner always clears when [onPressed] finishes or throws, the touch target is
+/// at least 44pt even when [height] is smaller, and the button exposes button semantics.
+///
+/// Colours: [color] fills the button and [textStyle]'s colour is the label and spinner colour.
+/// [loaderColor] and [animationDuration] are accepted for compatibility and no longer used (the
+/// spinner takes the label colour, so it can no longer vanish on a same-coloured fill).
+class AnimatedLoadingButton extends StatelessWidget {
   final String text;
   final Future<void> Function() onPressed;
   final double width;
@@ -15,7 +27,7 @@ class AnimatedLoadingButton extends StatefulWidget {
     required this.text,
     required this.onPressed,
     this.width = 200,
-    this.height = 40,
+    this.height = 48,
     required this.color,
     this.loaderColor = Colors.white,
     this.textStyle = const TextStyle(fontSize: 16, color: Colors.white),
@@ -23,53 +35,14 @@ class AnimatedLoadingButton extends StatefulWidget {
   });
 
   @override
-  State<AnimatedLoadingButton> createState() => _AnimatedLoadingButtonState();
-}
-
-class _AnimatedLoadingButtonState extends State<AnimatedLoadingButton> {
-  bool _isLoading = false;
-
-  void _handleOnPressed() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
-    await widget.onPressed();
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: widget.animationDuration,
-      width: _isLoading ? widget.height : widget.width,
-      height: widget.height,
-      decoration: BoxDecoration(color: widget.color, borderRadius: BorderRadius.circular(widget.height / 2)),
-      child: InkWell(
-        onTap: _isLoading ? null : _handleOnPressed,
-        borderRadius: BorderRadius.circular(widget.height / 2),
-        child: Center(
-          child: AnimatedSwitcher(
-            duration: widget.animationDuration,
-            child: _isLoading
-                ? SizedBox(
-                    width: widget.height / 2,
-                    height: widget.height / 2,
-                    child: CircularProgressIndicator(
-                      key: const ValueKey('loader'),
-                      color: widget.loaderColor,
-                      strokeWidth: 3.0,
-                    ),
-                  )
-                : Text(widget.text, key: const ValueKey('buttonText'), style: widget.textStyle),
-          ),
-        ),
-      ),
+    return OmiButton(
+      label: text,
+      onPressed: onPressed,
+      width: width,
+      height: height,
+      labelStyle: textStyle,
+      colors: OmiButtonColors(background: color, foreground: textStyle.color ?? loaderColor),
     );
   }
 }

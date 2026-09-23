@@ -523,7 +523,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             apiPhase == ApiViewPhase.empty;
 
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
           body: Stack(
             children: [
               GestureDetector(
