@@ -600,7 +600,8 @@ def validate_qa_sweep_environment(environ: Optional[Mapping[str, str]] = None) -
             raise ValueError(f"QA sweep requires {name}={expected!r}")
     if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
         raise ValueError("QA sweep proof must use named Cloud Firestore")
-    if env.get("SERVICE_ACCOUNT_JSON", "").strip() or env.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
+    customer_selectors = ("SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH", "OMI_CUSTOMER_DATA_PROJECT")
+    if any(env.get(name, "").strip() for name in customer_selectors):
         raise ValueError("QA sweep proof cannot select customer Firebase credentials")
     return run_id
 
