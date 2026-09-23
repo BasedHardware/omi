@@ -27,6 +27,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 
 /// Switch the home IndexedStack to Conversations *before* popping the capturing
 /// route so the user lands on that tab with no flash of the previous page.
@@ -60,6 +61,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
       ..repeat(reverse: true);
     super.initState();
+    ListenClientState.instance.capturePageOpened();
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
@@ -95,6 +97,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
   @override
   void dispose() {
+    ListenClientState.instance.capturePageClosed();
     _controller?.dispose();
     _animationController.dispose();
     super.dispose();
