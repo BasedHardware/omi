@@ -13,6 +13,7 @@ struct SpeakerBubbleView: View {
   var isMomentPlayable = false
 
   @State private var isBubbleHovered = false
+  @State private var isLabelHovered = false
 
   /// Get speaker color based on speaker ID
   private var bubbleColor: Color {
@@ -23,18 +24,15 @@ struct SpeakerBubbleView: View {
     return PageGlass.speakerTints[colorIndex]
   }
 
-  /// Format timestamp as MM:SS
+  /// "3:38", or "1:02:05" once the recording passes an hour.
   private func formatTime(_ seconds: Double) -> String {
-    let totalSeconds = Int(seconds)
-    let minutes = totalSeconds / 60
-    let secs = totalSeconds % 60
-    return String(format: "%d:%02d", minutes, secs)
+    OmiDateFormat.offset(seconds)
   }
 
   private var speakerLabel: String {
     if isUser { return "You" }
-    if let name = personName { return name }
-    return "Speaker \(segment.speakerId)"
+    if let name = personName, !name.isEmpty { return name }
+    return SpeakerLabelFormatter.anonymousLabel(speakerId: segment.speakerId)
   }
 
   private var avatarInitial: String {
@@ -42,7 +40,7 @@ struct SpeakerBubbleView: View {
     if let name = personName, let first = name.first {
       return String(first).uppercased()
     }
-    return String(segment.speakerId)
+    return String(SpeakerLabelFormatter.displayNumber(speakerId: segment.speakerId))
   }
 
   var body: some View {
@@ -53,29 +51,12 @@ struct SpeakerBubbleView: View {
       }
 
       VStack(alignment: isUser ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        // Speaker label — clickable for non-user speakers
-        if !isUser, let onTap = onSpeakerTapped {
-          Button(action: onTap) {
-            HStack(spacing: OmiSpacing.xxs) {
-              Text(speakerLabel)
-                .scaledFont(size: OmiType.caption, weight: .medium)
-              if personName == nil {
-                Image(systemName: "pencil")
-                  .scaledFont(size: OmiType.micro)
-              }
-            }
-            .padding(.vertical, OmiSpacing.hairline)
-            .contentShape(Rectangle())
-            .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
-          .accessibilityLabel("Transcript speaker \(speakerLabel)")
-          .modifier(PointingHandOnHover())
-        } else {
-          Text(speakerLabel)
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
+        // Name row: the speaker and where in the recording they spoke, together, so the time reads
+        // as part of the turn rather than floating loose under the bubble.
+        HStack(spacing: OmiSpacing.xs) {
+          if isUser { timestamp }
+          speakerLabelView
+          if !isUser { timestamp }
         }
 
         // Message bubble
@@ -110,7 +91,7 @@ struct SpeakerBubbleView: View {
           .help("Play from \(formatTime(segment.start))")
           .accessibilityLabel("Play transcript from \(formatTime(segment.start)): \(segment.text)")
           .accessibilityIdentifier("transcript_bubble_button_\(segment.id)")
-          .modifier(PointingHandOnHover(onHoverChange: { isBubbleHovered = $0 }))
+          .pointingHandOnHover { isBubbleHovered = $0 }
         } else {
           messageBubble
         }
@@ -131,27 +112,6 @@ struct SpeakerBubbleView: View {
           }
         }
 
-        // Capture transcripts reuse their existing timestamps as precise
-        // playback controls. Other conversation sources keep the ordinary
-        // read-only timestamp without acquiring capture-specific chrome.
-        if let onMomentTapped {
-          Button(action: onMomentTapped) {
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "play.circle")
-              Text(formatTime(segment.start))
-            }
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(isMomentPlayable ? Ink.primary : Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .disabled(!isMomentPlayable)
-          .help(isMomentPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
-          .accessibilityLabel("Play transcript from \(formatTime(segment.start))")
-        } else {
-          Text(formatTime(segment.start))
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
       }
 
       if isUser {
@@ -160,6 +120,62 @@ struct SpeakerBubbleView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+  }
+
+  /// The speaker's name. For other speakers it is the way to (re)assign who spoke: an unnamed speaker
+  /// always shows the pencil, a named one shows it under the pointer, so correcting a wrong name is
+  /// as discoverable as setting the first one.
+  @ViewBuilder
+  private var speakerLabelView: some View {
+    if !isUser, let onTap = onSpeakerTapped {
+      Button(action: onTap) {
+        HStack(spacing: OmiSpacing.xxs) {
+          Text(speakerLabel)
+            .scaledFont(size: OmiType.caption, weight: .medium)
+          Image(systemName: "pencil")
+            .scaledFont(size: OmiType.micro)
+            .opacity(personName == nil || isLabelHovered ? 1 : 0)
+        }
+        .padding(.vertical, OmiSpacing.xxs)
+        .contentShape(Rectangle())
+        .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
+      }
+      .buttonStyle(.plain)
+      .help(personName == nil ? "Name this speaker…" : "Change speaker…")
+      .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
+      .accessibilityLabel("Transcript speaker \(speakerLabel)")
+      .pointingHandOnHover { isLabelHovered = $0 }
+    } else {
+      Text(speakerLabel)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
+    }
+  }
+
+  /// Capture transcripts reuse their timestamps as precise playback controls. Other conversation
+  /// sources keep the ordinary read-only timestamp without acquiring capture-specific chrome.
+  @ViewBuilder
+  private var timestamp: some View {
+    if let onMomentTapped {
+      Button(action: onMomentTapped) {
+        HStack(spacing: OmiSpacing.xxs) {
+          Image(systemName: "play.circle")
+          Text(formatTime(segment.start))
+            .monospacedDigit()
+        }
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(isMomentPlayable ? Ink.primary : Ink.secondary)
+      }
+      .buttonStyle(.plain)
+      .disabled(!isMomentPlayable)
+      .help(isMomentPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
+      .accessibilityLabel("Play transcript from \(formatTime(segment.start))")
+    } else {
+      Text(formatTime(segment.start))
+        .scaledFont(size: OmiType.caption)
+        .monospacedDigit()
+        .foregroundColor(Ink.secondary)
+    }
   }
 
   /// Appears beside the bubble under the pointer so the affordance is
@@ -206,32 +222,3 @@ struct SpeakerBubbleView: View {
     .background(Ink.surface)
   }
 #endif
-
-/// The pointing hand while a clickable transcript element is hovered, pushed
-/// and popped in balance. SwiftUI does not deliver `onHover(false)` when a
-/// hovered view leaves the hierarchy — a transcript refresh or re-sync rebuilds
-/// every bubble — so an unpaired push would leave the hand over the whole app;
-/// `onDisappear` is the exit that hover never reports.
-private struct PointingHandOnHover: ViewModifier {
-  var onHoverChange: ((Bool) -> Void)? = nil
-  @State private var didPushCursor = false
-
-  func body(content: Content) -> some View {
-    content
-      .onHover { hovering in
-        onHoverChange?(hovering)
-        setHovered(hovering)
-      }
-      .onDisappear { setHovered(false) }
-  }
-
-  private func setHovered(_ hovering: Bool) {
-    if hovering, !didPushCursor {
-      NSCursor.pointingHand.push()
-      didPushCursor = true
-    } else if !hovering, didPushCursor {
-      NSCursor.pop()
-      didPushCursor = false
-    }
-  }
-}

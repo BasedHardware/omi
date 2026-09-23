@@ -872,7 +872,7 @@ struct FloatingControlBarView: View {
         Button {
           FloatingControlBarManager.shared.dismissCurrentNotification()
         } label: {
-          Text("Later").scaledFont(size: 12).foregroundColor(.white.opacity(0.5))
+          Text("Not Now").scaledFont(size: 12).foregroundColor(.white.opacity(0.5))
         }
         .buttonStyle(.plain)
       }
@@ -909,7 +909,7 @@ struct FloatingControlBarView: View {
       Button {
         FloatingControlBarManager.shared.retryReachError()
       } label: {
-        Text("Retry")
+        Text("Try Again")
           .scaledFont(size: 12, weight: .semibold)
           .foregroundColor(.white)
           .padding(.horizontal, OmiSpacing.sm)
@@ -1100,15 +1100,19 @@ struct FloatingControlBarView: View {
     // render an accepted spawn receipt one update before the manager does.
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.sm) {
+        // A chevron only when there is somewhere to go back to; when the control closes the chat
+        // it says so with the close glyph (docs/ux-contract.md §1).
         Button(action: mainConversationBackAction) {
-          Image(systemName: "chevron.left")
+          // omi-ux-allow: hand-rolled-back -- the notch bar is its own dark surface (NotchGlass)
+          Image(systemName: agentPills.pills.isEmpty ? "xmark" : "chevron.left")
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(.white.opacity(0.82))
             .frame(width: 36, height: 32)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(agentPills.pills.isEmpty ? "Close Omi Chat" : "Back to subagents")
+        .help(agentPills.pills.isEmpty ? "Close Omi Chat (Esc)" : "Back to subagents")
+        .accessibilityLabel(agentPills.pills.isEmpty ? "Close Omi Chat" : "Back to subagents")
 
         Text("Omi Chat")
           .scaledFont(size: OmiType.body, weight: .bold)
@@ -1118,7 +1122,7 @@ struct FloatingControlBarView: View {
         Spacer(minLength: 0)
 
         if state.hasVisibleConversation {
-          escToClearHint
+          clearConversationButton
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -1133,18 +1137,20 @@ struct FloatingControlBarView: View {
     return agentPills.pills.first { $0.id == id }
   }
 
-  private var escToClearHint: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Text("esc")
-        .scaledFont(size: OmiType.caption)
+  /// Clearing is its own labeled control. It used to be what Esc did, advertised by an "esc to
+  /// clear" keycap; Esc now closes and keeps the conversation.
+  private var clearConversationButton: some View {
+    Button(action: onClearVisibleConversation) {
+      Text("Clear")
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(.secondary)
-        .frame(width: 30, height: 16)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(4)
-      Text("to clear")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(.secondary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .frame(height: 20)
+        .background(Capsule().fill(NotchGlass.ink(.w1)))
     }
+    .buttonStyle(.plain)
+    .help("Clear this conversation")
+    .accessibilityLabel("Clear conversation")
   }
 
   /// The hover surface's Hide control. Closes the hover rows first so the island retracts as

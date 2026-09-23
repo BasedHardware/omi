@@ -136,6 +136,13 @@ struct OMIApp: App {
     return version.isEmpty ? title : "\(title) v\(version)"
   }
 
+  /// Posts the one navigation request the shell listens for. `hub` selects a page inside Memories.
+  private static func navigate(to item: SidebarNavItem, hub: MemoryHubDestination? = nil) {
+    var info: [String: Any] = ["rawValue": item.rawValue]
+    if let hub { info["hubDestination"] = hub.rawValue }
+    NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
+  }
+
   /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
   /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
   /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
@@ -184,49 +191,24 @@ struct OMIApp: App {
         }
       }
 
-      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      // Navigation shortcuts mirror the top bar, left to right: ⌘1…⌘4 are its four pills, and the
+      // Memories submenu's ⌥⌘1…⌥⌘5 are that page's chip row in order. ⌘, is Settings.
       CommandGroup(after: .sidebar) {
-        Button("Home") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
-        }
-        .keyboardShortcut("1", modifiers: .command)
+        Button("Chat") { Self.navigate(to: .dashboard) }
+          .keyboardShortcut("1", modifiers: .command)
+        Button("Memories") { Self.navigate(to: .conversations, hub: .activity) }
+          .keyboardShortcut("2", modifiers: .command)
+        Button("Tasks") { Self.navigate(to: .tasks) }
+          .keyboardShortcut("3", modifiers: .command)
+        Button("Apps") { Self.navigate(to: .apps) }
+          .keyboardShortcut("4", modifiers: .command)
 
-        Button("Conversations") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
+        Menu("Go to in Memories") {
+          ForEach(Array(ActivityDestinationChip.allCases.enumerated()), id: \.element) { index, chip in
+            Button(chip.title) { Self.navigate(to: .conversations, hub: chip.hubDestination) }
+              .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command, .option])
+          }
         }
-        .keyboardShortcut("2", modifiers: .command)
-
-        Button("Memories") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
-        }
-        .keyboardShortcut("3", modifiers: .command)
-
-        Button("Tasks") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
-        }
-        .keyboardShortcut("4", modifiers: .command)
-
-        Button("Rewind") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
-        }
-        .keyboardShortcut("5", modifiers: .command)
-
-        Button("Apps") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
-        }
-        .keyboardShortcut("6", modifiers: .command)
 
         Divider()
 
@@ -894,7 +876,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     if let button = item.button {
       if OMIApp.launchMode == .rewind {
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -949,14 +931,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
     let displayName =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
 
     // Set up the button with compact circle mark.
     if let button = statusBarItem.button {
       if OMIApp.launchMode == .rewind {
         // Rewind mode uses SF Symbol
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -1002,11 +984,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     menu.addItem(NSMenuItem.separator())
 
-    // Open app item
+    // Open app item. No key equivalent: ⌘O here only worked while this menu was open, and read as
+    // the global shortcut, which is the user's own (Settings → Shortcuts).
     let openItem = NSMenuItem(
-      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "o")
+      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "")
     openItem.target = self
     menu.addItem(openItem)
+
+    let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
+    settingsItem.target = self
+    menu.addItem(settingsItem)
 
     let undoDictationItem = NSMenuItem(
       title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
@@ -1017,7 +1004,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Check for Updates
     let updatesItem = NSMenuItem(
-      title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+      title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     updatesItem.target = self
     menu.addItem(updatesItem)
 
@@ -1033,14 +1020,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
       }
 
       let resetItem = NSMenuItem(
-        title: "Reset Onboarding...", action: #selector(resetOnboarding), keyEquivalent: "")
+        title: "Reset Onboarding…", action: #selector(resetOnboarding), keyEquivalent: "")
       resetItem.target = self
       menu.addItem(resetItem)
 
       menu.addItem(NSMenuItem.separator())
 
       let reportItem = NSMenuItem(
-        title: "Report Issue...", action: #selector(reportIssue), keyEquivalent: "")
+        title: "Report Issue…", action: #selector(reportIssue), keyEquivalent: "")
       reportItem.target = self
       menu.addItem(reportItem)
 
@@ -1119,6 +1106,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
     openMainAppWindow()
+  }
+
+  @MainActor @objc private func openSettingsFromMenu() {
+    AnalyticsManager.shared.menuBarActionClicked(action: "open_settings")
+    openMainAppWindow()
+    NotificationCenter.default.post(
+      name: .navigateToSidebarItem, object: nil, userInfo: ["rawValue": SidebarNavItem.settings.rawValue])
   }
 
   /// "Continue in Omi": bring the main window forward *and* land on the chat
@@ -1215,6 +1209,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
+    // Same question Settings asks before the same action. This comes from the status-bar menu, where
+    // there is no shell window to draw a confirmation in, so it is the one place a system alert is
+    // the right surface.
+    let alert = NSAlert()
+    alert.messageText = "Reset Onboarding?"
+    alert.informativeText =
+      "This will reset onboarding for this app build only, clear onboarding chat history, "
+      + "and restart the app without affecting the other installed build."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Reset & Restart")
+    alert.addButton(withTitle: "Cancel")
+    NSApp.activate(ignoringOtherApps: true)
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
     (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 

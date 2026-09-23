@@ -47,6 +47,8 @@ struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
 struct ConversationDetailView: View {
   let conversation: ServerConversation
   let onBack: () -> Void
+  /// Where Back returns to, named on the chip ("‹ Conversations", "‹ Memories", "‹ Activity").
+  var backTitle: String = "Conversations"
   var folders: [Folder] = []
   var onMoveToFolder: ((String, String?) async -> Void)?
   var onDelete: (() -> Void)?
@@ -158,43 +160,14 @@ struct ConversationDetailView: View {
     displayConversation.startedAt ?? displayConversation.createdAt
   }
 
-  // Static date formatters — creating DateFormatter is expensive, avoid per-render allocation
-  private static let dayDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "EEEE, MMM d, yyyy"
-    return f
-  }()
-  private static let timeOnlyFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "h:mm a"
-    return f
-  }()
-  private static let shortDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, yyyy"
-    return f
-  }()
-
-  /// Format date for display
-  private var formattedDate: String {
-    Self.dayDateFormatter.string(from: displayDate)
-  }
-
-  /// Format time for display
-  private var formattedTime: String {
-    Self.timeOnlyFormatter.string(from: displayDate)
-  }
-
-  /// Format time range for header subtitle (e.g., "Jan 15, 2025 from 2:30 PM to 3:15 PM")
+  /// The header subtitle: "Sep 23, 2026, 10:17 – 11:19 AM".
   private var formattedTimeRange: String {
-    let dateStr = Self.shortDateFormatter.string(from: displayDate)
-    let startStr = Self.timeOnlyFormatter.string(from: displayDate)
+    OmiDateFormat.range(displayDate, displayConversation.finishedAt)
+  }
 
-    if let finishedAt = displayConversation.finishedAt {
-      let endStr = Self.timeOnlyFormatter.string(from: finishedAt)
-      return "\(dateStr) from \(startStr) to \(endStr)"
-    }
-    return "\(dateStr) at \(startStr)"
+  /// "1 segment", "388 segments" — a badge says what it counts.
+  static func segmentCountLabel(_ count: Int) -> String {
+    count == 1 ? "1 segment" : "\(count) segments"
   }
 
   static func visiblePane(transcriptOpen: Bool) -> ConversationDetailPane {
@@ -266,6 +239,36 @@ struct ConversationDetailView: View {
     }
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
+    // Esc peels one layer: the transcript back to the summary, then the summary back to the list.
+    .onEscapeKey(priority: .content) {
+      if showTranscriptDrawer {
+        closeTranscript()
+      } else {
+        onBack()
+      }
+      return true
+    }
+    .shellConfirmation(
+      isPresented: $showDeleteConfirmation,
+      title: "Delete Conversation?",
+      message: "This permanently deletes the conversation, its transcript and its summary.",
+      confirmTitle: "Delete"
+    ) {
+      Task { await deleteConversation() }
+    }
+    .dismissableSheet(isPresented: $showEditDialog) {
+      TextPromptSheet(
+        title: "Edit Title",
+        placeholder: "Title",
+        text: $editedTitle,
+        isBusy: isUpdatingTitle,
+        onConfirm: {
+          showEditDialog = false
+          Task { await updateTitle() }
+        },
+        onCancel: { showEditDialog = false }
+      )
+    }
     .onAppear {
       showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
         conversationId: conversation.id,
@@ -439,27 +442,18 @@ struct ConversationDetailView: View {
 
   private var headerView: some View {
     HStack(spacing: OmiSpacing.md) {
-      // Back button
-      // A stadium chip, not blue text. `Ink.accent` is spent on the one link in this system that
-      // is actionable and is not already a button; Back is already a button, and a blue word
-      // floating beside a black headline is the loudest thing on the panel.
-      Button(action: onBack) {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-          Text("Back")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-        }
-        .foregroundColor(Ink.primary)
-        .padding(.horizontal, OmiSpacing.md)
-        .frame(height: 30)
-        .glassChip()
-      }
-      .buttonStyle(.plain)
+      BackChip(backTitle, accessibilityIdentifier: "conversation-detail-back", action: onBack)
 
-      // Emoji
-      Text(displayConversation.structured.emoji.isEmpty ? "\u{1F4AC}" : displayConversation.structured.emoji)
-        .scaledFont(size: OmiType.title)
+      // Emoji, or the neutral waveform the list row uses — a fallback 💬 would claim an identity the
+      // pipeline has not produced.
+      if displayConversation.structured.emoji.isEmpty {
+        Image(systemName: "waveform")
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(Ink.secondary)
+      } else {
+        Text(displayConversation.structured.emoji)
+          .scaledFont(size: OmiType.title)
+      }
 
       // Title + timestamp subtitle
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
@@ -468,20 +462,15 @@ struct ConversationDetailView: View {
             .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(detailTitleColor)
             .lineLimit(1)
+            .help(displayConversation.displayTitle)
 
           ConversationStatusBadge(state: displayConversation.displayState)
 
           // Edit title button (inline with title)
-          Button(action: {
+          OmiIconButton("pencil", help: "Edit Title", size: .compact) {
             editedTitle = displayConversation.title
             showEditDialog = true
-          }) {
-            Image(systemName: "pencil")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
           }
-          .buttonStyle(.plain)
-          .help("Edit title")
         }
 
         Text(formattedTimeRange)
@@ -509,24 +498,6 @@ struct ConversationDetailView: View {
     // it — and it is absent entirely when the note has no approved frame, which leaves the ordinary
     // header exactly as it was.
     .background(headerBanner)
-    .alert("Edit Conversation Title", isPresented: $showEditDialog) {
-      TextField("Title", text: $editedTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Save") {
-        Task { await updateTitle() }
-      }
-      .disabled(editedTitle.isEmpty || isUpdatingTitle)
-    } message: {
-      Text("Enter a new title for this conversation")
-    }
-    .alert("Delete Conversation", isPresented: $showDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        Task { await deleteConversation() }
-      }
-    } message: {
-      Text("Are you sure you want to delete this conversation? This action cannot be undone.")
-    }
   }
 
   @ViewBuilder
@@ -562,21 +533,17 @@ struct ConversationDetailView: View {
         showTranscriptDrawer = true
       }
     }) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "text.quote")
-          .scaledFont(size: OmiType.caption)
-        Text("View Transcript")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-      }
-      .foregroundColor(Ink.secondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(
-        Capsule()
-          .fill(Ink.rowFillHover)
-      )
+      Label("View Transcript", systemImage: "text.quote")
+        .lineLimit(1)
+        .fixedSize()
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+  }
+
+  private func closeTranscript() {
+    OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+      showTranscriptDrawer = false
+    }
   }
 
   // MARK: - Inline Action Buttons
@@ -585,21 +552,11 @@ struct ConversationDetailView: View {
     HStack(spacing: OmiSpacing.sm) {
       if let onDiscussInChat {
         Button(action: onDiscussInChat) {
-          HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: "bubble.left.and.bubble.right")
-              .scaledFont(size: OmiType.caption)
-            Text("Discuss in Chat")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .lineLimit(1)
-              .fixedSize(horizontal: true, vertical: false)
-          }
-          .foregroundColor(Ink.secondary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.xs)
-          .frame(minWidth: 126)
-          .background(Capsule().fill(Ink.rowFillHover))
+          Label("Discuss in Chat", systemImage: "bubble.left.and.bubble.right")
+            .lineLimit(1)
+            .fixedSize()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         .accessibilityLabel("Discuss this conversation in Chat")
         // Preserve the capture archive's automation contract while the
         // presentation itself moves into the canonical detail.
@@ -617,24 +574,16 @@ struct ConversationDetailView: View {
         }
       )
 
-      // Copy transcript button
-      Button(action: copyTranscript) {
-        Image(systemName: "doc.on.doc")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 28, height: 28)
-          .background(
-            Circle()
-              .fill(Ink.rowFillHover)
-          )
-      }
-      .buttonStyle(.plain)
-      .disabled(!canCopyTranscript)
-      .help("Copy transcript")
+      CopyButton(help: "Copy Transcript") { transcriptText }
+        .disabled(!canCopyTranscript)
 
       // Move to folder button (menu)
       if !folders.isEmpty {
-        Menu {
+        OmiIconMenu(
+          systemName: displayConversation.folderId != nil ? "folder.fill" : "folder",
+          help: "Move to Folder",
+          isActive: displayConversation.folderId != nil
+        ) {
           if displayConversation.folderId != nil {
             Button(action: {
               Task { await onMoveToFolder?(conversation.id, nil) }
@@ -657,38 +606,12 @@ struct ConversationDetailView: View {
             }
             .disabled(displayConversation.folderId == folder.id)
           }
-        } label: {
-          Image(systemName: displayConversation.folderId != nil ? "folder.fill" : "folder")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(displayConversation.folderId != nil ? Ink.primary : Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(
-              Circle()
-                .fill(Ink.rowFillHover)
-            )
         }
-        // `.borderlessButton` tints its template label with the *system* accent, which the
-        // `foregroundColor` inside the label does not override — this glyph rendered blue in a
-        // toolbar of neutral glass circles. The tint is the only lever that reaches it.
-        .tint(Ink.primary)
-        .menuStyle(.borderlessButton)
-        .frame(width: 28)
-        .help("Move to folder")
       }
 
-      // Delete button
-      Button(action: { showDeleteConfirmation = true }) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.errorRed)
-          .frame(width: 28, height: 28)
-          .background(
-            Circle()
-              .fill(Ink.rowFillHover)
-          )
+      OmiIconButton("trash", help: "Delete Conversation", isDestructive: true) {
+        showDeleteConfirmation = true
       }
-      .buttonStyle(.plain)
-      .help("Delete conversation")
     }
   }
 
@@ -770,24 +693,10 @@ struct ConversationDetailView: View {
     }
   }
 
-  private func copyTranscript() {
-    guard canCopyTranscript else { return }
-
-    let peopleDict = Dictionary(lastWriteWins: people.map { ($0.id, $0) })
-    let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
-      let speakerName: String
-      if segment.isUser {
-        speakerName = "You"
-      } else if let personId = segment.personId, let person = peopleDict[personId] {
-        speakerName = person.name
-      } else {
-        speakerName = "Speaker \(segment.speaker ?? "Unknown")"
-      }
-      return "[\(speakerName)]: \(segment.text)"
-    }.joined(separator: "\n\n")
-
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(transcript, forType: .string)
+  /// The transcript every copy action here produces, or nil when it is locked.
+  private var transcriptText: String? {
+    guard canCopyTranscript else { return nil }
+    return SpeakerLabelFormatter(people: people).transcript(displayConversation.transcriptSegments)
   }
 
   private func updateTitle() async {
@@ -977,26 +886,32 @@ struct ConversationDetailView: View {
   @ViewBuilder
   private var transcriptDrawerView: some View {
     VStack(alignment: .leading, spacing: 0) {
-      // Drawer header
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "text.quote")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
+      // The transcript replaced the summary, so it leaves the way a drill-in does: `‹ Summary` on the
+      // leading edge, and Esc. The conversation's title stays in the header so the reader knows
+      // whose transcript this is.
+      HStack(spacing: OmiSpacing.md) {
+        BackChip("Summary", accessibilityIdentifier: "conversation-detail-transcript-back") {
+          closeTranscript()
+        }
 
-        Text("Transcript")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(Ink.primary)
+        VStack(alignment: .leading, spacing: 0) {
+          Text("Transcript")
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          Text(displayConversation.displayTitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+            .help(displayConversation.displayTitle)
+        }
 
-        // Segment count badge
-        Text("\(displayConversation.transcriptSegments.count)")
+        Text(Self.segmentCountLabel(displayConversation.transcriptSegments.count))
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.hairline)
-          .background(
-            Capsule()
-              .fill(Ink.rowFillHover)
-          )
+          .background(Capsule().fill(Ink.rowFillHover))
+          .help("Number of transcript segments")
 
         Spacer()
 
@@ -1005,61 +920,28 @@ struct ConversationDetailView: View {
         // without leaving and reopening the conversation.
         Button(action: refreshTranscript) {
           Image(systemName: "arrow.clockwise")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .rotationEffect(.degrees(isRefreshingTranscript || transcriptResync.phase.isBusy ? 360 : 0))
             .animation(
               isRefreshingTranscript || transcriptResync.phase.isBusy
                 ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
               value: isRefreshingTranscript || transcriptResync.phase.isBusy
             )
-            .frame(width: 28, height: 28)
-            .background(
-              Circle()
-                .fill(Ink.rowFillHover)
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(GlassIconButtonStyle(diameter: OmiIconButtonSize.regular.diameter, restsFilled: true))
         .disabled(isRefreshingTranscript || transcriptResync.phase.isBusy)
         .help("Refresh transcript and re-sync it to the audio")
         .accessibilityLabel("Refresh transcript and re-sync it to the audio")
         .accessibilityIdentifier("conversation-detail-transcript-refresh")
 
-        // Copy button
-        Button(action: copyTranscript) {
-          Image(systemName: "doc.on.doc")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(
-              Circle()
-                .fill(Ink.rowFillHover)
-            )
-        }
-        .buttonStyle(.plain)
-        .help("Copy transcript")
-
-        // Close button
-        Button(action: {
-          OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-            showTranscriptDrawer = false
-          }
-        }) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(
-              Circle()
-                .fill(Ink.rowFillHover)
-            )
-        }
-        .buttonStyle(.plain)
-        .help("Close transcript")
+        CopyButton(help: "Copy Transcript") { transcriptText }
+          .disabled(!canCopyTranscript)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.md)
-      .background(Ink.rowFillHover.opacity(0.5))
+      .overlay(alignment: .bottom) {
+        Rectangle().fill(Ink.hairline).frame(height: 1)
+      }
 
       if Self.showsCapturePlayback(for: displayConversation.source, in: .transcript) {
         capturePlaybackSection
@@ -1097,7 +979,7 @@ struct ConversationDetailView: View {
           ProgressView()
             .scaleEffect(0.8)
 
-          Text("Loading transcript...")
+          Text("Loading transcript…")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
         }
@@ -1112,7 +994,9 @@ struct ConversationDetailView: View {
             }
             .padding(OmiSpacing.lg)
           }
-          .glassScrollFade()
+          // A soft top edge, so a speaker label scrolling under the header fades instead of being
+          // sliced mid-glyph.
+          .glassScrollFade(top: OmiSpacing.lg)
           .onAppear { focusTranscript(using: proxy) }
           .onChange(of: automation.focusedTranscriptSegmentIds) { _, _ in
             focusTranscript(using: proxy)
@@ -1251,9 +1135,10 @@ struct ConversationDetailView: View {
 
     return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "star.fill")
+        // Not a star: the star means "starred" everywhere else in the hub.
+        Image(systemName: "text.alignleft")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(PageGlass.starred)
+          .foregroundColor(Ink.secondary)
 
         Text("Summary")
           .scaledFont(size: OmiType.body, weight: .semibold)
@@ -1313,7 +1198,8 @@ struct ConversationDetailView: View {
   // MARK: - Metadata Section
 
   private var metadataSection: some View {
-    let participantLabels = Array(Set(displayConversation.transcriptSegments.compactMap(\.speaker))).sorted()
+    let participantLabels = SpeakerLabelFormatter(people: people)
+      .participants(in: displayConversation.transcriptSegments)
     return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.md) {
         // Source chip (device indicator)
@@ -1351,7 +1237,7 @@ struct ConversationDetailView: View {
   private var sourceLabel: String {
     switch displayConversation.source {
     case .desktop: return "Desktop"
-    case .omi: return "omi"
+    case .omi: return "Omi"
     case .phone: return "Phone"
     case .appleWatch: return "Apple Watch"
     case .workflow: return "Workflow"

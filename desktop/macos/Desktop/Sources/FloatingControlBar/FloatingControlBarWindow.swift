@@ -757,6 +757,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return
     }
 
+    // A card over the notch is the innermost layer, so Esc dismisses it before anything else.
+    if !state.showingAIConversation, state.currentNotification != nil {
+      FloatingControlBarManager.shared.dismissCurrentNotification(kind: .user)
+      return
+    }
+
     guard state.showingAIConversation else { return }
 
     if !state.aiInputText.isEmpty {
@@ -764,11 +770,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return
     }
 
-    if state.hasVisibleConversation {
-      clearVisibleConversationFromUI()
-    } else {
-      closeAIConversation()
-    }
+    // Esc closes the chat and keeps it, exactly like the header's close control. It used to clear
+    // the conversation — cancelling an answer still streaming — which made the most reflexive key
+    // on the keyboard the destructive one. Clearing is the explicit Clear control.
+    closeAIConversation()
   }
 
   private func setupViews() {

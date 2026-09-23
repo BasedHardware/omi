@@ -62,7 +62,7 @@ struct RewindPage: View {
   }
 
   private var finishButtonText: String {
-    if isFinishing { return "Saving..." }
+    if isFinishing { return "Saving…" }
     if showSavedSuccess { return "Saved!" }
     if showDiscarded { return "Too Short" }
     if showError { return "Failed" }
@@ -458,7 +458,7 @@ struct RewindPage: View {
         .foregroundColor(Ink.secondary)
 
       if viewModel.isSearching {
-        Text("Searching...")
+        Text("Searching…")
           .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(Ink.secondary)
       } else {
@@ -630,18 +630,9 @@ struct RewindPage: View {
     HStack(spacing: OmiSpacing.md) {
       // Left side: Back button (search timeline mode) or Rewind logo (other modes)
       if isInSearchMode && searchViewMode == .timeline {
-        Button {
+        BackChip("Results") {
           searchViewMode = .results
-        } label: {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(Ink.rowFill)
-            .clipShape(Circle())
         }
-        .buttonStyle(.plain)
-        .help("Back to results")
       } else {
         // Rewind title
         HStack(spacing: OmiSpacing.sm) {
@@ -1415,16 +1406,9 @@ struct RewindPage: View {
         .disabled(viewModel.isRebuilding)
       }
 
-      Button {
-        OmiMotion.withGated(.easeOut(duration: 0.2)) {
-          viewModel.dismissRecoveryBanner()
-        }
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
+      DismissButton(
+        action: { viewModel.dismissRecoveryBanner() }, showBackground: false, accessibilityLabel: "Dismiss",
+        size: .compact)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
@@ -1465,7 +1449,7 @@ struct RewindPage: View {
           .scaleEffect(1.2)
           .tint(Ink.surface)
 
-        Text("Loading screenshots...")
+        Text("Loading screenshots…")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
@@ -1498,7 +1482,7 @@ struct RewindPage: View {
         } label: {
           HStack(spacing: OmiSpacing.xs) {
             Image(systemName: "arrow.clockwise")
-            Text("Retry")
+            Text("Try Again")
           }
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(PageGlass.primaryActionLabel)
@@ -1519,35 +1503,20 @@ struct RewindPage: View {
 
   private var expandedTranscriptView: some View {
     VStack(spacing: 0) {
-      // Show a back bar only when the recording bar is not visible
-      if appState?.isTranscribing != true && appState?.isSavingConversation != true {
-        HStack(spacing: OmiSpacing.sm) {
-          Button {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isTranscriptExpanded = false
-              LiveTranscriptMonitor.shared.clearSaved()
-            }
-          } label: {
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "chevron.up")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-              Text("Back to Rewind")
-                .scaledFont(size: OmiType.body, weight: .medium)
-            }
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(Ink.rowFill)
-            .cornerRadius(OmiChrome.badgeRadius)
+      // The expanded transcript replaced the timeline, so it leaves the way every drill-in does —
+      // and the way out stays visible while recording too, instead of hiding behind the bar.
+      HStack(spacing: OmiSpacing.sm) {
+        BackChip("Rewind") {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            isTranscriptExpanded = false
+            LiveTranscriptMonitor.shared.clearSaved()
           }
-          .buttonStyle(.plain)
-
-          Spacer()
         }
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.rowFillHover.opacity(0.8))
+
+        Spacer()
       }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
 
       // Split panel: transcript (left) + notes (right)
       GeometryReader { geometry in
@@ -1662,7 +1631,7 @@ struct RewindPage: View {
         .onAppear { isSavingPulsing = true }
         .onDisappear { isSavingPulsing = false }
 
-        Text("Saving conversation...")
+        Text("Saving conversation…")
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.primary)
 

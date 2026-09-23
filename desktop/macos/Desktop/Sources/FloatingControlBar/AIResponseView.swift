@@ -173,25 +173,25 @@ struct AIResponseView: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       } else {
-        Text("omi says")
+        Text("Omi says")
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       }
 
       Spacer()
 
-      if canClearVisibleConversation {
-        HStack(spacing: OmiSpacing.xxs) {
-          Text("esc")
-            .scaledFont(size: OmiType.caption)
+      if canClearVisibleConversation, let onClearVisibleConversation {
+        Button(action: onClearVisibleConversation) {
+          Text("Clear")
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(.secondary)
-            .frame(width: 30, height: 16)
-            .background(NotchGlass.ink(.w1))
-            .cornerRadius(OmiChrome.stripRadius)
-          Text("to clear")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.secondary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .frame(height: 20)
+            .background(Capsule().fill(NotchGlass.ink(.w1)))
         }
+        .buttonStyle(.plain)
+        .help("Clear this conversation")
+        .accessibilityLabel("Clear conversation")
       }
     }
   }

@@ -3860,22 +3860,28 @@ final class DesktopAutomationActionRegistry {
     registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
-      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      summary: "Post the same navigation notification as the Cmd+1..4 / Cmd+, shortcuts",
       params: ["shortcut"]
     ) { params in
       let shortcut = (params["shortcut"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
       guard !shortcut.isEmpty else {
-        return ["error": "missing shortcut (1-6 or comma)"]
+        return ["error": "missing shortcut (1-4 or comma)"]
       }
+      // ⌘1…⌘4 mirror the top bar's pills (Chat, Memories, Tasks, Apps). Hub pages stay reachable by
+      // name, the way the Memories submenu reaches them.
       let item: SidebarNavItem?
+      var hub: MemoryHubDestination?
       switch shortcut {
-      case "1", "home", "dashboard": item = .dashboard
-      case "2", "conversations": item = .conversations
-      case "3", "memories": item = .memories
-      case "4", "tasks": item = .tasks
-      case "5", "rewind": item = .rewind
-      case "6", "apps": item = .apps
+      case "1", "home", "dashboard", "chat": item = .dashboard
+      case "2":
+        item = .conversations
+        hub = .activity
+      case "conversations": item = .conversations
+      case "memories": item = .memories
+      case "3", "tasks": item = .tasks
+      case "rewind": item = .rewind
+      case "4", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
       // Settings sub-sections ride the same notifications the app already posts
       // for its own deep-links (the Tasks gear, the floating-bar context menu),
@@ -3891,11 +3897,9 @@ final class DesktopAutomationActionRegistry {
       guard let item else {
         return ["error": "unsupported shortcut '\(shortcut)'"]
       }
-      NotificationCenter.default.post(
-        name: .navigateToSidebarItem,
-        object: nil,
-        userInfo: ["rawValue": item.rawValue]
-      )
+      var info: [String: Any] = ["rawValue": item.rawValue]
+      if let hub { info["hubDestination"] = hub.rawValue }
+      NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
       return [
         "navigated": item.title,
         "selected_tab_index": "\(item.rawValue)",

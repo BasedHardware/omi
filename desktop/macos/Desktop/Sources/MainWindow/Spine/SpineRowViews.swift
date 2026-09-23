@@ -224,9 +224,8 @@ struct SpineConversationRow: View {
     .glassRow(isHovering ? .hover : .rest, cornerRadius: InkGlass.cornerRadius)
     .contentShape(Rectangle())
     .onTapGesture(perform: onOpen)
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       isHovering = hovering
-      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Text("\(summary.title). \(summary.subtitle)"))

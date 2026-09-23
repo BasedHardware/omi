@@ -4,111 +4,6 @@ import Combine
 import OmiTheme
 import SwiftUI
 
-// MARK: - Safe Dismiss Button
-/// A dismiss button that prevents click-through to underlying views on macOS.
-/// Uses onTapGesture with async delay to ensure the click is fully consumed before dismissing.
-/// The key is to wait for the full mouse event cycle to complete before triggering dismiss.
-struct SafeDismissButton: View {
-  let dismiss: DismissAction
-  var icon: String = "xmark"
-  var showBackground: Bool = true
-
-  @State private var isPressed = false
-
-  var body: some View {
-    Image(systemName: icon)
-      .scaledFont(size: OmiType.body, weight: .medium)
-      .foregroundColor(Ink.secondary)
-      .frame(width: 28, height: 28)
-      .background(showBackground ? Ink.wash : Color.clear)
-      .clipShape(Circle())
-      .contentShape(Circle())
-      .opacity(isPressed ? 0.7 : 1.0)
-      .onTapGesture {
-        guard !isPressed else { return }  // Prevent double-tap
-        isPressed = true
-
-        let mouseLocation = NSEvent.mouseLocation
-        log("DISMISS: Tap gesture fired at mouse position: \(mouseLocation)")
-
-        // Consume the click by resigning first responder
-        NSApp.keyWindow?.makeFirstResponder(nil)
-
-        // Post a mouse-up event to ensure any pending click is consumed
-        if let window = NSApp.keyWindow {
-          let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: window.mouseLocationOutsideOfEventStream,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-          )
-          if let event = event {
-            window.sendEvent(event)
-            log("DISMISS: Sent synthetic mouse-up event")
-          }
-        }
-
-        // Use async with longer delay to ensure mouse event fully completes
-        Task { @MainActor in
-          log("DISMISS: Starting 250ms delay before dismiss")
-          // Longer delay to ensure mouse-up event is fully processed
-          try? await Task.sleep(nanoseconds: 250_000_000)  // 250ms
-          log("DISMISS: Delay complete, calling dismiss()")
-          log("DISMISS: Mouse position before dismiss: \(NSEvent.mouseLocation)")
-          dismiss()
-          log("DISMISS: dismiss() called")
-        }
-      }
-  }
-}
-
-// MARK: - Dismiss Button (Action-based)
-/// A dismiss button that takes a closure instead of a DismissAction.
-/// Used for overlay-based sheets where the dismiss is controlled externally.
-/// A real Button (not a tap gesture) so accessibility exposes it as a labeled
-/// "Close" control and keyboard users can reach it.
-struct DismissButton: View {
-  let action: () -> Void
-  var icon: String = "xmark"
-  var showBackground: Bool = true
-  var accessibilityLabel: String = "Close"
-
-  var body: some View {
-    Button {
-      log("DISMISS_BUTTON: Activated")
-
-      // Commit any in-progress field editing before tearing the sheet down.
-      NSApp.keyWindow?.makeFirstResponder(nil)
-
-      OmiMotion.withGated(.easeOut(duration: 0.2)) {
-        action()
-      }
-    } label: {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 28, height: 28)
-        .background(showBackground ? Ink.wash : Color.clear)
-        .clipShape(Circle())
-        .contentShape(Circle())
-    }
-    .buttonStyle(DismissButtonPressStyle())
-    .accessibilityLabel(accessibilityLabel)
-  }
-}
-
-private struct DismissButtonPressStyle: ButtonStyle {
-  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    configuration.label
-      .opacity(configuration.isPressed ? 0.7 : 1.0)
-  }
-}
-
 enum AppsPageCategoryFilter {
   static let allCategoriesOptionId = ""
   static let allCategoriesTitle = "All Categories"
@@ -245,6 +140,18 @@ struct AppsPage: View {
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .background(Color.clear)
+    // Esc leaves "See more", then clears the search, before the shell sees it.
+    .onEscapeKey(priority: .content) {
+      if viewAllSection != nil {
+        viewAllSection = nil
+        return true
+      }
+      if !searchText.isEmpty {
+        searchText = ""
+        return true
+      }
+      return false
+    }
     .onChange(of: searchText) { _, newValue in
       // Search never changes scope on the user's behalf. In All, the same
       // query is applied to apps, imports, and exports; a narrower Kind keeps
@@ -488,15 +395,15 @@ struct AppsPage: View {
 
   private var searchPlaceholder: String {
     switch selectedSection {
-    case .mcp: return "Search MCP servers…"
-    case .skills: return "Search skills…"
+    case .mcp: return "Search MCP servers"
+    case .skills: return "Search skills"
     case .apps: break
     }
     switch selectedKind {
-    case .all: return "Search apps, imports, and exports…"
-    case .apps: return "Search apps…"
-    case .imports: return "Search imports…"
-    case .exports: return "Search exports…"
+    case .all: return "Search apps, imports, and exports"
+    case .apps: return "Search apps"
+    case .imports: return "Search imports"
+    case .exports: return "Search exports"
     }
   }
 
@@ -1007,7 +914,7 @@ struct AppsPage: View {
       VStack(spacing: OmiSpacing.lg) {
         ProgressView()
           .scaleEffect(1.2)
-        Text("Searching...")
+        Text("Searching…")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
@@ -1045,16 +952,7 @@ struct AppsPage: View {
   private var filteredAppsGrid: some View {
     // Back button for "See more" view.
     if viewAllSection != nil {
-      Button(action: { viewAllSection = nil }) {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-          Text("Back")
-            .scaledFont(size: OmiType.body, weight: .medium)
-        }
-        .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
+      BackChip("Apps") { viewAllSection = nil }
     }
 
     AppGridSection(
@@ -1071,7 +969,7 @@ struct AppsPage: View {
         if appProvider.isLoadingMore {
           ProgressView()
             .scaleEffect(0.8)
-          Text("Loading more...")
+          Text("Loading more…")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
         } else {
@@ -2838,67 +2736,6 @@ struct FilterChip: View {
 
 // MARK: - Category Apps Sheet
 
-struct CategoryAppsSheet: View {
-  let category: OmiAppCategory
-  let appProvider: AppProvider
-  let onSelectApp: (OmiApp) -> Void
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var categoryApps: [OmiApp] {
-    appProvider.apps(forCategory: category.id)
-  }
-
-  var body: some View {
-    VStack(spacing: 0) {
-      // Header
-      HStack {
-        DismissButton(
-          action: dismissSheet, icon: "chevron.left", showBackground: false,
-          accessibilityLabel: "Back")
-
-        Text(category.title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-
-        Spacer()
-
-        Text("\(categoryApps.count) apps")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
-      .padding()
-
-      Divider()
-        .background(Ink.rowFill)
-
-      ScrollView {
-        LazyVGrid(
-          columns: [
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-          ], spacing: OmiSpacing.lg
-        ) {
-          ForEach(categoryApps) { app in
-            AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
-          }
-        }
-        .padding()
-      }
-    }
-    .background(Color.clear)
-  }
-}
-
 // MARK: - App Detail Sheet
 
 struct AppDetailSheet: View {
@@ -3058,7 +2895,7 @@ struct AppDetailSheet: View {
                     HStack(spacing: OmiSpacing.xs) {
                       ProgressView()
                         .scaleEffect(0.7)
-                      Text("Setting up...")
+                      Text("Setting up…")
                         .scaledFont(size: OmiType.caption, weight: .semibold)
                     }
                     .foregroundColor(Ink.secondary)
@@ -3549,7 +3386,7 @@ struct AddReviewSheet: View {
                 }
 
               if reviewText.isEmpty {
-                Text("Share your experience with this app...")
+                Text("Share your experience with this app…")
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
                   .padding(.leading, OmiSpacing.lg)

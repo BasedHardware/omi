@@ -419,7 +419,7 @@ struct ShortcutsSettingsSection: View {
         Spacer()
 
         Button(action: action) {
-          Text(isRecording ? "Listening..." : "Save")
+          Text(isRecording ? "Listening…" : "Save")
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }

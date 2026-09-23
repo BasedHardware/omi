@@ -182,20 +182,12 @@ private struct QueryAnswerFailureNotice: View {
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
       if classified.retryable {
-        Button("Try again", action: onRetry)
+        Button("Try Again", action: onRetry)
           .buttonStyle(.plain)
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(Ink.accent)
       }
-      Button {
-        onDismiss()
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundStyle(Ink.secondary)
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Dismiss")
+      DismissButton(action: { onDismiss() }, accessibilityLabel: "Dismiss", size: .compact)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)

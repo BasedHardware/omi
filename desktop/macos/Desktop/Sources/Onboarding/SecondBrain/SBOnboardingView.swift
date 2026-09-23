@@ -104,18 +104,11 @@ struct SBOnboardingView: View {
       // Navigation belongs to the onboarding card, not the window's corner. The window can be wider
       // than the card (and may be repositioned independently), so an outer overlay makes Back look
       // detached from the conversation it controls.
+      // Back on the leading edge, where every way back in the app sits; Skip Setup trailing.
       HStack {
-        Spacer(minLength: 0)
-        ViewThatFits(in: .horizontal) {
-          HStack(spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-          VStack(alignment: .trailing, spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-        }
+        backButton
+        Spacer(minLength: 8)
+        if model.canSkipOnboarding { skipButton }
       }
       .frame(minHeight: 44)
       .padding(.horizontal, 16)
@@ -132,7 +125,7 @@ struct SBOnboardingView: View {
             if model.typing {
               HStack(spacing: 10) {
                 SBLogo(size: 16, spinning: true)
-                Text("omi is typing…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+                Text("Omi is typing…").inkStyle(InkType.statusLabel, color: Ink.secondary)
               }
             }
             if model.showWidget {
@@ -209,7 +202,7 @@ struct SBOnboardingView: View {
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
       Button(action: { model.goBack() }) {
-        Text("← Back")
+        Text("‹ Back")
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .padding(.horizontal, 14).padding(.vertical, 7)
           .glassFloatingBar(cornerRadius: Self.chipRadius)
@@ -221,7 +214,9 @@ struct SBOnboardingView: View {
 
   private var skipButton: some View {
     Button(action: { model.skip() }) {
-      Text("Skip")
+      // "Skip Setup", not "Skip": the per-step links say "Skip for now", and the two look alike while
+      // meaning very different amounts.
+      Text("Skip Setup")
         .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .padding(.horizontal, 14).padding(.vertical, 7)
         .glassFloatingBar(cornerRadius: Self.chipRadius)
@@ -271,24 +266,24 @@ struct SBOnboardingView: View {
     case .howHeard: howHeardWidget
     case .language: languageWidget
     case .role: roleWidget
-    case .mic: permStepWidget("microphone", "Microphone", "hears your side of conversations") { model.answerMic() }
+    case .mic: permStepWidget("microphone", "Microphone", "so I can hear your side of conversations") { model.answerMic() }
     case .systemAudio:
-      permStepWidget("system_audio", "System audio", "the other side — Zoom, Meet, calls") { model.answerSystemAudio() }
+      permStepWidget("system_audio", "System Audio", "so I can hear the other side of calls — Zoom, Meet") { model.answerSystemAudio() }
     case .screen:
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
       }
     case .files: filesWidget
     case .accessibility:
-      permStepWidget("accessibility", "Accessibility", "catch your shortcut + click/type for you") {
+      permStepWidget("accessibility", "Accessibility", "so I can catch your shortcut and click or type for you") {
         model.answerAccessibility()
       }
     case .automation:
-      permStepWidget("automation", "Automation", "help with tasks in the apps you choose") {
+      permStepWidget("automation", "Automation", "so I can help with tasks in the apps you choose") {
         model.answerAutomation()
       }
     case .notifications:
-      permStepWidget("notifications", "Notifications", "tell you when I notice something worth flagging") {
+      permStepWidget("notifications", "Notifications", "so I can tell you when I notice something worth flagging") {
         model.answerNotifications()
       }
     case .shortcutOpen: shortcutWidget(isTalk: false)
@@ -345,6 +340,7 @@ struct SBOnboardingView: View {
         .glassField()
         .onSubmit { model.answerName() }
       SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerName() }
+        .accessibilityLabel("Continue")
     }
     .frame(maxWidth: 360, alignment: .leading)
   }
@@ -436,6 +432,7 @@ struct SBOnboardingView: View {
           .glassField()
           .onSubmit { model.answerRoleText() }
         SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerRoleText() }
+          .accessibilityLabel("Continue")
       }
       .frame(maxWidth: 360)
     }
@@ -520,7 +517,7 @@ struct SBOnboardingView: View {
   @ViewBuilder private var filesWidget: some View {
     switch model.localFileProfileState {
     case .idle:
-      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
+      permStepWidget("full_disk_access", "Full Disk Access", "so I can cite your files — read-only, and it stays on this Mac") {
         model.answerFiles()
       }
     case .scanning:
@@ -752,7 +749,7 @@ struct SBOnboardingView: View {
           Text("Voice setup isn't available yet. You can retry, or skip for now.")
             .inkStyle(InkType.rowCopy, color: Ink.primary)
             .fixedSize(horizontal: false, vertical: true)
-          Button("Try again") {
+          Button("Try Again") {
             model.startScreenDemo()
           }
           .buttonStyle(InkButtonStyle(kind: .secondary))
@@ -902,7 +899,7 @@ struct SBOnboardingView: View {
     case "checking": Text("checking…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "unavailable": Text("not installed").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "error":
-      Button("Retry", action: action)
+      Button("Try Again", action: action)
         .buttonStyle(InkButtonStyle(kind: .secondary))
     default:
       // `.secondary`, and this is a hierarchy decision rather than a taste one. There are six

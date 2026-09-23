@@ -238,6 +238,8 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// page. The page's back chevron returns there. Transient like a focus —
   /// never persisted, reset on owner change, and only ever a primary route.
   @Published private(set) var dailyRecapOrigin: ChatFirstRoute?
+  /// The primary page a More page (Settings) was opened from, so its Back returns there.
+  @Published private(set) var moreOrigin: ChatFirstRoute?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
   /// focus itself and is never restored across launches.
@@ -306,6 +308,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     // it may have been the back target of.
     pendingConversation = nil
     dailyRecapOrigin = nil
+    moreOrigin = nil
     // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
@@ -329,6 +332,10 @@ final class ChatFirstShellNavigation: ObservableObject {
       closeDailyRecap()
       return true
     }
+    if case .more = route {
+      closeMorePage()
+      return true
+    }
     guard route != .chat else { return false }
     selectPrimary(.chat)
     return true
@@ -337,6 +344,8 @@ final class ChatFirstShellNavigation: ObservableObject {
   func selectMore(_ page: ChatFirstMorePage) {
     pendingConversation = nil
     dailyRecapOrigin = nil
+    // Remember where the reader was, so Back and Esc return there rather than always to Chat.
+    if route.isPrimaryDestination { moreOrigin = route }
     if route == .more(page) {
       invalidateLinkResolutions()
       clearFocus()
@@ -349,6 +358,13 @@ final class ChatFirstShellNavigation: ObservableObject {
     clearFocus()
     persistNavigation()
     analytics(.routeEntered(route: .more, origin: .more))
+  }
+
+  /// Settings' Back, and Esc on it: to the page that opened it, or Chat when there was none.
+  func closeMorePage() {
+    guard case .more = route else { return }
+    let origin = moreOrigin ?? .chat
+    selectPrimary(origin, origin: .sidebar)
   }
 
   /// Used by a typed rich-Chat link. Unlike direct navigation it carries the

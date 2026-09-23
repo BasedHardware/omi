@@ -367,9 +367,10 @@ private struct AudioRecordingModeSwitcher: View {
 
   var body: some View {
     HStack(spacing: 2) {
-      segment(.off, label: "Off")
-      segment(.always, label: "Always")
-      segment(.onlyMeetings, label: "Meetings")
+      // The same names the top bar's audio control uses (`CaptureListeningLogic.audioRecordingModeTitle`).
+      segment(.off, label: CaptureListeningLogic.audioRecordingModeTitle(.off))
+      segment(.always, label: CaptureListeningLogic.audioRecordingModeTitle(.always))
+      segment(.onlyMeetings, label: CaptureListeningLogic.audioRecordingModeTitle(.onlyMeetings))
     }
     .padding(3)
     .background(

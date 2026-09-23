@@ -457,6 +457,18 @@ struct ShellStatusIcons: View {
   // MARK: Actions — the shared logic, never a second copy
 
   private func cycleListening() {
+    // Blocked means transcription itself is down, so moving the mode fixes nothing. The tooltip says
+    // "Open Settings to reconnect"; the click does exactly that, as the screen control's blocked
+    // click opens its permission flow.
+    if listeningState == .blocked {
+      NotificationCenter.default.post(
+        name: .navigateToSidebarItem, object: nil,
+        userInfo: [
+          "rawValue": SidebarNavItem.settings.rawValue,
+          "settingsSection": SettingsContentView.SettingsSection.transcription.rawValue,
+        ])
+      return
+    }
     let landed = CaptureListeningLogic.cycleListening(
       appState: appState,
       audioRecordingModeRaw: $audioRecordingModeRaw,

@@ -61,7 +61,7 @@ struct QuerySearchBar: View {
         }
         .buttonStyle(.plain)
         .onHover { isClearHovered = $0 }
-        .accessibilityLabel("Clear search")
+        .accessibilityLabel("Clear Search")
         .help("Clear the search")
       }
     }

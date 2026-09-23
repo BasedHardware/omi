@@ -95,16 +95,7 @@ struct OmiSearchField: View {
         }
 
       if !text.isEmpty {
-        Button {
-          text = ""
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.body)
-            .foregroundStyle(Ink.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Clear search")
-        .accessibilityLabel("Clear search")
+        ClearFieldButton { text = "" }
       }
     }
     .padding(.horizontal, OmiSpacing.md)

@@ -81,13 +81,13 @@ struct PersonaPage: View {
       createPersonaSheet
         .frame(width: 400, height: 400)
     }
-    .alert("Delete Persona", isPresented: $showingDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        Task { await deletePersona() }
-      }
-    } message: {
-      Text("Are you sure you want to delete your AI persona? This cannot be undone.")
+    .shellConfirmation(
+      isPresented: $showingDeleteConfirmation,
+      title: "Delete Persona?",
+      message: "This permanently deletes your AI persona. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      Task { await deletePersona() }
     }
     .task {
       await loadPersona()
@@ -131,7 +131,7 @@ struct PersonaPage: View {
       ProgressView()
         .scaleEffect(1.2)
 
-      Text("Loading persona...")
+      Text("Loading persona…")
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.secondary)
     }
@@ -410,7 +410,7 @@ struct PersonaPage: View {
                 Image(systemName: "arrow.triangle.2.circlepath")
               }
 
-              Text(isRegenerating ? "Regenerating..." : "Regenerate from Memories")
+              Text(isRegenerating ? "Regenerating…" : "Regenerate from Memories")
             }
             .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(Ink.primary)
@@ -769,7 +769,7 @@ private struct CreatePersonaSheetContent: View {
                 .scaleEffect(0.8)
             }
 
-            Text(isCreating ? "Creating..." : "Create Persona")
+            Text(isCreating ? "Creating…" : "Create Persona")
           }
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.surface)

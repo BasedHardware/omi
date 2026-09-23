@@ -238,7 +238,7 @@ extension SettingsContentView {
 
           // Add new word input
           HStack(spacing: OmiSpacing.sm) {
-            TextField("Add a word...", text: $newVocabularyWord)
+            TextField("Add a word…", text: $newVocabularyWord)
               .settingsTextInputStyle()
               .onSubmit {
                 addVocabularyWord()

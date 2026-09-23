@@ -1788,7 +1788,7 @@ class MemoriesViewModel: ObservableObject {
       allFilteredResults.removeAll { $0.id == memory.id }
       searchResults.removeAll { $0.id == memory.id }
       pendingDeleteMemory = memory
-      undoTimeRemaining = 4
+      undoTimeRemaining = OmiFeedbackTiming.undo
     }
 
     // The soft-delete above immediately drops this row from getLocalMemories(), so
@@ -1804,7 +1804,7 @@ class MemoriesViewModel: ObservableObject {
     // Start countdown timer
     deleteTask = Task {
       // Update countdown every 100ms
-      for _ in 0..<40 {
+      for _ in 0..<Int(OmiFeedbackTiming.undo * 10) {
         try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
         if Task.isCancelled { return }
         await MainActor.run {
@@ -2178,7 +2178,6 @@ struct MemoriesPage: View {
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
-  @State private var showManagementMenu = false
 
   var body: some View {
     pageSurface
@@ -2191,6 +2190,13 @@ struct MemoriesPage: View {
       BrainSectionPageLayout(
         selected: brainDestination,
         onSelect: onSelectBrainDestination,
+        onReselect: {
+          if viewModel.selectedMemory != nil {
+            viewModel.selectedMemory = nil
+          } else {
+            viewModel.searchText = ""
+          }
+        },
         search: {
           QuerySearchBar(
             text: $viewModel.searchText,
@@ -2298,6 +2304,28 @@ struct MemoriesPage: View {
     .overlay(alignment: .bottom) {
       undoDeleteToast
     }
+    .shellConfirmation(
+      isPresented: $viewModel.showingDeleteAllConfirmation,
+      title: "Delete Default Memories?",
+      message: viewModel.canonicalLifecycleExposed
+        ? "This permanently deletes your Short-term and Long-term memories. Archive is not included."
+        : "This permanently deletes your default memories.",
+      confirmTitle: "Delete Memories"
+    ) {
+      Task { await viewModel.deleteMemories(scope: .defaultAccess) }
+    }
+    // Esc closes the memory panel, then clears the search, before the shell sees it.
+    .onEscapeKey(priority: .content) {
+      if viewModel.selectedMemory != nil {
+        viewModel.selectedMemory = nil
+        return true
+      }
+      if !viewModel.searchText.isEmpty {
+        viewModel.searchText = ""
+        return true
+      }
+      return false
+    }
     .task {
       await viewModel.loadMemoriesIfNeeded()
     }
@@ -2318,46 +2346,10 @@ struct MemoriesPage: View {
 
   @ViewBuilder
   private var undoDeleteToast: some View {
-    if viewModel.pendingDeleteMemory != nil {
-      HStack(spacing: OmiSpacing.md) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-
-        Text("Memory deleted")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.primary)
-
-        Spacer()
-
-        // Progress indicator
-        Text(String(format: "%.0fs", viewModel.undoTimeRemaining))
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-          .monospacedDigit()
-
-        Button {
-          viewModel.undoDelete()
-        } label: {
-          Text("Undo")
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(Ink.primary)
-        }
-        .buttonStyle(.plain)
-
-        Button {
-          // Dismiss immediately and delete now
-          viewModel.confirmDelete()
-        } label: {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+    if let memory = viewModel.pendingDeleteMemory {
+      UndoToast(message: "Memory deleted", detail: memory.content) {
+        viewModel.undoDelete()
       }
-      .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md)
-      .glassFloatingBar()
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.xxl)
       .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -2393,18 +2385,6 @@ struct MemoriesPage: View {
         .padding(.vertical, OmiSpacing.xs)
       }
     }
-    .alert("Delete Default Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete Default Memories", role: .destructive) {
-        Task { await viewModel.deleteMemories(scope: .defaultAccess) }
-      }
-    } message: {
-      Text(
-        viewModel.canonicalLifecycleExposed
-          ? "This deletes Short-term and Long-term memories only. Archive is not included."
-          : "This deletes your default memories."
-      )
-    }
   }
 
   private var searchField: some View {
@@ -2425,26 +2405,26 @@ struct MemoriesPage: View {
       },
       actions: {
         HStack(spacing: OmiSpacing.sm) {
-          Button {
-            viewModel.showingAddMemory = true
-          } label: {
-            PageQueryActionLabel(icon: "plus", title: "Add Memory", isPrimary: true)
-          }
-          .buttonStyle(.plain)
-          .help("Add a memory")
-          .accessibilityIdentifier("memories-add-memory")
-
-          Button {
-            showManagementMenu = true
+          // `[More] [primary]`, the order every page's toolbar uses.
+          Menu {
+            managementMenuItems
           } label: {
             PageQueryActionLabel(icon: "ellipsis", title: "More")
           }
-          .buttonStyle(.plain)
-          .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-            managementMenuPopover
-          }
+          .menuStyle(.borderlessButton)
+          .menuIndicator(.hidden)
+          .fixedSize()
           .help("More memory actions")
           .accessibilityIdentifier("memories-more-actions")
+
+          Button {
+            viewModel.showingAddMemory = true
+          } label: {
+            PageQueryActionLabel(icon: "plus", title: "New Memory", isPrimary: true)
+          }
+          .buttonStyle(.plain)
+          .help("New memory")
+          .accessibilityIdentifier("memories-add-memory")
         }
       }
     )
@@ -2640,20 +2620,13 @@ struct MemoriesPage: View {
           .foregroundColor(Ink.secondary)
           .scaledFont(size: OmiType.caption)
 
-        TextField("Search categories...", text: $categorySearchText)
+        TextField("Search categories…", text: $categorySearchText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.primary)
 
         if !categorySearchText.isEmpty {
-          Button {
-            categorySearchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(Ink.secondary)
-              .scaledFont(size: OmiType.caption)
-          }
-          .buttonStyle(.plain)
+          ClearFieldButton { categorySearchText = "" }
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -2795,105 +2768,37 @@ struct MemoriesPage: View {
 
   // MARK: - Management Menu Popover
 
-  private var managementMenuPopover: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      // Visibility section
-      Text("Visibility")
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.top, OmiSpacing.md)
-        .padding(.bottom, OmiSpacing.xs)
-
+  @ViewBuilder
+  private var managementMenuItems: some View {
+    let bulkUnavailable =
+      !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty
+      || viewModel.isBulkOperationInProgress
+    Section("Visibility") {
       Button {
-        showManagementMenu = false
         Task { await viewModel.makeMemoriesPrivate(scope: .defaultAccess) }
       } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "lock")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Make Default Memories Private")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(Ink.primary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
+        Label("Make Default Memories Private", systemImage: "lock")
       }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
+      .disabled(bulkUnavailable)
 
       Button {
-        showManagementMenu = false
         Task { await viewModel.makeMemoriesPublic(scope: .defaultAccess) }
       } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "globe")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Make Default Memories Public")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(Ink.primary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
+        Label("Make Default Memories Public", systemImage: "globe")
       }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
-
-      Divider()
-        .padding(.vertical, OmiSpacing.sm)
-        .padding(.horizontal, OmiSpacing.md)
-
-      // Danger section
-      Button {
-        showManagementMenu = false
-        viewModel.showingDeleteAllConfirmation = true
-      } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "trash")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Delete Default Memories")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(Ink.errorRed)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Delete Short-term and Long-term memories; Archive is kept separate.")
+      .disabled(bulkUnavailable)
     }
-    .padding(.vertical, OmiSpacing.xxs)
-    .frame(width: 200)
-    .background(Ink.surface)
+
+    Divider()
+
+    Button(role: .destructive) {
+      viewModel.showingDeleteAllConfirmation = true
+    } label: {
+      Label("Delete Default Memories…", systemImage: "trash")
+    }
+    .disabled(
+      !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+    )
   }
 
   // MARK: - Memory List
@@ -2924,7 +2829,8 @@ struct MemoriesPage: View {
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,
-              formatDate: formatDate
+              formatDate: formatDate,
+              onDelete: { Task { await viewModel.deleteMemory(memory) } }
             )
             .onAppear {
               // Load more when approaching the end of the list
@@ -2938,7 +2844,7 @@ struct MemoriesPage: View {
           HStack(spacing: OmiSpacing.sm) {
             ProgressView()
               .scaleEffect(0.8)
-            Text("Loading more...")
+            Text("Loading more…")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }
@@ -3128,7 +3034,7 @@ struct MemoriesPage: View {
         .progressViewStyle(.circular)
         .scaleEffect(1.2)
 
-      Text("Loading memories...")
+      Text("Loading memories…")
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.secondary)
     }
@@ -3154,7 +3060,7 @@ struct MemoriesPage: View {
       } label: {
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "arrow.clockwise")
-          Text("Retry")
+          Text("Try Again")
         }
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(Ink.surface)
@@ -3227,6 +3133,9 @@ private struct MemoryCardView: View {
   let categoryColor: (MemoryCategory) -> Color
   let tagColorFor: (String) -> Color
   let formatDate: (Date) -> String
+  /// Right-click parity with the detail panel's menu, so a memory's actions are reachable without
+  /// opening it first — the same as a conversation row.
+  var onDelete: (() -> Void)? = nil
 
   @State private var isHovered = false
 
@@ -3286,13 +3195,6 @@ private struct MemoryCardView: View {
 
           Spacer(minLength: 4)
 
-          MemoryDetailButton(
-            memory: memory,
-            categoryIcon: categoryIcon,
-            categoryColor: categoryColor,
-            tagColorFor: tagColorFor
-          )
-
           MemoryReviewControls(
             verdict: verdict,
             isRevealed: isHovered || verdict != nil,
@@ -3306,8 +3208,9 @@ private struct MemoryCardView: View {
             )
           }
 
+          // Opens the side panel, so it points to the side — not the external-link glyph.
           if isHovered {
-            Image(systemName: "arrow.up.right")
+            Image(systemName: "chevron.right")
               .scaledFont(size: OmiType.micro, weight: .medium)
               .foregroundColor(Ink.secondary)
           }
@@ -3327,13 +3230,24 @@ private struct MemoryCardView: View {
     }
     .buttonStyle(.plain)
     .contentShape(Rectangle())
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       // No animation wrapper - simple state update for instant response
       isHovered = hovering
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
+    }
+    .contextMenu {
+      Button(action: onTap) {
+        Label("Open", systemImage: "sidebar.right")
+      }
+      Button {
+        OmiToastCenter.shared.copy(memory.content, confirming: "Memory copied")
+      } label: {
+        Label("Copy Text", systemImage: "doc.on.doc")
+      }
+      if let onDelete {
+        Divider()
+        Button(role: .destructive, action: onDelete) {
+          Label("Delete Memory", systemImage: "trash")
+        }
       }
     }
   }
@@ -3430,179 +3344,6 @@ private struct MemoryUseControls: View {
     .buttonStyle(.plain)
     .help(label)
     .accessibilityLabel(label)
-  }
-}
-
-// MARK: - Memory Detail Button (info icon with hover popover)
-
-/// Small inline info button with hover preview showing memory metadata.
-/// Compact hover metadata for a memory row.
-private struct MemoryDetailButton: View {
-  let memory: ServerMemory
-  let categoryIcon: (MemoryCategory) -> String
-  let categoryColor: (MemoryCategory) -> Color
-  let tagColorFor: (String) -> Color
-
-  @State private var showTooltip = false
-  @State private var isButtonHovered = false
-  @State private var isPopoverHovered = false
-  @State private var dismissWork: DispatchWorkItem?
-
-  var body: some View {
-    Image(systemName: "info.circle")
-      .scaledFont(size: OmiType.micro)
-      .foregroundColor(showTooltip ? Ink.primary : Ink.secondary)
-      .frame(width: 20, height: 20)
-      .contentShape(Rectangle())
-      .onHover { hovering in
-        isButtonHovered = hovering
-        scheduleHoverUpdate()
-      }
-      .popover(isPresented: $showTooltip, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-        MemoryDetailTooltip(
-          memory: memory,
-          categoryIcon: categoryIcon,
-          categoryColor: categoryColor,
-          tagColorFor: tagColorFor
-        )
-        .onHover { hovering in
-          isPopoverHovered = hovering
-          scheduleHoverUpdate()
-        }
-      }
-  }
-
-  private func scheduleHoverUpdate() {
-    dismissWork?.cancel()
-    if isButtonHovered || isPopoverHovered {
-      showTooltip = true
-    } else {
-      let work = DispatchWorkItem { showTooltip = false }
-      dismissWork = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
-    }
-  }
-}
-
-// MARK: - Memory Detail Tooltip
-
-/// Compact hover preview showing memory metadata (category, tags, source, etc.)
-private struct MemoryDetailTooltip: View {
-  let memory: ServerMemory
-  let categoryIcon: (MemoryCategory) -> String
-  let categoryColor: (MemoryCategory) -> Color
-  let tagColorFor: (String) -> Color
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-      if memory.tierIsExplicit, memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
-        tooltipRow("Layer", memory.tier.displayName)
-        tooltipRow("Expires", expiresAt.formatted(date: .abbreviated, time: .shortened))
-      } else if memory.tierIsExplicit {
-        tooltipRow("Layer", memory.tier.displayName)
-      }
-
-      // Category
-      if memory.isTip {
-        tooltipRow("Category", "Tips")
-        if let tipCat = memory.tipCategory {
-          tooltipRow("Subcategory", tipCat.capitalized)
-        }
-      } else {
-        tooltipRow("Category", memory.category.displayName)
-      }
-
-      // Tags
-      let displayTags = memory.tags.filter { tag in
-        let lower = tag.lowercased()
-        if lower == memory.category.rawValue { return false }
-        if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
-        if lower == "has-message" { return false }
-        return true
-      }
-      if !displayTags.isEmpty {
-        tooltipRow("Tags", displayTags.joined(separator: ", "))
-      }
-
-      // Source
-      if let sourceApp = memory.sourceApp {
-        tooltipRow("App", sourceApp)
-      }
-      if let sourceName = memory.sourceName {
-        tooltipRow("Source", sourceName)
-      }
-      if let window = memory.windowTitle {
-        tooltipRow("Window", window)
-      }
-
-      // Context
-      if let ctx = memory.contextSummary, !ctx.isEmpty {
-        tooltipBlock("Context", ctx)
-      }
-      if let activity = memory.currentActivity, !activity.isEmpty {
-        tooltipBlock("Activity", activity)
-      }
-
-      // Confidence
-      if let conf = memory.confidenceString {
-        tooltipRow("Confidence", conf)
-      }
-
-      if memory.currencyMetadataIsExplicit {
-        tooltipRow("Currency", memory.currencyBand?.capitalized ?? "Unknown")
-        if let asOf = memory.asOf {
-          tooltipRow("As of", asOf.formatted(date: .abbreviated, time: .omitted))
-        }
-        if let computedAt = memory.beliefComputedAt {
-          tooltipRow("Assessed", computedAt.formatted(date: .abbreviated, time: .shortened))
-        }
-      }
-
-      // Reasoning
-      if let reasoning = memory.reasoning, !reasoning.isEmpty {
-        tooltipBlock("Reasoning", reasoning)
-      }
-
-      // Created date
-      tooltipRow(
-        "Created",
-        {
-          let f = DateFormatter()
-          f.dateStyle = .medium
-          f.timeStyle = .short
-          return f.string(from: memory.createdAt)
-        }())
-    }
-    .padding(OmiSpacing.sm)
-    .frame(maxWidth: 350, maxHeight: 400)
-  }
-
-  private func tooltipRow(_ label: String, _ value: String) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.xs) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 70, alignment: .trailing)
-
-      Text(value)
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.primary)
-    }
-  }
-
-  private func tooltipBlock(_ label: String, _ value: String) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .padding(.leading, 76)
-
-      Text(value)
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.primary)
-        .padding(.leading, 76)
-        .lineLimit(3)
-    }
   }
 }
 
@@ -3703,11 +3444,9 @@ struct MemoryDetailPanel: View {
               trailingIcon: "arrow.up.right"
             ) {
               NSApp.keyWindow?.makeFirstResponder(nil)
-              Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                dismissSheet()
-                onOpenConversation?(conversationId)
-              }
+              // The memory stays selected: the conversation's `‹ Memories` returns to this panel,
+              // not to a list the reader has to search again.
+              onOpenConversation?(conversationId)
             }
           }
         }
@@ -3750,20 +3489,20 @@ struct MemoryDetailPanel: View {
       // Publishing and deleting are both one-way-feeling acts, so neither gets
       // a control sitting under the cursor. A public memory feeds the user's
       // shareable persona; a switch beside a trash can made that a slip.
-      Menu {
-        Button("Edit text") {
+      OmiIconMenu(systemName: "ellipsis", help: "Memory Actions") {
+        Button("Edit Text") {
           editContentText = memory.content
           isEditingContent = true
         }
         if memory.isPublic {
-          Button("Make private") {
+          Button("Make Private") {
             Task { await viewModel.toggleVisibility(memory) }
           }
         } else {
-          Button("Make public…") { isConfirmingPublic = true }
+          Button("Make Public…") { isConfirmingPublic = true }
         }
         Divider()
-        Button("Delete memory", role: .destructive) {
+        Button("Delete Memory", role: .destructive) {
           NSApp.keyWindow?.makeFirstResponder(nil)
           Task { @MainActor in
             try? await Task.sleep(nanoseconds: 100_000_000)
@@ -3771,37 +3510,22 @@ struct MemoryDetailPanel: View {
             await viewModel.deleteMemory(memory)
           }
         }
-      } label: {
-        Image(systemName: "ellipsis")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
       }
-      .tint(Ink.primary)
-      .menuStyle(.borderlessButton)
-      .menuIndicator(.hidden)
-      .frame(width: 24)
-      .help("More actions")
       .accessibilityIdentifier("memory_detail_actions_menu")
 
       DismissButton(action: dismissSheet)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md)
-    .confirmationDialog(
-      "Make this memory public?",
+    .shellConfirmation(
       isPresented: $isConfirmingPublic,
-      titleVisibility: .visible
+      title: "Make This Memory Public?",
+      message: "Public memories build your shareable persona, so anyone you share it with can see "
+        + "what this memory says. Everything else stays private to you.",
+      confirmTitle: "Make Public",
+      isDestructive: false
     ) {
-      Button("Make public") {
-        Task { await viewModel.toggleVisibility(memory) }
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "Public memories are used to build your shareable persona, so anyone you share it with can see what this memory says. Everything else stays private to you."
-      )
+      Task { await viewModel.toggleVisibility(memory) }
     }
   }
 

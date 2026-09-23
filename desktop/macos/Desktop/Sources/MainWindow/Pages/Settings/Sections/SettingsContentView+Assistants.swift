@@ -76,7 +76,7 @@ extension SettingsContentView {
 
               Spacer()
 
-              Button("Browse...") {
+              Button("Browse…") {
                 let panel = NSOpenPanel()
                 panel.canChooseFiles = false
                 panel.canChooseDirectories = true
@@ -988,11 +988,20 @@ extension SettingsContentView {
 
           Spacer()
 
-          Button("Reset") {
-            IntegrationNudgeStore.shared.resetAll()
+          Button("Reset…") {
+            isConfirmingNudgeReset = true
           }
           .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         }
+      }
+      .shellConfirmation(
+        isPresented: $isConfirmingNudgeReset,
+        title: "Reset Integration Suggestions?",
+        message: "Every integration's suggestion history is cleared, including ones you hid, so Omi may "
+          + "suggest them again. This can't be undone.",
+        confirmTitle: "Reset"
+      ) {
+        IntegrationNudgeStore.shared.resetAll()
       }
     }
   }
@@ -1184,14 +1193,15 @@ struct RescanFilesRow: View {
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
-    .alert("Rescan Files?", isPresented: $showConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Rescan") { rescan() }
-    } message: {
-      Text(
-        "Omi re-reads the names, sizes and folders of the files in your standard folders so recent "
-          + "ones are searchable. File contents are not read."
-      )
+    .shellConfirmation(
+      isPresented: $showConfirmation,
+      title: "Rescan Files?",
+      message: "Omi re-reads the names, sizes and folders of the files in your standard folders so recent "
+        + "ones are searchable. File contents are not read.",
+      confirmTitle: "Rescan",
+      isDestructive: false
+    ) {
+      rescan()
     }
   }
 

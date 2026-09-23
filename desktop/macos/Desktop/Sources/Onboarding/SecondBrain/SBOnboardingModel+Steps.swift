@@ -537,9 +537,11 @@ extension SBOnboardingModel {
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    // Settings' order (`ShortcutSettings.pttPresets`, whose first entry is the default), so the two
+    // surfaces recommend the same key.
     [
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
       ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
       ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }

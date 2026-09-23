@@ -410,13 +410,8 @@ private struct LiveSegmentView: View {
             }
           }
           .buttonStyle(.plain)
-          .onHover { hovering in
+          .pointingHandOnHover { hovering in
             isHovered = hovering
-            if hovering {
-              NSCursor.pointingHand.push()
-            } else {
-              NSCursor.pop()
-            }
           }
         } else {
           Text(speakerLabel)

@@ -152,14 +152,7 @@ struct ChatSessionsSidebar: View {
         .foregroundColor(Ink.primary)
 
       if !chatProvider.searchQuery.isEmpty {
-        Button(action: {
-          chatProvider.searchQuery = ""
-        }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+        ClearFieldButton { chatProvider.searchQuery = "" }
       }
     }
     .padding(.horizontal, OmiSpacing.sm)
@@ -223,7 +216,7 @@ struct ChatSessionsSidebar: View {
       Spacer()
       ProgressView()
         .scaleEffect(0.8)
-      Text("Loading chats...")
+      Text("Loading chats…")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.sm)

@@ -263,6 +263,8 @@ struct SettingsContentView: View {
   @State var aiProfileDataSourcesUsed: Int = 0
   @State var isGeneratingAIProfile = false
   @State var isEditingAIProfile = false
+  @State var isConfirmingAIProfileDelete = false
+  @State var isConfirmingNudgeReset = false
   @State var aiProfileEditText: String = ""
 
   // Selected section (passed in from parent)

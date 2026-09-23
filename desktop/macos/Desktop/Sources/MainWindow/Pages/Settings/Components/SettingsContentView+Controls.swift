@@ -806,7 +806,7 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(Ink.primary)
 
-            Text("Get help from the omi community and team")
+            Text("Get help from the Omi community and team")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }
@@ -831,7 +831,7 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(Ink.primary)
 
-            Text("Help us improve omi")
+            Text("Help us improve Omi")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }

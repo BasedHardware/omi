@@ -70,6 +70,8 @@ struct ChatFirstShell: View {
     }
     // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
+    // One place for "Copied" / "Transcript copied" confirmations from every page.
+    .omiToastHost()
     .environmentObject(navigation)
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
@@ -244,7 +246,8 @@ struct ChatFirstShell: View {
       SettingsSidebar(
         selectedSection: $selectedSettingsSection,
         highlightedSettingId: $highlightedSettingID,
-        onBack: { _ = navigation.handleEscapeNavigation() },
+        onBack: { navigation.closeMorePage() },
+        backTitle: (navigation.moreOrigin ?? .chat).title,
         appState: appState
       )
       SettingsPage(

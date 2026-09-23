@@ -25,12 +25,7 @@ struct AppSelectorSheet: View {
 
         Spacer()
 
-        Button(action: onDismiss) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: onDismiss)
       }
       .padding()
 

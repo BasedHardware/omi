@@ -47,19 +47,9 @@ struct DailyRecapPage: View {
 
   private var topBar: some View {
     HStack(spacing: OmiSpacing.md) {
-      Button {
+      BackChip((navigation.dailyRecapOrigin ?? .chat).title, accessibilityIdentifier: "daily-recap-back") {
         navigation.closeDailyRecap()
-      } label: {
-        Image(systemName: "chevron.left")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(Ink.primary)
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
       }
-      .buttonStyle(.plain)
-      .accessibilityLabel(Text("Back"))
-      .accessibilityIdentifier("daily-recap-back")
-      .help("Back")
 
       Text("Daily recap")
         .scaledFont(size: OmiType.micro, weight: .semibold)

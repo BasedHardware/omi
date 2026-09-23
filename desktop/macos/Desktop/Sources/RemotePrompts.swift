@@ -236,19 +236,7 @@ struct RemotePromptBar: View {
           }
         }
 
-        Button {
-          engine.dismissCurrent()
-        } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.secondary)
-            // Same hit area as the built-in ask's dismiss — these two bars
-            // render in the same slot and must not behave differently.
-            .frame(width: RatingPromptLayout.dismissHitSide, height: RatingPromptLayout.dismissHitSide)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Dismiss prompt")
+        DismissButton(action: { engine.dismissCurrent() }, accessibilityLabel: "Dismiss Prompt", size: .compact)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.md)

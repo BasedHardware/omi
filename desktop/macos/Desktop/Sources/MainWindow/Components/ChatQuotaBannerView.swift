@@ -90,14 +90,7 @@ struct ChatQuotaBannerView: View {
       .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       .accessibilityIdentifier("chat-quota-banner-view-plan")
 
-      Button(action: onDismiss) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
-      .help("Dismiss")
-      .accessibilityLabel("Dismiss")
+      DismissButton(action: onDismiss, accessibilityLabel: "Dismiss", size: .compact)
       .accessibilityIdentifier("chat-quota-banner-dismiss")
     }
     .padding(.horizontal, OmiSpacing.md)
