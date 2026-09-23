@@ -7,7 +7,8 @@
 /// | Colour, type, radius, spacing, motion, haptics | `OmiColors`, `OmiType`, `OmiRadius`, `OmiSpacing`, `OmiMotion.of(context)`, `OmiHaptics` |
 /// | A pushed page | `Scaffold(appBar: AppBar(leading: const OmiBackButton(), title: Text(...)))` — the theme gives the black bar, centred 17pt title, white icons |
 /// | Leaving a modal (sheet, full-screen dialog, viewer) | trailing `OmiCloseButton` |
-/// | A bottom sheet | `showOmiSheet(context:, title:, builder:)` |
+/// | A bottom sheet | `showOmiSheet(context:, title:, builder:)`; an editing sheet `showOmiEditSheet` |
+/// | A row's long-press menu | `showOmiRowMenu(context, title:, actions:)` |
 /// | A text action | `OmiButton` (`.secondary`, `.destructive`, `.tertiary`; `size: OmiButtonSize.compact`) |
 /// | An icon-only action | `OmiIconButton(icon:, label:, onPressed:)` / `OmiIconButton.filled` |
 /// | A spinner | `OmiSpinner` |
@@ -25,9 +26,11 @@
 library;
 
 export 'components/omi_button.dart';
+export 'components/omi_edit_sheet.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';
+export 'components/omi_row_menu.dart';
 export 'components/omi_search_field.dart';
 export 'components/omi_settings.dart';
 export 'components/omi_sheet.dart';

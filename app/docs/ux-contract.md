@@ -53,8 +53,10 @@ There are exactly two ways out, and they mean different things.
   widget. It owns the top radius (`OmiRadius.xl`), the 36×4 drag handle, the optional title row
   with a trailing `OmiCloseButton`, safe-area and keyboard insets, and `isScrollControlled`. Never
   a raw `showModalBottomSheet` (`raw-bottom-sheet`) and never a hand-drawn handle.
-- A sheet that edits something has explicit Save and Cancel. Swipe-down, tap-outside and system back
-  on a **dirty** sheet ask first: `showOmiConfirm(title: l10n.discardChangesTitle, message:
+- A sheet that edits something is `showOmiEditSheet(...)` / `OmiEditSheet(isDirty:, ...)`, with
+  explicit Save and Cancel. It owns the swipe-down itself, because the framework's sheet drag pops
+  without consulting `PopScope`. Swipe-down, tap-outside, the close X and system back on a **dirty**
+  sheet ask first (`confirmDiscardChanges`): `showOmiConfirm(title: l10n.discardChangesTitle, message:
   l10n.discardChangesMessage, confirmLabel: l10n.discard, cancelLabel: l10n.keepEditing,
   destructive: true)`. A clean sheet just closes.
 - A progress sheet that cannot be cancelled blocks back with `PopScope` and pops with its **own**
@@ -97,6 +99,11 @@ One policy, and never neither:
 - An undo toast has no close button. Nothing in it means "destroy this sooner"; a replaced or
   swiped-away undo commits.
 - "Don't ask again" only where an Undo backs the action.
+- A bulk delete (several conversations) confirms every time and, when the provider can defer it,
+  also offers Undo.
+- A row's long-press opens `showOmiRowMenu(context, title:, actions: [OmiMenuAction(...)])` — the
+  same menu shape on conversations, memories and tasks (Open first, Delete last and destructive);
+  multi-select is a "Select" entry in that menu, not the long-press itself.
 - Swipe-to-delete follows the same table: `confirmDismiss` shows the confirm for things that cannot
   be undone; restorable things dismiss and show Undo. A swipe means the same thing on every row of a
   list.
