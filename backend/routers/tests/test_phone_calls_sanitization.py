@@ -6,8 +6,6 @@ Verifies that raw Twilio errors, API keys, Account SIDs, and internal traces
 do NOT leak to clients in phone verification or token generation responses.
 """
 
-from fastapi import HTTPException
-
 
 class TestPhoneCallsSanitization:
     """Ensure no raw Twilio or runtime exception traces reach client HTTP responses."""
