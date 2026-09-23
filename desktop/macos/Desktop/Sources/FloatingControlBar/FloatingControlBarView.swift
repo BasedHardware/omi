@@ -1100,10 +1100,7 @@ struct FloatingControlBarView: View {
     // render an accepted spawn receipt one update before the manager does.
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.sm) {
-        // A chevron only when there is somewhere to go back to; when the control closes the chat
-        // it says so with the close glyph (docs/ux-contract.md §1).
-        Button(action: mainConversationBackAction) {
-          // omi-ux-allow: hand-rolled-back -- the notch bar is its own dark surface (NotchGlass)
+        Button(action: mainConversationBackAction) {  // xmark when it closes, chevron when it goes back
           Image(systemName: agentPills.pills.isEmpty ? "xmark" : "chevron.left")
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(.white.opacity(0.82))
@@ -1137,8 +1134,6 @@ struct FloatingControlBarView: View {
     return agentPills.pills.first { $0.id == id }
   }
 
-  /// Clearing is its own labeled control. It used to be what Esc did, advertised by an "esc to
-  /// clear" keycap; Esc now closes and keeps the conversation.
   private var clearConversationButton: some View {
     Button(action: onClearVisibleConversation) {
       Text("Clear")
@@ -1150,7 +1145,6 @@ struct FloatingControlBarView: View {
     }
     .buttonStyle(.plain)
     .help("Clear this conversation")
-    .accessibilityLabel("Clear conversation")
   }
 
   /// The hover surface's Hide control. Closes the hover rows first so the island retracts as

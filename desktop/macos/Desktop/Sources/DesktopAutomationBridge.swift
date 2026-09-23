@@ -3868,16 +3868,12 @@ final class DesktopAutomationActionRegistry {
       guard !shortcut.isEmpty else {
         return ["error": "missing shortcut (1-4 or comma)"]
       }
-      // ⌘1…⌘4 mirror the top bar's pills (Chat, Memories, Tasks, Apps). Hub pages stay reachable by
-      // name, the way the Memories submenu reaches them.
       let item: SidebarNavItem?
-      var hub: MemoryHubDestination?
+      // ⌘1…⌘4 are the top bar's pills; ⌘2 opens Memories on Activity. Hub pages also by name.
+      let hub: MemoryHubDestination? = shortcut == "2" ? .activity : nil
       switch shortcut {
       case "1", "home", "dashboard", "chat": item = .dashboard
-      case "2":
-        item = .conversations
-        hub = .activity
-      case "conversations": item = .conversations
+      case "2", "conversations": item = .conversations
       case "memories": item = .memories
       case "3", "tasks": item = .tasks
       case "rewind": item = .rewind

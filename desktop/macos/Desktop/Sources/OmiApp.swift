@@ -137,7 +137,7 @@ struct OMIApp: App {
   }
 
   /// Posts the one navigation request the shell listens for. `hub` selects a page inside Memories.
-  private static func navigate(to item: SidebarNavItem, hub: MemoryHubDestination? = nil) {
+  static func navigate(to item: SidebarNavItem, hub: MemoryHubDestination? = nil) {
     var info: [String: Any] = ["rawValue": item.rawValue]
     if let hub { info["hubDestination"] = hub.rawValue }
     NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
@@ -191,8 +191,7 @@ struct OMIApp: App {
         }
       }
 
-      // Navigation shortcuts mirror the top bar, left to right: ⌘1…⌘4 are its four pills, and the
-      // Memories submenu's ⌥⌘1…⌥⌘5 are that page's chip row in order. ⌘, is Settings.
+      // ⌘1…⌘4 are the top bar's pills in order; ⌥⌘1…⌥⌘5 its Memories chip row; ⌘, Settings.
       CommandGroup(after: .sidebar) {
         Button("Chat") { Self.navigate(to: .dashboard) }
           .keyboardShortcut("1", modifiers: .command)
@@ -984,8 +983,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     menu.addItem(NSMenuItem.separator())
 
-    // Open app item. No key equivalent: ⌘O here only worked while this menu was open, and read as
-    // the global shortcut, which is the user's own (Settings → Shortcuts).
+    // No key equivalent: ⌘O here only worked with this menu open, yet read as the global shortcut.
     let openItem = NSMenuItem(
       title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "")
     openItem.target = self
@@ -994,7 +992,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
     settingsItem.target = self
     menu.addItem(settingsItem)
-
     let undoDictationItem = NSMenuItem(
       title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
     undoDictationItem.target = self
@@ -1111,8 +1108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   @MainActor @objc private func openSettingsFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_settings")
     openMainAppWindow()
-    NotificationCenter.default.post(
-      name: .navigateToSidebarItem, object: nil, userInfo: ["rawValue": SidebarNavItem.settings.rawValue])
+    OMIApp.navigate(to: .settings)
   }
 
   /// "Continue in Omi": bring the main window forward *and* land on the chat
@@ -1209,15 +1205,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    // Same question Settings asks before the same action. This comes from the status-bar menu, where
-    // there is no shell window to draw a confirmation in, so it is the one place a system alert is
-    // the right surface.
+    // Settings asks the same question; the status menu has no shell window to draw it in.
     let alert = NSAlert()
     alert.messageText = "Reset Onboarding?"
     alert.informativeText =
       "This will reset onboarding for this app build only, clear onboarding chat history, "
       + "and restart the app without affecting the other installed build."
-    alert.alertStyle = .warning
     alert.addButton(withTitle: "Reset & Restart")
     alert.addButton(withTitle: "Cancel")
     NSApp.activate(ignoringOtherApps: true)
