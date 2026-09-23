@@ -2503,7 +2503,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert 'branches: [ "main" ]' in text
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
-    assert "id-token: 'write'" not in text
+    # Development-only lane: GitHub WIF as the dev deployer, never a JSON key.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
+    assert 'secrets.GCP_CREDENTIALS' not in text
     assert 'id: gateway-serving' in text
     assert '--lane omi:auto:memory-l2' in text
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text
