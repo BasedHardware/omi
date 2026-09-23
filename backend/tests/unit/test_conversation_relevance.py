@@ -20,7 +20,7 @@ from utils.conversations.relevance import (
 )
 from utils.conversations.relevance_rules import RULES_VERSION
 
-LONG = ['word'] * 101
+LONG = [' '.join(f'topic{i}' for i in range(101))]
 
 
 def _decide(
@@ -100,7 +100,7 @@ def test_exempt_identity_is_never_judged():
 def test_long_speech_is_kept_by_rule_without_a_model_call():
     decision, model, _ = _decide(texts=LONG)
 
-    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'rule', 'long_transcript')
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'rule', 'substantial_length')
     model.assert_not_called()
 
 
@@ -125,8 +125,9 @@ def test_keep_verdicts_never_consult_the_calendar():
     calendar.assert_not_called()
 
 
-def test_a_trusted_wake_word_is_only_discarded_by_the_model():
-    decision, model, _ = _decide(texts=('hmm',), trusted_wake_word=True)
+@pytest.mark.parametrize('texts', [('hmm',), ("Hey Omi, don't forget to send the budget.",)])
+def test_a_trusted_wake_word_is_judged_only_by_the_model(texts):
+    decision, model, _ = _decide(texts=texts, trusted_wake_word=True)
 
     model.assert_called_once()
     assert decision.reason == 'model_keep'

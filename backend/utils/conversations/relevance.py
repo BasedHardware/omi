@@ -115,14 +115,14 @@ def decide_relevance(
     if user_kept:
         return keep('user', 'restored')
 
-    # Photos carry content the transcript rules cannot see; the model reads both.
-    if not has_photos:
+    # Photos carry content the transcript rules cannot see, and a trusted wake
+    # word is judged by the model's wake-word rules (an invocation the
+    # assistant already handled may be discarded); both skip the rules.
+    if not has_photos and not trusted_wake_word:
         verdict, rule = deterministic_relevance(texts, speech_seconds)
         if verdict == 'keep':
             return keep('rule', rule)
-        # A trusted wake word is a deliberate request; only the model, with its
-        # wake-word rules, may discard one.
-        if verdict == 'discard' and not trusted_wake_word:
+        if verdict == 'discard':
             return discard_unless_calendar('rule', rule)
 
     model_failed = False
