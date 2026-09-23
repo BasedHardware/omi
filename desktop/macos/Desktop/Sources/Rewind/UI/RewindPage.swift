@@ -9,6 +9,8 @@ struct RewindPage: View {
   var appState: AppState? = nil
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Set when Rewind was opened in place of another page (task evidence, a citation).
+  @Environment(\.drillInBack) private var drillInBack
 
   @StateObject private var viewModel = RewindViewModel()
 
@@ -514,6 +516,9 @@ struct RewindPage: View {
   private var brainNavigationRow: some View {
     if let brainDestination, let onSelectBrainDestination {
       HStack(spacing: OmiSpacing.md) {
+        if let drillInBack {
+          BackChip(drillInBack.title, accessibilityIdentifier: "rewind-drill-in-back", action: drillInBack.action)
+        }
         BrainSectionNavigation(
           selected: brainDestination,
           onSelect: onSelectBrainDestination
@@ -864,6 +869,7 @@ struct RewindPage: View {
         searchViewMode = nil
       }
     )
+    .focusesOnFind($isSearchFocused)
     .frame(maxWidth: RewindSearchLayout.panelWidth * 0.6)
   }
 

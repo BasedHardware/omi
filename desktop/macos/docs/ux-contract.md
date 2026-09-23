@@ -165,6 +165,60 @@ a toolbar, a field, a "Loading more…" footer — is `ProgressView().controlSiz
 (rule `scaled-progress-view`). A spinner inside a button replaces or sits beside the label; the
 button keeps its `OmiButtonStyle`.
 
+## 11. Page headers
+
+One rule for which pages carry a title, and one style for it.
+
+| The page is… | Title | Example |
+|---|---|---|
+| reached from a top-bar pill (Chat, Brain: Activity/Conversations/Memories/Rewind/Brain Map, Tasks, Apps) | **none** — the lit pill and the search placeholder already name it | "Search memories" |
+| a drill-in with no pill of its own (Goals, Daily recap, Settings) | `BackChip(origin)` leading, then `GlassPageHeader(title:subtitle:)`, page actions trailing | `‹ Tasks  Goals` |
+| a pill page opened as a drill-in (Rewind from a task's evidence or a Chat citation) | no title; a `BackChip(origin)` leads its section row (`DrillInBack` environment value) | `‹ Tasks  Activity · Rewind …` |
+| a window of its own (standalone Rewind) | the same `GlassPageHeader` style at the leading edge | `Rewind ⌘⌥R` |
+
+- `GlassPageHeader`: title `OmiType.subheading` (15) semibold `Ink.primary`, optional subtitle
+  `OmiType.caption` `Ink.secondary`, one line each. Content headlines inside a page (a recap's
+  headline, a goal's title) sit below it at `OmiType.heading` and are not page titles.
+- A drill-in with no pill lights **no** pill in the top bar (Goals), or the pill of the page it was
+  opened from (Daily recap). It never claims Chat.
+- Settings' sidebar title (20 pt bold) is not yet on this rule.
+
+## 12. Keyboard
+
+| Keys | Does | Where | Owner |
+|---|---|---|---|
+| ⌘F | focus the page's search field | every page with one: Chat (the query bar), Activity, Conversations, Memories, Tasks, Apps, Rewind, Brain Map, Settings | `FindCommandRouter` via `QuerySearchBar`, `OmiSearchField`, `RewindSearchBar`'s caller, the Settings sidebar |
+| ⌘F | find in transcript | a conversation's transcript pane | the transcript's own find field, `FindCommandPriority.detail` (beats the page) |
+| ⌘N | New Task / New Memory | Tasks, Memories | the page's primary add action |
+| Esc | leave the innermost layer | everywhere | §1 |
+| ⌘⌥R | open Rewind | anywhere | global hotkey |
+
+- ⌘F is registered by the **shared field**, never by a page: a search field that uses
+  `.focusesOnFind(_:)` gets it, in the window it is mounted in, only while it is mounted and not
+  hidden. A find field on something opened over the page registers `.detail` and wins. When nothing
+  claims ⌘F the key passes on, so a page whose search is hidden while a detail is open (Conversations)
+  leaves ⌘F to the detail.
+- A page's primary add action carries ⌘N (`.keyboardShortcut("n", modifiers: .command)`) and says so
+  in its tooltip.
+
+## 13. Motion
+
+Three tokens, in `Theme/OmiMotion.swift`, all off under Reduce Motion:
+
+| Token | Curve | For |
+|---|---|---|
+| `.quick` | ease-out 0.12 s | a control answering a press, hover or toggle; Esc and pill switches |
+| `.standard` | ease-in-out 0.24 s | content changing in place: a row, a panel, a list, a scroll, an onboarding step |
+| `.emphasized` | spring 0.35 / 0.86 | a surface arriving or leaving: a sheet, a card, a toast |
+
+- Use `.omiAnimation(.standard, value:)` and `OmiMotion.perform(.quick) { … }`. A raw `.animation(…)`
+  or `withAnimation(…)` ignores Reduce Motion.
+- `InkMotion` is the first-run duration table (word reveal, finale glow, press). `InkReduceMotion` and
+  `OmiMotion` read the same setting; `.standard` is `InkMotion.stepTransition`, so an onboarding step
+  and a page change share one tempo. New code uses the tokens.
+- Older call sites that pass their own curve to `OmiMotion.withGated` are gated and migrate to a
+  token when touched.
+
 ## Adding to this contract
 
 Changing a rule here is a product decision: update the component, migrate its callers in the same

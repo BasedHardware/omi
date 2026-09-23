@@ -240,6 +240,9 @@ final class ChatFirstShellNavigation: ObservableObject {
   @Published private(set) var dailyRecapOrigin: ChatFirstRoute?
   /// The primary page a More page (Settings) was opened from, so its Back returns there.
   @Published private(set) var moreOrigin: ChatFirstRoute?
+  /// The primary page Goals was opened from. Goals has no top-bar pill, so it is always a drill-in
+  /// and its Back (and Esc) return here. Kept across a detour through a recap or Settings.
+  @Published private(set) var goalsOrigin: ChatFirstRoute?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
   /// focus itself and is never restored across launches.
@@ -309,6 +312,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingConversation = nil
     dailyRecapOrigin = nil
     moreOrigin = nil
+    recordGoalsOrigin(entering: destination)
     // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
@@ -336,9 +340,30 @@ final class ChatFirstShellNavigation: ObservableObject {
       closeMorePage()
       return true
     }
+    if route == .goals {
+      closeGoals()
+      return true
+    }
     guard route != .chat else { return false }
     selectPrimary(.chat)
     return true
+  }
+
+  /// Goals' Back, and Esc on it: to the page that opened Goals, or Chat when there was none.
+  func closeGoals() {
+    guard route == .goals else { return }
+    selectPrimary(goalsOrigin ?? .chat, origin: .sidebar)
+  }
+
+  /// Goals remembers the primary page it was opened from. Arriving from a detour (a recap, Settings)
+  /// keeps the origin already recorded; going to any other primary page forgets it.
+  private func recordGoalsOrigin(entering destination: ChatFirstRoute) {
+    guard destination == .goals else {
+      if destination.isPrimaryDestination { goalsOrigin = nil }
+      return
+    }
+    guard route != .goals else { return }
+    if route.isPrimaryDestination { goalsOrigin = route }
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
@@ -358,6 +383,12 @@ final class ChatFirstShellNavigation: ObservableObject {
     clearFocus()
     persistNavigation()
     analytics(.routeEntered(route: .more, origin: .more))
+  }
+
+  /// Where a Rewind drill-in (task evidence, a Chat citation) returns to; `nil` when Rewind is not
+  /// a drill-in. Its Back and Esc both go through `closeMorePage`.
+  var rewindDrillInOrigin: ChatFirstRoute? {
+    route == .more(.rewind) ? moreOrigin : nil
   }
 
   /// Settings' Back, and Esc on it: to the page that opened it, or Chat when there was none.
@@ -380,6 +411,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     guard destination.isPrimaryDestination else { return }
     presentMainWindowIfNeeded()
     pendingConversation = nil
+    recordGoalsOrigin(entering: destination)
     invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -405,6 +437,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     guard destination.isPrimaryDestination else { return }
     guard !conversation.id.isEmpty else { return }
     presentMainWindowIfNeeded()
+    recordGoalsOrigin(entering: destination)
     invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
@@ -613,6 +646,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     invalidateLinkResolutions()
     pendingConversation = nil
     dailyRecapOrigin = nil
+    goalsOrigin = nil
     clearFocus()
     lastAcknowledgedFocusKind = nil
   }
