@@ -1,6 +1,6 @@
-# Agent Quickstart Guide (Serbian)
+# Agent Quickstart – Srpski (sr)
 
-Ovaj vodič će vas kroz osnovne korake za kreiranje i pokretanje LLM/Agent radnog toka koristeći `omi-cli`.
+Ovaj vodič opisuje kako da brzo pokrenete **omi-cli** i kreirate LLM/Agent radni tok na srpskom jeziku.
 
-## 1. Instalacija `omi-cli`
+## 1. Instalacija
 
