@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -161,7 +162,7 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await _settle(tester);
     await _capture(tester, '02-memory-create', 'Tap the add floating action button');
-    expect(tester.widget<ElevatedButton>(find.byKey(const ValueKey('memory_save_button'))).onPressed, isNull);
+    expect(tester.widget<OmiButton>(find.byKey(const ValueKey('memory_save_button'))).onPressed, isNull);
     await tester.tap(find.byKey(const ValueKey('memory_save_button')));
     await _settle(tester);
     await _capture(tester, '03-memory-empty-save', 'Tap Save Memory with no content');
@@ -218,7 +219,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Send the design notes to Alex');
     await _settle(tester);
     await _capture(tester, '07-task-draft', 'Enter a task description');
-    await tester.tap(find.text('Add due date'));
+    await tester.tap(find.text('Add Due Date'));
     await _settle(tester);
     await _capture(tester, '07b-task-date-picker', 'Tap Add due date');
     await tester.tap(find.text('Done'));
