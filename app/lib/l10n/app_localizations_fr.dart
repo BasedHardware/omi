@@ -10250,4 +10250,56 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Vos modifications non enregistrées seront perdues.';
+
+  @override
+  String get linkEvent => 'Lier un événement';
+
+  @override
+  String get noCalendarEventsNearby => 'Aucun événement d\'agenda trouvé autour de cette heure.';
+
+  @override
+  String get suggestedEvent => 'Suggéré';
+
+  @override
+  String get openInGoogleCalendar => 'Ouvrir dans Google Agenda';
+
+  @override
+  String get shareWithAttendees => 'Partager avec les participants';
+
+  @override
+  String get unlinkCalendarEvent => 'Dissocier l\'événement';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notes : $title';
+  }
+
+  @override
+  String get previousResult => 'Résultat précédent';
+
+  @override
+  String get nextResult => 'Résultat suivant';
+
+  @override
+  String get playFromHere => 'Lire à partir d\'ici';
+
+  @override
+  String get pause => 'Pause';
+
+  @override
+  String get shareConversationQuestion => 'Partager la conversation ?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Les tâches de cette conversation apparaîtront ici.';
+
+  @override
+  String get noPendingTasks => 'Aucune tâche en attente';
+
+  @override
+  String nCompleted(int count) {
+    return '$count terminée(s)';
+  }
+
+  @override
+  String get identifySpeaker => 'Identifier l\'intervenant';
 }

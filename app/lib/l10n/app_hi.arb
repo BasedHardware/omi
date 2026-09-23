@@ -3266,5 +3266,21 @@
     "discard": "रद्द करें",
     "keepEditing": "संपादन जारी रखें",
     "discardChangesTitle": "बदलाव रद्द करें?",
-    "discardChangesMessage": "आपके बिना सहेजे गए बदलाव खो जाएंगे।"
+    "discardChangesMessage": "आपके बिना सहेजे गए बदलाव खो जाएंगे।",
+    "linkEvent": "इवेंट लिंक करें",
+    "noCalendarEventsNearby": "इस समय के आसपास कोई कैलेंडर इवेंट नहीं मिला।",
+    "suggestedEvent": "सुझाया गया",
+    "openInGoogleCalendar": "Google Calendar में खोलें",
+    "shareWithAttendees": "प्रतिभागियों के साथ साझा करें",
+    "unlinkCalendarEvent": "कैलेंडर इवेंट अनलिंक करें",
+    "meetingNotesSubject": "नोट्स: {title}",
+    "previousResult": "पिछला परिणाम",
+    "nextResult": "अगला परिणाम",
+    "playFromHere": "यहाँ से चलाएँ",
+    "pause": "रोकें",
+    "shareConversationQuestion": "बातचीत साझा करें?",
+    "conversationTasksEmptyMessage": "इस बातचीत के कार्य यहाँ दिखाई देंगे।",
+    "noPendingTasks": "कोई लंबित कार्य नहीं",
+    "nCompleted": "{count} पूरे",
+    "identifySpeaker": "वक्ता की पहचान करें"
 }

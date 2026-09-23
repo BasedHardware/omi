@@ -10838,5 +10838,21 @@
     "discard": "ತ್ಯಜಿಸಿ",
     "keepEditing": "ಸಂಪಾದನೆ ಮುಂದುವರಿಸಿ",
     "discardChangesTitle": "ಬದಲಾವಣೆಗಳನ್ನು ತ್ಯಜಿಸುವುದೇ?",
-    "discardChangesMessage": "ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ."
+    "discardChangesMessage": "ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ.",
+    "linkEvent": "ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಿ",
+    "noCalendarEventsNearby": "ಈ ಸಮಯದ ಸುತ್ತ ಯಾವುದೇ ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
+    "suggestedEvent": "ಸೂಚಿಸಲಾಗಿದೆ",
+    "openInGoogleCalendar": "Google Calendar ನಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "shareWithAttendees": "ಭಾಗವಹಿಸುವವರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ",
+    "unlinkCalendarEvent": "ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಅನ್‌ಲಿಂಕ್ ಮಾಡಿ",
+    "meetingNotesSubject": "ಟಿಪ್ಪಣಿಗಳು: {title}",
+    "previousResult": "ಹಿಂದಿನ ಫಲಿತಾಂಶ",
+    "nextResult": "ಮುಂದಿನ ಫಲಿತಾಂಶ",
+    "playFromHere": "ಇಲ್ಲಿಂದ ಪ್ಲೇ ಮಾಡಿ",
+    "pause": "ವಿರಾಮ",
+    "shareConversationQuestion": "ಸಂಭಾಷಣೆ ಹಂಚಿಕೊಳ್ಳುವುದೇ?",
+    "conversationTasksEmptyMessage": "ಈ ಸಂಭಾಷಣೆಯ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "noPendingTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳಿಲ್ಲ",
+    "nCompleted": "{count} ಪೂರ್ಣಗೊಂಡಿದೆ",
+    "identifySpeaker": "ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಿ"
 }

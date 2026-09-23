@@ -3301,5 +3301,21 @@
     "discard": "Vazgeç",
     "keepEditing": "Düzenlemeye Devam Et",
     "discardChangesTitle": "Değişiklikler silinsin mi?",
-    "discardChangesMessage": "Kaydedilmemiş değişiklikleriniz kaybolacak."
+    "discardChangesMessage": "Kaydedilmemiş değişiklikleriniz kaybolacak.",
+    "linkEvent": "Etkinliği Bağla",
+    "noCalendarEventsNearby": "Bu saat civarında takvim etkinliği bulunamadı.",
+    "suggestedEvent": "Önerilen",
+    "openInGoogleCalendar": "Google Takvim'de Aç",
+    "shareWithAttendees": "Katılımcılarla Paylaş",
+    "unlinkCalendarEvent": "Takvim Etkinliği Bağlantısını Kaldır",
+    "meetingNotesSubject": "Notlar: {title}",
+    "previousResult": "Önceki sonuç",
+    "nextResult": "Sonraki sonuç",
+    "playFromHere": "Buradan oynat",
+    "pause": "Duraklat",
+    "shareConversationQuestion": "Konuşma paylaşılsın mı?",
+    "conversationTasksEmptyMessage": "Bu konuşmadaki görevler burada görünecek.",
+    "noPendingTasks": "Bekleyen görev yok",
+    "nCompleted": "{count} tamamlandı",
+    "identifySpeaker": "Konuşmacıyı belirle"
 }

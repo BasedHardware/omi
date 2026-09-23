@@ -10198,4 +10198,56 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Vaše nespremljene promjene bit će izgubljene.';
+
+  @override
+  String get linkEvent => 'Poveži događaj';
+
+  @override
+  String get noCalendarEventsNearby => 'Oko ovog vremena nema događaja u kalendaru.';
+
+  @override
+  String get suggestedEvent => 'Predloženo';
+
+  @override
+  String get openInGoogleCalendar => 'Otvori u Google kalendaru';
+
+  @override
+  String get shareWithAttendees => 'Podijeli sa sudionicima';
+
+  @override
+  String get unlinkCalendarEvent => 'Ukloni vezu s događajem';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Bilješke: $title';
+  }
+
+  @override
+  String get previousResult => 'Prethodni rezultat';
+
+  @override
+  String get nextResult => 'Sljedeći rezultat';
+
+  @override
+  String get playFromHere => 'Reproduciraj odavde';
+
+  @override
+  String get pause => 'Pauza';
+
+  @override
+  String get shareConversationQuestion => 'Podijeliti razgovor?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Zadaci iz ovog razgovora pojavit će se ovdje.';
+
+  @override
+  String get noPendingTasks => 'Nema zadataka na čekanju';
+
+  @override
+  String nCompleted(int count) {
+    return 'Dovršeno: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Označi govornika';
 }

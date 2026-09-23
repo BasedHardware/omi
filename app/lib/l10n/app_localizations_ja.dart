@@ -9991,4 +9991,56 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '保存されていない変更は失われます。';
+
+  @override
+  String get linkEvent => '予定をリンク';
+
+  @override
+  String get noCalendarEventsNearby => 'この時間帯のカレンダーの予定は見つかりませんでした。';
+
+  @override
+  String get suggestedEvent => 'おすすめ';
+
+  @override
+  String get openInGoogleCalendar => 'Google カレンダーで開く';
+
+  @override
+  String get shareWithAttendees => '参加者と共有';
+
+  @override
+  String get unlinkCalendarEvent => '予定のリンクを解除';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'メモ: $title';
+  }
+
+  @override
+  String get previousResult => '前の結果';
+
+  @override
+  String get nextResult => '次の結果';
+
+  @override
+  String get playFromHere => 'ここから再生';
+
+  @override
+  String get pause => '一時停止';
+
+  @override
+  String get shareConversationQuestion => '会話を共有しますか？';
+
+  @override
+  String get conversationTasksEmptyMessage => 'この会話のタスクがここに表示されます。';
+
+  @override
+  String get noPendingTasks => '未完了のタスクはありません';
+
+  @override
+  String nCompleted(int count) {
+    return '$count 件完了';
+  }
+
+  @override
+  String get identifySpeaker => '話者を指定';
 }

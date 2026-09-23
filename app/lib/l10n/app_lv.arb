@@ -3266,5 +3266,21 @@
     "discard": "Atmest",
     "keepEditing": "Turpināt rediģēt",
     "discardChangesTitle": "Atmest izmaiņas?",
-    "discardChangesMessage": "Nesaglabātās izmaiņas tiks zaudētas."
+    "discardChangesMessage": "Nesaglabātās izmaiņas tiks zaudētas.",
+    "linkEvent": "Saistīt notikumu",
+    "noCalendarEventsNearby": "Ap šo laiku kalendāra notikumi netika atrasti.",
+    "suggestedEvent": "Ieteikts",
+    "openInGoogleCalendar": "Atvērt Google kalendārā",
+    "shareWithAttendees": "Kopīgot ar dalībniekiem",
+    "unlinkCalendarEvent": "Atsaistīt kalendāra notikumu",
+    "meetingNotesSubject": "Piezīmes: {title}",
+    "previousResult": "Iepriekšējais rezultāts",
+    "nextResult": "Nākamais rezultāts",
+    "playFromHere": "Atskaņot no šejienes",
+    "pause": "Pauze",
+    "shareConversationQuestion": "Kopīgot sarunu?",
+    "conversationTasksEmptyMessage": "Šīs sarunas uzdevumi parādīsies šeit.",
+    "noPendingTasks": "Nav neizpildītu uzdevumu",
+    "nCompleted": "Pabeigti: {count}",
+    "identifySpeaker": "Identificēt runātāju"
 }

@@ -3301,5 +3301,21 @@
     "discard": "Отменить",
     "keepEditing": "Продолжить редактирование",
     "discardChangesTitle": "Отменить изменения?",
-    "discardChangesMessage": "Несохранённые изменения будут потеряны."
+    "discardChangesMessage": "Несохранённые изменения будут потеряны.",
+    "linkEvent": "Связать событие",
+    "noCalendarEventsNearby": "Около этого времени событий в календаре не найдено.",
+    "suggestedEvent": "Рекомендуется",
+    "openInGoogleCalendar": "Открыть в Google Календаре",
+    "shareWithAttendees": "Поделиться с участниками",
+    "unlinkCalendarEvent": "Отвязать событие календаря",
+    "meetingNotesSubject": "Заметки: {title}",
+    "previousResult": "Предыдущий результат",
+    "nextResult": "Следующий результат",
+    "playFromHere": "Воспроизвести отсюда",
+    "pause": "Пауза",
+    "shareConversationQuestion": "Поделиться разговором?",
+    "conversationTasksEmptyMessage": "Задачи из этого разговора появятся здесь.",
+    "noPendingTasks": "Нет невыполненных задач",
+    "nCompleted": "Выполнено: {count}",
+    "identifySpeaker": "Указать говорящего"
 }

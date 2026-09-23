@@ -10104,4 +10104,56 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป';
+
+  @override
+  String get linkEvent => 'เชื่อมโยงกิจกรรม';
+
+  @override
+  String get noCalendarEventsNearby => 'ไม่พบกิจกรรมในปฏิทินในช่วงเวลานี้';
+
+  @override
+  String get suggestedEvent => 'แนะนำ';
+
+  @override
+  String get openInGoogleCalendar => 'เปิดใน Google ปฏิทิน';
+
+  @override
+  String get shareWithAttendees => 'แชร์กับผู้เข้าร่วม';
+
+  @override
+  String get unlinkCalendarEvent => 'ยกเลิกการเชื่อมโยงกิจกรรม';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'บันทึก: $title';
+  }
+
+  @override
+  String get previousResult => 'ผลลัพธ์ก่อนหน้า';
+
+  @override
+  String get nextResult => 'ผลลัพธ์ถัดไป';
+
+  @override
+  String get playFromHere => 'เล่นจากตรงนี้';
+
+  @override
+  String get pause => 'หยุดชั่วคราว';
+
+  @override
+  String get shareConversationQuestion => 'แชร์บทสนทนาไหม';
+
+  @override
+  String get conversationTasksEmptyMessage => 'งานจากบทสนทนานี้จะแสดงที่นี่';
+
+  @override
+  String get noPendingTasks => 'ไม่มีงานที่รอดำเนินการ';
+
+  @override
+  String nCompleted(int count) {
+    return 'เสร็จแล้ว $count รายการ';
+  }
+
+  @override
+  String get identifySpeaker => 'ระบุผู้พูด';
 }

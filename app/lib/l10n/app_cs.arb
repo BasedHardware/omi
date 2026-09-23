@@ -3266,5 +3266,21 @@
     "discard": "Zahodit",
     "keepEditing": "Pokračovat v úpravách",
     "discardChangesTitle": "Zahodit změny?",
-    "discardChangesMessage": "Neuložené změny budou ztraceny."
+    "discardChangesMessage": "Neuložené změny budou ztraceny.",
+    "linkEvent": "Propojit událost",
+    "noCalendarEventsNearby": "Kolem této doby nebyly nalezeny žádné události v kalendáři.",
+    "suggestedEvent": "Navrženo",
+    "openInGoogleCalendar": "Otevřít v Kalendáři Google",
+    "shareWithAttendees": "Sdílet s účastníky",
+    "unlinkCalendarEvent": "Zrušit propojení události",
+    "meetingNotesSubject": "Poznámky: {title}",
+    "previousResult": "Předchozí výsledek",
+    "nextResult": "Další výsledek",
+    "playFromHere": "Přehrát odsud",
+    "pause": "Pozastavit",
+    "shareConversationQuestion": "Sdílet konverzaci?",
+    "conversationTasksEmptyMessage": "Úkoly z této konverzace se zobrazí zde.",
+    "noPendingTasks": "Žádné čekající úkoly",
+    "nCompleted": "Dokončeno: {count}",
+    "identifySpeaker": "Určit mluvčího"
 }

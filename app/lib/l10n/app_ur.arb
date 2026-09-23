@@ -10838,5 +10838,21 @@
     "discard": "رد کریں",
     "keepEditing": "ترمیم جاری رکھیں",
     "discardChangesTitle": "تبدیلیاں رد کریں؟",
-    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔"
+    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔",
+    "linkEvent": "ایونٹ لنک کریں",
+    "noCalendarEventsNearby": "اس وقت کے آس پاس کیلنڈر کا کوئی ایونٹ نہیں ملا۔",
+    "suggestedEvent": "تجویز کردہ",
+    "openInGoogleCalendar": "Google Calendar میں کھولیں",
+    "shareWithAttendees": "شرکاء کے ساتھ شیئر کریں",
+    "unlinkCalendarEvent": "کیلنڈر ایونٹ کا لنک ہٹائیں",
+    "meetingNotesSubject": "نوٹس: {title}",
+    "previousResult": "پچھلا نتیجہ",
+    "nextResult": "اگلا نتیجہ",
+    "playFromHere": "یہاں سے چلائیں",
+    "pause": "روکیں",
+    "shareConversationQuestion": "گفتگو شیئر کریں؟",
+    "conversationTasksEmptyMessage": "اس گفتگو کے کام یہاں ظاہر ہوں گے۔",
+    "noPendingTasks": "کوئی زیر التواء کام نہیں",
+    "nCompleted": "{count} مکمل",
+    "identifySpeaker": "بولنے والے کی شناخت کریں"
 }

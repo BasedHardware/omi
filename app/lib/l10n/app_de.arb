@@ -3266,5 +3266,21 @@
     "discard": "Verwerfen",
     "keepEditing": "Weiter bearbeiten",
     "discardChangesTitle": "Änderungen verwerfen?",
-    "discardChangesMessage": "Ihre nicht gespeicherten Änderungen gehen verloren."
+    "discardChangesMessage": "Ihre nicht gespeicherten Änderungen gehen verloren.",
+    "linkEvent": "Termin verknüpfen",
+    "noCalendarEventsNearby": "Um diese Zeit wurden keine Kalendertermine gefunden.",
+    "suggestedEvent": "Vorgeschlagen",
+    "openInGoogleCalendar": "In Google Kalender öffnen",
+    "shareWithAttendees": "Mit Teilnehmern teilen",
+    "unlinkCalendarEvent": "Termin-Verknüpfung aufheben",
+    "meetingNotesSubject": "Notizen: {title}",
+    "previousResult": "Vorheriges Ergebnis",
+    "nextResult": "Nächstes Ergebnis",
+    "playFromHere": "Ab hier abspielen",
+    "pause": "Pause",
+    "shareConversationQuestion": "Unterhaltung teilen?",
+    "conversationTasksEmptyMessage": "Aufgaben aus dieser Unterhaltung erscheinen hier.",
+    "noPendingTasks": "Keine offenen Aufgaben",
+    "nCompleted": "{count} erledigt",
+    "identifySpeaker": "Sprecher zuordnen"
 }

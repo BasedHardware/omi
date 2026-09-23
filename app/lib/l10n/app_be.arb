@@ -10838,5 +10838,21 @@
     "discard": "Адхіліць",
     "keepEditing": "Працягнуць рэдагаванне",
     "discardChangesTitle": "Адхіліць змены?",
-    "discardChangesMessage": "Вашы незахаваныя змены будуць страчаны."
+    "discardChangesMessage": "Вашы незахаваныя змены будуць страчаны.",
+    "linkEvent": "Звязаць падзею",
+    "noCalendarEventsNearby": "Каля гэтага часу падзей у календары не знойдзена.",
+    "suggestedEvent": "Прапанавана",
+    "openInGoogleCalendar": "Адкрыць у Google Календары",
+    "shareWithAttendees": "Падзяліцца з удзельнікамі",
+    "unlinkCalendarEvent": "Адвязаць падзею календара",
+    "meetingNotesSubject": "Нататкі: {title}",
+    "previousResult": "Папярэдні вынік",
+    "nextResult": "Наступны вынік",
+    "playFromHere": "Прайграць адсюль",
+    "pause": "Паўза",
+    "shareConversationQuestion": "Падзяліцца размовай?",
+    "conversationTasksEmptyMessage": "Задачы з гэтай размовы з'явяцца тут.",
+    "noPendingTasks": "Няма невыкананых задач",
+    "nCompleted": "Выканана: {count}",
+    "identifySpeaker": "Вызначыць удзельніка"
 }

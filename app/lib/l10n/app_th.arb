@@ -3266,5 +3266,21 @@
     "discard": "ละทิ้ง",
     "keepEditing": "แก้ไขต่อ",
     "discardChangesTitle": "ละทิ้งการเปลี่ยนแปลง?",
-    "discardChangesMessage": "การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป"
+    "discardChangesMessage": "การเปลี่ยนแปลงที่ยังไม่ได้บันทึกจะหายไป",
+    "linkEvent": "เชื่อมโยงกิจกรรม",
+    "noCalendarEventsNearby": "ไม่พบกิจกรรมในปฏิทินในช่วงเวลานี้",
+    "suggestedEvent": "แนะนำ",
+    "openInGoogleCalendar": "เปิดใน Google ปฏิทิน",
+    "shareWithAttendees": "แชร์กับผู้เข้าร่วม",
+    "unlinkCalendarEvent": "ยกเลิกการเชื่อมโยงกิจกรรม",
+    "meetingNotesSubject": "บันทึก: {title}",
+    "previousResult": "ผลลัพธ์ก่อนหน้า",
+    "nextResult": "ผลลัพธ์ถัดไป",
+    "playFromHere": "เล่นจากตรงนี้",
+    "pause": "หยุดชั่วคราว",
+    "shareConversationQuestion": "แชร์บทสนทนาไหม",
+    "conversationTasksEmptyMessage": "งานจากบทสนทนานี้จะแสดงที่นี่",
+    "noPendingTasks": "ไม่มีงานที่รอดำเนินการ",
+    "nCompleted": "เสร็จแล้ว {count} รายการ",
+    "identifySpeaker": "ระบุผู้พูด"
 }

@@ -10838,5 +10838,21 @@
     "discard": "מחיקה",
     "keepEditing": "המשך עריכה",
     "discardChangesTitle": "לבטל את השינויים?",
-    "discardChangesMessage": "השינויים שלא נשמרו יאבדו."
+    "discardChangesMessage": "השינויים שלא נשמרו יאבדו.",
+    "linkEvent": "קישור אירוע",
+    "noCalendarEventsNearby": "לא נמצאו אירועי יומן בסביבות השעה הזו.",
+    "suggestedEvent": "מוצע",
+    "openInGoogleCalendar": "פתיחה ביומן Google",
+    "shareWithAttendees": "שיתוף עם המשתתפים",
+    "unlinkCalendarEvent": "ביטול קישור לאירוע היומן",
+    "meetingNotesSubject": "הערות: {title}",
+    "previousResult": "התוצאה הקודמת",
+    "nextResult": "התוצאה הבאה",
+    "playFromHere": "הפעלה מכאן",
+    "pause": "השהיה",
+    "shareConversationQuestion": "לשתף את השיחה?",
+    "conversationTasksEmptyMessage": "המשימות מהשיחה הזו יופיעו כאן.",
+    "noPendingTasks": "אין משימות ממתינות",
+    "nCompleted": "{count} הושלמו",
+    "identifySpeaker": "זיהוי דובר"
 }

@@ -10168,4 +10168,56 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Dina osparade ändringar går förlorade.';
+
+  @override
+  String get linkEvent => 'Länka händelse';
+
+  @override
+  String get noCalendarEventsNearby => 'Inga kalenderhändelser hittades runt den här tiden.';
+
+  @override
+  String get suggestedEvent => 'Förslag';
+
+  @override
+  String get openInGoogleCalendar => 'Öppna i Google Kalender';
+
+  @override
+  String get shareWithAttendees => 'Dela med deltagare';
+
+  @override
+  String get unlinkCalendarEvent => 'Ta bort länk till händelse';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Anteckningar: $title';
+  }
+
+  @override
+  String get previousResult => 'Föregående resultat';
+
+  @override
+  String get nextResult => 'Nästa resultat';
+
+  @override
+  String get playFromHere => 'Spela upp härifrån';
+
+  @override
+  String get pause => 'Pausa';
+
+  @override
+  String get shareConversationQuestion => 'Dela konversationen?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Uppgifter från den här konversationen visas här.';
+
+  @override
+  String get noPendingTasks => 'Inga väntande uppgifter';
+
+  @override
+  String nCompleted(int count) {
+    return '$count klara';
+  }
+
+  @override
+  String get identifySpeaker => 'Identifiera talare';
 }

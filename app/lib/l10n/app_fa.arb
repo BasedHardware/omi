@@ -10838,5 +10838,21 @@
     "discard": "دور انداختن",
     "keepEditing": "ادامه ویرایش",
     "discardChangesTitle": "تغییرات دور انداخته شود؟",
-    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت."
+    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت.",
+    "linkEvent": "پیوند رویداد",
+    "noCalendarEventsNearby": "هیچ رویداد تقویمی در حدود این زمان پیدا نشد.",
+    "suggestedEvent": "پیشنهادی",
+    "openInGoogleCalendar": "باز کردن در تقویم Google",
+    "shareWithAttendees": "اشتراک‌گذاری با شرکت‌کنندگان",
+    "unlinkCalendarEvent": "لغو پیوند رویداد تقویم",
+    "meetingNotesSubject": "یادداشت‌ها: {title}",
+    "previousResult": "نتیجهٔ قبلی",
+    "nextResult": "نتیجهٔ بعدی",
+    "playFromHere": "پخش از اینجا",
+    "pause": "توقف",
+    "shareConversationQuestion": "گفتگو به اشتراک گذاشته شود؟",
+    "conversationTasksEmptyMessage": "وظایف این گفتگو اینجا نمایش داده می‌شوند.",
+    "noPendingTasks": "وظیفهٔ در انتظاری نیست",
+    "nCompleted": "{count} انجام‌شده",
+    "identifySpeaker": "شناسایی گوینده"
 }

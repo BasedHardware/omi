@@ -3266,5 +3266,21 @@
     "discard": "Απόρριψη",
     "keepEditing": "Συνέχεια επεξεργασίας",
     "discardChangesTitle": "Απόρριψη αλλαγών;",
-    "discardChangesMessage": "Οι μη αποθηκευμένες αλλαγές σας θα χαθούν."
+    "discardChangesMessage": "Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.",
+    "linkEvent": "Σύνδεση συμβάντος",
+    "noCalendarEventsNearby": "Δεν βρέθηκαν συμβάντα ημερολογίου γύρω από αυτή την ώρα.",
+    "suggestedEvent": "Προτεινόμενο",
+    "openInGoogleCalendar": "Άνοιγμα στο Google Calendar",
+    "shareWithAttendees": "Κοινοποίηση στους συμμετέχοντες",
+    "unlinkCalendarEvent": "Αποσύνδεση συμβάντος ημερολογίου",
+    "meetingNotesSubject": "Σημειώσεις: {title}",
+    "previousResult": "Προηγούμενο αποτέλεσμα",
+    "nextResult": "Επόμενο αποτέλεσμα",
+    "playFromHere": "Αναπαραγωγή από εδώ",
+    "pause": "Παύση",
+    "shareConversationQuestion": "Κοινοποίηση συνομιλίας;",
+    "conversationTasksEmptyMessage": "Οι εργασίες από αυτή τη συνομιλία θα εμφανίζονται εδώ.",
+    "noPendingTasks": "Δεν υπάρχουν εκκρεμείς εργασίες",
+    "nCompleted": "{count} ολοκληρωμένες",
+    "identifySpeaker": "Αναγνώριση ομιλητή"
 }

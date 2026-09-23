@@ -3266,5 +3266,21 @@
     "discard": "Loobu",
     "keepEditing": "Jätka muutmist",
     "discardChangesTitle": "Kas loobuda muudatustest?",
-    "discardChangesMessage": "Salvestamata muudatused lähevad kaotsi."
+    "discardChangesMessage": "Salvestamata muudatused lähevad kaotsi.",
+    "linkEvent": "Seo sündmus",
+    "noCalendarEventsNearby": "Selle aja ümbruses ei leitud kalendrisündmusi.",
+    "suggestedEvent": "Soovitatud",
+    "openInGoogleCalendar": "Ava Google'i kalendris",
+    "shareWithAttendees": "Jaga osalejatega",
+    "unlinkCalendarEvent": "Eemalda kalendrisündmuse seos",
+    "meetingNotesSubject": "Märkmed: {title}",
+    "previousResult": "Eelmine tulemus",
+    "nextResult": "Järgmine tulemus",
+    "playFromHere": "Esita siit",
+    "pause": "Paus",
+    "shareConversationQuestion": "Kas jagada vestlust?",
+    "conversationTasksEmptyMessage": "Selle vestluse ülesanded ilmuvad siia.",
+    "noPendingTasks": "Ootel ülesandeid pole",
+    "nCompleted": "{count} tehtud",
+    "identifySpeaker": "Tuvasta kõneleja"
 }

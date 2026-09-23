@@ -3301,5 +3301,21 @@
     "discard": "Odrzuć",
     "keepEditing": "Kontynuuj edycję",
     "discardChangesTitle": "Odrzucić zmiany?",
-    "discardChangesMessage": "Niezapisane zmiany zostaną utracone."
+    "discardChangesMessage": "Niezapisane zmiany zostaną utracone.",
+    "linkEvent": "Połącz wydarzenie",
+    "noCalendarEventsNearby": "Nie znaleziono wydarzeń w kalendarzu w okolicach tej godziny.",
+    "suggestedEvent": "Sugerowane",
+    "openInGoogleCalendar": "Otwórz w Kalendarzu Google",
+    "shareWithAttendees": "Udostępnij uczestnikom",
+    "unlinkCalendarEvent": "Odłącz wydarzenie",
+    "meetingNotesSubject": "Notatki: {title}",
+    "previousResult": "Poprzedni wynik",
+    "nextResult": "Następny wynik",
+    "playFromHere": "Odtwórz od tego miejsca",
+    "pause": "Wstrzymaj",
+    "shareConversationQuestion": "Udostępnić rozmowę?",
+    "conversationTasksEmptyMessage": "Zadania z tej rozmowy pojawią się tutaj.",
+    "noPendingTasks": "Brak oczekujących zadań",
+    "nCompleted": "Ukończone: {count}",
+    "identifySpeaker": "Wskaż mówcę"
 }

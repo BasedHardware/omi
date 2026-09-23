@@ -10158,4 +10158,56 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Các thay đổi chưa lưu của bạn sẽ bị mất.';
+
+  @override
+  String get linkEvent => 'Liên kết sự kiện';
+
+  @override
+  String get noCalendarEventsNearby => 'Không tìm thấy sự kiện lịch nào vào khoảng thời gian này.';
+
+  @override
+  String get suggestedEvent => 'Đề xuất';
+
+  @override
+  String get openInGoogleCalendar => 'Mở trong Google Lịch';
+
+  @override
+  String get shareWithAttendees => 'Chia sẻ với người tham dự';
+
+  @override
+  String get unlinkCalendarEvent => 'Hủy liên kết sự kiện lịch';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Ghi chú: $title';
+  }
+
+  @override
+  String get previousResult => 'Kết quả trước';
+
+  @override
+  String get nextResult => 'Kết quả tiếp theo';
+
+  @override
+  String get playFromHere => 'Phát từ đây';
+
+  @override
+  String get pause => 'Tạm dừng';
+
+  @override
+  String get shareConversationQuestion => 'Chia sẻ cuộc trò chuyện?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Các công việc từ cuộc trò chuyện này sẽ hiển thị ở đây.';
+
+  @override
+  String get noPendingTasks => 'Không có công việc đang chờ';
+
+  @override
+  String nCompleted(int count) {
+    return '$count đã hoàn thành';
+  }
+
+  @override
+  String get identifySpeaker => 'Xác định người nói';
 }

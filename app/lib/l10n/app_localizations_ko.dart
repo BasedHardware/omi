@@ -9994,4 +9994,56 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '저장하지 않은 변경 사항이 사라집니다.';
+
+  @override
+  String get linkEvent => '일정 연결';
+
+  @override
+  String get noCalendarEventsNearby => '이 시간대의 캘린더 일정이 없습니다.';
+
+  @override
+  String get suggestedEvent => '추천';
+
+  @override
+  String get openInGoogleCalendar => 'Google 캘린더에서 열기';
+
+  @override
+  String get shareWithAttendees => '참석자와 공유';
+
+  @override
+  String get unlinkCalendarEvent => '일정 연결 해제';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return '메모: $title';
+  }
+
+  @override
+  String get previousResult => '이전 결과';
+
+  @override
+  String get nextResult => '다음 결과';
+
+  @override
+  String get playFromHere => '여기부터 재생';
+
+  @override
+  String get pause => '일시정지';
+
+  @override
+  String get shareConversationQuestion => '대화를 공유할까요?';
+
+  @override
+  String get conversationTasksEmptyMessage => '이 대화의 작업이 여기에 표시됩니다.';
+
+  @override
+  String get noPendingTasks => '대기 중인 작업이 없습니다';
+
+  @override
+  String nCompleted(int count) {
+    return '$count개 완료';
+  }
+
+  @override
+  String get identifySpeaker => '화자 지정';
 }

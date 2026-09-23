@@ -10202,4 +10202,56 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get linkEvent => 'Esemény összekapcsolása';
+
+  @override
+  String get noCalendarEventsNearby => 'Ebben az időpontban nem található naptáresemény.';
+
+  @override
+  String get suggestedEvent => 'Javasolt';
+
+  @override
+  String get openInGoogleCalendar => 'Megnyitás a Google Naptárban';
+
+  @override
+  String get shareWithAttendees => 'Megosztás a résztvevőkkel';
+
+  @override
+  String get unlinkCalendarEvent => 'Naptáresemény leválasztása';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Jegyzetek: $title';
+  }
+
+  @override
+  String get previousResult => 'Előző találat';
+
+  @override
+  String get nextResult => 'Következő találat';
+
+  @override
+  String get playFromHere => 'Lejátszás innen';
+
+  @override
+  String get pause => 'Szünet';
+
+  @override
+  String get shareConversationQuestion => 'Megosztod a beszélgetést?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'A beszélgetés feladatai itt jelennek meg.';
+
+  @override
+  String get noPendingTasks => 'Nincs függő feladat';
+
+  @override
+  String nCompleted(int count) {
+    return '$count kész';
+  }
+
+  @override
+  String get identifySpeaker => 'Beszélő azonosítása';
 }

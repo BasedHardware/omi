@@ -10157,4 +10157,56 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Salvestamata muudatused lähevad kaotsi.';
+
+  @override
+  String get linkEvent => 'Seo sündmus';
+
+  @override
+  String get noCalendarEventsNearby => 'Selle aja ümbruses ei leitud kalendrisündmusi.';
+
+  @override
+  String get suggestedEvent => 'Soovitatud';
+
+  @override
+  String get openInGoogleCalendar => 'Ava Google\'i kalendris';
+
+  @override
+  String get shareWithAttendees => 'Jaga osalejatega';
+
+  @override
+  String get unlinkCalendarEvent => 'Eemalda kalendrisündmuse seos';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Märkmed: $title';
+  }
+
+  @override
+  String get previousResult => 'Eelmine tulemus';
+
+  @override
+  String get nextResult => 'Järgmine tulemus';
+
+  @override
+  String get playFromHere => 'Esita siit';
+
+  @override
+  String get pause => 'Paus';
+
+  @override
+  String get shareConversationQuestion => 'Kas jagada vestlust?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Selle vestluse ülesanded ilmuvad siia.';
+
+  @override
+  String get noPendingTasks => 'Ootel ülesandeid pole';
+
+  @override
+  String nCompleted(int count) {
+    return '$count tehtud';
+  }
+
+  @override
+  String get identifySpeaker => 'Tuvasta kõneleja';
 }

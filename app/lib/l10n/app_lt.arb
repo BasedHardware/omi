@@ -3266,5 +3266,21 @@
     "discard": "Atmesti",
     "keepEditing": "Tęsti redagavimą",
     "discardChangesTitle": "Atmesti pakeitimus?",
-    "discardChangesMessage": "Neišsaugoti pakeitimai bus prarasti."
+    "discardChangesMessage": "Neišsaugoti pakeitimai bus prarasti.",
+    "linkEvent": "Susieti įvykį",
+    "noCalendarEventsNearby": "Apie šį laiką kalendoriaus įvykių nerasta.",
+    "suggestedEvent": "Siūloma",
+    "openInGoogleCalendar": "Atidaryti „Google“ kalendoriuje",
+    "shareWithAttendees": "Bendrinti su dalyviais",
+    "unlinkCalendarEvent": "Atsieti kalendoriaus įvykį",
+    "meetingNotesSubject": "Užrašai: {title}",
+    "previousResult": "Ankstesnis rezultatas",
+    "nextResult": "Kitas rezultatas",
+    "playFromHere": "Leisti nuo čia",
+    "pause": "Pristabdyti",
+    "shareConversationQuestion": "Bendrinti pokalbį?",
+    "conversationTasksEmptyMessage": "Šio pokalbio užduotys bus rodomos čia.",
+    "noPendingTasks": "Laukiančių užduočių nėra",
+    "nCompleted": "Atlikta: {count}",
+    "identifySpeaker": "Nustatyti kalbėtoją"
 }

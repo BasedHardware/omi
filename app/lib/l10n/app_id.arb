@@ -3301,5 +3301,21 @@
     "discard": "Buang",
     "keepEditing": "Lanjutkan Mengedit",
     "discardChangesTitle": "Buang Perubahan?",
-    "discardChangesMessage": "Perubahan yang belum disimpan akan hilang."
+    "discardChangesMessage": "Perubahan yang belum disimpan akan hilang.",
+    "linkEvent": "Tautkan Acara",
+    "noCalendarEventsNearby": "Tidak ada acara kalender di sekitar waktu ini.",
+    "suggestedEvent": "Disarankan",
+    "openInGoogleCalendar": "Buka di Google Kalender",
+    "shareWithAttendees": "Bagikan dengan Peserta",
+    "unlinkCalendarEvent": "Putuskan Tautan Acara Kalender",
+    "meetingNotesSubject": "Catatan: {title}",
+    "previousResult": "Hasil sebelumnya",
+    "nextResult": "Hasil berikutnya",
+    "playFromHere": "Putar dari sini",
+    "pause": "Jeda",
+    "shareConversationQuestion": "Bagikan Percakapan?",
+    "conversationTasksEmptyMessage": "Tugas dari percakapan ini akan muncul di sini.",
+    "noPendingTasks": "Tidak ada tugas tertunda",
+    "nCompleted": "{count} selesai",
+    "identifySpeaker": "Identifikasi pembicara"
 }

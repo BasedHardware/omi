@@ -10254,4 +10254,56 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get linkEvent => 'I-link ang Event';
+
+  @override
+  String get noCalendarEventsNearby => 'Walang nahanap na event sa kalendaryo sa oras na ito.';
+
+  @override
+  String get suggestedEvent => 'Iminumungkahi';
+
+  @override
+  String get openInGoogleCalendar => 'Buksan sa Google Calendar';
+
+  @override
+  String get shareWithAttendees => 'Ibahagi sa mga Dumalo';
+
+  @override
+  String get unlinkCalendarEvent => 'I-unlink ang Event sa Kalendaryo';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Mga Tala: $title';
+  }
+
+  @override
+  String get previousResult => 'Nakaraang resulta';
+
+  @override
+  String get nextResult => 'Susunod na resulta';
+
+  @override
+  String get playFromHere => 'I-play mula rito';
+
+  @override
+  String get pause => 'I-pause';
+
+  @override
+  String get shareConversationQuestion => 'Ibahagi ang Pag-uusap?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Lalabas dito ang mga gawain mula sa pag-uusap na ito.';
+
+  @override
+  String get noPendingTasks => 'Walang nakabinbing gawain';
+
+  @override
+  String nCompleted(int count) {
+    return '$count tapos na';
+  }
+
+  @override
+  String get identifySpeaker => 'Tukuyin ang nagsasalita';
 }

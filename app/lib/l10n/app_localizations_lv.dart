@@ -10187,4 +10187,56 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get linkEvent => 'Saistīt notikumu';
+
+  @override
+  String get noCalendarEventsNearby => 'Ap šo laiku kalendāra notikumi netika atrasti.';
+
+  @override
+  String get suggestedEvent => 'Ieteikts';
+
+  @override
+  String get openInGoogleCalendar => 'Atvērt Google kalendārā';
+
+  @override
+  String get shareWithAttendees => 'Kopīgot ar dalībniekiem';
+
+  @override
+  String get unlinkCalendarEvent => 'Atsaistīt kalendāra notikumu';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Piezīmes: $title';
+  }
+
+  @override
+  String get previousResult => 'Iepriekšējais rezultāts';
+
+  @override
+  String get nextResult => 'Nākamais rezultāts';
+
+  @override
+  String get playFromHere => 'Atskaņot no šejienes';
+
+  @override
+  String get pause => 'Pauze';
+
+  @override
+  String get shareConversationQuestion => 'Kopīgot sarunu?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Šīs sarunas uzdevumi parādīsies šeit.';
+
+  @override
+  String get noPendingTasks => 'Nav neizpildītu uzdevumu';
+
+  @override
+  String nCompleted(int count) {
+    return 'Pabeigti: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Identificēt runātāju';
 }

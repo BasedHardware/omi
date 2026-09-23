@@ -3266,5 +3266,21 @@
     "discard": "Отхвърляне",
     "keepEditing": "Продължи редактирането",
     "discardChangesTitle": "Отхвърляне на промените?",
-    "discardChangesMessage": "Незаписаните промени ще бъдат загубени."
+    "discardChangesMessage": "Незаписаните промени ще бъдат загубени.",
+    "linkEvent": "Свързване на събитие",
+    "noCalendarEventsNearby": "Няма намерени събития в календара около това време.",
+    "suggestedEvent": "Предложено",
+    "openInGoogleCalendar": "Отваряне в Google Календар",
+    "shareWithAttendees": "Споделяне с участниците",
+    "unlinkCalendarEvent": "Премахване на връзката със събитието",
+    "meetingNotesSubject": "Бележки: {title}",
+    "previousResult": "Предишен резултат",
+    "nextResult": "Следващ резултат",
+    "playFromHere": "Пусни оттук",
+    "pause": "Пауза",
+    "shareConversationQuestion": "Споделяне на разговора?",
+    "conversationTasksEmptyMessage": "Задачите от този разговор ще се появят тук.",
+    "noPendingTasks": "Няма чакащи задачи",
+    "nCompleted": "{count} завършени",
+    "identifySpeaker": "Разпознаване на говорещия"
 }

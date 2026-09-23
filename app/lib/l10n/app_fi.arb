@@ -3266,5 +3266,21 @@
     "discard": "Hylkää",
     "keepEditing": "Jatka muokkausta",
     "discardChangesTitle": "Hylätäänkö muutokset?",
-    "discardChangesMessage": "Tallentamattomat muutokset menetetään."
+    "discardChangesMessage": "Tallentamattomat muutokset menetetään.",
+    "linkEvent": "Linkitä tapahtuma",
+    "noCalendarEventsNearby": "Tämän ajankohdan tienoilta ei löytynyt kalenteritapahtumia.",
+    "suggestedEvent": "Ehdotettu",
+    "openInGoogleCalendar": "Avaa Google-kalenterissa",
+    "shareWithAttendees": "Jaa osallistujille",
+    "unlinkCalendarEvent": "Poista kalenteritapahtuman linkitys",
+    "meetingNotesSubject": "Muistiinpanot: {title}",
+    "previousResult": "Edellinen tulos",
+    "nextResult": "Seuraava tulos",
+    "playFromHere": "Toista tästä",
+    "pause": "Tauko",
+    "shareConversationQuestion": "Jaetaanko keskustelu?",
+    "conversationTasksEmptyMessage": "Tämän keskustelun tehtävät näkyvät täällä.",
+    "noPendingTasks": "Ei avoimia tehtäviä",
+    "nCompleted": "{count} valmiina",
+    "identifySpeaker": "Tunnista puhuja"
 }

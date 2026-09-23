@@ -18770,6 +18770,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your unsaved changes will be lost.'**
   String get discardChangesMessage;
+
+  /// Menu item and sheet title: link this conversation to a calendar event
+  ///
+  /// In en, this message translates to:
+  /// **'Link Event'**
+  String get linkEvent;
+
+  /// Empty state of the link-event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'No calendar events found around this time.'**
+  String get noCalendarEventsNearby;
+
+  /// Badge on the calendar event that best matches the conversation time
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get suggestedEvent;
+
+  /// Action in the linked calendar event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Google Calendar'**
+  String get openInGoogleCalendar;
+
+  /// Action in the linked calendar event sheet: email the meeting attendees
+  ///
+  /// In en, this message translates to:
+  /// **'Share with Attendees'**
+  String get shareWithAttendees;
+
+  /// Action in the linked calendar event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Unlink Calendar Event'**
+  String get unlinkCalendarEvent;
+
+  /// Email subject when sharing conversation notes with meeting attendees
+  ///
+  /// In en, this message translates to:
+  /// **'Notes: {title}'**
+  String meetingNotesSubject(String title);
+
+  /// Accessibility label of the up arrow in conversation search
+  ///
+  /// In en, this message translates to:
+  /// **'Previous result'**
+  String get previousResult;
+
+  /// Accessibility label of the down arrow in conversation search
+  ///
+  /// In en, this message translates to:
+  /// **'Next result'**
+  String get nextResult;
+
+  /// Accessibility label of the play button on a transcript line
+  ///
+  /// In en, this message translates to:
+  /// **'Play from here'**
+  String get playFromHere;
+
+  /// Pause audio playback button
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pause;
+
+  /// Title of the confirm shown before a private conversation is made shareable by link
+  ///
+  /// In en, this message translates to:
+  /// **'Share Conversation?'**
+  String get shareConversationQuestion;
+
+  /// Empty state message of a conversation's Tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks from this conversation will appear here.'**
+  String get conversationTasksEmptyMessage;
+
+  /// Placeholder row when every task of a conversation is done
+  ///
+  /// In en, this message translates to:
+  /// **'No pending tasks'**
+  String get noPendingTasks;
+
+  /// Accessibility label of the completed-count pill on a conversation's Tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'{count} completed'**
+  String nCompleted(int count);
+
+  /// Accessibility label of a speaker avatar/name in a transcript; opens the sheet to name the speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Identify speaker'**
+  String get identifySpeaker;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

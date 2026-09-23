@@ -3301,5 +3301,21 @@
     "discard": "Ignorer",
     "keepEditing": "Continuer la modification",
     "discardChangesTitle": "Ignorer les modifications ?",
-    "discardChangesMessage": "Vos modifications non enregistrées seront perdues."
+    "discardChangesMessage": "Vos modifications non enregistrées seront perdues.",
+    "linkEvent": "Lier un événement",
+    "noCalendarEventsNearby": "Aucun événement d'agenda trouvé autour de cette heure.",
+    "suggestedEvent": "Suggéré",
+    "openInGoogleCalendar": "Ouvrir dans Google Agenda",
+    "shareWithAttendees": "Partager avec les participants",
+    "unlinkCalendarEvent": "Dissocier l'événement",
+    "meetingNotesSubject": "Notes : {title}",
+    "previousResult": "Résultat précédent",
+    "nextResult": "Résultat suivant",
+    "playFromHere": "Lire à partir d'ici",
+    "pause": "Pause",
+    "shareConversationQuestion": "Partager la conversation ?",
+    "conversationTasksEmptyMessage": "Les tâches de cette conversation apparaîtront ici.",
+    "noPendingTasks": "Aucune tâche en attente",
+    "nCompleted": "{count} terminée(s)",
+    "identifySpeaker": "Identifier l'intervenant"
 }

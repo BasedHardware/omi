@@ -10167,4 +10167,56 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।';
+
+  @override
+  String get linkEvent => 'ইভেন্ট লিঙ্ক করুন';
+
+  @override
+  String get noCalendarEventsNearby => 'এই সময়ের আশেপাশে কোনো ক্যালেন্ডার ইভেন্ট পাওয়া যায়নি।';
+
+  @override
+  String get suggestedEvent => 'প্রস্তাবিত';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendar-এ খুলুন';
+
+  @override
+  String get shareWithAttendees => 'অংশগ্রহণকারীদের সাথে শেয়ার করুন';
+
+  @override
+  String get unlinkCalendarEvent => 'ক্যালেন্ডার ইভেন্ট আনলিঙ্ক করুন';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'নোট: $title';
+  }
+
+  @override
+  String get previousResult => 'আগের ফলাফল';
+
+  @override
+  String get nextResult => 'পরের ফলাফল';
+
+  @override
+  String get playFromHere => 'এখান থেকে চালান';
+
+  @override
+  String get pause => 'বিরতি';
+
+  @override
+  String get shareConversationQuestion => 'কথোপকথন শেয়ার করবেন?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'এই কথোপকথনের কাজগুলি এখানে দেখা যাবে।';
+
+  @override
+  String get noPendingTasks => 'কোনো বাকি কাজ নেই';
+
+  @override
+  String nCompleted(int count) {
+    return '$countটি সম্পন্ন';
+  }
+
+  @override
+  String get identifySpeaker => 'বক্তা শনাক্ত করুন';
 }

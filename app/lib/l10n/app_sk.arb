@@ -3266,5 +3266,21 @@
     "discard": "Zahodiť",
     "keepEditing": "Pokračovať v úpravách",
     "discardChangesTitle": "Zahodiť zmeny?",
-    "discardChangesMessage": "Neuložené zmeny sa stratia."
+    "discardChangesMessage": "Neuložené zmeny sa stratia.",
+    "linkEvent": "Prepojiť udalosť",
+    "noCalendarEventsNearby": "Okolo tohto času sa nenašli žiadne udalosti v kalendári.",
+    "suggestedEvent": "Navrhované",
+    "openInGoogleCalendar": "Otvoriť v Kalendári Google",
+    "shareWithAttendees": "Zdieľať s účastníkmi",
+    "unlinkCalendarEvent": "Zrušiť prepojenie udalosti",
+    "meetingNotesSubject": "Poznámky: {title}",
+    "previousResult": "Predchádzajúci výsledok",
+    "nextResult": "Nasledujúci výsledok",
+    "playFromHere": "Prehrať odtiaľto",
+    "pause": "Pozastaviť",
+    "shareConversationQuestion": "Zdieľať konverzáciu?",
+    "conversationTasksEmptyMessage": "Úlohy z tejto konverzácie sa zobrazia tu.",
+    "noPendingTasks": "Žiadne čakajúce úlohy",
+    "nCompleted": "Dokončené: {count}",
+    "identifySpeaker": "Určiť hovoriaceho"
 }

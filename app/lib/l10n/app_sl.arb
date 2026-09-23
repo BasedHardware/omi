@@ -10838,5 +10838,21 @@
     "discard": "Zavrzi",
     "keepEditing": "Nadaljuj z urejanjem",
     "discardChangesTitle": "Želite zavreči spremembe?",
-    "discardChangesMessage": "Neshranjene spremembe bodo izgubljene."
+    "discardChangesMessage": "Neshranjene spremembe bodo izgubljene.",
+    "linkEvent": "Poveži dogodek",
+    "noCalendarEventsNearby": "Okoli tega časa ni bilo najdenih dogodkov v koledarju.",
+    "suggestedEvent": "Predlagano",
+    "openInGoogleCalendar": "Odpri v Google Koledarju",
+    "shareWithAttendees": "Deli z udeleženci",
+    "unlinkCalendarEvent": "Odstrani povezavo z dogodkom",
+    "meetingNotesSubject": "Zapiski: {title}",
+    "previousResult": "Prejšnji rezultat",
+    "nextResult": "Naslednji rezultat",
+    "playFromHere": "Predvajaj od tu",
+    "pause": "Premor",
+    "shareConversationQuestion": "Deli pogovor?",
+    "conversationTasksEmptyMessage": "Opravila iz tega pogovora bodo prikazana tukaj.",
+    "noPendingTasks": "Ni čakajočih opravil",
+    "nCompleted": "Dokončano: {count}",
+    "identifySpeaker": "Določi govorca"
 }

@@ -3266,5 +3266,21 @@
     "discard": "Hủy bỏ",
     "keepEditing": "Tiếp tục chỉnh sửa",
     "discardChangesTitle": "Hủy bỏ thay đổi?",
-    "discardChangesMessage": "Các thay đổi chưa lưu của bạn sẽ bị mất."
+    "discardChangesMessage": "Các thay đổi chưa lưu của bạn sẽ bị mất.",
+    "linkEvent": "Liên kết sự kiện",
+    "noCalendarEventsNearby": "Không tìm thấy sự kiện lịch nào vào khoảng thời gian này.",
+    "suggestedEvent": "Đề xuất",
+    "openInGoogleCalendar": "Mở trong Google Lịch",
+    "shareWithAttendees": "Chia sẻ với người tham dự",
+    "unlinkCalendarEvent": "Hủy liên kết sự kiện lịch",
+    "meetingNotesSubject": "Ghi chú: {title}",
+    "previousResult": "Kết quả trước",
+    "nextResult": "Kết quả tiếp theo",
+    "playFromHere": "Phát từ đây",
+    "pause": "Tạm dừng",
+    "shareConversationQuestion": "Chia sẻ cuộc trò chuyện?",
+    "conversationTasksEmptyMessage": "Các công việc từ cuộc trò chuyện này sẽ hiển thị ở đây.",
+    "noPendingTasks": "Không có công việc đang chờ",
+    "nCompleted": "{count} đã hoàn thành",
+    "identifySpeaker": "Xác định người nói"
 }

@@ -10196,4 +10196,56 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ.';
+
+  @override
+  String get linkEvent => 'ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಿ';
+
+  @override
+  String get noCalendarEventsNearby => 'ಈ ಸಮಯದ ಸುತ್ತ ಯಾವುದೇ ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳು ಕಂಡುಬಂದಿಲ್ಲ.';
+
+  @override
+  String get suggestedEvent => 'ಸೂಚಿಸಲಾಗಿದೆ';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendar ನಲ್ಲಿ ತೆರೆಯಿರಿ';
+
+  @override
+  String get shareWithAttendees => 'ಭಾಗವಹಿಸುವವರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ';
+
+  @override
+  String get unlinkCalendarEvent => 'ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಅನ್‌ಲಿಂಕ್ ಮಾಡಿ';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'ಟಿಪ್ಪಣಿಗಳು: $title';
+  }
+
+  @override
+  String get previousResult => 'ಹಿಂದಿನ ಫಲಿತಾಂಶ';
+
+  @override
+  String get nextResult => 'ಮುಂದಿನ ಫಲಿತಾಂಶ';
+
+  @override
+  String get playFromHere => 'ಇಲ್ಲಿಂದ ಪ್ಲೇ ಮಾಡಿ';
+
+  @override
+  String get pause => 'ವಿರಾಮ';
+
+  @override
+  String get shareConversationQuestion => 'ಸಂಭಾಷಣೆ ಹಂಚಿಕೊಳ್ಳುವುದೇ?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'ಈ ಸಂಭಾಷಣೆಯ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
+
+  @override
+  String get noPendingTasks => 'ಬಾಕಿ ಕಾರ್ಯಗಳಿಲ್ಲ';
+
+  @override
+  String nCompleted(int count) {
+    return '$count ಪೂರ್ಣಗೊಂಡಿದೆ';
+  }
+
+  @override
+  String get identifySpeaker => 'ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಿ';
 }

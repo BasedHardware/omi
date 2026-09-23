@@ -3266,5 +3266,21 @@
     "discard": "Renunță",
     "keepEditing": "Continuă editarea",
     "discardChangesTitle": "Renunți la modificări?",
-    "discardChangesMessage": "Modificările nesalvate se vor pierde."
+    "discardChangesMessage": "Modificările nesalvate se vor pierde.",
+    "linkEvent": "Asociază evenimentul",
+    "noCalendarEventsNearby": "Nu s-au găsit evenimente în calendar în jurul acestei ore.",
+    "suggestedEvent": "Sugerat",
+    "openInGoogleCalendar": "Deschide în Google Calendar",
+    "shareWithAttendees": "Distribuie participanților",
+    "unlinkCalendarEvent": "Anulează asocierea evenimentului",
+    "meetingNotesSubject": "Notițe: {title}",
+    "previousResult": "Rezultatul anterior",
+    "nextResult": "Rezultatul următor",
+    "playFromHere": "Redă de aici",
+    "pause": "Pauză",
+    "shareConversationQuestion": "Distribui conversația?",
+    "conversationTasksEmptyMessage": "Sarcinile din această conversație vor apărea aici.",
+    "noPendingTasks": "Nicio sarcină în așteptare",
+    "nCompleted": "{count} finalizate",
+    "identifySpeaker": "Identifică vorbitorul"
 }

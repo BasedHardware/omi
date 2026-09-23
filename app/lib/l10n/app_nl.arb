@@ -3266,5 +3266,21 @@
     "discard": "Verwerpen",
     "keepEditing": "Verder bewerken",
     "discardChangesTitle": "Wijzigingen verwerpen?",
-    "discardChangesMessage": "Je niet-opgeslagen wijzigingen gaan verloren."
+    "discardChangesMessage": "Je niet-opgeslagen wijzigingen gaan verloren.",
+    "linkEvent": "Afspraak koppelen",
+    "noCalendarEventsNearby": "Geen agenda-afspraken gevonden rond dit tijdstip.",
+    "suggestedEvent": "Voorgesteld",
+    "openInGoogleCalendar": "Openen in Google Agenda",
+    "shareWithAttendees": "Delen met deelnemers",
+    "unlinkCalendarEvent": "Afspraak ontkoppelen",
+    "meetingNotesSubject": "Notities: {title}",
+    "previousResult": "Vorig resultaat",
+    "nextResult": "Volgend resultaat",
+    "playFromHere": "Hier afspelen",
+    "pause": "Pauzeren",
+    "shareConversationQuestion": "Gesprek delen?",
+    "conversationTasksEmptyMessage": "Taken uit dit gesprek verschijnen hier.",
+    "noPendingTasks": "Geen openstaande taken",
+    "nCompleted": "{count} voltooid",
+    "identifySpeaker": "Spreker toewijzen"
 }

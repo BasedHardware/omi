@@ -10216,4 +10216,56 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Вашите незачувани промени ќе бидат изгубени.';
+
+  @override
+  String get linkEvent => 'Поврзи настан';
+
+  @override
+  String get noCalendarEventsNearby => 'Не се пронајдени настани во календарот околу ова време.';
+
+  @override
+  String get suggestedEvent => 'Предложено';
+
+  @override
+  String get openInGoogleCalendar => 'Отвори во Google Календар';
+
+  @override
+  String get shareWithAttendees => 'Сподели со учесниците';
+
+  @override
+  String get unlinkCalendarEvent => 'Откачи го настанот';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Белешки: $title';
+  }
+
+  @override
+  String get previousResult => 'Претходен резултат';
+
+  @override
+  String get nextResult => 'Следен резултат';
+
+  @override
+  String get playFromHere => 'Пушти од тука';
+
+  @override
+  String get pause => 'Пауза';
+
+  @override
+  String get shareConversationQuestion => 'Да се сподели разговорот?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Задачите од овој разговор ќе се појават тука.';
+
+  @override
+  String get noPendingTasks => 'Нема задачи на чекање';
+
+  @override
+  String nCompleted(int count) {
+    return 'Завршени: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Означи го говорникот';
 }

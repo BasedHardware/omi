@@ -10838,5 +10838,21 @@
     "discard": "విస్మరించు",
     "keepEditing": "సవరణ కొనసాగించు",
     "discardChangesTitle": "మార్పులను విస్మరించాలా?",
-    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు."
+    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.",
+    "linkEvent": "ఈవెంట్‌ను లింక్ చేయండి",
+    "noCalendarEventsNearby": "ఈ సమయానికి సమీపంలో క్యాలెండర్ ఈవెంట్‌లు ఏవీ కనుగొనబడలేదు.",
+    "suggestedEvent": "సూచించబడింది",
+    "openInGoogleCalendar": "Google Calendarలో తెరవండి",
+    "shareWithAttendees": "పాల్గొనేవారితో షేర్ చేయండి",
+    "unlinkCalendarEvent": "క్యాలెండర్ ఈవెంట్ లింక్ తీసివేయండి",
+    "meetingNotesSubject": "నోట్స్: {title}",
+    "previousResult": "మునుపటి ఫలితం",
+    "nextResult": "తదుపరి ఫలితం",
+    "playFromHere": "ఇక్కడి నుండి ప్లే చేయండి",
+    "pause": "పాజ్",
+    "shareConversationQuestion": "సంభాషణను షేర్ చేయాలా?",
+    "conversationTasksEmptyMessage": "ఈ సంభాషణ నుండి టాస్క్‌లు ఇక్కడ కనిపిస్తాయి.",
+    "noPendingTasks": "పెండింగ్ టాస్క్‌లు లేవు",
+    "nCompleted": "{count} పూర్తయ్యాయి",
+    "identifySpeaker": "మాట్లాడేవారిని గుర్తించండి"
 }

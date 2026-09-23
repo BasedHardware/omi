@@ -3266,5 +3266,21 @@
     "discard": "放弃",
     "keepEditing": "继续编辑",
     "discardChangesTitle": "放弃更改？",
-    "discardChangesMessage": "未保存的更改将会丢失。"
+    "discardChangesMessage": "未保存的更改将会丢失。",
+    "linkEvent": "关联日程",
+    "noCalendarEventsNearby": "该时间附近没有找到日历日程。",
+    "suggestedEvent": "推荐",
+    "openInGoogleCalendar": "在 Google 日历中打开",
+    "shareWithAttendees": "与参与者共享",
+    "unlinkCalendarEvent": "取消关联日程",
+    "meetingNotesSubject": "笔记：{title}",
+    "previousResult": "上一个结果",
+    "nextResult": "下一个结果",
+    "playFromHere": "从这里播放",
+    "pause": "暂停",
+    "shareConversationQuestion": "共享对话？",
+    "conversationTasksEmptyMessage": "此对话中的任务将显示在这里。",
+    "noPendingTasks": "没有待办任务",
+    "nCompleted": "已完成 {count} 项",
+    "identifySpeaker": "指定说话人"
 }

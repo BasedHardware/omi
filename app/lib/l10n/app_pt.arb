@@ -3301,5 +3301,21 @@
     "discard": "Descartar",
     "keepEditing": "Continuar editando",
     "discardChangesTitle": "Descartar alterações?",
-    "discardChangesMessage": "Suas alterações não salvas serão perdidas."
+    "discardChangesMessage": "Suas alterações não salvas serão perdidas.",
+    "linkEvent": "Vincular evento",
+    "noCalendarEventsNearby": "Nenhum evento do calendário encontrado perto deste horário.",
+    "suggestedEvent": "Sugerido",
+    "openInGoogleCalendar": "Abrir no Google Agenda",
+    "shareWithAttendees": "Compartilhar com os participantes",
+    "unlinkCalendarEvent": "Desvincular evento do calendário",
+    "meetingNotesSubject": "Notas: {title}",
+    "previousResult": "Resultado anterior",
+    "nextResult": "Próximo resultado",
+    "playFromHere": "Reproduzir a partir daqui",
+    "pause": "Pausar",
+    "shareConversationQuestion": "Compartilhar conversa?",
+    "conversationTasksEmptyMessage": "As tarefas desta conversa aparecerão aqui.",
+    "noPendingTasks": "Nenhuma tarefa pendente",
+    "nCompleted": "{count} concluídas",
+    "identifySpeaker": "Identificar falante"
 }

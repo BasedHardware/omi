@@ -3266,5 +3266,21 @@
     "discard": "تجاهل",
     "keepEditing": "متابعة التعديل",
     "discardChangesTitle": "تجاهل التغييرات؟",
-    "discardChangesMessage": "ستفقد التغييرات غير المحفوظة."
+    "discardChangesMessage": "ستفقد التغييرات غير المحفوظة.",
+    "linkEvent": "ربط حدث",
+    "noCalendarEventsNearby": "لم يتم العثور على أحداث تقويم في هذا الوقت تقريبًا.",
+    "suggestedEvent": "مقترح",
+    "openInGoogleCalendar": "فتح في تقويم Google",
+    "shareWithAttendees": "مشاركة مع الحاضرين",
+    "unlinkCalendarEvent": "إلغاء ربط حدث التقويم",
+    "meetingNotesSubject": "ملاحظات: {title}",
+    "previousResult": "النتيجة السابقة",
+    "nextResult": "النتيجة التالية",
+    "playFromHere": "التشغيل من هنا",
+    "pause": "إيقاف مؤقت",
+    "shareConversationQuestion": "مشاركة المحادثة؟",
+    "conversationTasksEmptyMessage": "ستظهر هنا المهام من هذه المحادثة.",
+    "noPendingTasks": "لا توجد مهام معلقة",
+    "nCompleted": "{count} مكتملة",
+    "identifySpeaker": "تحديد المتحدث"
 }

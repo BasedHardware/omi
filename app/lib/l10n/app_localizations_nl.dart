@@ -10190,4 +10190,56 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Je niet-opgeslagen wijzigingen gaan verloren.';
+
+  @override
+  String get linkEvent => 'Afspraak koppelen';
+
+  @override
+  String get noCalendarEventsNearby => 'Geen agenda-afspraken gevonden rond dit tijdstip.';
+
+  @override
+  String get suggestedEvent => 'Voorgesteld';
+
+  @override
+  String get openInGoogleCalendar => 'Openen in Google Agenda';
+
+  @override
+  String get shareWithAttendees => 'Delen met deelnemers';
+
+  @override
+  String get unlinkCalendarEvent => 'Afspraak ontkoppelen';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notities: $title';
+  }
+
+  @override
+  String get previousResult => 'Vorig resultaat';
+
+  @override
+  String get nextResult => 'Volgend resultaat';
+
+  @override
+  String get playFromHere => 'Hier afspelen';
+
+  @override
+  String get pause => 'Pauzeren';
+
+  @override
+  String get shareConversationQuestion => 'Gesprek delen?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Taken uit dit gesprek verschijnen hier.';
+
+  @override
+  String get noPendingTasks => 'Geen openstaande taken';
+
+  @override
+  String nCompleted(int count) {
+    return '$count voltooid';
+  }
+
+  @override
+  String get identifySpeaker => 'Spreker toewijzen';
 }

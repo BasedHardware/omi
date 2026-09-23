@@ -10081,4 +10081,56 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'השינויים שלא נשמרו יאבדו.';
+
+  @override
+  String get linkEvent => 'קישור אירוע';
+
+  @override
+  String get noCalendarEventsNearby => 'לא נמצאו אירועי יומן בסביבות השעה הזו.';
+
+  @override
+  String get suggestedEvent => 'מוצע';
+
+  @override
+  String get openInGoogleCalendar => 'פתיחה ביומן Google';
+
+  @override
+  String get shareWithAttendees => 'שיתוף עם המשתתפים';
+
+  @override
+  String get unlinkCalendarEvent => 'ביטול קישור לאירוע היומן';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'הערות: $title';
+  }
+
+  @override
+  String get previousResult => 'התוצאה הקודמת';
+
+  @override
+  String get nextResult => 'התוצאה הבאה';
+
+  @override
+  String get playFromHere => 'הפעלה מכאן';
+
+  @override
+  String get pause => 'השהיה';
+
+  @override
+  String get shareConversationQuestion => 'לשתף את השיחה?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'המשימות מהשיחה הזו יופיעו כאן.';
+
+  @override
+  String get noPendingTasks => 'אין משימות ממתינות';
+
+  @override
+  String nCompleted(int count) {
+    return '$count הושלמו';
+  }
+
+  @override
+  String get identifySpeaker => 'זיהוי דובר';
 }

@@ -3266,5 +3266,21 @@
     "discard": "Förkasta",
     "keepEditing": "Fortsätt redigera",
     "discardChangesTitle": "Förkasta ändringar?",
-    "discardChangesMessage": "Dina osparade ändringar går förlorade."
+    "discardChangesMessage": "Dina osparade ändringar går förlorade.",
+    "linkEvent": "Länka händelse",
+    "noCalendarEventsNearby": "Inga kalenderhändelser hittades runt den här tiden.",
+    "suggestedEvent": "Förslag",
+    "openInGoogleCalendar": "Öppna i Google Kalender",
+    "shareWithAttendees": "Dela med deltagare",
+    "unlinkCalendarEvent": "Ta bort länk till händelse",
+    "meetingNotesSubject": "Anteckningar: {title}",
+    "previousResult": "Föregående resultat",
+    "nextResult": "Nästa resultat",
+    "playFromHere": "Spela upp härifrån",
+    "pause": "Pausa",
+    "shareConversationQuestion": "Dela konversationen?",
+    "conversationTasksEmptyMessage": "Uppgifter från den här konversationen visas här.",
+    "noPendingTasks": "Inga väntande uppgifter",
+    "nCompleted": "{count} klara",
+    "identifySpeaker": "Identifiera talare"
 }

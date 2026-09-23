@@ -9972,4 +9972,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '未保存的更改将会丢失。';
+
+  @override
+  String get linkEvent => '关联日程';
+
+  @override
+  String get noCalendarEventsNearby => '该时间附近没有找到日历日程。';
+
+  @override
+  String get suggestedEvent => '推荐';
+
+  @override
+  String get openInGoogleCalendar => '在 Google 日历中打开';
+
+  @override
+  String get shareWithAttendees => '与参与者共享';
+
+  @override
+  String get unlinkCalendarEvent => '取消关联日程';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return '笔记：$title';
+  }
+
+  @override
+  String get previousResult => '上一个结果';
+
+  @override
+  String get nextResult => '下一个结果';
+
+  @override
+  String get playFromHere => '从这里播放';
+
+  @override
+  String get pause => '暂停';
+
+  @override
+  String get shareConversationQuestion => '共享对话？';
+
+  @override
+  String get conversationTasksEmptyMessage => '此对话中的任务将显示在这里。';
+
+  @override
+  String get noPendingTasks => '没有待办任务';
+
+  @override
+  String nCompleted(int count) {
+    return '已完成 $count 项';
+  }
+
+  @override
+  String get identifySpeaker => '指定说话人';
 }

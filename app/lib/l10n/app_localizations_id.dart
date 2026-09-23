@@ -10174,4 +10174,56 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Perubahan yang belum disimpan akan hilang.';
+
+  @override
+  String get linkEvent => 'Tautkan Acara';
+
+  @override
+  String get noCalendarEventsNearby => 'Tidak ada acara kalender di sekitar waktu ini.';
+
+  @override
+  String get suggestedEvent => 'Disarankan';
+
+  @override
+  String get openInGoogleCalendar => 'Buka di Google Kalender';
+
+  @override
+  String get shareWithAttendees => 'Bagikan dengan Peserta';
+
+  @override
+  String get unlinkCalendarEvent => 'Putuskan Tautan Acara Kalender';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Catatan: $title';
+  }
+
+  @override
+  String get previousResult => 'Hasil sebelumnya';
+
+  @override
+  String get nextResult => 'Hasil berikutnya';
+
+  @override
+  String get playFromHere => 'Putar dari sini';
+
+  @override
+  String get pause => 'Jeda';
+
+  @override
+  String get shareConversationQuestion => 'Bagikan Percakapan?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Tugas dari percakapan ini akan muncul di sini.';
+
+  @override
+  String get noPendingTasks => 'Tidak ada tugas tertunda';
+
+  @override
+  String nCompleted(int count) {
+    return '$count selesai';
+  }
+
+  @override
+  String get identifySpeaker => 'Identifikasi pembicara';
 }

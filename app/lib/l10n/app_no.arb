@@ -3266,5 +3266,21 @@
     "discard": "Forkast",
     "keepEditing": "Fortsett redigering",
     "discardChangesTitle": "Forkaste endringer?",
-    "discardChangesMessage": "Endringer som ikke er lagret, går tapt."
+    "discardChangesMessage": "Endringer som ikke er lagret, går tapt.",
+    "linkEvent": "Koble til hendelse",
+    "noCalendarEventsNearby": "Fant ingen kalenderhendelser rundt dette tidspunktet.",
+    "suggestedEvent": "Foreslått",
+    "openInGoogleCalendar": "Åpne i Google Kalender",
+    "shareWithAttendees": "Del med deltakere",
+    "unlinkCalendarEvent": "Fjern kobling til hendelse",
+    "meetingNotesSubject": "Notater: {title}",
+    "previousResult": "Forrige resultat",
+    "nextResult": "Neste resultat",
+    "playFromHere": "Spill av herfra",
+    "pause": "Pause",
+    "shareConversationQuestion": "Dele samtalen?",
+    "conversationTasksEmptyMessage": "Oppgaver fra denne samtalen vises her.",
+    "noPendingTasks": "Ingen ventende oppgaver",
+    "nCompleted": "{count} fullført",
+    "identifySpeaker": "Identifiser taler"
 }

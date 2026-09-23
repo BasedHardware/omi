@@ -3266,5 +3266,21 @@
     "discard": "Descarta",
     "keepEditing": "Continua editant",
     "discardChangesTitle": "Vols descartar els canvis?",
-    "discardChangesMessage": "Es perdran els canvis no desats."
+    "discardChangesMessage": "Es perdran els canvis no desats.",
+    "linkEvent": "Enllaça un esdeveniment",
+    "noCalendarEventsNearby": "No s'han trobat esdeveniments del calendari al voltant d'aquesta hora.",
+    "suggestedEvent": "Suggerit",
+    "openInGoogleCalendar": "Obre a Google Calendar",
+    "shareWithAttendees": "Comparteix amb els assistents",
+    "unlinkCalendarEvent": "Desenllaça l'esdeveniment",
+    "meetingNotesSubject": "Notes: {title}",
+    "previousResult": "Resultat anterior",
+    "nextResult": "Resultat següent",
+    "playFromHere": "Reprodueix des d'aquí",
+    "pause": "Pausa",
+    "shareConversationQuestion": "Vols compartir la conversa?",
+    "conversationTasksEmptyMessage": "Les tasques d'aquesta conversa apareixeran aquí.",
+    "noPendingTasks": "No hi ha tasques pendents",
+    "nCompleted": "{count} completades",
+    "identifySpeaker": "Identifica el parlant"
 }

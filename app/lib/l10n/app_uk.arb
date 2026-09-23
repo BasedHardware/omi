@@ -3266,5 +3266,21 @@
     "discard": "Скасувати",
     "keepEditing": "Продовжити редагування",
     "discardChangesTitle": "Скасувати зміни?",
-    "discardChangesMessage": "Незбережені зміни буде втрачено."
+    "discardChangesMessage": "Незбережені зміни буде втрачено.",
+    "linkEvent": "Пов'язати подію",
+    "noCalendarEventsNearby": "Близько цього часу подій у календарі не знайдено.",
+    "suggestedEvent": "Рекомендовано",
+    "openInGoogleCalendar": "Відкрити в Google Календарі",
+    "shareWithAttendees": "Поділитися з учасниками",
+    "unlinkCalendarEvent": "Відв'язати подію календаря",
+    "meetingNotesSubject": "Нотатки: {title}",
+    "previousResult": "Попередній результат",
+    "nextResult": "Наступний результат",
+    "playFromHere": "Відтворити звідси",
+    "pause": "Пауза",
+    "shareConversationQuestion": "Поділитися розмовою?",
+    "conversationTasksEmptyMessage": "Завдання з цієї розмови з'являться тут.",
+    "noPendingTasks": "Немає незавершених завдань",
+    "nCompleted": "Виконано: {count}",
+    "identifySpeaker": "Указати мовця"
 }

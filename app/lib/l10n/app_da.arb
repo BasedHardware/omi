@@ -3308,5 +3308,21 @@
     "discard": "Kassér",
     "keepEditing": "Fortsæt redigering",
     "discardChangesTitle": "Kassér ændringer?",
-    "discardChangesMessage": "Dine ikke-gemte ændringer går tabt."
+    "discardChangesMessage": "Dine ikke-gemte ændringer går tabt.",
+    "linkEvent": "Tilknyt begivenhed",
+    "noCalendarEventsNearby": "Der blev ikke fundet nogen kalenderbegivenheder omkring dette tidspunkt.",
+    "suggestedEvent": "Foreslået",
+    "openInGoogleCalendar": "Åbn i Google Kalender",
+    "shareWithAttendees": "Del med deltagere",
+    "unlinkCalendarEvent": "Fjern tilknytning til begivenhed",
+    "meetingNotesSubject": "Noter: {title}",
+    "previousResult": "Forrige resultat",
+    "nextResult": "Næste resultat",
+    "playFromHere": "Afspil herfra",
+    "pause": "Pause",
+    "shareConversationQuestion": "Del samtale?",
+    "conversationTasksEmptyMessage": "Opgaver fra denne samtale vises her.",
+    "noPendingTasks": "Ingen ventende opgaver",
+    "nCompleted": "{count} fuldført",
+    "identifySpeaker": "Identificer taler"
 }
