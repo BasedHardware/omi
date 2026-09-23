@@ -227,8 +227,8 @@ def make_shipbob_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"ShipBob API error: {response.status_code}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"ShipBob API error: {response.status_code}"): {response.text}")
+            return {"error": "ShipBob API request failed.", "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
         return {"error": "ShipBob API request failed"}
@@ -542,7 +542,7 @@ async def handle_shipbob_callback(
                 {
                     "request": request,
                     "authenticated": False,
-                    "error": f"Failed to exchange authorization code: {response.text}",
+                    "error": f"Failed to exchange authorization code.",
                 },
             )
 
