@@ -58,6 +58,7 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development' }}
     permissions:
       contents: read
+      id-token: write
       actions: read
     runs-on: ubuntu-latest
     env:
@@ -159,7 +160,18 @@ jobs:
             echo "project=$project"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: google-github-actions/auth@v3
+      # Prod: GitHub WIF as omi-ci-schema-prod@ (bucket get/update on
+      # omi-private-cloud-sync only; credential-hygiene WS-C). Development keeps JSON.
+      - name: Google Auth (prod WIF)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') == 'prod' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') != 'prod' }}
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
