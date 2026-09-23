@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 import typer
 from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -66,7 +67,7 @@ def get_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.get(f"/v1/dev/user/goals/{goal_id}")
+        result = client.get(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     ctx.renderer.emit(result, title="goal")
 
 
@@ -158,7 +159,7 @@ def update_goal(
             detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
+        result = client.patch(f"/v1/dev/user/goals/{path_segment(goal_id)}", json_body=body)
     ctx.renderer.success(f"Updated goal [bold]{escape(goal_id)}[/bold].")
     ctx.renderer.emit(result)
 
@@ -172,7 +173,9 @@ def update_progress(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # The progress endpoint takes current_value as a query param.
-        result = client.patch(f"/v1/dev/user/goals/{goal_id}/progress", params={"current_value": current_value})
+        result = client.patch(
+            f"/v1/dev/user/goals/{path_segment(goal_id)}/progress", params={"current_value": current_value}
+        )
     ctx.renderer.success(f"Updated progress on [bold]{escape(goal_id)}[/bold] → {current_value}.")
     ctx.renderer.emit(result)
 
@@ -185,7 +188,7 @@ def goal_history(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.get(f"/v1/dev/user/goals/{goal_id}/history", params={"days": days})
+        result = client.get(f"/v1/dev/user/goals/{path_segment(goal_id)}/history", params={"days": days})
     ctx.renderer.emit(result, title=f"goal history (last {days}d)")
 
 
@@ -199,7 +202,7 @@ def delete_goal(
     if not confirm:
         typer.confirm(f"Delete goal {goal_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/goals/{goal_id}")
+        result = client.delete(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted goal [bold]{escape(goal_id)}[/bold].")
