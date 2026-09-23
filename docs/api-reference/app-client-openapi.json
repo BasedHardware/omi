@@ -42378,7 +42378,7 @@
     },
     "/v1/conversations/{conversation_id}/reprocess-transcription": {
       "post": {
-        "description": "Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.\n\nUnlike ``POST .../reprocess``, which only regenerates the summary from the\ncurrent transcript, this replaces transcript segments from stored audio and\nthen calls ``process_conversation`` with the same reprocess flags.",
+        "description": "Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.\n\nUnlike ``POST .../reprocess``, which only regenerates the summary from the\ncurrent transcript, this replaces transcript segments from stored audio and\nthen calls ``process_conversation`` with the same ``USER_REPROCESS`` trigger.",
         "operationId": "reprocess_conversation_transcription_v1_conversations__conversation_id__reprocess_transcription_post",
         "parameters": [
           {
