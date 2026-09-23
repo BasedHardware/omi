@@ -49,7 +49,9 @@ def _raise_store_error(exc: Exception) -> NoReturn:
     if isinstance(exc, recommendation_db.RecommendationGenerationMismatchError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Recommendation generation mismatch.') from exc
     if isinstance(exc, recommendations.SnapshotValidationError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Snapshot validation failed.') from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='Snapshot validation failed.'
+        ) from exc
     raise exc
 
 
