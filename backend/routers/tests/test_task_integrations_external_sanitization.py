@@ -6,8 +6,6 @@ Verifies that upstream API tokens, network stack traces, and internal endpoint U
 from Linear, Jira, Asana, or ClickUp do NOT leak to clients in 500 responses.
 """
 
-from fastapi import HTTPException
-
 
 class TestTaskIntegrationsExternalSanitization:
     """Ensure no upstream API provider tokens or stack traces reach client responses."""
