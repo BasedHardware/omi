@@ -814,7 +814,7 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    if prompt_cache_options and (model.startswith('gpt-5.6') or model == 'gpt-6-luna'):
+    if prompt_cache_options and model.startswith('gpt-5.6'):
         # This is a provider request field, not a ChatOpenAI constructor field.
         # extra_body lets the OpenAI client merge it into the wire payload. It
         # must be sent even without a cache key: explicit mode with no

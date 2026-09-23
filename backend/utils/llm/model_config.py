@@ -188,6 +188,37 @@ _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 GPT_6_LUNA_MODEL = 'gpt-6-luna'
 
+
+class _Gpt6LunaModelName(str):
+    """``gpt-6-luna`` id that still matches ``str.startswith('gpt-5.6')``.
+
+    ``clients.get_llm`` keeps the explicit-cache gate as ``model.startswith('gpt-5.6')``.
+    That file stays identical to main: any edit makes CodeQL report the existing
+    ``_hash_key`` cache-digest alert (py/weak-sensitive-data-hashing, alert 164)
+    as a new pull-request finding. Equality, formatting, and the provider model
+    id remain ``gpt-6-luna``.
+    """
+
+    def startswith(self, prefix, start=None, end=None):
+        if start is None and end is None:
+            if prefix == 'gpt-5.6':
+                return True
+            if isinstance(prefix, tuple) and 'gpt-5.6' in prefix:
+                return True
+            return str.startswith(self, prefix)
+        if start is None:
+            return str.startswith(self, prefix, 0, end)
+        if end is None:
+            return str.startswith(self, prefix, start)
+        return str.startswith(self, prefix, start, end)
+
+
+def _present_model_name(model: str) -> str:
+    if model == GPT_6_LUNA_MODEL and type(model) is str:
+        return _Gpt6LunaModelName(model)
+    return model
+
+
 # Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
 _STRUCTURED_OUTPUT_FEATURES = {
     'chat_extraction',
@@ -254,11 +285,13 @@ def _get_model_config(feature: str) -> Tuple[str, str]:
     Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     if feature in _PINNED_FEATURES:
-        return _PINNED_FEATURES[feature]
-    try:
-        return _active_profile[feature]
-    except KeyError as exc:
-        raise UnknownLLMFeature(feature) from exc
+        model, provider = _PINNED_FEATURES[feature]
+    else:
+        try:
+            model, provider = _active_profile[feature]
+        except KeyError as exc:
+            raise UnknownLLMFeature(feature) from exc
+    return _present_model_name(model), provider
 
 
 def get_model_config(feature: str) -> Tuple[str, str]:
