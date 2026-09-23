@@ -412,12 +412,29 @@ def test_backend_static_contract_job_uses_the_pinned_backend_environment():
     assert "python3 -c 'import pytest, yaml'" in pre_deploy
 
 
+def _github_jobs(workflow_text: str) -> dict[str, str]:
+    """Map top-level GitHub Actions job ids to their YAML bodies."""
+    match = re.search(r"^jobs:\n", workflow_text, re.MULTILINE)
+    assert match is not None
+    body = workflow_text[match.end() :]
+    tokens = re.split(r"^(  [A-Za-z0-9_-]+:)\n", body, flags=re.MULTILINE)
+    jobs: dict[str, str] = {}
+    index = 1
+    while index < len(tokens):
+        job_id = tokens[index].strip()[:-1]
+        job_body = tokens[index + 1] if index + 1 < len(tokens) else ""
+        jobs[job_id] = job_body
+        index += 2
+    return jobs
+
+
 def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / '.github/workflows/mobile-app-checks.yml').read_text(encoding='utf-8')
-    generated = mobile_checks.split('\n  generated-files:\n', 1)[1].split('\n  analyze:\n', 1)[0]
-    android = mobile_checks.split('\n  android-compile-smoke:\n', 1)[1]
-    changes = mobile_checks.split('\n  changes:\n', 1)[1].split('\n  generated-files:\n', 1)[0]
+    jobs = _github_jobs(mobile_checks)
+    generated = jobs["generated-files"]
+    android = jobs["android-compile-smoke"]
+    changes = jobs["changes"]
     resolver = _load_repo_script("pre_push_ci_prediction")
 
     regular_dart = "app/lib/utils/date_formats.dart"
@@ -450,7 +467,156 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
 
     pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
     assert pinned_version is not None
-    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
+    pinned = f"flutter-version: {pinned_version.group(1)}"
+    # Every Flutter-installing job must use the repo pin. A new job that
+    # installs Flutter without this pin (or a mismatched version) fails
+    # because the two counts diverge. The floor is the historical four
+    # (generated-files, analyze-and-test, journeys-hermetic,
+    # android-compile-smoke); android-unit-tests, dart-tests-kiritimati, and
+    # ios-compile-check add three more.
+    action_count = mobile_checks.count("uses: subosito/flutter-action")
+    assert action_count == mobile_checks.count(pinned)
+    assert action_count >= 6
+
+
+def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+
+    android = jobs["android-compile-smoke"]
+    unit_tests = jobs["android-unit-tests"]
+
+    assert "name: Android Compile Smoke" in mobile_checks
+    assert "name: Android JVM Unit Tests" in mobile_checks
+    assert "needs: changes" in android
+    assert "needs: changes" in unit_tests
+    assert "needs: android-compile-smoke" not in unit_tests
+    assert "needs: android-unit-tests" not in android
+    assert "has_app_compile_smoke" in android
+    assert "has_app_compile_smoke" in unit_tests
+
+    # PRs and main both stay arm64-only (disk; extra ABIs OOM'd ubuntu-latest).
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64" in android
+    android_run_lines = {line.strip() for line in android.splitlines()}
+    assert "flutter build apk --debug --flavor dev" not in android_run_lines
+    assert "GITHUB_EVENT_NAME" not in android
+    assert "testDevDebugUnitTest" not in android
+    assert "actions/upload-artifact@v7" in android
+    assert "app-dev-debug-${{ github.event.pull_request.head.sha || github.sha }}" in android
+    assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
+    assert "retention-days: 5" in android
+    assert "${{ secrets." not in android
+    # Compile-smoke is the wall: restore-only so main does not pay Gradle
+    # save+cleanup after the APK, and so it does not race the JVM writer
+    # for the same content keys (runs 35256814704 / 35268313733).
+    assert "cache-read-only: true" in android
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" not in android
+
+    # Size report is a zip breakdown of the debug APK this job already built.
+    # --analyze-size would need a second release compile; this is never a gate.
+    assert "report_debug_apk_size.py" in android
+    assert "GITHUB_STEP_SUMMARY" in android
+    assert "apk-size-${{ github.event.pull_request.head.sha || github.sha }}" in android
+    assert not any("--analyze-size" in line and not line.lstrip().startswith("#") for line in android.splitlines())
+    assert "github-script" not in android
+    assert "create-or-update-comment" not in android
+    assert "${{ secrets." not in android
+    assert "THRESHOLD" not in (repo / ".github/scripts/report_debug_apk_size.py").read_text(encoding="utf-8")
+
+    assert "./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64" in unit_tests
+    unit_run_lines = {line.strip() for line in unit_tests.splitlines()}
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64" not in unit_run_lines
+    assert "uses: gradle/actions/setup-gradle@v6" in android
+    assert "uses: gradle/actions/setup-gradle@v6" in unit_tests
+    # Configuration cache broke AGP 8.11.1 + Kotlin 2.2.20 in CI
+    # (run 35207698338): warn mode does not downgrade a cache-state
+    # serialization failure. Savings stay in the Gradle User Home cache
+    # and the parallel JVM job.
+    assert "org.gradle.configuration-cache" not in android
+    assert "org.gradle.configuration-cache" not in unit_tests
+    assert "--config-only" not in android
+    assert "flutter build apk --debug --flavor dev --target-platform android-arm64 --config-only" in unit_tests
+    assert "${{ secrets." not in unit_tests
+    assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" in unit_tests
+    # Fork PRs must keep working: debug keystore is the in-repo prebuilt file.
+    assert "app/setup/prebuilt/debug.keystore" in android
+    assert "app/setup/prebuilt/debug.keystore" in unit_tests
+
+
+def test_mobile_kiritimati_dart_suite_is_a_parallel_second_pass():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+
+    tz_job = jobs["dart-tests-kiritimati"]
+    journeys = jobs["journeys-hermetic"]
+    analyze = jobs["analyze-and-test"]
+
+    assert "name: Dart Tests (Pacific/Kiritimati)" in mobile_checks
+    assert "needs: changes" in tz_job
+    assert "needs: analyze-and-test" not in tz_job
+    assert "needs: android-compile-smoke" not in tz_job
+    assert "needs: journeys-hermetic" not in tz_job
+    assert "has_app_dart" in tz_job
+    assert "TZ=Pacific/Kiritimati bash app/test.sh" in tz_job
+    assert "TZ=Pacific/Pago_Pago bash app/test.sh" in tz_job
+    assert "${{ secrets." not in tz_job
+    # The UTC Dart job and the journeys lane must not grow this TZ serial
+    # dependency — a needs: edge here would lengthen the critical path.
+    assert "dart-tests-kiritimati" not in analyze
+    assert "TZ=" not in journeys
+    assert "Pacific/Kiritimati" not in journeys
+    assert "Pacific/Pago_Pago" not in journeys
+
+
+def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_free():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text(encoding="utf-8")
+    jobs = _github_jobs(mobile_checks)
+    ios = jobs["ios-compile-check"]
+    changes = jobs["changes"]
+    resolver = _load_repo_script("pre_push_ci_prediction")
+
+    assert "name: iOS Compile Check" in mobile_checks
+    assert "runs-on: macos-26" in ios
+    assert "needs: changes" in ios
+    assert "has_app_ios_compile" in ios
+    assert "has_app_ios_compile" in changes
+    assert "has_app_ios_compile:" in detect_changes
+    assert "timeout-minutes: 40" in ios
+    assert "fetch-depth: 1" in ios
+    assert "run-swift-ci.sh --select-toolchain" in ios
+    assert "hashFiles('app/ios/Podfile.lock')" in ios
+    assert "GoogleService-Info-Local.plist" in ios
+    assert "flutter build ios --simulator --debug --flavor dev --no-codesign -d \"$IOS_SIMULATOR_UDID\"" in ios
+    assert "simctl" in ios
+    assert "IOS_SIMULATOR_UDID" in ios
+    assert "${{ secrets." not in ios
+    assert "ios-compile-check.yml" not in mobile_checks
+
+    dart = "app/lib/pages/chat/page.dart"
+    dart_outputs = resolver.github_outputs(
+        resolver.resolve_impact([dart], read_text=lambda path: {dart: "class ChatPage {}"}.get(path))
+    )
+    assert dart_outputs["has_app_ios_compile"] == "false"
+    assert dart_outputs["has_app_compile_smoke"] == "true"
+
+    swift = "app/ios/Runner/AppDelegate.swift"
+    swift_outputs = resolver.github_outputs(resolver.resolve_impact([swift]))
+    assert swift_outputs["has_app_ios_compile"] == "true"
+
+    workflow = ".github/workflows/mobile-app-checks.yml"
+    workflow_outputs = resolver.github_outputs(resolver.resolve_impact([workflow]))
+    assert workflow_outputs["has_app_ios_compile"] == "true"
+
+    # Stacked PRs whose base is not main must still start this workflow.
+    # `pull_request: branches: main` skipped the entire run for #14358.
+    header = mobile_checks.split("jobs:", 1)[0]
+    assert "pull_request:" in header
+    assert "push:\n    branches: main" in header
+    assert "pull_request:\n    branches:" not in header
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():
@@ -579,3 +745,34 @@ def test_workflow_contracts_static_check_validates_all_sources_when_manifest_cha
 
     assert len(errors) == 1
     assert "bad_contract returns a positional tuple with 3 fields" in errors[0]
+
+
+def test_codemagic_mobile_app_builds_inject_build_provenance_defines():
+    repo = BACKEND_DIR.parent
+    cm = (repo / "codemagic.yaml").read_text(encoding="utf-8")
+    script = repo / "app/scripts/build_provenance_dart_defines.sh"
+    assert script.is_file()
+    text = script.read_text(encoding="utf-8")
+    assert "OMI_GIT_SHA" in text
+    assert "OMI_BUILD_NUMBER" in text
+    assert "OMI_GIT_DIRTY" in text
+    assert "diff --quiet HEAD --" in text
+    assert "git status --porcelain" not in text
+    assert "CM_BUILD_ID" in text
+    assert "diff --name-only HEAD --" in text
+    assert "invalid OMI_GIT_SHA" in text
+    assert "invalid OMI_BUILD_NUMBER" in text
+
+    for workflow_id in (
+        "ios-internal-auto",
+        "android-internal-auto",
+        "ios-prod-testflight",
+        "android-prod-internal",
+        "ios-prod-patch",
+        "android-prod-patch",
+    ):
+        assert f"  {workflow_id}:" in cm
+
+    assert cm.count("scripts/build_provenance_dart_defines.sh") == 6
+    assert "shorebird patch ios" in cm
+    assert "shorebird patch android" in cm

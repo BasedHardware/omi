@@ -20,6 +20,7 @@ from utils.env_loader import firebase_admin_options
 from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
 from utils.memory.daily_memory_sweep import (
     DailySweepCohortDecision,
+    assert_no_live_pre_lock_claims,
     daily_memory_sweep_authority_from_environment,
     firestore_daily_sweep_source_provider,
     reconcile_daily_memory_sweep_timezone,
@@ -93,6 +94,7 @@ def run_daily_memory_sweep_job() -> None:
         raise RuntimeError("daily-memory-sweep inventory page is malformed")
     inventory = page.uids
     now = datetime.now(timezone.utc)
+    assert_no_live_pre_lock_claims(default_db_client, now=now, uids=inventory)
     timezone_reconciler = None
     if os.getenv("MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED", "false").casefold() in truthy:
         timezone_reconciler = lambda uid, timezone_name: reconcile_daily_memory_sweep_timezone(

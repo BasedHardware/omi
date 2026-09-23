@@ -1,3 +1,4 @@
+import { AdapterRuntimeError, isRuntimeFailureCode, type RuntimeFailureCode } from "../runtime/failures.js";
 // PiMonoAdapter — pi-mono harness adapter using SDK in-process
 //
 // Uses createAgentSession() from pi-mono SDK to run the agent loop
@@ -9,7 +10,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
 import type {
@@ -530,6 +531,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  /** Kernel-admitted directory bound to this pinned worker process. Pi's
+   * native file tools resolve relative paths from the subprocess cwd. */
+  private currentWorkingDirectory: string | undefined;
   private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
   private currentToolProjection: {
     surfaceKind?: string;
@@ -539,8 +543,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     jitProactivity: boolean;
   } = { chatFirstUi: false, controlGeneration: null, jitKnowledgeToolsEnabled: false, jitProactivity: false };
   private readonly sessionPrefix: string;
-  /** True when a token refresh was deferred because a prompt was active */
-  private pendingTokenRefresh = false;
+  /** Numeric HTTP classification correlated with the active provider request. */
+  private providerFailureCode: RuntimeFailureCode | undefined;
+  private providerRequestId: string | undefined;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
@@ -575,22 +580,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       args.push("--system-prompt", this.currentSystemPrompt);
     }
 
-    // SECURITY: require a Firebase ID token. We MUST NOT fall back to
-    // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
-    // one here would leak the upstream secret to api.omi.me.
-    if (!this.config.authToken) {
-      throw new Error(
-        "pi-mono adapter requires config.authToken (Firebase ID token)"
-      );
+    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    for (const key of Object.keys(env)) {
+      if (["ANTHROPIC_API_KEY", "OMI_AUTH_TOKEN", "OMI_API_KEY"].includes(key) || key.startsWith("OMI_BYOK_")) delete env[key];
     }
-
-    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
-    // accidentally read it as a credential. pi-mono talks to api.omi.me with
-    // OMI_API_KEY only.
-    const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
-    };
-    delete env.ANTHROPIC_API_KEY;
 
     // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
     // Scrub it from the subprocess env, then only re-inject when explicitly
@@ -603,10 +596,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       process.stderr.write("[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n");
     }
 
-    // Pass the raw Firebase ID token. pi's openai-completions client already
-    // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
-    // prefix here would produce a malformed `Bearer Bearer <token>` header.
-    env.OMI_API_KEY = this.config.authToken;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
@@ -660,6 +649,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
       env,
+      ...(this.currentWorkingDirectory ? { cwd: this.currentWorkingDirectory } : {}),
     });
 
     if (!this.process.stdout || !this.process.stdin) {
@@ -740,6 +730,18 @@ export class PiMonoAdapter implements HarnessAdapter {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
+    const admittedWorkingDirectory = resolve(opts.cwd);
+    if (
+      this.currentWorkingDirectory !== undefined
+      && this.currentWorkingDirectory !== admittedWorkingDirectory
+      && this.process
+    ) {
+      // A pinned worker may be reassigned only while idle. Process-local Pi
+      // sessions cannot cross artifact roots, so restart before rebinding it.
+      await this.stop();
+    }
+    this.currentWorkingDirectory = admittedWorkingDirectory;
+
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
     // restart the subprocess with the new flag. Callers that want this handled
@@ -751,7 +753,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
-      cwd: opts.cwd,
+      cwd: admittedWorkingDirectory,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
@@ -873,6 +875,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
+    this.providerFailureCode = undefined;
+    this.providerRequestId = relayContext?.requestId;
     this.activePromptGeneration = generation;
 
     if (signal) {
@@ -1052,45 +1056,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     return true;
   }
 
-  /** Update auth token by restarting the subprocess when idle.
-   *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
-   *  to refresh is to restart the process. If a prompt is active, marks a
-   *  pending restart that handleTurnEnd will execute after the prompt completes.
-   *  Returns true if restart happened immediately, false if deferred. */
-  async updateAuthToken(token: string): Promise<boolean> {
-    this.config.authToken = token;
-    if (this.pendingRequests.size > 0) {
-      this.pendingTokenRefresh = true;
-      process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
-      return false;
-    }
-    await this.stop();
-    await this.start();
-    this.config.onRestart?.("token_refresh");
-    this.pendingTokenRefresh = false;
-    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
-    return true;
-  }
-
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0;
   }
 
-  /** Whether a deferred restart is pending (token or system prompt) */
+  /** Whether a system-prompt restart is pending. */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh;
+    return this.pendingSystemPromptRefresh;
   }
 
   /** Execute the deferred restart (call after prompt completes).
-   *  Handles both token refresh and system-prompt change — both baked at
-   *  spawn time, both requiring a restart. */
+   *  System prompts are baked at spawn time. Credentials are request-scoped. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return;
+    if (!this.pendingSystemPromptRefresh) return;
     const reasons: string[] = [];
-    if (this.pendingTokenRefresh) reasons.push("token");
     if (this.pendingSystemPromptRefresh) reasons.push("systemPrompt");
-    this.pendingTokenRefresh = false;
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
@@ -1219,6 +1200,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     switch (event.type) {
+      case "omi_provider_status":
+        if (!this.activePromptGeneration || event.requestId !== this.providerRequestId) return;
+        this.providerFailureCode = isRuntimeFailureCode(event.failureCode) ? event.failureCode : undefined;
+        return;
       case "message_update":
         this.handleMessageUpdate(event);
         break;
@@ -1636,7 +1621,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
       this.activePublicWebTurn = null;
-      pending.reject(new Error(errorMessage));
+      pending.reject(this.providerFailureCode ? new AdapterRuntimeError({
+        code: this.providerFailureCode === "authentication" ? "omi_session_authentication" : "omi_provider_failed",
+        failureCode: this.providerFailureCode,
+        provider: "omi",
+        adapterId: "pi-mono",
+        source: "adapter_execution",
+        userMessage: this.providerFailureCode === "authentication" ? "Your session expired. Sign in to continue." : errorMessage,
+        technicalMessage: errorMessage,
+        retryable: !["authentication", "provider_setup_needed", "quota_exceeded"].includes(this.providerFailureCode),
+      }) : new Error(errorMessage));
+      this.providerFailureCode = undefined;
       this.clearJitUsage();
       this.eventHandler = null;
       this.toolExecutor = null;
@@ -1898,13 +1893,26 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
+    const providerTargets = new Set<string>();
+    const modelsUsed = new Set<string>();
+    const observingSink: AdapterEventSink = (event) => {
+      if (event.type === "model_used") {
+        if (typeof event.provider === "string" && event.provider.length > 0) {
+          providerTargets.add(event.provider);
+        }
+        if (typeof event.model === "string" && event.model.length > 0) {
+          modelsUsed.add(event.model);
+        }
+      }
+      sink(event);
+    };
     try {
       const result = await this.harness.sendPrompt(
         context.binding.adapterNativeSessionId,
         context.prompt,
         context.tools ?? [],
         context.mode,
-        sink,
+        observingSink,
         async () => "",
         signal,
         {
@@ -1927,6 +1935,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         jitEstimatedCostUsd: result.jitEstimatedCostUsd,
         jitProviderAttempts: result.jitProviderAttempts,
         jitReceiptAttemptIDs: result.jitReceiptAttemptIDs,
+        providerTargets: [...providerTargets],
+        modelsUsed: [...modelsUsed],
         adapterSessionId: result.sessionId,
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };

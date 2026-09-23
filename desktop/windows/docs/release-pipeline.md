@@ -26,14 +26,23 @@ On a manual `workflow_dispatch`:
 2. **build-and-publish** (Windows)
    - Checks out the `v<version>-windows` tag (so `package.json` already has the
      right version).
-   - Provisions `.env` from `.env.example` (public Firebase/PostHog config), then
-     `pnpm install --frozen-lockfile` (rebuilds `better-sqlite3`, builds the .NET
-     OCR/automation helpers).
+   - Provisions `.env` from the tracked `.env.beta.example` profile (public
+     Firebase/PostHog config plus the Beta API and desktop-backend endpoints),
+     then `pnpm install --frozen-lockfile` (rebuilds `better-sqlite3`, builds
+     the .NET OCR/automation helpers).
    - Builds the NSIS installer. **Signed** if the Azure Trusted Signing secrets
      are present, **unsigned** otherwise (the release notes say which).
    - Publishes the installer `.exe`, its `.exe.blockmap` (differential updates),
      and `latest.yml` (the electron-updater feed) to a **prerelease** GitHub
      Release named `Omi for Windows <version> (beta)`, using `gh`.
+
+The release workflow is the Windows Beta path: it copies
+`desktop/windows/.env.beta.example` to `.env` before installing and building.
+That profile points memory-enabled requests at the development serving plane
+(`api.omiapi.com` and the development desktop backend), while retaining the
+same Firebase project and analytics settings as the stable app. The checked-in
+`.env.example` remains the stable production profile for local or stable builds;
+the workflow must not be changed to copy it for a Beta release.
 
 ### electron-builder config (`--config electron-builder.config.mjs`)
 

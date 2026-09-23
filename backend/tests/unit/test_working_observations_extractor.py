@@ -47,6 +47,20 @@ def _l1_system_prompt() -> str:
     )[0][1]
 
 
+def _invoked_system_prompt(fake_llm) -> str:
+    """Read the static system text out of the first invoked message.
+
+    The cacheable prefix is a dict message whose content may be a plain string or a
+    list of text blocks carrying the cache breakpoint; the legacy shape was a
+    (role, text) tuple. Tests assert on the text, not on that envelope.
+    """
+    message = fake_llm.calls[0][0]
+    content = message['content'] if isinstance(message, dict) else message[1]
+    if isinstance(content, list):
+        return ''.join(block.get('text', '') for block in content)
+    return content
+
+
 def test_l1_prompt_teaches_owner_attribution_gates():
     prompt = _l1_system_prompt()
 
@@ -145,6 +159,66 @@ def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive
     assert "Speaker 1:" in captured["text"]
 
 
+def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypatch):
+    extracted = [
+        L1MemoryArchiveItem(
+            text="The owner chose the short retention window.",
+            evidence_quotes=["I chose the short retention window."],
+            speaker_label="speaker_0",
+            about="the user",
+        ),
+        L1MemoryArchiveItem(
+            text="Sarah prefers the long retention window.",
+            evidence_quotes=["Sarah prefers the long retention window."],
+            speaker_label="speaker_1",
+            about="Sarah",
+        ),
+    ]
+    monkeypatch.setattr(
+        working_observations,
+        "extract_l1_memory_archive_items_from_text",
+        lambda **_kwargs: extracted,
+    )
+    segments = [
+        TranscriptSegment(
+            id="segment-user",
+            text="I chose the short retention window.",
+            speaker="SPEAKER_00",
+            speaker_id=0,
+            speaker_id_scope="conversation-owner:0",
+            is_user=True,
+            start=0.0,
+            end=2.0,
+        ),
+        TranscriptSegment(
+            id="segment-other",
+            text="Sarah prefers the long retention window.",
+            speaker="SPEAKER_01",
+            speaker_id=1,
+            speaker_id_scope="conversation-owner:1",
+            is_user=False,
+            start=2.0,
+            end=4.0,
+        ),
+    ]
+
+    candidates = extract_canonical_l1_memory_candidates(
+        "user_1",
+        "conversation_owner",
+        segments,
+        user_name="David",
+        language="en",
+    )
+
+    assert candidates[0].source_id == "conversation_owner"
+    assert candidates[0].source_type == "conversation"
+    assert candidates[0].source_signal == "transcription"
+    assert candidates[0].lineage_id == "conversation_owner"
+    assert candidates[0].independence_group == "conversation_owner"
+    assert candidates[0].attribution == "user_spoken"
+    assert candidates[1].attribution is None
+
+
 def test_canonical_l1_wrapper_threads_rejection_examples_to_the_prompt_boundary(monkeypatch):
     captured = []
 
@@ -199,9 +273,8 @@ def test_l1_rejection_examples_stay_after_the_shared_prompt_cache_breakpoint():
     )
 
     messages = fake_llm.calls[0]
-    assert messages[1]["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
-    assert rejected_text not in str(messages[:2])
-    assert rejected_text not in str(messages[2])
+    assert messages[0]["content"][0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert rejected_text not in str(messages[:3])
     assert rejected_text in str(messages[3])
 
 
@@ -544,7 +617,7 @@ def test_l1_archive_extractor_deterministically_bounds_dense_provider_output():
         f"Distinct observation {index}" for index in range(MAX_WORKING_OBSERVATION_ITEMS)
     ]
     assert [item.archive_id for item in second] == [item.archive_id for item in first]
-    assert f"at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items" in fake_llm.calls[0][0][1].lower()
+    assert f"at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items" in _invoked_system_prompt(fake_llm).lower()
 
 
 def test_l1_archive_extractor_deduplicates_within_subject_without_collapsing_other_speakers():
@@ -604,7 +677,7 @@ def test_l1_prompt_omits_belief_instructions_when_flag_off(monkeypatch):
         persist_route_outcomes=False,
         llm=fake_llm,
     )
-    prompt = fake_llm.calls[0][0][1]
+    prompt = _invoked_system_prompt(fake_llm)
     assert "belief_class" not in prompt
     assert "half_life_days" not in prompt
     assert "subject_scope" not in prompt
@@ -621,11 +694,90 @@ def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
         persist_route_outcomes=False,
         llm=fake_llm,
     )
-    prompt = fake_llm.calls[0][0][1]
+    prompt = _invoked_system_prompt(fake_llm)
     assert "belief_class" in prompt
     assert "half_life_days" in prompt
     assert "subject_scope" in prompt
-    assert "media_screen" in prompt
+    assert "user_owned_project" in prompt
+    assert "media_screen" not in prompt
+    assert "Voice, OCR, API, and device transport do not outrank one another by modality" in prompt
+
+
+def test_l1_preserves_scoped_decision_arguments_and_source_lineage(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    fake_llm = FakeLLM(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "text": "David accepted the launch plan for Omi.",
+                        "class": "general",
+                        "source_refs": [{"source_id": "source-decision", "quote": "I accept the launch plan"}],
+                        "evidence_quotes": ["I accept the launch plan because it keeps the team focused"],
+                        "about": "the user",
+                        "subject_scope": "user_owned_project",
+                        "arguments": {
+                            "object": "Omi launch plan",
+                            "decision": "accepted",
+                            "rationale": "keeps the team focused",
+                            "task_id": "must-be-dropped",
+                        },
+                    }
+                ]
+            }
+        )
+    )
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_decision",
+        source_id="source-decision",
+        source_type="voice_transcript",
+        text="I accept the launch plan because it keeps the team focused.",
+        user_name="David",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+
+    assert len(items) == 1
+    assert items[0].subject_scope == "user_owned_project"
+    assert items[0].source_refs[0]["source_id"] == "source-decision"
+    assert items[0].arguments == {
+        "object": "Omi launch plan",
+        "decision": "accepted",
+        "rationale": "keeps the team focused",
+    }
+
+
+def test_l1_does_not_default_assistant_content_to_primary_user(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    fake_llm = FakeLLM(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "text": "The assistant suggested switching to dark mode.",
+                        "class": "general",
+                        "evidence_quotes": ["You should switch to dark mode"],
+                        "about": "the user",
+                        "subject_scope": "primary_user",
+                    }
+                ]
+            }
+        )
+    )
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user-assistant",
+        source_id="assistant-source",
+        source_type="assistant_response",
+        text="You should switch to dark mode because it is easier on the eyes.",
+        user_name="David",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+
+    assert len(items) == 1
+    assert items[0].subject_scope is None
 
 
 def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):

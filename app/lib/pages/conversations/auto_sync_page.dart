@@ -15,6 +15,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/sync/sync_card_progress_line.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
@@ -191,9 +192,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
-          final cur = s.currentFile ?? 0;
-          final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          progressText = SyncCardProgressLine.subtitle(
+            phase: s.phase,
+            currentFile: s.currentFile,
+            totalFiles: s.totalFiles,
+            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
+          );
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
@@ -201,9 +205,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
-          final cur = s.currentFile ?? 0;
-          final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          progressText = SyncCardProgressLine.subtitle(
+            phase: s.phase,
+            currentFile: s.currentFile,
+            totalFiles: s.totalFiles,
+            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
+          );
           break;
         case SyncPhase.processingOnServer:
           title = l.syncCardProcessing;
@@ -218,9 +225,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
-      // Uploaded WAL counts are queue state, not server segment progress. A
-      // localized background hint avoids presenting them as a completion meter.
-      progressText = l.syncProcessingBackgroundHint;
+      final counts = p.offlineServerProcessingCounts;
+      progressText = SyncCardProgressLine.serverProcessingSubtitle(
+            processed: counts.processed,
+            total: counts.total,
+            counterLabel: (processed, total) => l.processingProgress(processed, total),
+          ) ??
+          l.syncProcessingBackgroundHint;
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;
@@ -683,7 +694,46 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         ),
       );
     }
+    // Nothing can move these forward, so the only honest action is removal.
+    // Swipe-to-delete already works, but it is invisible: without a labelled
+    // control the needs-attention banner reads as permanent chores.
+    if (_isUnsyncableState(state)) {
+      return GestureDetector(
+        onTap: () => _confirmDeleteWal(wal),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(
+            context.l10n.delete,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+      );
+    }
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+  }
+
+  /// Terminal states no upload can resolve. [WalSyncDisplayState.failed] is
+  /// deliberately absent: its retry budget is spent but a deliberate retry can
+  /// still succeed, so that row keeps its Retry.
+  static bool _isUnsyncableState(WalSyncDisplayState state) =>
+      state == WalSyncDisplayState.corrupted ||
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio;
+
+  Future<void> _confirmDeleteWal(Wal wal) async {
+    final syncProvider = context.read<SyncProvider>();
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: context.l10n.deleteRecording,
+      message: context.l10n.thisCannotBeUndone,
+      confirmLabel: context.l10n.delete,
+      confirmColor: Colors.red,
+    );
+    if (confirmed == true) await syncProvider.deleteWal(wal);
   }
 
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
@@ -707,6 +757,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.triangleExclamation, context.l10n.syncStatusFileUnavailable);
       case WalSyncDisplayState.outsideRecoveryWindow:
         return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
+      case WalSyncDisplayState.unsupportedAudio:
+        return (Colors.redAccent, FontAwesomeIcons.fileCircleExclamation, context.l10n.syncStatusUnsupportedAudio);
     }
   }
 

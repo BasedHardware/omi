@@ -270,6 +270,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             ListTile(
                               title:
                                   Text(person.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                              subtitle: Text(context.l10n.voiceRecognitionStatus(person.voiceReadiness)),
                               onTap: () => _showPersonDialog(context, provider, person: person),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete, size: 20),

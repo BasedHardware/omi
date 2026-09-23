@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -47,19 +46,44 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    server_page_size = 25 if include_transcript else 100
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        if limit <= server_page_size:
+            items = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": limit,
+                    "offset": offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+        else:
+            items = []
+            current_offset = offset
+            while len(items) < limit:
+                batch_limit = min(limit - len(items), server_page_size)
+                page = client.get(
+                    "/v1/dev/user/conversations",
+                    params={
+                        "limit": batch_limit,
+                        "offset": current_offset,
+                        "start_date": start_date.isoformat() if start_date else None,
+                        "end_date": end_date.isoformat() if end_date else None,
+                        "categories": categories,
+                        "include_transcript": include_transcript,
+                    },
+                )
+                if not page:
+                    break
+                items.extend(page)
+                current_offset += batch_limit
+            if len(items) > limit:
+                items = items[:limit]
+
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
@@ -68,7 +92,7 @@ def list_conversations(
         structured = c.get("structured") or {}
         rows.append(
             {
-                "id": shorten(c.get("id"), 14),
+                "id": c.get("id"),
                 "title": shorten(structured.get("title"), 50),
                 "category": structured.get("category"),
                 "started_at": c.get("started_at"),
@@ -151,8 +175,18 @@ def from_segments(
     ctx = _ctx(typer_ctx)
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
+    if segments_file.is_dir():
+        raise UsageError(
+            message=f"Expected a file, but found a directory: {segments_file}",
+            detail="Provide the path to a JSON file containing transcript_segments.",
+        )
     try:
-        payload = load_json_input(segments_file.read_bytes())
+        data = segments_file.read_bytes()
+    except OSError as exc:
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc))
+
+    try:
+        payload = load_json_input(data)
     except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 

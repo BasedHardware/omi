@@ -14,11 +14,13 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
@@ -246,9 +248,20 @@ class _FCMNotificationService implements NotificationInterface {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
+
+        // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).
+        // Keep ServerMessage emission above so in-app consumers still receive it.
+        // Match the legacy foreground path: suppress shade noise while Omi speaks.
+        if (ChatAnswerNotificationHandler.isChatAnswerData(data) && !OmiVoicePlaybackService.instance.isSpeaking) {
+          ChatAnswerNotificationHandler.handle(data, channel.channelKey!, isAppInForeground: true);
+          return;
+        }
+
         if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
           if (!OmiVoicePlaybackService.instance.isSpeaking) {
-            _showForegroundNotification(noti: noti, payload: payload);
+            final route = payload['navigate_to'] ?? '';
+            final layout = route.startsWith('/chat/') ? NotificationLayout.BigText : NotificationLayout.Default;
+            _showForegroundNotification(noti: noti, layout: layout, payload: payload);
           }
         }
         return;
@@ -263,12 +276,13 @@ class _FCMNotificationService implements NotificationInterface {
       }
     });
 
-    void handleNotificationTap(RemoteMessage? message) {
+    Future<void> handleNotificationTap(RemoteMessage? message) async {
       if (message == null) return;
       final navigateTo = NotificationUtil.navigateToFromFcmData(message.data);
-      if (navigateTo != null) {
-        NotificationUtil.handleNavigateTo(navigateTo);
-      }
+      if (navigateTo == null) return;
+
+      final objectId = _notificationObjectId(message.data);
+      await NotificationUtil.handleNavigateTo(navigateTo, objectId: objectId);
     }
 
     // Background: app is backgrounded and the user taps a push notification (#5126).
@@ -276,6 +290,19 @@ class _FCMNotificationService implements NotificationInterface {
 
     // Terminated: app was killed and opened via notification tap (#5126).
     FirebaseMessaging.instance.getInitialMessage().then(handleNotificationTap);
+  }
+
+  RecordReference? _notificationObjectId(Map<String, dynamic> data) {
+    for (final key in const ['conversation_id', 'summary_id', 'message_id']) {
+      final value = data[key];
+      if (value is! String || value.isEmpty) continue;
+      try {
+        return RecordReference.fromId(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();

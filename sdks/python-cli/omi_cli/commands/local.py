@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
@@ -63,7 +64,7 @@ def configure(
         "local_api_url": profile.local_api_url,
         "local_token": _mask_token(profile.local_token),
     }
-    ctx.renderer.success(f"Configured local Omi Desktop API for profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Configured local Omi Desktop API for profile [bold]{escape(profile.name)}[/bold].")
     ctx.renderer.emit(payload, title="local configuration")
 
 
@@ -125,7 +126,9 @@ def search_screen(
         if ctx.renderer.json_mode:
             result = _normalize_screen_search(result, args)
             if isinstance(result, Mapping) and not result.get("results"):
-                result = _add_exact_screen_fallback(client, result, query=query, app_filter=app_filter, limit=limit)
+                result = _add_exact_screen_fallback(
+                    client, result, query=query, app_filter=app_filter, limit=limit, days=days
+                )
     ctx.renderer.emit(result, title="search_screen_history")
 
 
@@ -302,23 +305,59 @@ def _normalize_sql_result(result: Any) -> Any:
     if result.startswith("OK:"):
         return {"ok": True, "message": result}
 
-    footer = non_empty[-1]
+    # Find first non-empty line (header) and last non-empty line (footer)
+    header_idx = None
+    for idx, line in enumerate(lines):
+        if line.strip():
+            header_idx = idx
+            break
+
+    footer_idx = None
+    for idx in range(len(lines) - 1, -1, -1):
+        if lines[idx].strip():
+            footer_idx = idx
+            break
+
+    if header_idx is None or footer_idx is None or header_idx >= footer_idx:
+        return {"text": result}
+
+    footer = lines[footer_idx].strip()
     row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
-    header = non_empty[0]
-    separator_index = 1 if len(non_empty) > 1 and set(non_empty[1]) <= {"-", " "} else None
-    if separator_index is None or not row_count_match:
+    if not row_count_match:
+        return {"text": result}
+
+    header = lines[header_idx].strip()
+    sep_idx = header_idx + 1
+    if sep_idx >= footer_idx or not set(lines[sep_idx].strip()) <= {"-", " "}:
+        return {"text": result}
+
+    expected_count = int(row_count_match.group(1))
+
+    # Extract raw data lines between separator line and footer line
+    data_lines = lines[sep_idx + 1 : footer_idx]
+    # Strip optional trailing blank line before footer
+    if data_lines and not data_lines[-1].strip():
+        data_lines.pop()
+
+    if len(data_lines) != expected_count:
+        return {"text": result}
+
+    # Verify no embedded empty continuation lines inside data_lines
+    if any(not line.strip() for line in data_lines):
         return {"text": result}
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
     rows = []
-    for line in non_empty[2:-1]:
+    for line in data_lines:
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
-        rows.append({column: values[index] if index < len(values) else "" for index, column in enumerate(columns)})
+        if len(values) != len(columns):
+            return {"text": result}
+        rows.append({column: values[index] for index, column in enumerate(columns)})
 
     return {
         "columns": columns,
         "rows": rows,
-        "row_count": int(row_count_match.group(1)),
+        "row_count": expected_count,
     }
 
 
@@ -390,6 +429,7 @@ def _add_exact_screen_fallback(
     query: str,
     app_filter: Optional[str],
     limit: int,
+    days: int,
 ) -> dict[str, Any]:
     next_payload = dict(payload)
     escaped_query = _sql_like_literal(query)
@@ -402,12 +442,12 @@ def _add_exact_screen_fallback(
         escaped_app = _sql_like_literal(app_filter)
         where_clause = f"(appName LIKE '%{escaped_app}%' ESCAPE '!') AND ({' OR '.join(query_clauses)})"
     else:
-        where_clause = " OR ".join(query_clauses)
+        where_clause = "(" + " OR ".join(query_clauses) + ")"
 
     sql = (
         "SELECT id AS screenshot_id, timestamp, appName AS app_name, isIndexed AS is_indexed "
         "FROM screenshots "
-        f"WHERE {where_clause} "
+        f"WHERE {where_clause} AND timestamp >= datetime('now', '-{days} days') "
         "ORDER BY timestamp DESC "
         f"LIMIT {limit}"
     )

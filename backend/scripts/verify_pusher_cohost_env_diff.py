@@ -38,6 +38,13 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_NOTES_V2_ENABLED",
     "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
     "CONVERSATION_OCR_CONTEXT_ENABLED",
+    "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
+    "FREE_TIER_LOCAL_PROCESSING",
+    "FREE_TIER_EMERGENCY_STOP",
+    # Both process_conversation hosts must read the same managed-spend ledger
+    # switch; a listen-only value would leave pusher-hosted direct-provider
+    # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
+    "LLM_GATEWAY_ACCOUNTING_ENABLED",
 )
 
 # Explained listen-only residuals. New listen-only keys fail until added here
@@ -46,6 +53,18 @@ REQUIRED_IDENTICAL_LITERALS = (
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_CONNECT_ORDER_FROM_CONFIG",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
@@ -75,7 +94,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
@@ -98,7 +116,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "RAPID_API_KEY",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SONIOX_API_KEY",
             "TRANSLATION_SERVICE_MODELS",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
@@ -110,6 +127,18 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     ),
     "prod": frozenset(
         {
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_CONNECT_ORDER_FROM_CONFIG",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
@@ -138,11 +167,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
-            "MEMORY_BELIEF_MODEL_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
@@ -151,7 +178,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "POSTHOG_PROJECT_API_KEY",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SONIOX_API_KEY",
             "SYNC_TASKS_LOCATION",
             "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
@@ -173,7 +199,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID"}),
+    # Live TDT is a listen-only experiment; pusher retains its existing STT route.
+    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID", "STT_SERVICE_MODELS"}),
     "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
 }
 

@@ -3,11 +3,10 @@ import {
   buildTimelineDayGroups,
   conversationSignals,
   countTimelineItems,
-  dayKeyOf,
   dayLabel,
   flattenTimelineItems,
-  parseLocalDay,
 } from '@/lib/conversationTimeline';
+import { dayKeyOf, parseLocalDay } from '@/lib/localDay';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 
@@ -108,6 +107,18 @@ describe('conversationSignals', () => {
       actionItemCount: 0,
       speakerCount: 0,
     });
+  });
+
+  it('uses the selected app result for the conversation excerpt', () => {
+    const subject = {
+      id: 'c',
+      created_at: NOW.toISOString(),
+      started_at: NOW.toISOString(),
+      structured: { title: 'Standup', overview: 'Overview', category: 'business' },
+      apps_results: [{ app_id: 'app-1', content: 'App summary' }],
+    } as unknown as Conversation;
+
+    expect(conversationSignals(subject).excerpt).toBe('App summary');
   });
 });
 

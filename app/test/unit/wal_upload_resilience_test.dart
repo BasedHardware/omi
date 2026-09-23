@@ -327,14 +327,11 @@ void main() {
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
     });
 
-    test('KNOWN GAP: syncAll picks up miss WAL regardless of retryCount', () async {
-      // getOrphanedWals() gates on retryCount < 3 (line 438), but syncAll()
-      // at line 504 filters ONLY on status==miss && storage==disk.
-      // A WAL that has already failed 100 times is treated identically to one
-      // that has never been tried.
-      //
-      // Fix needed: syncAll() should skip WALs with retryCount >= N,
-      // or _autoUploadPendingPhoneFiles should apply the cap before calling syncAll().
+    test('syncAll skips a WAL whose auto-retry budget is spent', () async {
+      // The automatic drain used to filter only on status==miss && storage==disk,
+      // so a recording that had already failed 50 times was treated exactly like
+      // one never tried — the server could refuse the same bytes forever.
+      // `isAutoUploadEligible` now applies `walMaxAutoRetries` to every auto loop.
       const filename = 'high_retry_7000.bin';
       final file = File('${tempDir.path}/$filename');
       await file.writeAsBytes([0xAA, 0xBB]);
@@ -343,18 +340,30 @@ void main() {
       wal.retryCount = 50; // Has failed 50 times already
       sync.testWals = [wal];
 
-      // syncAll will still attempt the upload — retryCount is never consulted.
-      // We verify by observing that isSyncing is cleared after the attempt,
-      // meaning syncAll processed the WAL (not skipped it).
       final result = await sync.syncAll();
 
-      expect(result?.localUploadFailures, 1);
-      expect(
-        sync.testWals.first.isSyncing,
-        false,
-        reason: 'isSyncing cleared confirms syncAll processed this WAL, '
-            'despite retryCount=50 — no cap is enforced',
-      );
+      expect(result, isNull, reason: 'nothing is eligible, so the drain has no batch to attempt');
+      final skipped = sync.testWals.first;
+      expect(skipped.status, WalStatus.miss, reason: 'the recording is retained, not discarded');
+      expect(skipped.isSyncing, false);
+      expect(skipped.retryCount, 50, reason: 'a skipped recording spends nothing further');
+      expect(skipped.syncDisplayState, WalSyncDisplayState.failed,
+          reason: 'the sync row presents it as failed with a manual retry');
+    });
+
+    test('syncAll still uploads a WAL with budget left', () async {
+      const filename = 'some_retry_7100.bin';
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes([0xAA, 0xBB]);
+
+      final wal = _makeWal(timerStart: 7100, filePath: filename);
+      wal.retryCount = walMaxAutoRetries - 1;
+      sync.testWals = [wal];
+
+      final result = await sync.syncAll();
+
+      expect(result?.localUploadFailures, 1, reason: 'the last budgeted attempt is still made');
+      expect(sync.testWals.first.isSyncing, false);
     });
   });
 

@@ -3,6 +3,8 @@ from typing import List, Dict, Any, Optional, Union, cast
 
 from google.cloud import firestore
 
+from models.screen_activity import ScreenActivityCoverage
+
 from ._client import data_plane_db as db
 import logging
 
@@ -10,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
+SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT = 5000
 
 # Date inputs may arrive as datetime or as pre-formatted 'YYYY-MM-DD HH:MM:SS.mmm' strings.
 DateInput = Union[datetime, str]
@@ -120,11 +123,23 @@ def get_screen_activity_summary(
     start_date: Optional[DateInput] = None,
     end_date: Optional[DateInput] = None,
 ) -> Dict[str, Any]:
-    """Get aggregated app usage summary — groups by appName, counts screenshots, estimates time."""
-    rows = get_screen_activity(uid, start_date=start_date, end_date=end_date, limit=5000)
+    """Summarize the earliest synced observations, with explicit query coverage.
 
-    if not rows:
-        return {'apps': {}, 'total_screenshots': 0}
+    OCR gating, deduplication and sync compaction make counts unsuitable for
+    estimating elapsed usage. One lookahead row detects a truncated query;
+    it never contributes to the aggregate or its observation bounds.
+    """
+    rows = get_screen_activity(
+        uid, start_date=start_date, end_date=end_date, limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT + 1
+    )
+    truncated = len(rows) > SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT
+    rows = rows[:SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT]
+    coverage = ScreenActivityCoverage(
+        row_limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT,
+        truncated=truncated,
+        first_observed_at=rows[0].get('timestamp') if rows else None,
+        last_observed_at=rows[-1].get('timestamp') if rows else None,
+    )
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -151,4 +166,5 @@ def get_screen_activity_summary(
     return {
         'apps': apps,
         'total_screenshots': len(rows),
+        'coverage': coverage.model_dump(),
     }

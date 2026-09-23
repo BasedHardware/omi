@@ -25,7 +25,7 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
-from utils.transcribe_store import user_db
+from utils.transcribe_store import get_user_name, user_db
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +55,45 @@ class SpeakerMatcher:
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._generation = 0
         self.tasks: set[asyncio.Task[Any]] = set()
+        self._profile_conversation_id: Optional[str] = None
+        self._profile_lock = asyncio.Lock()
+        # The account owner's own first name, so hearing it in the transcript cannot
+        # mint a person who is really the user. Resolved lazily by
+        # resolve_owner_name(); never used for matching, only as a veto.
+        self.owner_name: Optional[str] = None
+        self._owner_name_resolved = False
 
-    async def load_and_run(self) -> None:
-        state = self.host.state
-        if not state.speaker_id_enabled:
-            state.speaker_id_done.set()
-            return
+    async def refresh_for_conversation(self, conversation_id: str) -> None:
+        async with self._profile_lock:
+            if self._profile_conversation_id == conversation_id:
+                return
+            self.clear()
+            self._profile_conversation_id = conversation_id
+            if self.host.state.speaker_id_enabled:
+                await self._load_profiles()
+
+    async def resolve_owner_name(self) -> Optional[str]:
+        """The account owner's first name, resolved at most once per session.
+
+        Deliberately lazy. Text detection only produces a name when a segment
+        matches a self-introduction pattern, which is rare, and that path already
+        makes a person lookup — so the veto costs one extra call there instead of
+        an auth round trip on every conversation refresh. A failure leaves the
+        veto off rather than failing the session.
+        """
+        if self._owner_name_resolved:
+            return self.owner_name
+        self._owner_name_resolved = True
+        try:
+            name = await self.host.persistence.call(get_user_name, self.host.request.uid, False)
+        except Exception as error:
+            logger.error('Speaker ID owner name load failed type=%s', type(error).__name__)
+            return None
+        if name and isinstance(name, str) and name.strip():
+            self.owner_name = name.strip()
+        return self.owner_name
+
+    async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:
             try:
                 embedding = await self.host.persistence.call(user_db.get_user_speaker_embedding, self.host.request.uid)
@@ -81,6 +114,8 @@ class SpeakerMatcher:
                         await self.host.persistence.call(
                             user_db.set_user_speaker_embedding, self.host.request.uid, result.flatten().tolist()
                         )
+                    else:
+                        logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
             except Exception as error:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:
@@ -100,11 +135,19 @@ class SpeakerMatcher:
                     self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
+            return
+
+    async def load_and_run(self) -> None:
+        state = self.host.state
+        if not state.speaker_id_enabled:
             state.speaker_id_done.set()
             return
-        if not self.person_embeddings:
-            state.speaker_id_done.set()
-            return
+        # prepare() may already have loaded the first conversation's profiles.
+        # Keep the loop alive even with zero enrolled people so a later
+        # refresh_for_conversation can load a newly taught profile and still
+        # consume the queue in this socket session.
+        if self._profile_conversation_id is None:
+            await self._load_profiles()
         while True:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
@@ -145,9 +188,15 @@ class SpeakerMatcher:
             if not audio:
                 return None
             vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')
-            await self.host.persistence.call(
-                user_db.set_person_speaker_embedding, self.host.request.uid, person_id, vector.flatten().tolist()
+            saved = await self.host.persistence.call(
+                user_db.set_person_speaker_embedding,
+                self.host.request.uid,
+                person_id,
+                vector.flatten().tolist(),
+                expected_updated_at=person.get('updated_at'),
             )
+            if not saved:
+                return None
             logger.info('Speaker ID recovered missing person embedding person=%s', person_id)
             return vector
         except Exception as error:
@@ -157,14 +206,23 @@ class SpeakerMatcher:
             return None
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
+        conversation_id = self._profile_conversation_id
+        if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
+            return
         generation = self._generation
         lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
         async with lock:
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
-            await self._match_unmapped(speaker_id, segment, generation)
+            await self._match_unmapped(speaker_id, segment, generation, conversation_id)
 
-    async def _match_unmapped(self, speaker_id: int, segment: dict[str, Any], generation: int) -> None:
+    async def _match_unmapped(
+        self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
+    ) -> None:
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
             if ring_buffer is None or segment['duration'] < self.host.limits.speaker_id_min_audio:
@@ -217,7 +275,11 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            if generation != self._generation or speaker_id in self.speaker_to_person:
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
                 return
             # Reserve only successful embeddings: a failed request may be retried.
             covered.append((extract_start, extract_end))
@@ -250,6 +312,12 @@ class SpeakerMatcher:
                 decision.runner_up_distance,
                 decision.accepted,
             )
+            if (
+                generation != self._generation
+                or self._profile_conversation_id != conversation_id
+                or speaker_id in self.speaker_to_person
+            ):
+                return
             if decision.person_id is not None:
                 best_id = decision.person_id
                 best_name = self.person_embeddings[best_id]['name']
@@ -272,7 +340,7 @@ class SpeakerMatcher:
 
     def clear(self) -> None:
         self._generation += 1
-        self._speaker_locks.clear()
+        self._profile_conversation_id = None
         self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

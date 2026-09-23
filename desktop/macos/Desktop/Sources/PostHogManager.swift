@@ -284,21 +284,89 @@ extension PostHogManager {
 
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
-    track(
-      "Desktop Recording Started",
-      properties: [
-        "platform": "macos"
-      ])
+  static func transcriptionStartedProperties(
+    attemptId: String? = nil,
+    mode: String? = nil,
+    intent: String? = nil
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos"
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    if let mode {
+      properties["recording_mode"] = mode
+    }
+    if let intent {
+      properties["intent"] = intent
+    }
+    return properties
   }
 
-  func transcriptionStopped(wordCount: Int) {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
+    track(
+      "Desktop Recording Started",
+      properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
+  }
+
+  static func transcriptionStoppedProperties(wordCount: Int, attemptId: String? = nil) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos",
+      "word_count": wordCount,
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    return properties
+  }
+
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: [
-        "platform": "macos",
-        "word_count": wordCount,
-      ])
+      properties: Self.transcriptionStoppedProperties(wordCount: wordCount, attemptId: attemptId))
+  }
+
+  // MARK: - Capture Attempt Outcome
+
+  /// Terminal record for one armed ambient-capture attempt. The authoritative
+  /// attempt/outcome funnel for the retention investigation; `Desktop Recording
+  /// Started` remains an arming signal, not a success KPI.
+  static let captureAttemptOutcomeEventName = "Desktop Capture Attempt Outcome"
+
+  /// Full outcome payload for an attempt that terminalized in-process. Every
+  /// field is a bounded boolean/enum/opaque id — no transcript, audio, device,
+  /// or path content (see `CaptureAttemptOutcomeState`).
+  static func captureAttemptOutcomeProperties(
+    _ attempt: CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) -> [String: Any] {
+    [
+      "platform": "macos",
+      "attempt_id": attempt.attemptId,
+      "mode": attempt.mode,
+      "intent": attempt.intent.rawValue,
+      "capture_eligible": attempt.captureEligible,
+      "first_audio_frame": attempt.firstAudioFrame,
+      "speech_observed": attempt.speechObserved,
+      "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "conversation_accepted": attempt.conversationAccepted,
+    ]
+  }
+
+  /// Minimal outcome payload for an attempt whose process died mid-flight:
+  /// the crash-recovery hook only knows the persisted join key, so every other
+  /// dimension is omitted rather than guessed.
+  static func captureAttemptPendingProperties(attemptId: String) -> [String: Any] {
+    [
+      "platform": "macos",
+      "attempt_id": attemptId,
+      "terminal_reason": CaptureAttemptOutcomeState.TerminalReason.pending.rawValue,
+    ]
+  }
+
+  func captureAttemptOutcome(properties: [String: Any]) {
+    track(Self.captureAttemptOutcomeEventName, properties: properties)
   }
 
   func recordingError(
@@ -502,20 +570,35 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  static func conversationCreatedProperties(source: String, durationSeconds: Int?) -> [String: Any] {
+  static func conversationCreatedProperties(
+    source: String,
+    durationSeconds: Int?,
+    attemptId: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
       "conversation_source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
     }
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
     return properties
   }
 
-  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(
+    conversationId _: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
     track(
       "Memory Created",
-      properties: Self.conversationCreatedProperties(source: source, durationSeconds: durationSeconds)
+      properties: Self.conversationCreatedProperties(
+        source: source,
+        durationSeconds: durationSeconds,
+        attemptId: attemptId)
     )
   }
 

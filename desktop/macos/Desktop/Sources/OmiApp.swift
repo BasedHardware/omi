@@ -39,7 +39,10 @@ class AuthState: ObservableObject {
   // UserDefaults keys (must match AuthService)
   private static let kAuthIsSignedIn = "auth_isSignedIn"
   private static let kAuthUserEmail = "auth_userEmail"
-  private static let kAuthUserId = "auth_userId"
+  /// `nonisolated` so the automation bridge can answer "which account is this"
+  /// without hopping to the main actor. It is an immutable String; the
+  /// isolation bought nothing and cost the identity check its callers.
+  nonisolated private static let kAuthUserId = "auth_userId"
 
   @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
@@ -48,6 +51,22 @@ class AuthState: ObservableObject {
 
   var isSignedIn: Bool { sessionPhase == .authenticated }
   var isRestoringAuth: Bool { sessionPhase == .restoring }
+
+  /// The signed-in uid, for the non-production automation bridge only.
+  ///
+  /// Read from the same `auth_userId` default `AuthService` writes, rather than
+  /// from Firebase, so it answers during `.restoring` too — a harness that
+  /// checks identity right after launch must not get `nil` merely because the
+  /// credential has not finished validating.
+  nonisolated static func automationAccountUserID(
+    defaults: UserDefaults = .standard,
+    isNonProduction: Bool = AppBuild.isNonProduction
+  ) -> String? {
+    guard isNonProduction else { return nil }
+    let raw = defaults.string(forKey: kAuthUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return (raw?.isEmpty ?? true) ? nil : raw
+  }
 
   private init() {
     BundleEnvironment.loadIfNeeded()

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import admin, { getDb } from '@/lib/firebase/admin'
 import { verifyAdmin } from '@/lib/auth'
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs'
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -93,6 +94,10 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'Missing required field: id' }, { status: 400 })
+    }
+
+    if (!isSafeDocumentId(id)) {
+      return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
     }
 
     const docRef = db.collection('distributors').doc(id)

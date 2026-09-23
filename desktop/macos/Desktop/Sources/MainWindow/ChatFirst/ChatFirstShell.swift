@@ -344,6 +344,7 @@ struct ChatFirstShell: View {
     case .apps:
       ChatFirstAppsHost(
         appProvider: viewModelContainer.appProvider,
+        chatProvider: viewModelContainer.chatProvider,
         appState: appState,
         connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
         handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete
@@ -395,6 +396,7 @@ struct ChatFirstPageGlassLane<Content: View>: View {
 /// first, then yields one frame before constructing the existing AppsPage.
 private struct ChatFirstAppsHost: View {
   @ObservedObject var appProvider: AppProvider
+  @ObservedObject var chatProvider: ChatProvider
   let appState: AppState
   @ObservedObject var connectorStatusStore: ImportConnectorStatusStore
   let handlesAutomationPresentations: Bool
@@ -406,6 +408,17 @@ private struct ChatFirstAppsHost: View {
         AppsPage(
           appProvider: appProvider,
           appState: appState,
+          onOpenChatApp: { app, details in
+            let appPrompt = [details?.personaPrompt, details?.chatPrompt]
+              .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+              .first { !$0.isEmpty }
+            await chatProvider.selectApp(
+              app.id,
+              name: app.name,
+              chatPrompt: appPrompt
+            )
+            NotificationCenter.default.post(name: .navigateToChat, object: nil)
+          },
           connectorStatusStore: connectorStatusStore,
           handlesAutomationPresentations: handlesAutomationPresentations
         )

@@ -16,7 +16,9 @@ from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.relevance import ProcessingTrigger
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
@@ -145,6 +147,9 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 force_process=force_process,
+                # Only the client finalize route enqueues force_process jobs;
+                # listen's own finalization never does.
+                trigger=ProcessingTrigger.CLIENT_FINALIZE if force_process else ProcessingTrigger.CAPTURE_END,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
@@ -183,6 +188,8 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if fanout['status'] in {'claimed', 'completed'}:
+            await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
@@ -268,7 +275,9 @@ async def finalize_persisted_conversation(
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+                await run_blocking(
+                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
+                )
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed during finalization uid=%s error=%s',

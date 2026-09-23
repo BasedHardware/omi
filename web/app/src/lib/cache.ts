@@ -22,6 +22,26 @@ interface CacheEntry<T> {
   ttl: number;
 }
 
+/** Scope for data that is both user-owned and backend-environment-specific. */
+export interface MemoryCacheScope {
+  ownerId: string;
+  backendScope: string;
+}
+
+export function getMemoryBackendScope(): string {
+  const configured =
+    typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_BASE_URL : undefined;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'unknown';
+}
+
+export function memoryCacheScopeKey(scope: MemoryCacheScope): string {
+  return `owner=${encodeURIComponent(scope.ownerId)}&backend=${encodeURIComponent(
+    scope.backendScope,
+  )}`;
+}
+
 // In-flight request tracking for deduplication
 const pendingRequests = new Map<string, Promise<unknown>>();
 
@@ -37,7 +57,8 @@ if (typeof window !== 'undefined') {
     // Check if this is a page reload - if so, clear cache for fresh data
     // This ensures refreshing the page always fetches fresh data from server
     const navEntry = performance.getEntriesByType('navigation')[0] as
-      PerformanceNavigationTiming | undefined;
+      | PerformanceNavigationTiming
+      | undefined;
     const isReload = navEntry?.type === 'reload';
 
     if (isReload) {
@@ -47,6 +68,9 @@ if (typeof window !== 'undefined') {
       if (stored) {
         const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
         for (const [key, entry] of Object.entries(parsed)) {
+          // Memory entries are user-owned. They are hydrated lazily by
+          // getCache after the authenticated owner scope is known.
+          if (key.startsWith('memories:')) continue;
           // Only restore if not expired (check against original TTL)
           if (Date.now() - entry.timestamp < entry.ttl) {
             cache.set(key, entry);
@@ -90,6 +114,20 @@ const invalidationListeners = new Set<InvalidationListener>();
  * @returns { data, isStale } or null if not in cache
  */
 export function getCache<T>(key: string): { data: T; isStale: boolean } | null {
+  const isScopedMemoryKey =
+    key.startsWith('memories:owner=') && key.includes('&backend=');
+  if (!cache.has(key) && isScopedMemoryKey && typeof window !== 'undefined') {
+    try {
+      const stored = sessionStorage.getItem('omi_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
+        const entry = parsed[key];
+        if (entry && Date.now() - entry.timestamp < entry.ttl) cache.set(key, entry);
+      }
+    } catch {
+      // Ignore malformed or unavailable session storage.
+    }
+  }
   const entry = cache.get(key) as CacheEntry<T> | undefined;
   if (!entry) return null;
 
@@ -122,6 +160,17 @@ export function updateCache<T>(key: string, updater: (data: T) => T): void {
  */
 export function deleteCache(key: string): void {
   cache.delete(key);
+  persistCache();
+}
+
+/** Delete entries for one data family without notifying active readers. */
+export function deleteCachePattern(pattern: string, scope?: MemoryCacheScope): void {
+  const scopeKey = scope ? memoryCacheScopeKey(scope) : null;
+  for (const key of cache.keys()) {
+    if (key.includes(pattern) && (!scopeKey || key.startsWith(`memories:${scopeKey}:`))) {
+      cache.delete(key);
+    }
+  }
   persistCache();
 }
 
@@ -272,8 +321,10 @@ export const cacheKeys = {
 
   screenFrames: (conversationId: string) => `screenFrames:${conversationId}`,
 
-  memories: (categories: string[]) =>
-    `memories:${categories.length === 0 ? 'all' : [...categories].sort().join(',')}`,
+  memories: (categories: string[], view = 'default', scope?: MemoryCacheScope) =>
+    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${view}:${
+      categories.length === 0 ? 'all' : [...categories].sort().join(',')
+    }`,
 
   memory: (id: string) => `memory:${id}`,
 

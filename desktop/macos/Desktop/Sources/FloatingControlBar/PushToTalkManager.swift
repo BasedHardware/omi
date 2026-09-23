@@ -419,10 +419,22 @@ class PushToTalkManager: ObservableObject {
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
-    if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm(userInitiated: true)
-    }
+    // Launch is not a key press: plan-gated accounts must not mint a managed
+    // session just because the app started. PTT still uses `userInitiated: true`.
+    Self.warmHubOnLaunchIfNeeded(
+      localProfileEnabled: DesktopLocalProfile.isEnabled)
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Launch keep-warm. Not a key press: the plan gate still applies. Tests pin
+  /// this symbol at the `setup` callsite so a revert to `ensureWarm()` fails.
+  static func warmHubOnLaunchIfNeeded(
+    localProfileEnabled: Bool,
+    hub: RealtimeHubController = .shared
+  ) {
+    if !localProfileEnabled {
+      hub.prepareAutomaticWarm()
+    }
   }
 
   func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
@@ -3489,6 +3501,7 @@ class PushToTalkManager: ObservableObject {
   struct DictationRun {
     var transcript: String?
     var transcriber = "none"
+    var transcriptionUnavailableReason: DictationTranscriber.UnavailableReason?
     /// True when the closing transcript did not read as a dictation (only
     /// the offline route can reach the pipeline unclaimed).
     var notADictation = false
@@ -3497,6 +3510,20 @@ class PushToTalkManager: ObservableObject {
     var completion: VoiceTypeSession.Completion = .none
     /// Set when the turn was superseded between steps; nothing was delivered.
     var abandoned = false
+
+    var automationTranscriptionFields: [String: String] {
+      guard let reason = transcriptionUnavailableReason else {
+        return ["transcription_status": "transcribed"]
+      }
+      var fields = [
+        "transcription_status": "unavailable",
+        "error_code": reason.rawValue,
+      ]
+      if reason == .onDeviceTimedOut {
+        fields["error"] = "on-device transcription did not complete within the 12-second deadline"
+      }
+      return fields
+    }
   }
 
   /// The dictation pipeline proper: transcribe once, correct, format, polish,
@@ -3518,11 +3545,19 @@ class PushToTalkManager: ObservableObject {
     if let knownTranscript {
       run.transcript = knownTranscript
       run.transcriber = "route"
-    } else if let result = await makeDictationTranscriber(
-      keywords: keywords, language: language, allowNetwork: allowNetwork
-    ).transcribe(audio) {
-      run.transcript = result.text
-      run.transcriber = result.source.rawValue
+    } else {
+      let outcome = await makeDictationTranscriber(
+        keywords: keywords, language: language, allowNetwork: allowNetwork
+      ).outcome(for: audio)
+      switch outcome {
+      case .transcribed(let result):
+        run.transcript = result.text
+        run.transcriber = result.source.rawValue
+      case .unavailable(let reason):
+        run.transcriptionUnavailableReason = reason
+      case .cancelled:
+        run.abandoned = true
+      }
     }
     guard isCurrent() else {
       run.abandoned = true
@@ -3655,7 +3690,8 @@ class PushToTalkManager: ObservableObject {
       // a dictation that could not be delivered is still a classified attempt
       // rather than a hole in the telemetry.
       guard run.transcript != nil else {
-        log("PushToTalkManager: dictation produced no transcript from any recognizer")
+        let unavailable = run.transcriptionUnavailableReason?.rawValue ?? "no_transcript"
+        log("PushToTalkManager: dictation produced no transcript from any recognizer (\(unavailable))")
         self.voiceTypeSession.abandon()
         // The voice-typing pipeline ran, so the terminal is a dictation even
         // though no recognizer produced text.
@@ -3816,7 +3852,7 @@ class PushToTalkManager: ObservableObject {
     case .pasteRequested: delivery = "paste_requested"
     case .insertionUncertain: delivery = "insertion_uncertain"
     }
-    return [
+    var result = [
       "accessibility_trusted": AXIsProcessTrusted() ? "true" : "false",
       "online": (allowNetwork && NetworkReachability.shared.isOnline) ? "true" : "false",
       "transcript": run.transcript ?? "",
@@ -3827,6 +3863,10 @@ class PushToTalkManager: ObservableObject {
       "delivery": delivery,
       "elapsed_ms": "\(Int(Date().timeIntervalSince(started) * 1000))",
     ]
+    for (key, value) in run.automationTranscriptionFields {
+      result[key] = value
+    }
+    return result
   }
 
   /// Puts a dictated turn in the chat transcript as `Typed: <text>`.

@@ -62,7 +62,9 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
               // Bottom card with permissions
               Container(
                 width: double.infinity,
-                padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
+                // The SafeArea below adds the system inset; adding it here as well left
+                // twice the inset of dead space under the content on inset devices.
+                padding: const EdgeInsets.fromLTRB(32, 0, 32, 8),
                 decoration: const BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
@@ -184,18 +186,11 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                                   if (Platform.isAndroid && !provider.hasBackgroundPermission) {
                                     await provider.askForBackgroundPermissions();
                                   }
-                                  await Permission.notification.request().then((value) async {
-                                    if (value.isGranted) {
-                                      provider.updateNotificationPermission(true);
-                                    }
-                                    if (await Permission.location.serviceStatus.isEnabled) {
-                                      var res = await Permission.locationWhenInUse.request();
-                                      provider.updateLocationPermission(res.isGranted);
-                                      if (Platform.isIOS && res.isGranted) {
-                                        await provider.alwaysAllowLocation();
-                                      }
-                                    }
-                                  });
+                                  await provider.askForNotificationPermissions();
+                                  final (_, locationStatus) = await provider.askForLocationPermissions();
+                                  if (Platform.isIOS && locationStatus.isGranted) {
+                                    await provider.alwaysAllowLocation();
+                                  }
                                   PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                                   provider.setLoading(false);
                                   if (context.mounted) {

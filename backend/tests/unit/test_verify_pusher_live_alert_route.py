@@ -202,3 +202,31 @@ def test_live_query_requires_every_scrape_target_in_each_job_to_be_up() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     assert 'min(up{job=~"pusher-metrics|backend-listen-metrics"}) by (job)' in source
     assert 'max(up{job=~"pusher-metrics|backend-listen-metrics"}) by (job)' not in source
+
+
+def test_scrape_target_failure_names_each_jobs_observed_up_state(verifier: SimpleNamespace) -> None:
+    """The 2026-09-16 -> 09-17 outage failed this gate for ~26 hours without
+    saying which required job was down: dev Pusher crash-looped on a missing
+    SONIOX_API_KEY binding, its pusher-metrics target went dark, and every log
+    line read the same blame-free sentence. The failure must carry per-job
+    observed state so the culprit is named on the first red run."""
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    up_query["data"]["result"] = [
+        {"metric": {"job": "backend-listen-metrics"}, "value": [1, "1"]},
+        {"metric": {"job": "pusher-metrics"}, "value": [1, "0"]},
+    ]
+    errors = verifier.validate_live_route(rules, datasource, up_query, metric_query, contact_points, phase="prepublish")
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "backend-listen-metrics=1" in message
+    assert "pusher-metrics=0" in message
+
+
+def test_scrape_target_failure_marks_a_job_with_no_series_absent(verifier: SimpleNamespace) -> None:
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    up_query["data"]["result"] = [
+        {"metric": {"job": "backend-listen-metrics"}, "value": [1, "1"]},
+    ]
+    errors = verifier.validate_live_route(rules, datasource, up_query, metric_query, contact_points, phase="prepublish")
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "backend-listen-metrics=1" in message
+    assert "pusher-metrics=absent" in message

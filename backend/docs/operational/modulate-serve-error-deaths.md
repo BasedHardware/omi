@@ -5,7 +5,7 @@ Incident window: 2026-08-31 → 09-01 (backend-listen, Loop S sensor).
 was the #3 error signature (×11/30m), with `Unable to complete the request.
 Please try again.` at #10 (×5/30m); the sensor logged 62 more over the
 following 6 hours. Modulate-Velma-2 is the streaming **primary**
-(`modulate-velma-2,dg-nova-3,parakeet`), so during such an outage
+(`modulate-velma-2,soniox,dg-nova-3,parakeet`), so during such an outage
 every new session is handed to Velma, serves briefly, takes the error frame
 mid-session, and fails over.
 
@@ -37,14 +37,15 @@ configured right behind it.
 |---|---|---|---|
 | `Internal server error` | `modulate_serve_error` | **ERROR** | yes — one cooldown window |
 | `Unable to complete the request…` | `modulate_serve_error` | **ERROR** | yes |
-| `Monthly usage limit reached.` | `modulate_serve_error` | **ERROR** | yes |
+| `Monthly usage limit reached.` | `provider_budget_exhausted` | **ERROR** | yes |
 | `Invalid input audio` | untyped | WARNING | no — our/client fault |
 | `rate limit`, unknown wordings | untyped | WARNING | no — session-scoped |
 
 - `modulate_death_reason()` (utils/stt/streaming.py) bounds the provider's
-  free-text frame to `MODULATE_DEATH_SERVE_ERROR` for server-fault shapes
-  only; everything else degrades to untyped rather than growing the bounded
-  vocabulary per provider wording.
+  free-text frame to `provider_budget_exhausted` for monthly/quota wording and
+  `MODULATE_DEATH_SERVE_ERROR` for 5xx serve-fault shapes; everything else
+  degrades to untyped rather than growing the bounded vocabulary per provider
+  wording.
 - The socket latches the typed reason next to the raw text on the death
   latch; severity follows fault origin at the frame (serve error stays ERROR
   — it IS the outage signal).

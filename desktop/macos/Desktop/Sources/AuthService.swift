@@ -152,6 +152,7 @@ class AuthService {
 
   struct TokenRefreshHooks {
     var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
+    var now: () -> Date = Date.init
 
     nonisolated(unsafe) static let live = TokenRefreshHooks(dataForRequest: nil)
   }
@@ -289,9 +290,8 @@ class AuthService {
     // The REST-backed session remains authoritative if the Firebase SDK was
     // unavailable at launch. Only clear an SDK session when one exists.
     do {
-      return try await commitSignedOutSession(
+      return try await commitLightInvalidatedSession(
         attempt: attempt,
-        phase: .needsReauth,
         beforeClearingCredentials: { [self] in
           if let auth = configuredFirebaseAuth() {
             try auth.signOut()
@@ -547,6 +547,8 @@ class AuthService {
       // never proof of a usable session. Keep every authenticated surface gated
       // until a forced refresh succeeds.
       validateRestoredSession(attempt: attempt)
+    } else if preservedReauthOwnerId() != nil {
+      restorePreservedReauthOwner(email: savedEmail)
     } else {
       NSLog("OMI AUTH: No saved auth state found")
       guard
@@ -663,10 +665,7 @@ class AuthService {
           let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
           log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self.isSignedIn)")
           if !savedSignedIn {
-            // No saved session either - user is truly signed out
-            log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
-            AuthState.shared.transition(to: .signedOut)
-            AuthState.shared.userEmail = nil
+            await MainActor.run { self.handleFirebaseNilUserWithoutSavedSignedIn() }
           } else {
             log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
             await self.validateSavedSessionAfterFirebaseNil()
@@ -1851,7 +1850,7 @@ class AuthService {
 
   func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) throws {
     // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
-    let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
+    let expiryTime = tokenRefreshHooks.now().addingTimeInterval(TimeInterval(expiresIn - 300))
     let tokens = StoredAuthTokens(
       idToken: idToken,
       refreshToken: refreshToken,
@@ -2136,7 +2135,7 @@ class AuthService {
   private var isTokenExpired: Bool {
     let expiryTime = storedTokens()?.expiryTime ?? 0
     guard expiryTime > 0 else { return true }
-    return Date().timeIntervalSince1970 > expiryTime
+    return tokenRefreshHooks.now().timeIntervalSince1970 >= expiryTime
   }
 
   // MARK: - Firebase REST API Token Exchange
