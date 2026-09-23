@@ -133,7 +133,7 @@ def test_luna_30_minute_cache_writes_use_the_luna_write_rate(report) -> None:
                 actual_model_version='gpt-6-luna',
                 cache_write_tokens=1_000_000,
                 cache_write_ttl='30m',
-                estimated_cost_micro_usd=250_000,
+                estimated_cost_micro_usd=125_000,
             )
         ]
     )
@@ -147,8 +147,8 @@ def test_luna_30_minute_cache_writes_use_the_luna_write_rate(report) -> None:
     rates = report.load_rates('gpt-6-luna', card_path)
     by_name = {component.name: component for component in report.cost_components(totals, rates)}
 
-    assert rates.cache_write_micro_usd == 250_000
-    assert by_name['cache write 30m'].cost_micro_usd == 250_000
+    assert rates.cache_write_micro_usd == 125_000
+    assert by_name['cache write 30m'].cost_micro_usd == 125_000
     assert by_name['cache write 1h'].cost_micro_usd == 0
     assert 'cache write 30m' in report.render(totals, rates, 'chat_agent')
 
