@@ -339,11 +339,6 @@ env:
     value: "price_1TN7jo1F8wnoWYvw6Xu1zAtC"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT

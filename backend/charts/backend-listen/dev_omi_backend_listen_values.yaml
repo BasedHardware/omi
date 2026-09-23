@@ -317,11 +317,6 @@ env:
     value: "http://pusher.omiapi.com"
   - name: BUCKET_PLUGINS_LOGOS
     value: "plugin_resources"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: DD_SERVICE
     value: "backend-listen"
   - name: DD_ENV
@@ -399,11 +394,6 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT
