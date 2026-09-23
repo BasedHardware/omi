@@ -23,6 +23,7 @@ import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
 
@@ -56,10 +57,10 @@ class _AddAppPageState extends State<AddAppPage> {
     return Consumer<AddAppProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
             title: Text(context.l10n.submitApp),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             actions: [
               Center(
                 child: Padding(

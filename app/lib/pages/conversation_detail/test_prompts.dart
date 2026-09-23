@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -26,10 +27,10 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         title: Text(context.l10n.testConversationPrompt),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         actions: [
           IconButton(
             onPressed: onTap,

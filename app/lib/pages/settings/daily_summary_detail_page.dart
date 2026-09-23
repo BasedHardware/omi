@@ -21,6 +21,7 @@ import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -92,7 +93,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
@@ -384,7 +385,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return SliverAppBar(
       expandedHeight: 150,
       pinned: true,
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       leading: IconButton(
         icon: Container(
           padding: const EdgeInsets.all(8),

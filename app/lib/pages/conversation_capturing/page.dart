@@ -27,6 +27,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Switch the home IndexedStack to Conversations *before* popping the capturing
 /// route so the user lands on that tab with no flash of the previous page.
@@ -200,10 +201,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
           canPop: true,
           child: Scaffold(
             key: scaffoldKey,
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: OmiColors.surface0,
               title: Row(
                 mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

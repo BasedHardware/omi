@@ -12,6 +12,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/functions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class UserPeoplePage extends StatelessWidget {
   const UserPeoplePage({super.key});
@@ -209,10 +210,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
     return Consumer<PeopleProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
             title: Text(context.l10n.people),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: OmiColors.surface0,
             centerTitle: true,
             actions: [
               IconButton(icon: const Icon(Icons.add), onPressed: () => _showPersonDialog(context, provider)),

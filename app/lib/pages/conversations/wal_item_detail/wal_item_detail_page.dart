@@ -15,6 +15,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/waveform_section.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -109,7 +110,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           ),
         ],
       ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
   }

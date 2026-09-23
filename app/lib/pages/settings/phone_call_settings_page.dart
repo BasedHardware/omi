@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class PhoneCallSettingsPage extends StatelessWidget {
   const PhoneCallSettingsPage({super.key});
@@ -11,10 +12,10 @@ class PhoneCallSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         title: Text(context.l10n.phoneCallSettingsTitle),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         elevation: 0,
       ),
       body: Consumer<PhoneCallProvider>(

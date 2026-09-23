@@ -772,7 +772,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           }
         });
       }
-      return Scaffold(backgroundColor: Theme.of(context).colorScheme.primary);
+      return const Scaffold();
     }
 
     return PopScope(
@@ -789,10 +789,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         child: Scaffold(
           key: scaffoldKey,
           extendBody: true,
-          backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             automaticallyImplyLeading: false,
-            backgroundColor: Theme.of(context).colorScheme.primary,
             leading: Container(
               width: 36,
               height: 36,
