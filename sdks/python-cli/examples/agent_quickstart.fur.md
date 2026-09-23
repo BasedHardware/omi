@@ -7,7 +7,7 @@
 * **JSON contract stabil.** `--json` e mande un document JSON valit sul stdout e
   *nomai* un document JSON — nissun messaç di progress, nissune spinner. Lis erors va a
   stderr come `{"error": "...", "detail": "..."}`.
-* **Exit codes stabil.** `0` vut / `1` jame / `2` auth / `3` server /  `4` rate
+* **Exit codes stabil.** `0` vut / `1` jame / `2` auth / `3` server / `4` rate
   limited / `5` no cjatât. Agints puedin ramificâ su chesti cedure cence interpretâ
   erors in lenghe naturâl.
 * **Nissune domeande interatifs in contests headless.** Passe `--yes` (o `-y`) ai
