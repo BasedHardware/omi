@@ -1736,6 +1736,8 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -1837,6 +1839,8 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -2101,6 +2105,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
               value: '1'
               category: rollout
@@ -2294,6 +2300,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -2457,6 +2465,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -2600,6 +2610,8 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -2669,6 +2681,8 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
         memory-maintenance-job:
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
@@ -2759,6 +2773,8 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
@@ -2784,6 +2800,8 @@ environments:
               default: prod-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
           flags:
@@ -2849,6 +2867,8 @@ environments:
             MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
               category: memory_rollout
               value: 'false'
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
           forbidden_env:
@@ -2880,6 +2900,8 @@ environments:
             KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
               category: memory_rollout
               value: ''
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
         day3-reengagement-email-job:
@@ -2914,6 +2936,8 @@ environments:
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
             BASE_API_URL:
               value: https://api.omi.me
           forbidden_env:
