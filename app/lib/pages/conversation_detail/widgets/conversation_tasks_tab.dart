@@ -31,8 +31,8 @@ Future<void> openConversationTask(BuildContext context, ConversationDetailProvid
     return;
   }
   // ActionItemFormSheet draws its own sheet shell, so it is presented the way the Tasks tab does.
-  await showModalBottomSheet<void>(
-    // omi-ux-allow: raw-bottom-sheet -- the shared task editor owns its shell
+  final present = showModalBottomSheet<void>; // omi-ux-allow: raw-bottom-sheet -- task editor owns its shell
+  await present(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

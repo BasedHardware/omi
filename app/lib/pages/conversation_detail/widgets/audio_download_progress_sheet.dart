@@ -111,22 +111,15 @@ class AudioDownloadProgressSheet extends StatelessWidget {
       );
     }
     final determinate = state == AudioDownloadState.downloading;
+    // A determinate ring shows the download's real progress; OmiSpinner is indeterminate only.
+    final value = determinate ? progress : null;
+    final ring = CircularProgressIndicator(value: value); // omi-ux-allow: raw-spinner -- determinate
     return SizedBox.square(
       dimension: 64,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          SizedBox.square(
-            dimension: 64,
-            // A determinate ring shows the download's real progress; OmiSpinner is indeterminate only.
-            child: CircularProgressIndicator(
-              // omi-ux-allow: raw-spinner -- determinate progress ring
-              value: determinate ? progress : null,
-              strokeWidth: 3,
-              color: OmiColors.accent,
-              backgroundColor: OmiColors.surface3,
-            ),
-          ),
+          SizedBox.square(dimension: 64, child: ring),
           if (determinate && progress > 0)
             Text('${(progress * 100).toInt()}%', style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
         ],
