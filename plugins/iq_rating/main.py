@@ -1753,8 +1753,8 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
         return HTMLResponse(content=html)
         
     except Exception as e:
-        logger.error(f"Error generating IQ ratings: {e}")
-        error_content = f'<div class="empty-state"><h2>Error</h2><p>{str(e)}</p></div>'
+        logger.error(f"Error generating IQ ratings: {type(e).__name__}", exc_info=True)
+        error_content = '<div class="empty-state"><h2>Error</h2><p>Failed to generate IQ ratings due to an internal error.</p></div>'
         html = IQ_RATING_HTML.format(content=error_content)
         return HTMLResponse(content=html)
 
@@ -1782,8 +1782,8 @@ async def iq_rating_api(uid: str = Query(..., description="User ID")):
         })
         
     except Exception as e:
-        logger.error(f"Error getting IQ ratings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting IQ ratings: {type(e).__name__}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get IQ ratings due to an internal error.")
 
 
 @router.post("/iq/hide")
