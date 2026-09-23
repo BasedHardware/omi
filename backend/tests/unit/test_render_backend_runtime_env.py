@@ -201,6 +201,7 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))

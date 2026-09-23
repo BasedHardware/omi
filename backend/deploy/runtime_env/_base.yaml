@@ -982,6 +982,9 @@ environment_shared:
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+            value: '0'
+            category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       knowledge-ledger-drain-job:

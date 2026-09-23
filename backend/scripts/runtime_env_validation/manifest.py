@@ -292,6 +292,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
     }
     for forbidden_name in sorted(daily_sweep_env_names.intersection(job_env)):
         errors.append(

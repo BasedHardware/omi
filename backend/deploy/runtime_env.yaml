@@ -1420,6 +1420,9 @@ environments:
             MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
               category: memory_rollout
               value: 'true'
+            MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+              value: '0'
+              category: memory_rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2863,6 +2866,9 @@ environments:
             MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
               category: memory_rollout
               value: 'false'
+            MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+              value: '0'
+              category: memory_rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
