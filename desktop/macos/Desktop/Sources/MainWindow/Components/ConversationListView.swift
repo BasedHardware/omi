@@ -11,6 +11,8 @@ struct ConversationListView: View {
   let onSelect: (ServerConversation) -> Void
   let onRefresh: () -> Void
   let onMoveToFolder: (String, String?) async -> Void
+  /// Opens a recording hidden behind its event's row.
+  var onOpenCaptureMember: ((ServerConversation) -> Void)? = nil
 
   // Multi-select support
   var isMultiSelectMode: Bool = false
@@ -53,7 +55,8 @@ struct ConversationListView: View {
     var groups: [String: [ServerConversation]] = [:]
     var groupDates: [String: Date] = ["Today": today, "Yesterday": yesterday]
 
-    for conversation in conversations {
+    // One row per recorded event: other devices' recordings stay reachable from its menu.
+    for conversation in CaptureGroupPresentation.collapse(conversations) {
       let conversationDate = calendar.startOfDay(for: conversation.createdAt)
       let groupKey: String
 
@@ -187,7 +190,9 @@ struct ConversationListView: View {
             isMultiSelectMode: isMultiSelectMode,
             isSelected: selectedIds.contains(conversation.id),
             onToggleSelection: { onToggleSelection?(conversation.id) },
-            appState: appState
+            appState: appState,
+            captureMembers: CaptureGroupPresentation.otherLoadedMembers(of: conversation, in: conversations),
+            onOpenCaptureMember: onOpenCaptureMember ?? onSelect
           )
         }
       }

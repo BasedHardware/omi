@@ -208,6 +208,19 @@ extension AppState {
     }
   }
 
+  /// Splits a recording out of the event it was grouped into, then refetches so
+  /// every member's membership reflects the server.
+  func separateConversationFromCaptureGroup(_ conversationId: String) async -> Bool {
+    do {
+      try await APIClient.shared.separateConversationFromCaptureGroup(id: conversationId)
+      await refreshConversations()
+      return true
+    } catch {
+      logError("Conversations: Failed to separate conversation from its capture group", error: error)
+      return false
+    }
+  }
+
   // MARK: - People (Speaker Profiles)
 
   /// Fetches all people from the OMI API. `fetch` is a test seam.

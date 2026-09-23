@@ -1147,6 +1147,21 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
+@router.post(
+    "/v1/conversations/{conversation_id}/capture-group/separate",
+    response_model=StatusResponse,
+    tags=['conversations'],
+    description=(
+        "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. "
+        "The decision is sticky: this capture is never regrouped with the members it left. Idempotent."
+    ),
+)
+def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
+    return StatusResponse(status='ok' if changed else 'unchanged')
+
+
 @router.patch(
     "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
 )

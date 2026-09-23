@@ -417,7 +417,7 @@ struct ConversationsPage: View {
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    searchQuery.isEmpty ? appState.conversations.map { $0.id } : visibleSearchResults.map { $0.id }
+    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
   }
 
   /// Search is text-only at the API boundary. Apply the same local refinements
@@ -583,7 +583,7 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     LazyVStack(spacing: OmiSpacing.sm) {
-      ForEach(visibleSearchResults) { conversation in
+      ForEach(CaptureGroupPresentation.collapse(visibleSearchResults)) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
@@ -609,7 +609,9 @@ struct ConversationsPage: View {
               selectedConversationIds.insert(conversation.id)
             }
           },
-          appState: appState
+          appState: appState,
+          captureMembers: CaptureGroupPresentation.otherLoadedMembers(of: conversation, in: visibleSearchResults),
+          onOpenCaptureMember: { selectedConversation = $0 }
         )
       }
     }

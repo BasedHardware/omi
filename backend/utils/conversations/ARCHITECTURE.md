@@ -58,6 +58,10 @@ and background processing.
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The
   database transaction rechecks both captures; discard and content stay independent.
+- `shared_speech.py` confirms a window match from content (word-trigram containment of
+  the smaller transcript). Confirmed pairs join a capture group through
+  `database/capture_groups.py`, the sole writer of `capture_group`; processing writes
+  strip it. Grouping is presentation metadata; content and derived work stay per capture.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
