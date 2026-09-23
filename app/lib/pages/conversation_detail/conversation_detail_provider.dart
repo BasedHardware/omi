@@ -353,6 +353,42 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  /// Saves an edited title. Resolves null when nothing changed (blank or identical text keeps the
+  /// current title), true when the server accepted it, false when it did not (the old title is
+  /// restored).
+  Future<bool?> saveTitle(String text) async {
+    final target = conversationOrNull;
+    if (target == null) return null;
+    final title = text.trim();
+    final previous = target.structured.title;
+    if (title.isEmpty || title == previous.trim()) {
+      if (titleController != null && titleController!.text != previous) titleController!.text = previous;
+      return null;
+    }
+    target.structured.title = title;
+    notifyListeners();
+    final saved = await updateConversationTitle(target.id, title);
+    if (!saved && !_isDisposed) {
+      target.structured.title = previous;
+      if (_cachedConversationId == target.id && titleController != null) titleController!.text = previous;
+      notifyListeners();
+    }
+    return saved;
+  }
+
+  /// Folds an edit made in the shared task editor back into this conversation's task list.
+  void applyTaskEdit(ActionItem item, {String? description, bool? completed, bool deleted = false}) {
+    final items = conversationOrNull?.structured.actionItems;
+    if (items == null || !items.contains(item)) return;
+    if (deleted) {
+      item.deleted = true;
+    } else {
+      if (description != null && description.trim().isNotEmpty) item.description = description;
+      if (completed != null) item.completed = completed;
+    }
+    notifyListeners();
+  }
+
   List<ActionItem> deletedActionItems = [];
 
   void deleteActionItem(int i) {
@@ -388,13 +424,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     showUnassignedFloatingButton = true;
 
     titleController!.text = conversation.structured.title;
-    titleFocusNode!.addListener(() {
-      print('titleFocusNode focus changed');
-      if (!titleFocusNode!.hasFocus) {
-        conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
-      }
-    });
+    // The title saves when editing ends (Done or leaving the field); the title field calls
+    // [saveTitle] and reports the outcome.
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
