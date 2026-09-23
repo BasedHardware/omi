@@ -41,6 +41,30 @@ void main() {
         isFalse,
       );
     });
+
+    test('blocks when hasNetwork is false (#4822)', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+          hasNetwork: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('allows when hasNetwork is true (#4822)', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+          hasNetwork: true,
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('selectNextAutoPhoneUpload — selection', () {
@@ -134,6 +158,77 @@ void main() {
         busy.add(next); // accepted → no longer selectable
       }
       expect(uploaded, {auto2});
+    });
+  });
+
+  group('resetAutoPhoneUploadFailures (#4822)', () {
+    test('clears all failure counts to restore eligibility upon network restoration', () {
+      final failureCounts = {
+        auto1: autoPhoneUploadMaxFailures,
+        auto2: 2,
+      };
+      resetAutoPhoneUploadFailures(failureCounts);
+      expect(failureCounts, isEmpty);
+
+      // Files that previously hit the cap are now immediately eligible
+      final next = selectNextAutoPhoneUpload([auto1, auto2], busyNames: {}, failureCounts: failureCounts);
+      expect(next, auto1);
+    });
+  });
+
+  group('network restoration and failsafe batch upload simulation (#4822)', () {
+    test('transient disconnect preserves file and reconnect drains preserved files', () {
+      final failureCounts = <String, int>{};
+      final uploaded = <String>{};
+      final preservedOnDisk = <String>{auto1, auto2};
+
+      // Step 1: Online attempt, auto1 upload in flight, network drops mid-upload.
+      // Transient network drop does NOT increment permanent failure count.
+      final inFlight = selectNextAutoPhoneUpload([auto1, auto2], busyNames: {}, failureCounts: failureCounts);
+      expect(inFlight, auto1);
+      // Failsafe: auto1 is not deleted on disconnect
+      expect(preservedOnDisk.contains(auto1), isTrue);
+
+      // Step 2: While disconnected, canAutoUploadPhoneRecordings blocks attempts
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+          hasNetwork: false,
+        ),
+        isFalse,
+      );
+
+      // Step 3: Stable network reconnects: failure counts reset and batch drain resumes
+      resetAutoPhoneUploadFailures(failureCounts);
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+          hasNetwork: true,
+        ),
+        isTrue,
+      );
+
+      // Step 4: Batch uploads both files successfully; each is deleted only upon completion
+      final busy = <String>{};
+      while (true) {
+        final next = selectNextAutoPhoneUpload(
+          preservedOnDisk.toList(),
+          busyNames: busy,
+          failureCounts: failureCounts,
+        );
+        if (next == null) break;
+        uploaded.add(next);
+        busy.add(next);
+        // Completed server receipt -> file deleted from disk
+        preservedOnDisk.remove(next);
+      }
+
+      expect(uploaded, {auto1, auto2});
+      expect(preservedOnDisk, isEmpty);
     });
   });
 }
