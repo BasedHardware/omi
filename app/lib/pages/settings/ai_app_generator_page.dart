@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
 
 class AiAppGeneratorPage extends StatelessWidget {
   const AiAppGeneratorPage({super.key});
@@ -57,12 +58,15 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     return Consumer<AiAppGeneratorProvider>(
       builder: (context, provider, _) {
         // Show generated app view if we have generated content
-        if (provider.hasGeneratedApp) {
-          return _buildGeneratedAppView(provider);
-        }
-
-        // Show main input view
-        return _buildInputView(provider);
+        // One way back, the same on screen and from the system: the generated app steps back to the
+        // prompt (it has not been created yet, so leaving would lose it); the prompt leaves the page.
+        return PopScope(
+          canPop: !provider.hasGeneratedApp,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) provider.clear();
+          },
+          child: provider.hasGeneratedApp ? _buildGeneratedAppView(provider) : _buildInputView(provider),
+        );
       },
     );
   }
@@ -77,28 +81,17 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
         body: SafeArea(
           child: Column(
             children: [
-              // Header with close button
+              // Pushed page: one leading back.
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        provider.clear();
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1C1C1E),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.all(OmiSpacing.xs),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: OmiBackButton.circled(
+                    onPressed: () {
+                      provider.clear();
+                      Navigator.pop(context);
+                    },
+                  ),
                 ),
               ),
 
@@ -633,47 +626,18 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(OmiSpacing.xs),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => provider.clear(),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Center(child: FaIcon(FontAwesomeIcons.arrowLeft, color: Colors.white, size: 16)),
-                    ),
-                  ),
+                  // Back steps to the prompt (the page's PopScope clears the generated app).
+                  const OmiBackButton.circled(),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)]),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'BETA',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () {
-                      provider.clear();
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
+                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                    child: Text(
+                      context.l10n.beta,
+                      style: OmiType.caption.copyWith(fontWeight: FontWeight.w700, color: OmiColors.textSecondary),
                     ),
                   ),
                 ],
