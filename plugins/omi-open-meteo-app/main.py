@@ -4,6 +4,8 @@ Open-Meteo Integration App for Omi.
 Provides chat tools for current weather, short forecasts, and basic air-quality
 lookups using public Open-Meteo APIs.
 """
+import logging
+
 
 from typing import Any, Literal, Optional
 
@@ -12,6 +14,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -431,8 +435,14 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
             f"Wind: {_format_number(_as_number(current.get('wind_speed_10m')), wind_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Open-Meteo request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Open-Meteo request failed: {exc}")
+        logger.error("Open-Meteo request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Open-Meteo weather request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo request failed.")
 
 
 @app.post("/tools/get_weather_forecast", response_model=ChatToolResponse)
@@ -489,8 +499,14 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Open-Meteo forecast request failed with status {exc.response.status_code}.")
     except (httpx.HTTPError, IndexError) as exc:
-        return ChatToolResponse(error=f"Open-Meteo forecast request failed: {exc}")
+        logger.error("Open-Meteo forecast request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo forecast request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Open-Meteo forecast request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo forecast request failed.")
 
 
 @app.post("/tools/get_air_quality", response_model=ChatToolResponse)
@@ -532,5 +548,11 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
             f"Nitrogen dioxide: {_format_number(_as_number(current.get('nitrogen_dioxide')), no2_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Open-Meteo air-quality request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Open-Meteo air-quality request failed: {exc}")
+        logger.error("Open-Meteo air-quality request failed: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo air-quality request failed due to a network error.")
+    except Exception as exc:
+        logger.error("Unexpected error during Open-Meteo air-quality request: %s", type(exc).__name__, exc_info=True)
+        return ChatToolResponse(error="Open-Meteo air-quality request failed.")
