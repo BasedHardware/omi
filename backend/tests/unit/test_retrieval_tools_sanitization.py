@@ -4,14 +4,12 @@ Ensures that internal exceptions, tracebacks, database errors, and sensitive tok
 are never disclosed in tool outputs returned to the agent context.
 """
 
-import importlib
 import os
 import sys
-import types
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from tests.unit.memory_import_isolation import AutoMockModule, restore_sys_modules, snapshot_sys_modules
+from testing.import_isolation import AutoMockModule, stub_modules
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -46,31 +44,39 @@ _STUB_MODULES = [
     "utils.app_integrations",
 ]
 
-_SYS_SNAPSHOT = snapshot_sys_modules(_STUB_MODULES)
+calendar_tools = None
+conversation_tools = None
+file_tools = None
+gmail_tools = None
+memory_tools = None
 
-# Install AutoMockModule stubs for non-present modules
-for name in _STUB_MODULES:
-    if name not in sys.modules:
-        sys.modules[name] = AutoMockModule(name)
 
-# Mock specific functions needed by retrieval tools
-sys.modules["database.notifications"].get_user_time_zone = MagicMock(return_value="America/Los_Angeles")
-sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
-sys.modules["database.conversations"].get_conversation = MagicMock(return_value=None)
-sys.modules["database.users"].get_user_name = MagicMock(return_value="Test User")
-sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
+@pytest.fixture(scope="module", autouse=True)
+def _retrieval_tools_isolation():
+    fakes = {name: AutoMockModule(name) for name in _STUB_MODULES}
+    fakes["database.notifications"].get_user_time_zone = MagicMock(return_value="America/Los_Angeles")
+    fakes["database.conversations"].get_conversations = MagicMock(return_value=[])
+    fakes["database.conversations"].get_conversation = MagicMock(return_value=None)
+    fakes["database.users"].get_user_name = MagicMock(return_value="Test User")
+    fakes["database.users"].get_people_by_ids = MagicMock(return_value=[])
 
-# Import retrieval tools
-from utils.retrieval.tools import (
-    calendar_tools,
-    conversation_tools,
-    file_tools,
-    gmail_tools,
-    memory_tools,
-)
+    with stub_modules(fakes):
+        from utils.retrieval.tools import (
+            calendar_tools as _cal,
+            conversation_tools as _conv,
+            file_tools as _file,
+            gmail_tools as _gmail,
+            memory_tools as _mem,
+        )
 
-# Unload action_item_tools from sys.modules so sibling test test_action_item_date_validation.py can load its own stubbed copy
-sys.modules.pop("utils.retrieval.tools.action_item_tools", None)
+        mod = sys.modules[__name__]
+        mod.calendar_tools = _cal
+        mod.conversation_tools = _conv
+        mod.file_tools = _file
+        mod.gmail_tools = _gmail
+        mod.memory_tools = _mem
+        yield
+
 
 CONFIG = {"configurable": {"user_id": "test-user-123", "chat_session_id": "session-456"}}
 
