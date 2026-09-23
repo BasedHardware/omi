@@ -50,21 +50,29 @@ sys.modules["langchain_core.runnables"].RunnableConfig = dict
 # Stub database._client
 sys.modules["database._client"].db = MagicMock()
 
+
 # Stub models.memories
 class DummyMemoryDB:
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
+
+
 sys.modules["models.memories"].MemoryDB = DummyMemoryDB
+
 
 # Stub utils.memory.memory_service
 class DummyMemoryService:
     def __init__(self, *args, **kwargs):
         pass
+
     def read(self, *args, **kwargs):
         return []
+
     def search(self, *args, **kwargs):
         return []
+
+
 sys.modules["utils.memory.memory_service"].MemoryService = DummyMemoryService
 
 # Stub utils.memory.belief_model
@@ -119,7 +127,9 @@ def test_get_memories_tool_invalid_date_sanitized():
 
 def test_get_memories_tool_db_exception_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(memory_tools, "MemoryService", side_effect=RuntimeError("internal_firestore_pool_crash_secret_path")):
+    with patch.object(
+        memory_tools, "MemoryService", side_effect=RuntimeError("internal_firestore_pool_crash_secret_path")
+    ):
         res = memory_tools.get_memories_tool(config=config)
         assert res == "Error retrieving memories."
         assert "internal_firestore_pool_crash_secret_path" not in res
@@ -135,7 +145,9 @@ def test_search_memories_tool_exception_sanitized():
 
 def test_get_memories_tool_invalid_temporal_args_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")):
+    with patch.object(
+        memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")
+    ):
         res = memory_tools.get_memories_tool(as_of="bad_as_of", config=config)
         assert res == "Error: Invalid temporal read arguments."
         assert "Invalid as_of timezone detail leaking" not in res
@@ -143,7 +155,9 @@ def test_get_memories_tool_invalid_temporal_args_sanitized():
 
 def test_search_memories_tool_invalid_temporal_args_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")):
+    with patch.object(
+        memory_tools, "_parse_aware_iso", side_effect=ValueError("Invalid as_of timezone detail leaking")
+    ):
         res = memory_tools.search_memories_tool(query="q", as_of="bad_as_of", config=config)
         assert res == "Error: Invalid temporal read arguments."
         assert "Invalid as_of timezone detail leaking" not in res
@@ -151,13 +165,15 @@ def test_search_memories_tool_invalid_temporal_args_sanitized():
 
 def test_search_memories_tool_invalid_chat_scope_dates_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
+
     def _parse_mock(val):
         if val == "bad_date":
             raise ValueError("date parse error with secret payload")
         return None
 
-    with patch.object(memory_tools, "chat_scope_from_config", return_value={"start_date": "bad_date"}), \
-         patch.object(memory_tools, "_parse_aware_iso", side_effect=_parse_mock):
+    with patch.object(memory_tools, "chat_scope_from_config", return_value={"start_date": "bad_date"}), patch.object(
+        memory_tools, "_parse_aware_iso", side_effect=_parse_mock
+    ):
         res = memory_tools.search_memories_tool(query="q", config=config)
         assert res == "Error: chat_scope dates invalid."
         assert "date parse error with secret payload" not in res
