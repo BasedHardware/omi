@@ -27,8 +27,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deleteConversationTitle => 'Slette samtale?';
 
   @override
-  String get deleteConversationMessage =>
-      'Dette vil også slette tilknyttede minner, oppgaver og lydfiler. Denne handlingen kan ikke angres.';
+  String get deleteConversationMessage => 'Dette vil også slette tilknyttede minner, oppgaver og lydfiler.';
 
   @override
   String get confirm => 'Bekreft';
@@ -7413,7 +7412,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Ny 🚀';
+  String get conversationNewIndicator => 'Ny';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10162,4 +10161,96 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Endringer som ikke er lagret, går tapt.';
+
+  @override
+  String get pause => 'Pause';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slette $count samtaler?',
+      one: 'Slette 1 samtale?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Dette sletter også minnene, oppgavene og lydfilene deres.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler slettet',
+      one: '1 samtale slettet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler flyttet',
+      one: '1 samtale flyttet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Kunne ikke flytte samtalene';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Forkastet · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => 'Samtaler du tar opp vises her. Trykk på + på Hjem for å ta opp den første.';
+
+  @override
+  String get conversationMap => 'Samtalekart';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler',
+      one: '1 samtale',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count oppgaver',
+      one: '1 oppgave',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 sekunder tilbake';
+
+  @override
+  String get skipForward10Seconds => '10 sekunder frem';
+
+  @override
+  String get failedToShareRecap => 'Kunne ikke dele sammendraget';
+
+  @override
+  String get captureOfflineBuffering => 'Frakoblet, bufrer';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Frakoblet, bufrer · $minutes min';
+  }
 }

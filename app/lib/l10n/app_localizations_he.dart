@@ -27,8 +27,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteConversationTitle => 'מחיקת שיחה?';
 
   @override
-  String get deleteConversationMessage =>
-      'פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו. לא ניתן לבטל פעולה זו.';
+  String get deleteConversationMessage => 'פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו.';
 
   @override
   String get confirm => 'אישור';
@@ -7355,7 +7354,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'חדש 🚀';
+  String get conversationNewIndicator => 'חדש';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10081,4 +10080,96 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'השינויים שלא נשמרו יאבדו.';
+
+  @override
+  String get pause => 'השהיה';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'למחוק $count שיחות?',
+      one: 'למחוק שיחה אחת?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'פעולה זו תמחק גם את הזיכרונות, המשימות וקבצי האודיו שלהן.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count שיחות נמחקו',
+      one: 'שיחה אחת נמחקה',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count שיחות הועברו',
+      one: 'שיחה אחת הועברה',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'לא ניתן היה להעביר את השיחות';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'נמחקה מהרשימה · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => 'שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.';
+
+  @override
+  String get conversationMap => 'מפת שיחות';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count שיחות',
+      one: 'שיחה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count משימות',
+      one: 'משימה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 שניות אחורה';
+
+  @override
+  String get skipForward10Seconds => '10 שניות קדימה';
+
+  @override
+  String get failedToShareRecap => 'לא ניתן היה לשתף את הסיכום';
+
+  @override
+  String get captureOfflineBuffering => 'לא מקוון, שומר בזיכרון זמני';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'לא מקוון, שומר בזיכרון זמני · $minutes דק׳';
+  }
 }

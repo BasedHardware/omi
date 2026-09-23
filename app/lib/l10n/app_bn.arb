@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "এটি সম্পর্কিত স্মৃতি, কাজ এবং অডিও ফাইলগুলিও মুছে ফেলবে। এই পদক্ষেপটি আনডু করা যাবে না।",
+    "deleteConversationMessage": "এটি সম্পর্কিত স্মৃতি, কাজ এবং অডিও ফাইলগুলিও মুছে ফেলবে।",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "নতুন 🚀",
+    "conversationNewIndicator": "নতুন",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "বাতিল করুন",
     "keepEditing": "সম্পাদনা চালিয়ে যান",
     "discardChangesTitle": "পরিবর্তনগুলি বাতিল করবেন?",
-    "discardChangesMessage": "আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।"
+    "discardChangesMessage": "আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।",
+    "pause": "বিরতি",
+    "deleteConversationsTitle": "{count, plural, =1{১টি কথোপকথন মুছবেন?} other{{count}টি কথোপকথন মুছবেন?}}",
+    "deleteConversationsMessage": "এটি সেগুলোর স্মৃতি, কাজ এবং অডিও ফাইলও মুছে ফেলবে।",
+    "conversationsDeletedCount": "{count, plural, =1{১টি কথোপকথন মুছে ফেলা হয়েছে} other{{count}টি কথোপকথন মুছে ফেলা হয়েছে}}",
+    "conversationsMovedCount": "{count, plural, =1{১টি কথোপকথন সরানো হয়েছে} other{{count}টি কথোপকথন সরানো হয়েছে}}",
+    "failedToMoveConversations": "কথোপকথনগুলো সরানো যায়নি",
+    "discardedConversationTitle": "বাতিল · {duration}",
+    "noConversationsHeroMessage": "আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে + চাপুন।",
+    "conversationMap": "কথোপকথনের মানচিত্র",
+    "conversationCount": "{count, plural, =1{১টি কথোপকথন} other{{count}টি কথোপকথন}}",
+    "taskCount": "{count, plural, =1{১টি কাজ} other{{count}টি কাজ}}",
+    "skipBack10Seconds": "১০ সেকেন্ড পিছনে",
+    "skipForward10Seconds": "১০ সেকেন্ড সামনে",
+    "failedToShareRecap": "সারসংক্ষেপ শেয়ার করা যায়নি",
+    "captureOfflineBuffering": "অফলাইন, বাফার হচ্ছে",
+    "captureOfflineBufferingFor": "অফলাইন, বাফার হচ্ছে · {minutes} মিনিট"
 }

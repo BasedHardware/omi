@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Ovo će obrisati i povezane uspomene, zadatke i audio datoteke. Ova radnja se ne može poništiti.",
+    "deleteConversationMessage": "Ovo će obrisati i povezane uspomene, zadatke i audio datoteke.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Novo 🚀",
+    "conversationNewIndicator": "Novo",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "Odbaci",
     "keepEditing": "Nastavi uređivati",
     "discardChangesTitle": "Odbaciti promjene?",
-    "discardChangesMessage": "Vaše nespremljene promjene bit će izgubljene."
+    "discardChangesMessage": "Vaše nespremljene promjene bit će izgubljene.",
+    "pause": "Pauza",
+    "deleteConversationsTitle": "{count, plural, =1{Izbrisati 1 razgovor?} other{Izbrisati razgovore ({count})?}}",
+    "deleteConversationsMessage": "Ovo će obrisati i njihove uspomene, zadatke i audio datoteke.",
+    "conversationsDeletedCount": "{count, plural, =1{1 razgovor izbrisan} other{Izbrisano razgovora: {count}}}",
+    "conversationsMovedCount": "{count, plural, =1{Premješten 1 razgovor} other{Premješteno razgovora: {count}}}",
+    "failedToMoveConversations": "Premještanje razgovora nije uspjelo",
+    "discardedConversationTitle": "Odbačeno · {duration}",
+    "noConversationsHeroMessage": "Razgovori koje snimite pojavljuju se ovdje. Dodirnite + na početnoj za snimanje prvog.",
+    "conversationMap": "Karta razgovora",
+    "conversationCount": "{count, plural, =1{1 razgovor} other{Razgovora: {count}}}",
+    "taskCount": "{count, plural, =1{1 zadatak} other{Zadataka: {count}}}",
+    "skipBack10Seconds": "Natrag 10 sekundi",
+    "skipForward10Seconds": "Naprijed 10 sekundi",
+    "failedToShareRecap": "Dijeljenje sažetka nije uspjelo",
+    "captureOfflineBuffering": "Izvan mreže, međuspremanje",
+    "captureOfflineBufferingFor": "Izvan mreže, međuspremanje · {minutes} min"
 }

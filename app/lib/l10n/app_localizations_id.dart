@@ -27,8 +27,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteConversationTitle => 'Hapus Percakapan?';
 
   @override
-  String get deleteConversationMessage =>
-      'Ini juga akan menghapus kenangan, tugas, dan file audio terkait. Tindakan ini tidak dapat dibatalkan.';
+  String get deleteConversationMessage => 'Ini juga akan menghapus kenangan, tugas, dan file audio terkait.';
 
   @override
   String get confirm => 'Konfirmasi';
@@ -10174,4 +10173,97 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Perubahan yang belum disimpan akan hilang.';
+
+  @override
+  String get pause => 'Jeda';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hapus $count Percakapan?',
+      one: 'Hapus 1 Percakapan?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Ini juga menghapus kenangan, tugas, dan file audionya.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan dihapus',
+      one: '1 percakapan dihapus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan dipindahkan',
+      one: '1 percakapan dipindahkan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Tidak dapat memindahkan percakapan';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Dibuang · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Percakapan yang Anda rekam muncul di sini. Ketuk + di Beranda untuk merekam yang pertama.';
+
+  @override
+  String get conversationMap => 'Peta Percakapan';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan',
+      one: '1 percakapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tugas',
+      one: '1 tugas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Mundur 10 detik';
+
+  @override
+  String get skipForward10Seconds => 'Maju 10 detik';
+
+  @override
+  String get failedToShareRecap => 'Tidak dapat membagikan rekap';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, menyangga';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, menyangga · $minutes mnt';
+  }
 }

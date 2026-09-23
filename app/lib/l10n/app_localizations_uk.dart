@@ -27,8 +27,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deleteConversationTitle => 'Видалити розмову?';
 
   @override
-  String get deleteConversationMessage =>
-      'Це також видалить пов\'язані спогади, завдання та аудіофайли. Цю дію не можна скасувати.';
+  String get deleteConversationMessage => 'Це також видалить пов\'язані спогади, завдання та аудіофайли.';
 
   @override
   String get confirm => 'Підтвердити';
@@ -7426,7 +7425,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Нове 🚀';
+  String get conversationNewIndicator => 'Нове';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10182,4 +10181,97 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Незбережені зміни буде втрачено.';
+
+  @override
+  String get pause => 'Пауза';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Видалити розмови ($count)?',
+      one: 'Видалити 1 розмову?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Також буде видалено їхні спогади, завдання та аудіофайли.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Видалено розмов: $count',
+      one: '1 розмову видалено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Переміщено розмов: $count',
+      one: '1 розмову переміщено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Не вдалося перемістити розмови';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Відхилено · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Тут з\'являються записані розмови. Торкніться + на головній, щоб записати першу.';
+
+  @override
+  String get conversationMap => 'Мапа розмов';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Розмов: $count',
+      one: '1 розмова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Завдань: $count',
+      one: '1 завдання',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Назад на 10 секунд';
+
+  @override
+  String get skipForward10Seconds => 'Вперед на 10 секунд';
+
+  @override
+  String get failedToShareRecap => 'Не вдалося поділитися підсумком';
+
+  @override
+  String get captureOfflineBuffering => 'Офлайн, буферизація';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Офлайн, буферизація · $minutes хв';
+  }
 }

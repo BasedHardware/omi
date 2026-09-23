@@ -27,8 +27,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteConversationTitle => 'Διαγραφή Συνομιλίας;';
 
   @override
-  String get deleteConversationMessage =>
-      'Αυτό θα διαγράψει επίσης τις σχετικές αναμνήσεις, εργασίες και αρχεία ήχου. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+  String get deleteConversationMessage => 'Αυτό θα διαγράψει επίσης τις σχετικές αναμνήσεις, εργασίες και αρχεία ήχου.';
 
   @override
   String get confirm => 'Επιβεβαίωση';
@@ -7470,7 +7469,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Νέο 🚀';
+  String get conversationNewIndicator => 'Νέο';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10233,4 +10232,97 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.';
+
+  @override
+  String get pause => 'Παύση';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγραφή $count συνομιλιών;',
+      one: 'Διαγραφή 1 συνομιλίας;',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Θα διαγραφούν επίσης οι αναμνήσεις, οι εργασίες και τα αρχεία ήχου τους.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγράφηκαν $count συνομιλίες',
+      one: 'Διαγράφηκε 1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Μετακινήθηκαν $count συνομιλίες',
+      one: 'Μετακινήθηκε 1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Δεν ήταν δυνατή η μετακίνηση των συνομιλιών';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Απορρίφθηκε · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε + στην Αρχική για να ηχογραφήσετε την πρώτη.';
+
+  @override
+  String get conversationMap => 'Χάρτης συνομιλιών';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες',
+      one: '1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εργασίες',
+      one: '1 εργασία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Πίσω 10 δευτερόλεπτα';
+
+  @override
+  String get skipForward10Seconds => 'Εμπρός 10 δευτερόλεπτα';
+
+  @override
+  String get failedToShareRecap => 'Δεν ήταν δυνατή η κοινοποίηση της σύνοψης';
+
+  @override
+  String get captureOfflineBuffering => 'Εκτός σύνδεσης, προσωρινή αποθήκευση';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Εκτός σύνδεσης, προσωρινή αποθήκευση · $minutes λ.';
+  }
 }

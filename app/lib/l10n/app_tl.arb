@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file. Hindi maaaring bawiin ang aksyong ito.",
+    "deleteConversationMessage": "Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Bago 🚀",
+    "conversationNewIndicator": "Bago",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "Itapon",
     "keepEditing": "Ipagpatuloy ang Pag-edit",
     "discardChangesTitle": "Itapon ang mga Pagbabago?",
-    "discardChangesMessage": "Mawawala ang mga hindi mo na-save na pagbabago."
+    "discardChangesMessage": "Mawawala ang mga hindi mo na-save na pagbabago.",
+    "pause": "I-pause",
+    "deleteConversationsTitle": "{count, plural, =1{Burahin ang 1 Usapan?} other{Burahin ang {count} Usapan?}}",
+    "deleteConversationsMessage": "Mabubura din ang kanilang mga alaala, gawain, at audio file.",
+    "conversationsDeletedCount": "{count, plural, =1{Nabura ang 1 usapan} other{Nabura ang {count} usapan}}",
+    "conversationsMovedCount": "{count, plural, =1{Nailipat ang 1 usapan} other{Nailipat ang {count} usapan}}",
+    "failedToMoveConversations": "Hindi mailipat ang mga usapan",
+    "discardedConversationTitle": "Itinapon · {duration}",
+    "noConversationsHeroMessage": "Lalabas dito ang mga usapang nire-record mo. I-tap ang + sa Home para i-record ang una.",
+    "conversationMap": "Mapa ng mga Usapan",
+    "conversationCount": "{count, plural, =1{1 usapan} other{{count} usapan}}",
+    "taskCount": "{count, plural, =1{1 gawain} other{{count} gawain}}",
+    "skipBack10Seconds": "Bumalik ng 10 segundo",
+    "skipForward10Seconds": "Umabante ng 10 segundo",
+    "failedToShareRecap": "Hindi maibahagi ang recap",
+    "captureOfflineBuffering": "Offline, nagba-buffer",
+    "captureOfflineBufferingFor": "Offline, nagba-buffer · {minutes} min"
 }

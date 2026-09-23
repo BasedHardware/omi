@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Гэта таксама выдаліць звязаныя ўспаміны, задачы і аўдыёфайлы. Гэта дзеянне нельга адмяніць.",
+    "deleteConversationMessage": "Гэта таксама выдаліць звязаныя ўспаміны, задачы і аўдыёфайлы.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Новая 🚀",
+    "conversationNewIndicator": "Новая",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "Адхіліць",
     "keepEditing": "Працягнуць рэдагаванне",
     "discardChangesTitle": "Адхіліць змены?",
-    "discardChangesMessage": "Вашы незахаваныя змены будуць страчаны."
+    "discardChangesMessage": "Вашы незахаваныя змены будуць страчаны.",
+    "pause": "Паўза",
+    "deleteConversationsTitle": "{count, plural, =1{Выдаліць 1 размову?} other{Выдаліць размовы ({count})?}}",
+    "deleteConversationsMessage": "Гэта таксама выдаліць іх успаміны, задачы і аўдыёфайлы.",
+    "conversationsDeletedCount": "{count, plural, =1{1 размова выдалена} other{Выдалена размоў: {count}}}",
+    "conversationsMovedCount": "{count, plural, =1{Перамешчана 1 размова} other{Перамешчана размоў: {count}}}",
+    "failedToMoveConversations": "Не ўдалося перамясціць размовы",
+    "discardedConversationTitle": "Адкінута · {duration}",
+    "noConversationsHeroMessage": "Тут з'яўляюцца размовы, якія вы запісваеце. Націсніце + на галоўнай, каб запісаць першую.",
+    "conversationMap": "Карта размоў",
+    "conversationCount": "{count, plural, =1{1 размова} other{Размоў: {count}}}",
+    "taskCount": "{count, plural, =1{1 задача} other{Задач: {count}}}",
+    "skipBack10Seconds": "Назад на 10 секунд",
+    "skipForward10Seconds": "Наперад на 10 секунд",
+    "failedToShareRecap": "Не ўдалося падзяліцца зводкай",
+    "captureOfflineBuffering": "Па-за сеткай, буферызацыя",
+    "captureOfflineBufferingFor": "Па-за сеткай, буферызацыя · {minutes} хв"
 }

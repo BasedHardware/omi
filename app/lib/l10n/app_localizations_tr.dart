@@ -27,8 +27,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteConversationTitle => 'Konuşma Silinsin mi?';
 
   @override
-  String get deleteConversationMessage =>
-      'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir. Bu işlem geri alınamaz.';
+  String get deleteConversationMessage => 'Bu işlem ilişkili anıları, görevleri ve ses dosyalarını da silecektir.';
 
   @override
   String get confirm => 'Onayla';
@@ -7429,7 +7428,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Yeni 🚀';
+  String get conversationNewIndicator => 'Yeni';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10175,4 +10174,97 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Kaydedilmemiş değişiklikleriniz kaybolacak.';
+
+  @override
+  String get pause => 'Duraklat';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma silinsin mi?',
+      one: '1 konuşma silinsin mi?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Bu işlem onların anılarını, görevlerini ve ses dosyalarını da siler.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma silindi',
+      one: '1 konuşma silindi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma taşındı',
+      one: '1 konuşma taşındı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Konuşmalar taşınamadı';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Atıldı · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Kaydettiğin konuşmalar burada görünür. İlkini kaydetmek için Ana Sayfa\'da + simgesine dokun.';
+
+  @override
+  String get conversationMap => 'Konuşma Haritası';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma',
+      one: '1 konuşma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count görev',
+      one: '1 görev',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 saniye geri';
+
+  @override
+  String get skipForward10Seconds => '10 saniye ileri';
+
+  @override
+  String get failedToShareRecap => 'Özet paylaşılamadı';
+
+  @override
+  String get captureOfflineBuffering => 'Çevrimdışı, arabelleğe alınıyor';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Çevrimdışı, arabelleğe alınıyor · $minutes dk';
+  }
 }

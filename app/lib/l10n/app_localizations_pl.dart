@@ -27,8 +27,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteConversationTitle => 'Usunąć rozmowę?';
 
   @override
-  String get deleteConversationMessage =>
-      'Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio. Tej czynności nie można cofnąć.';
+  String get deleteConversationMessage => 'Spowoduje to również usunięcie powiązanych wspomnień, zadań i plików audio.';
 
   @override
   String get confirm => 'Potwierdź';
@@ -7433,7 +7432,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Nowe 🚀';
+  String get conversationNewIndicator => 'Nowe';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10193,4 +10192,97 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Niezapisane zmiany zostaną utracone.';
+
+  @override
+  String get pause => 'Wstrzymaj';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usunąć rozmowy ($count)?',
+      one: 'Usunąć 1 rozmowę?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Usunie to również ich wspomnienia, zadania i pliki audio.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usunięte rozmowy: $count',
+      one: 'Usunięto 1 rozmowę',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Przeniesione rozmowy: $count',
+      one: 'Przeniesiono 1 rozmowę',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Nie udało się przenieść rozmów';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Odrzucona · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Nagrane rozmowy pojawiają się tutaj. Stuknij + na ekranie głównym, aby nagrać pierwszą.';
+
+  @override
+  String get conversationMap => 'Mapa rozmów';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rozmowy: $count',
+      one: '1 rozmowa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zadania: $count',
+      one: '1 zadanie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 sekund do tyłu';
+
+  @override
+  String get skipForward10Seconds => '10 sekund do przodu';
+
+  @override
+  String get failedToShareRecap => 'Nie udało się udostępnić podsumowania';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, buforowanie';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, buforowanie · $minutes min';
+  }
 }

@@ -27,7 +27,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteConversationTitle => '会話を削除しますか？';
 
   @override
-  String get deleteConversationMessage => '関連する記憶、タスク、音声ファイルも削除されます。この操作は元に戻せません。';
+  String get deleteConversationMessage => '関連する記憶、タスク、音声ファイルも削除されます。';
 
   @override
   String get confirm => '確認';
@@ -7291,7 +7291,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => '新規 🚀';
+  String get conversationNewIndicator => '新規';
 
   @override
   String conversationPhotosCount(int count) {
@@ -9991,4 +9991,96 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '保存されていない変更は失われます。';
+
+  @override
+  String get pause => '一時停止';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を削除しますか？',
+      one: '1件の会話を削除しますか？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'それぞれの記憶、タスク、音声ファイルも削除されます。';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を削除しました',
+      one: '1件の会話を削除しました',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を移動しました',
+      one: '1件の会話を移動しました',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => '会話を移動できませんでした';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return '破棄済み · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => '録音した会話はここに表示されます。ホームの + をタップして最初の会話を録音しましょう。';
+
+  @override
+  String get conversationMap => '会話マップ';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話',
+      one: '1件の会話',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のタスク',
+      one: '1件のタスク',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10秒戻る';
+
+  @override
+  String get skipForward10Seconds => '10秒進む';
+
+  @override
+  String get failedToShareRecap => 'まとめを共有できませんでした';
+
+  @override
+  String get captureOfflineBuffering => 'オフライン、バッファ中';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'オフライン、バッファ中 · $minutes分';
+  }
 }

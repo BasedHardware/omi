@@ -27,8 +27,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteConversationTitle => 'حذف المحادثة؟';
 
   @override
-  String get deleteConversationMessage =>
-      'سيؤدي هذا أيضًا إلى حذف الذكريات والمهام وملفات الصوت المرتبطة. لا يمكن التراجع عن هذا الإجراء.';
+  String get deleteConversationMessage => 'سيؤدي هذا أيضًا إلى حذف الذكريات والمهام وملفات الصوت المرتبطة.';
 
   @override
   String get confirm => 'تأكيد';
@@ -7361,7 +7360,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'جديد 🚀';
+  String get conversationNewIndicator => 'جديد';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10101,4 +10100,97 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'ستفقد التغييرات غير المحفوظة.';
+
+  @override
+  String get pause => 'إيقاف مؤقت';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف $count محادثات؟',
+      one: 'حذف محادثة واحدة؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'سيؤدي هذا أيضًا إلى حذف الذكريات والمهام وملفات الصوت الخاصة بها.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم حذف $count محادثات',
+      one: 'تم حذف محادثة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم نقل $count محادثات',
+      one: 'تم نقل محادثة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'تعذّر نقل المحادثات';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'مُهمَلة · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'تظهر هنا المحادثات التي تسجّلها. اضغط + في الصفحة الرئيسية لتسجيل أول محادثة.';
+
+  @override
+  String get conversationMap => 'خريطة المحادثات';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count محادثات',
+      one: 'محادثة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مهام',
+      one: 'مهمة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'رجوع 10 ثوانٍ';
+
+  @override
+  String get skipForward10Seconds => 'تقديم 10 ثوانٍ';
+
+  @override
+  String get failedToShareRecap => 'تعذّرت مشاركة الملخص';
+
+  @override
+  String get captureOfflineBuffering => 'غير متصل، يتم التخزين المؤقت';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'غير متصل، يتم التخزين المؤقت · $minutes د';
+  }
 }

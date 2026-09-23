@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו. לא ניתן לבטל פעולה זו.",
+    "deleteConversationMessage": "פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "חדש 🚀",
+    "conversationNewIndicator": "חדש",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "מחיקה",
     "keepEditing": "המשך עריכה",
     "discardChangesTitle": "לבטל את השינויים?",
-    "discardChangesMessage": "השינויים שלא נשמרו יאבדו."
+    "discardChangesMessage": "השינויים שלא נשמרו יאבדו.",
+    "pause": "השהיה",
+    "deleteConversationsTitle": "{count, plural, =1{למחוק שיחה אחת?} other{למחוק {count} שיחות?}}",
+    "deleteConversationsMessage": "פעולה זו תמחק גם את הזיכרונות, המשימות וקבצי האודיו שלהן.",
+    "conversationsDeletedCount": "{count, plural, =1{שיחה אחת נמחקה} other{{count} שיחות נמחקו}}",
+    "conversationsMovedCount": "{count, plural, =1{שיחה אחת הועברה} other{{count} שיחות הועברו}}",
+    "failedToMoveConversations": "לא ניתן היה להעביר את השיחות",
+    "discardedConversationTitle": "נמחקה מהרשימה · {duration}",
+    "noConversationsHeroMessage": "שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.",
+    "conversationMap": "מפת שיחות",
+    "conversationCount": "{count, plural, =1{שיחה אחת} other{{count} שיחות}}",
+    "taskCount": "{count, plural, =1{משימה אחת} other{{count} משימות}}",
+    "skipBack10Seconds": "10 שניות אחורה",
+    "skipForward10Seconds": "10 שניות קדימה",
+    "failedToShareRecap": "לא ניתן היה לשתף את הסיכום",
+    "captureOfflineBuffering": "לא מקוון, שומר בזיכרון זמני",
+    "captureOfflineBufferingFor": "לא מקוון, שומר בזיכרון זמני · {minutes} דק׳"
 }

@@ -27,8 +27,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteConversationTitle => 'Tanggalin ang Pag-uusap?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file. Hindi maaaring bawiin ang aksyong ito.';
+  String get deleteConversationMessage => 'Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file.';
 
   @override
   String get confirm => 'Kumpirma';
@@ -7486,7 +7485,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Bago 🚀';
+  String get conversationNewIndicator => 'Bago';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10254,4 +10253,97 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get pause => 'I-pause';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count Usapan?',
+      one: 'Burahin ang 1 Usapan?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Mabubura din ang kanilang mga alaala, gawain, at audio file.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nabura ang $count usapan',
+      one: 'Nabura ang 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nailipat ang $count usapan',
+      one: 'Nailipat ang 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Hindi mailipat ang mga usapan';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Itinapon · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Lalabas dito ang mga usapang nire-record mo. I-tap ang + sa Home para i-record ang una.';
+
+  @override
+  String get conversationMap => 'Mapa ng mga Usapan';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count usapan',
+      one: '1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Bumalik ng 10 segundo';
+
+  @override
+  String get skipForward10Seconds => 'Umabante ng 10 segundo';
+
+  @override
+  String get failedToShareRecap => 'Hindi maibahagi ang recap';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, nagba-buffer';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, nagba-buffer · $minutes min';
+  }
 }

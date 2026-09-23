@@ -27,8 +27,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteConversationTitle => 'Kustuta vestlus?';
 
   @override
-  String get deleteConversationMessage =>
-      'See kustutab ka seotud mälestused, ülesanded ja helifailid. Seda toimingut ei saa tagasi võtta.';
+  String get deleteConversationMessage => 'See kustutab ka seotud mälestused, ülesanded ja helifailid.';
 
   @override
   String get confirm => 'Kinnita';
@@ -7415,7 +7414,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Uus 🚀';
+  String get conversationNewIndicator => 'Uus';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10157,4 +10156,97 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Salvestamata muudatused lähevad kaotsi.';
+
+  @override
+  String get pause => 'Paus';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kas kustutada $count vestlust?',
+      one: 'Kas kustutada 1 vestlus?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'See kustutab ka nende mälestused, ülesanded ja helifailid.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust kustutatud',
+      one: '1 vestlus kustutatud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust teisaldatud',
+      one: '1 vestlus teisaldatud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Vestlusi ei saanud teisaldada';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Loobutud · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Siin kuvatakse salvestatud vestlused. Esimese salvestamiseks puuduta avalehel +.';
+
+  @override
+  String get conversationMap => 'Vestluste kaart';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust',
+      one: '1 vestlus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ülesannet',
+      one: '1 ülesanne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 sekundit tagasi';
+
+  @override
+  String get skipForward10Seconds => '10 sekundit edasi';
+
+  @override
+  String get failedToShareRecap => 'Kokkuvõtet ei saanud jagada';
+
+  @override
+  String get captureOfflineBuffering => 'Võrguühenduseta, puhverdamine';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Võrguühenduseta, puhverdamine · $minutes min';
+  }
 }

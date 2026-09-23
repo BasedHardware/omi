@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Ово ће такође обрисати повезане успомене, задатке и аудио датотеке. Ова радња се не може отказати.",
+    "deleteConversationMessage": "Ово ће такође обрисати повезане успомене, задатке и аудио датотеке.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Ново 🚀",
+    "conversationNewIndicator": "Ново",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "Одбаци",
     "keepEditing": "Настави уређивање",
     "discardChangesTitle": "Одбацити промене?",
-    "discardChangesMessage": "Ваше несачуване промене ће бити изгубљене."
+    "discardChangesMessage": "Ваше несачуване промене ће бити изгубљене.",
+    "pause": "Пауза",
+    "deleteConversationsTitle": "{count, plural, =1{Обрисати 1 разговор?} other{Обрисати разговоре ({count})?}}",
+    "deleteConversationsMessage": "Ово ће обрисати и њихове успомене, задатке и аудио датотеке.",
+    "conversationsDeletedCount": "{count, plural, =1{1 разговор обрисан} other{Обрисано разговора: {count}}}",
+    "conversationsMovedCount": "{count, plural, =1{1 разговор премештен} other{Премештено разговора: {count}}}",
+    "failedToMoveConversations": "Премештање разговора није успело",
+    "discardedConversationTitle": "Одбачено · {duration}",
+    "noConversationsHeroMessage": "Разговори које снимите појављују се овде. Додирните + на почетној да снимите први.",
+    "conversationMap": "Мапа разговора",
+    "conversationCount": "{count, plural, =1{1 разговор} other{Разговора: {count}}}",
+    "taskCount": "{count, plural, =1{1 задатак} other{Задатака: {count}}}",
+    "skipBack10Seconds": "Назад 10 секунди",
+    "skipForward10Seconds": "Напред 10 секунди",
+    "failedToShareRecap": "Дељење резимеа није успело",
+    "captureOfflineBuffering": "Ван мреже, баферовање",
+    "captureOfflineBufferingFor": "Ван мреже, баферовање · {minutes} мин"
 }

@@ -25,7 +25,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "This will also delete associated memories, tasks, and audio files. This action cannot be undone.",
+    "deleteConversationMessage": "This also deletes its memories, tasks, and audio files.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9230,7 +9230,7 @@
             }
         }
     },
-    "conversationNewIndicator": "New 🚀",
+    "conversationNewIndicator": "New",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -11982,5 +11982,104 @@
     "discardChangesMessage": "Your unsaved changes will be lost.",
     "@discardChangesMessage": {
         "description": "Message of the dialog shown when leaving an editor with unsaved changes"
+    },
+    "pause": "Pause",
+    "@pause": {
+        "description": "Button label that pauses audio playback"
+    },
+    "deleteConversationsTitle": "{count, plural, =1{Delete 1 Conversation?} other{Delete {count} Conversations?}}",
+    "@deleteConversationsTitle": {
+        "description": "Title of the confirm dialog for deleting several selected conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteConversationsMessage": "This also deletes their memories, tasks, and audio files.",
+    "@deleteConversationsMessage": {
+        "description": "Message of the confirm dialog for deleting several selected conversations"
+    },
+    "conversationsDeletedCount": "{count, plural, =1{1 conversation deleted} other{{count} conversations deleted}}",
+    "@conversationsDeletedCount": {
+        "description": "Undo toast after deleting several conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "conversationsMovedCount": "{count, plural, =1{Moved 1 conversation} other{Moved {count} conversations}}",
+    "@conversationsMovedCount": {
+        "description": "Confirmation after moving selected conversations into a folder",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "failedToMoveConversations": "Couldn't move the conversations",
+    "@failedToMoveConversations": {
+        "description": "Error toast when moving selected conversations into a folder fails"
+    },
+    "discardedConversationTitle": "Discarded · {duration}",
+    "@discardedConversationTitle": {
+        "description": "Row title for a discarded conversation, with its length (e.g. 'Discarded · 12s')",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "noConversationsHeroMessage": "Conversations you record show up here. Tap + on Home to record your first one.",
+    "@noConversationsHeroMessage": {
+        "description": "Empty state message on the Conversations tab for a new user"
+    },
+    "conversationMap": "Conversation Map",
+    "@conversationMap": {
+        "description": "Title of the page (and the button label) that shows conversations on a map"
+    },
+    "conversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@conversationCount": {
+        "description": "A count of conversations (recap cards, map places)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "taskCount": "{count, plural, =1{1 task} other{{count} tasks}}",
+    "@taskCount": {
+        "description": "A count of tasks (recap cards)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "skipBack10Seconds": "Back 10 seconds",
+    "@skipBack10Seconds": {
+        "description": "Accessibility label of the playback control that jumps back 10 seconds"
+    },
+    "skipForward10Seconds": "Forward 10 seconds",
+    "@skipForward10Seconds": {
+        "description": "Accessibility label of the playback control that jumps forward 10 seconds"
+    },
+    "failedToShareRecap": "Couldn't share the recap",
+    "@failedToShareRecap": {
+        "description": "Error toast when sharing a daily recap fails"
+    },
+    "captureOfflineBuffering": "Offline, buffering",
+    "@captureOfflineBuffering": {
+        "description": "Live capture status: the speech endpoint is unreachable and audio is kept on the phone"
+    },
+    "captureOfflineBufferingFor": "Offline, buffering · {minutes} min",
+    "@captureOfflineBufferingFor": {
+        "description": "Live capture status with how many minutes audio has been kept on the phone",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
     }
 }

@@ -27,8 +27,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deleteConversationTitle => 'Изтриване на разговор?';
 
   @override
-  String get deleteConversationMessage =>
-      'Това ще изтрие и свързаните спомени, задачи и аудио файлове. Това действие не може да бъде отменено.';
+  String get deleteConversationMessage => 'Това ще изтрие и свързаните спомени, задачи и аудио файлове.';
 
   @override
   String get confirm => 'Потвърди';
@@ -10200,4 +10199,97 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Незаписаните промени ще бъдат загубени.';
+
+  @override
+  String get pause => 'Пауза';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Изтриване на $count разговора?',
+      one: 'Изтриване на 1 разговор?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Това ще изтрие и техните спомени, задачи и аудио файлове.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора са изтрити',
+      one: '1 разговор е изтрит',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Преместени са $count разговора',
+      one: 'Преместен е 1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Разговорите не можаха да бъдат преместени';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Отхвърлен · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Разговорите, които записвате, се появяват тук. Докоснете + на началния екран, за да запишете първия.';
+
+  @override
+  String get conversationMap => 'Карта на разговорите';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count задачи',
+      one: '1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Назад с 10 секунди';
+
+  @override
+  String get skipForward10Seconds => 'Напред с 10 секунди';
+
+  @override
+  String get failedToShareRecap => 'Обобщението не можа да бъде споделено';
+
+  @override
+  String get captureOfflineBuffering => 'Офлайн, буфериране';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Офлайн, буфериране · $minutes мин';
+  }
 }

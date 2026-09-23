@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "இது தொடர்புடைய நினைவுகள், பணிகள் மற்றும் ஆடியோ ফাইல்களையும் நீக்கும். இந்த நடவடிக்கையை மாற்ற முடியாது.",
+    "deleteConversationMessage": "இது தொடர்புடைய நினைவுகள், பணிகள் மற்றும் ஆடியோ கோப்புகளையும் நீக்கும்.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -9182,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "புதிய 🚀",
+    "conversationNewIndicator": "புதிய",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -10838,5 +10838,21 @@
     "discard": "நிராகரி",
     "keepEditing": "தொடர்ந்து திருத்து",
     "discardChangesTitle": "மாற்றங்களை நிராகரிக்கவா?",
-    "discardChangesMessage": "சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்."
+    "discardChangesMessage": "சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்.",
+    "pause": "இடைநிறுத்து",
+    "deleteConversationsTitle": "{count, plural, =1{1 உரையாடலை நீக்கவா?} other{{count} உரையாடல்களை நீக்கவா?}}",
+    "deleteConversationsMessage": "இது அவற்றின் நினைவுகள், பணிகள் மற்றும் ஆடியோ கோப்புகளையும் நீக்கும்.",
+    "conversationsDeletedCount": "{count, plural, =1{1 உரையாடல் நீக்கப்பட்டது} other{{count} உரையாடல்கள் நீக்கப்பட்டன}}",
+    "conversationsMovedCount": "{count, plural, =1{1 உரையாடல் நகர்த்தப்பட்டது} other{{count} உரையாடல்கள் நகர்த்தப்பட்டன}}",
+    "failedToMoveConversations": "உரையாடல்களை நகர்த்த முடியவில்லை",
+    "discardedConversationTitle": "நிராகரிக்கப்பட்டது · {duration}",
+    "noConversationsHeroMessage": "நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் + ஐத் தட்டவும்.",
+    "conversationMap": "உரையாடல் வரைபடம்",
+    "conversationCount": "{count, plural, =1{1 உரையாடல்} other{{count} உரையாடல்கள்}}",
+    "taskCount": "{count, plural, =1{1 பணி} other{{count} பணிகள்}}",
+    "skipBack10Seconds": "10 வினாடிகள் பின்னால்",
+    "skipForward10Seconds": "10 வினாடிகள் முன்னால்",
+    "failedToShareRecap": "சுருக்கத்தைப் பகிர முடியவில்லை",
+    "captureOfflineBuffering": "ஆஃப்லைன், இடைநிலைப்படுத்துகிறது",
+    "captureOfflineBufferingFor": "ஆஃப்லைன், இடைநிலைப்படுத்துகிறது · {minutes} நிமி"
 }

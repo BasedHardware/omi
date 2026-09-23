@@ -27,8 +27,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deleteConversationTitle => 'உரையாடலை நீக்கவா?';
 
   @override
-  String get deleteConversationMessage =>
-      'இது தொடர்புடைய நினைவுகள், பணிகள் மற்றும் ஆடியோ ফাইல்களையும் நீக்கும். இந்த நடவடிக்கையை மாற்ற முடியாது.';
+  String get deleteConversationMessage => 'இது தொடர்புடைய நினைவுகள், பணிகள் மற்றும் ஆடியோ கோப்புகளையும் நீக்கும்.';
 
   @override
   String get confirm => 'உறுதிப்படுத்து';
@@ -7471,7 +7470,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'புதிய 🚀';
+  String get conversationNewIndicator => 'புதிய';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10233,4 +10232,97 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'சேமிக்கப்படாத உங்கள் மாற்றங்கள் இழக்கப்படும்.';
+
+  @override
+  String get pause => 'இடைநிறுத்து';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்களை நீக்கவா?',
+      one: '1 உரையாடலை நீக்கவா?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'இது அவற்றின் நினைவுகள், பணிகள் மற்றும் ஆடியோ கோப்புகளையும் நீக்கும்.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள் நீக்கப்பட்டன',
+      one: '1 உரையாடல் நீக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள் நகர்த்தப்பட்டன',
+      one: '1 உரையாடல் நகர்த்தப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'உரையாடல்களை நகர்த்த முடியவில்லை';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'நிராகரிக்கப்பட்டது · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் + ஐத் தட்டவும்.';
+
+  @override
+  String get conversationMap => 'உரையாடல் வரைபடம்';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள்',
+      one: '1 உரையாடல்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பணிகள்',
+      one: '1 பணி',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 வினாடிகள் பின்னால்';
+
+  @override
+  String get skipForward10Seconds => '10 வினாடிகள் முன்னால்';
+
+  @override
+  String get failedToShareRecap => 'சுருக்கத்தைப் பகிர முடியவில்லை';
+
+  @override
+  String get captureOfflineBuffering => 'ஆஃப்லைன், இடைநிலைப்படுத்துகிறது';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'ஆஃப்லைன், இடைநிலைப்படுத்துகிறது · $minutes நிமி';
+  }
 }

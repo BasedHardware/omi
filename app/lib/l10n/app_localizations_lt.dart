@@ -27,8 +27,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteConversationTitle => 'Ištrinti pokalbį?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tai taip pat ištrins susijusius prisiminimus, užduotis ir garso failus. Šio veiksmo negalima atšaukti.';
+  String get deleteConversationMessage => 'Tai taip pat ištrins susijusius prisiminimus, užduotis ir garso failus.';
 
   @override
   String get confirm => 'Patvirtinti';
@@ -7421,7 +7420,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Naujas 🚀';
+  String get conversationNewIndicator => 'Naujas';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10181,4 +10180,97 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neišsaugoti pakeitimai bus prarasti.';
+
+  @override
+  String get pause => 'Pristabdyti';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinti pokalbius ($count)?',
+      one: 'Ištrinti 1 pokalbį?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Taip pat bus ištrinti jų prisiminimai, užduotys ir garso failai.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinta pokalbių: $count',
+      one: 'Ištrintas 1 pokalbis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Perkelta pokalbių: $count',
+      one: 'Perkeltas 1 pokalbis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Nepavyko perkelti pokalbių';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Atmesta · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Čia rodomi įrašyti pokalbiai. Pirmam įrašyti pradžios ekrane bakstelėkite +.';
+
+  @override
+  String get conversationMap => 'Pokalbių žemėlapis';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pokalbių: $count',
+      one: '1 pokalbis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Užduočių: $count',
+      one: '1 užduotis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Atgal 10 sekundžių';
+
+  @override
+  String get skipForward10Seconds => 'Pirmyn 10 sekundžių';
+
+  @override
+  String get failedToShareRecap => 'Nepavyko bendrinti santraukos';
+
+  @override
+  String get captureOfflineBuffering => 'Neprisijungta, buferizuojama';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Neprisijungta, buferizuojama · $minutes min.';
+  }
 }

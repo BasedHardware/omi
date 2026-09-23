@@ -27,8 +27,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteConversationTitle => 'Smazat konverzaci?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tím se také smažou související vzpomínky, úkoly a zvukové soubory. Tuto akci nelze vrátit zpět.';
+  String get deleteConversationMessage => 'Tím se také smažou související vzpomínky, úkoly a zvukové soubory.';
 
   @override
   String get confirm => 'Potvrdit';
@@ -7410,7 +7409,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Nové 🚀';
+  String get conversationNewIndicator => 'Nové';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10162,4 +10161,97 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neuložené změny budou ztraceny.';
+
+  @override
+  String get pause => 'Pozastavit';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat konverzace ($count)?',
+      one: 'Smazat 1 konverzaci?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Smažou se také jejich vzpomínky, úkoly a zvukové soubory.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazáno konverzací: $count',
+      one: '1 konverzace smazána',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Přesunuto konverzací: $count',
+      one: 'Přesunuta 1 konverzace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Konverzace se nepodařilo přesunout';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Zahozeno · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na + na domovské obrazovce.';
+
+  @override
+  String get conversationMap => 'Mapa konverzací';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Konverzace: $count',
+      one: '1 konverzace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Úkoly: $count',
+      one: '1 úkol',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Zpět o 10 sekund';
+
+  @override
+  String get skipForward10Seconds => 'Vpřed o 10 sekund';
+
+  @override
+  String get failedToShareRecap => 'Souhrn se nepodařilo sdílet';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, ukládání do vyrovnávací paměti';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, ukládání do vyrovnávací paměti · $minutes min';
+  }
 }

@@ -28,7 +28,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteConversationMessage =>
-      'Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen. Deze actie kan niet ongedaan worden gemaakt.';
+      'Dit zal ook de bijbehorende herinneringen, taken en audiobestanden verwijderen.';
 
   @override
   String get confirm => 'Bevestigen';
@@ -7438,7 +7438,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Nieuw 🚀';
+  String get conversationNewIndicator => 'Nieuw';
 
   @override
   String conversationPhotosCount(int count) {
@@ -10190,4 +10190,97 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Je niet-opgeslagen wijzigingen gaan verloren.';
+
+  @override
+  String get pause => 'Pauzeren';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken verwijderen?',
+      one: '1 gesprek verwijderen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Hiermee worden ook hun herinneringen, taken en audiobestanden verwijderd.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken verwijderd',
+      one: '1 gesprek verwijderd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken verplaatst',
+      one: '1 gesprek verplaatst',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Kan de gesprekken niet verplaatsen';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Verworpen · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Gesprekken die je opneemt verschijnen hier. Tik op + op Home om je eerste op te nemen.';
+
+  @override
+  String get conversationMap => 'Gesprekskaart';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken',
+      one: '1 gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taken',
+      one: '1 taak',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10 seconden terug';
+
+  @override
+  String get skipForward10Seconds => '10 seconden vooruit';
+
+  @override
+  String get failedToShareRecap => 'Kan de samenvatting niet delen';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, bufferen';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, bufferen · $minutes min';
+  }
 }
