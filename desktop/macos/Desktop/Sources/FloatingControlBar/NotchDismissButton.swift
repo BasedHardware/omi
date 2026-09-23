@@ -11,7 +11,7 @@ import SwiftUI
 /// 18 pt circle with three different labels, and one had none.
 struct NotchDismissButton: View {
   /// The visible circle and the click target: 24 pt, the smallest a pointer should have to hit.
-  static let diameter: CGFloat = 24
+  nonisolated static let diameter: CGFloat = 24
   /// Inset from the card's top-trailing corner, chosen so the larger circle keeps the old one's
   /// center.
   static let inset: CGFloat = OmiSpacing.sm

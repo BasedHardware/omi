@@ -170,7 +170,7 @@ struct ConversationDetailView: View {
   }
 
   /// "1 segment", "388 segments" — a badge says what it counts.
-  static func segmentCountLabel(_ count: Int) -> String {
+  nonisolated static func segmentCountLabel(_ count: Int) -> String {
     count == 1 ? "1 segment" : "\(count) segments"
   }
 
