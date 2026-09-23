@@ -6,8 +6,6 @@ Verifies that Redis cluster connection errors, internal hostnames, and credentia
 do NOT leak to clients in the OAuth authorization initialization response.
 """
 
-from fastapi import HTTPException
-
 
 class TestIntegrationsOAuthSanitization:
     """Ensure no raw Redis connection errors or internal hostnames reach client responses."""
