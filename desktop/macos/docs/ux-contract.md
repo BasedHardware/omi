@@ -22,6 +22,10 @@ There are exactly two ways out, and they mean different things.
 - Back returns to **where the reader came from**, not to a fixed page. Record the origin when you
   open the surface (see `ChatFirstNavigationModel.openDailyRecap`).
 - Never an xmark on something that replaced the page, never a chevron on something floating.
+- On the notch's black glass (floating-bar cards) the xmark is `NotchDismissButton` /
+  `.notchDismissOverlay(accessibilityLabel:)`: the same glyph and "Dismiss (Esc)" tooltip as
+  `DismissButton`, drawn in `NotchGlass` colors, 24 pt target. A card whose only exit is "go away"
+  labels that button **Dismiss**, never Skip or Close.
 
 ### Escape
 
@@ -75,6 +79,12 @@ One policy:
 
 `OmiFeedbackTiming`: confirmations 1.5 s, undo 5 s, informational cards 8 s (paused on hover).
 Billing, trial and error cards that need an action persist until acted on.
+
+The floating bar applies this through `FloatingBarNoticePolicy`: confirmations use
+`FloatingBarNoticePolicy.confirmation`; every timed notch card pauses while the bar is hovered
+(Interject lengthens informational cards to reading time, 4–14 s); `.trial` cards and any card sent
+`isPersistent` stay until acted on, dismissed, or Esc. A new card picks a row there rather than
+starting its own timer.
 
 ## 5. Dates, times, durations
 
