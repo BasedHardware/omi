@@ -2116,9 +2116,9 @@ def write_canonical_external_memory(
         schedule_belief_admission(
             uid,
             memory_id,
-            str(payload.get("content") or ""),
+            str(data.get("content") or ""),
             db_client=client,
-            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+            new_user_asserted=bool(data.get("manually_added") or data.get("user_asserted")),
         )
     return memory_id
 
