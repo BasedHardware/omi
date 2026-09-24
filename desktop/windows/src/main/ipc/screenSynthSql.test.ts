@@ -36,6 +36,7 @@ describe('screen synthesis frame query', () => {
       processName: 'code.exe',
       ocrText: 'draft',
       ocrLinesJson: '[{"text":"draft"}]',
+      width: 1920,
       height: 1080
     })
     expect(Object.keys(rows[0])).not.toContain('imagePath')

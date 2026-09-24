@@ -5,6 +5,7 @@ export type ScreenSynthFrameRow = {
   processName: string
   ocrText: string
   ocrLinesJson: string | null
+  width: number
   height: number
 }
 
@@ -17,6 +18,7 @@ export const SCREEN_SYNTH_FRAMES_SQL = `
          process_name AS processName,
          ocr_text AS ocrText,
          ocr_lines_json AS ocrLinesJson,
+         width,
          height
     FROM rewind_frames
    WHERE indexed = 1 AND ts BETWEEN ? AND ?

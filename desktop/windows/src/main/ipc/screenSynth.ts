@@ -1,4 +1,4 @@
-// src/main/ipc/screenSynth.ts
+﻿// src/main/ipc/screenSynth.ts
 import { ipcMain } from 'electron'
 import { listScreenSynthFrames } from './db'
 import {
@@ -71,6 +71,19 @@ function chromeEdgePx(height: number): number {
   return (effectiveHeight / REFERENCE_FRAME_HEIGHT) * CHROME_EDGE_PX_AT_1080P
 }
 
+/** Production OCR stores boxes as 0..1 fractions of frame width/height (Program.cs). */
+function denormalizeOcrLines(lines: OcrLine[], width: number, height: number): OcrLine[] {
+  const effectiveWidth = Number.isFinite(width) && width > 0 ? width : 1920
+  const effectiveHeight = Number.isFinite(height) && height > 0 ? height : REFERENCE_FRAME_HEIGHT
+  return lines.map((line) => ({
+    ...line,
+    x: line.x * effectiveWidth,
+    y: line.y * effectiveHeight,
+    w: line.w * effectiveWidth,
+    h: line.h * effectiveHeight
+  }))
+}
+
 function clusterRows(lines: OcrLine[]): SpatialRow[] {
   const rows: SpatialRow[] = []
   const sorted = [...lines].sort((a, b) => a.y - b.y || a.x - b.x)
@@ -88,14 +101,16 @@ function clusterRows(lines: OcrLine[]): SpatialRow[] {
 /** Build layout-aware OCR while preserving plain text when stored geometry is incomplete. */
 export function buildSpatialOcrText(frame: ScreenSynthFrameRow): string {
   const plainText = frame.ocrText.trim()
-  const lines = parseStoredOcrLines(frame.ocrLinesJson)
-  if (!lines) return plainText
+  const parsed = parseStoredOcrLines(frame.ocrLinesJson)
+  if (!parsed) return plainText
 
-  const lineText = lines.map((line) => line.text).join(' ')
+  const lineText = parsed.map((line) => line.text).join(' ')
   if (plainText && !hasCompleteTextCoverage(lineText, plainText)) {
     return plainText
   }
 
+  // Stored geometry is normalized 0..1; thresholds and clustering stay in pixels.
+  const lines = denormalizeOcrLines(parsed, frame.width, frame.height)
   const edge = chromeEdgePx(frame.height)
   const effectiveHeight =
     Number.isFinite(frame.height) && frame.height > 0 ? frame.height : REFERENCE_FRAME_HEIGHT
@@ -286,3 +301,4 @@ export function registerScreenSynthHandlers(): void {
     recordRun(run.lastRunAt, run.lastCount)
   )
 }
+

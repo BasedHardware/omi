@@ -25,6 +25,27 @@ import {
   registerScreenSynthHandlers
 } from './screenSynth'
 
+/** Match Program.cs: persist pixel boxes as fractions of frame width/height. */
+function normalizedLine(
+  text: string,
+  xPx: number,
+  yPx: number,
+  wPx: number,
+  hPx: number,
+  width = 1920,
+  height = 1080,
+  confidence = 1
+) {
+  return {
+    text,
+    x: xPx / width,
+    y: yPx / height,
+    w: wPx / width,
+    h: hPx / height,
+    confidence
+  }
+}
+
 function frame(overrides: Partial<ScreenSynthFrameRow> = {}): ScreenSynthFrameRow {
   return {
     ts: 1,
@@ -33,11 +54,12 @@ function frame(overrides: Partial<ScreenSynthFrameRow> = {}): ScreenSynthFrameRo
     processName: 'code.exe',
     ocrText: 'File Edit quarterly plan Save',
     ocrLinesJson: JSON.stringify([
-      { text: 'File', x: 10, y: 20, w: 20, h: 10, confidence: 1 },
-      { text: 'quarterly plan', x: 100, y: 200, w: 100, h: 20, confidence: 1 },
-      { text: 'Edit', x: 20, y: 205, w: 40, h: 20, confidence: 1 },
-      { text: 'Save', x: 10, y: 1050, w: 40, h: 10, confidence: 1 }
+      normalizedLine('File', 10, 20, 20, 10),
+      normalizedLine('quarterly plan', 100, 200, 100, 20),
+      normalizedLine('Edit', 20, 205, 40, 20),
+      normalizedLine('Save', 10, 1050, 40, 10)
     ]),
+    width: 1920,
     height: 1080,
     ...overrides
   }
@@ -50,6 +72,28 @@ describe('spatial OCR synthesis', () => {
     expect(buildSpatialOcrText(frame())).toBe('- Edit | quarterly plan')
   })
 
+  it('denormalizes Program.cs 0..1 boxes before chrome filtering (real production shape)', () => {
+    // Reviewer fixture: 1080p menu bar at y=20px → ~0.0185, content at y=540px → 0.5.
+    // Without denormalize, y<=1 fails the pixel chrome gate and synthesis returns ''.
+    const productionShaped = frame({
+      ocrText: 'File Edit quarterly plan Save',
+      ocrLinesJson: JSON.stringify([
+        { text: 'File', x: 10 / 1920, y: 20 / 1080, w: 20 / 1920, h: 10 / 1080, confidence: 1 },
+        {
+          text: 'quarterly plan',
+          x: 100 / 1920,
+          y: 540 / 1080,
+          w: 100 / 1920,
+          h: 20 / 1080,
+          confidence: 1
+        },
+        { text: 'Edit', x: 20 / 1920, y: 545 / 1080, w: 40 / 1920, h: 20 / 1080, confidence: 1 },
+        { text: 'Save', x: 10 / 1920, y: 1050 / 1080, w: 40 / 1920, h: 10 / 1080, confidence: 1 }
+      ])
+    })
+    expect(buildSpatialOcrText(productionShaped)).toBe('- Edit | quarterly plan')
+  })
+
   it('falls back for malformed or incomplete geometry without reintroducing chrome-only layouts', () => {
     expect(buildSpatialOcrText(frame({ ocrLinesJson: '{bad json' }))).toBe(
       'File Edit quarterly plan Save'
@@ -58,9 +102,7 @@ describe('spatial OCR synthesis', () => {
       buildSpatialOcrText(
         frame({
           ocrText: 'one two three four five six seven eight nine ten',
-          ocrLinesJson: JSON.stringify([
-            { text: 'one', x: 10, y: 200, w: 20, h: 10, confidence: 1 }
-          ])
+          ocrLinesJson: JSON.stringify([normalizedLine('one', 10, 200, 20, 10)])
         })
       )
     ).toBe('one two three four five six seven eight nine ten')
@@ -68,9 +110,7 @@ describe('spatial OCR synthesis', () => {
       buildSpatialOcrText(
         frame({
           ocrText: 'alpha beta',
-          ocrLinesJson: JSON.stringify([
-            { text: 'alpha zeta', x: 10, y: 200, w: 80, h: 10, confidence: 1 }
-          ])
+          ocrLinesJson: JSON.stringify([normalizedLine('alpha zeta', 10, 200, 80, 10)])
         })
       )
     ).toBe('alpha beta')
@@ -79,8 +119,8 @@ describe('spatial OCR synthesis', () => {
         frame({
           ocrText: 'File Save',
           ocrLinesJson: JSON.stringify([
-            { text: 'File', x: 10, y: 20, w: 20, h: 10, confidence: 1 },
-            { text: 'Save', x: 10, y: 1050, w: 40, h: 10, confidence: 1 }
+            normalizedLine('File', 10, 20, 20, 10),
+            normalizedLine('Save', 10, 1050, 40, 10)
           ])
         })
       )
@@ -94,10 +134,10 @@ describe('spatial OCR synthesis', () => {
       ts: 42,
       ocrText: 'File Edit quarterly plans Save',
       ocrLinesJson: JSON.stringify([
-        { text: 'File', x: 10, y: 20, w: 20, h: 10, confidence: 1 },
-        { text: 'quarterly plans', x: 100, y: 200, w: 100, h: 20, confidence: 1 },
-        { text: 'Edit', x: 20, y: 205, w: 40, h: 20, confidence: 1 },
-        { text: 'Save', x: 10, y: 1050, w: 40, h: 10, confidence: 1 }
+        normalizedLine('File', 10, 20, 20, 10),
+        normalizedLine('quarterly plans', 100, 200, 100, 20),
+        normalizedLine('Edit', 20, 205, 40, 20),
+        normalizedLine('Save', 10, 1050, 40, 10)
       ])
     })
     const otherWindow = frame({ ts: 43, windowTitle: 'notes.md' })
