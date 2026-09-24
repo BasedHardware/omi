@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+
 class AppDetailSummary extends StatelessWidget {
   final String name;
   final String author;
@@ -36,41 +39,44 @@ class AppDetailSummary extends StatelessWidget {
             children: [
               Text(
                 name,
-                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                style: OmiType.title3,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: OmiSpacing.xxs),
               Row(
                 children: [
                   Flexible(
                     child: Text(
                       author,
-                      style: const TextStyle(color: Colors.grey, fontSize: 16),
+                      style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (official) ...[
-                    const SizedBox(width: 4),
-                    const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
+                    const SizedBox(width: OmiSpacing.xxs),
+                    const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: OmiColors.textPrimary),
                   ],
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: OmiSpacing.xs),
               GestureDetector(
                 onTap: onRatingTap,
                 child: Row(
                   children: [
                     if (ratingCount > 0) ...[
-                      const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
-                      const SizedBox(width: 4),
-                      Text('$rating ($ratingCount)', style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
-                      if (installs > 0) Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                      const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: OmiColors.textPrimary),
+                      const SizedBox(width: OmiSpacing.xxs),
+                      Text(
+                        '$rating ($ratingCount)',
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      ),
+                      if (installs > 0) Text('  ·  ', style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                     ],
                     if (installs > 0)
                       Text(
-                        '${(installs / 10).round() * 10}+ users',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                        context.l10n.appUsersCount((installs / 10).round() * 10),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                       ),
                   ],
                 ),

@@ -175,7 +175,7 @@ Settings sheet (settings_drawer.dart) — rows in order
 │   ├── Email (read-only)
 │   ├── Language → Language Settings (language_settings_page.dart)
 │   ├── Custom Vocabulary (custom_vocabulary_page.dart)
-│   ├── Speech Profile (speech_profile/page.dart)
+│   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart)
 │   ├── Identifying Others (people.dart)
 │   ├── Payment Methods (payments/payments_page.dart)
 │   ├── Conversation Display (conversation_display_settings.dart)
@@ -241,11 +241,9 @@ Connected Device (home/device.dart) — requires BLE
 ├── Actions: Firmware Update, SD Card Sync, Disconnect, Unpair
 └── Device info: Product, Model, Manufacturer, Firmware, ID, Serial
 
-Speech Profile (speech_profile/page.dart)
-├── Device animation, intro text
-├── Get Started / Do It Again button
-├── Question flow: text, progress bar, skip
-└── Listen to Speech Profile (if samples exist)
+Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #14514)
+├── Four sentence starters, phone mic, Next / Skip per prompt
+└── Review: edit or uncheck answers, then Save and finish (voice, memories, goal)
 ```
 
 ### Widget Patterns

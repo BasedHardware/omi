@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
-import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -48,7 +48,7 @@ class NotificationUtil {
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
-        print('Redirecting the execution to main isolate process in listening...');
+        print('Redirecting the execution to main isolate process in listening…');
         dynamic serializedData = receivedAction.toMap();
         sendPort.send(serializedData);
       }
@@ -130,10 +130,10 @@ class NotificationUtil {
       return false;
     }
 
-    navigator.pushReplacement(
-      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
-    );
-    return true;
+    // Open the destination inside the Home already on screen (pop to it, then push the page) —
+    // never a second Home over whatever was showing (nav #3). No Home within the wait (signed
+    // out, still onboarding) drops the link rather than skipping those screens.
+    return HomeNavigation.openRoute(navigateTo, navigator: navigator);
   }
 
   static Future<void> triggerFallNotification() async {

@@ -2164,6 +2164,57 @@
         "mobile-product-outcomes"
       ],
       "correlation": null
+    },
+    {
+      "id": "conversationAction",
+      "wire_name": "Conversation Action",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "action": {
+          "type": "enum",
+          "wire_name": "action",
+          "values": [
+            "ask_omi",
+            "star",
+            "unstar",
+            "share",
+            "rename",
+            "move_folder",
+            "recordings_open",
+            "separate",
+            "delete",
+            "copy_transcript",
+            "copy_summary",
+            "share_audio",
+            "link_event",
+            "reprocess",
+            "search",
+            "visibility",
+            "open",
+            "select",
+            "copy_conversation_id",
+            "test_prompt"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "top_bar",
+            "overflow",
+            "detail_body",
+            "row_long_press",
+            "row_swipe"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-conversation-actions"
+      ],
+      "correlation": null
     }
   ]
 }
