@@ -476,8 +476,8 @@ class AnalyticsManager {
     PostHogManager.shared.transcriptionStarted(attemptId: attemptId, mode: mode, intent: intent)
   }
 
-  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
-    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId)
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
+    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId, reason: reason)
   }
 
   /// Terminal outcome of one armed ambient-capture attempt. Observes the

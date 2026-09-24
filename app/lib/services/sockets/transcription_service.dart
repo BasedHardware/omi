@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -10,6 +12,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -100,6 +103,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool onboardingMode;
   bool speechProfileRedo;
   Geolocation? geolocation;
+
+  /// Reports foreground / live-transcript visibility to the server while connected.
+  VoidCallback? _clientStateListener;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
@@ -201,6 +207,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future stop({String? reason}) async {
+    _detachClientState();
     await _socket.stop();
     _listeners.clear();
 
@@ -224,8 +231,28 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     await sendText(jsonEncode({'type': 'start_onboarding'}));
   }
 
+  void _sendClientState() {
+    if (_socket.status != PureSocketStatus.connected) return;
+    _socket.send(jsonEncode(ListenClientState.instance.value.toJson()));
+  }
+
+  void _attachClientState() {
+    _detachClientState();
+    final listener = _sendClientState;
+    _clientStateListener = listener;
+    ListenClientState.instance.addListener(listener);
+    _sendClientState();
+  }
+
+  void _detachClientState() {
+    final listener = _clientStateListener;
+    if (listener != null) ListenClientState.instance.removeListener(listener);
+    _clientStateListener = null;
+  }
+
   @override
   void onClosed([int? closeCode]) {
+    _detachClientState();
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
     });
@@ -309,6 +336,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onConnected() {
+    _attachClientState();
     _listeners.forEach((k, v) {
       v.onConnected();
     });

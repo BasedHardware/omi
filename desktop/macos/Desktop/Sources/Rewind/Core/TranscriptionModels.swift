@@ -33,6 +33,42 @@ enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
   case maxDurationRotation = "max_duration_rotation"
   case crashRecovery = "crash_recovery"
   case retry = "retry"
+  /// Audio Recording mode switched to Off (user or settings sync).
+  case recordingDisabled = "recording_disabled"
+  /// System sleep tore the session down; the wake handler re-arms it.
+  case systemSleep = "system_sleep"
+  /// App termination teardown.
+  case appTerminated = "app_terminated"
+  /// `freemium_threshold_reached` admission stop.
+  case paywall = "paywall"
+  /// Microphone could not start or lost authorization mid-session.
+  case microphoneUnavailable = "microphone_unavailable"
+  /// BLE audio source had no live connection when capture armed.
+  case deviceUnavailable = "device_unavailable"
+  /// Repeated silent-mic recoveries failed and the session was stopped.
+  case silentMicExhausted = "silent_mic_exhausted"
+  /// A meeting-boundary conversation rotation failed and the session was
+  /// torn down rather than left half-rotated.
+  case rotationFailed = "rotation_failed"
+  /// Session stopped to switch STT engines (local↔cloud fallback restart).
+  case sttFallback = "stt_fallback"
+  /// Settings-driven capture restart (e.g. input-device change) stopped the
+  /// old session before re-arming.
+  case settingsChange = "settings_change"
+
+  /// Reasons that name a forced termination rather than an intended boundary:
+  /// the attempt died because capture could not continue, so the outcome funnel
+  /// must count it as `error` even if the call site forgot `noteErrorTerminal()`.
+  var isForcedTermination: Bool {
+    switch self {
+    case .paywall, .microphoneUnavailable, .deviceUnavailable, .silentMicExhausted,
+      .rotationFailed, .sttFallback:
+      return true
+    case .userStop, .finishAndContinue, .meetingStarted, .meetingEnded, .maxDurationRotation,
+      .crashRecovery, .retry, .recordingDisabled, .systemSleep, .appTerminated, .settingsChange:
+      return false
+    }
+  }
 }
 
 /// Conversation processing status (from backend)

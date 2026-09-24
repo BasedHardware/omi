@@ -223,8 +223,9 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_rejects_missing_or_conflicting_development_firestore_credentials(self) -> None:
         missing_mount = self.dev.replace(
-            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n",
-            "",
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n"
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
             1,
         )
         without_google_adc_reset = self.dev.replace(
@@ -246,11 +247,12 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
             with self.subTest(credential_env=credential_env):
                 readded_credential = self.dev.replace(
-                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
-                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n"
+                    "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n",
+                    "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n"
                     f"            {credential_env}=/secrets/firebase/service-account.json\n",
                     1,
                 )
+                self.assertNotEqual(readded_credential, self.dev)
                 errors = POLICY.validate_deploy_workflow(readded_credential, production=False)
                 self.assertTrue(any("must not set" in error and credential_env in error for error in errors), errors)
 
@@ -429,14 +431,24 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         errors = POLICY.validate_deploy_workflow(mutated, production=False)
                         self.assertTrue(any(step in error and env_var in error for error in errors), errors)
 
-    def test_requires_dev_adc_and_an_explicit_firebase_auth_credential_path(self) -> None:
-        without_auth_path = self.dev.replace(
-            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+    def test_requires_the_keyless_dev_runtime_identity(self) -> None:
+        self.assertEqual(POLICY.validate_deploy_workflow(self.dev, production=False), [])
+        without_identity = self.dev.replace(
+            "            --service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com\n",
             "",
             1,
         )
-        errors = POLICY.validate_deploy_workflow(without_auth_path, production=False)
-        self.assertTrue(any("Firebase auth credentials" in error for error in errors), errors)
+        self.assertNotEqual(without_identity, self.dev)
+        errors = POLICY.validate_deploy_workflow(without_identity, production=False)
+        self.assertTrue(any("keyless dev-backend-runtime" in error for error in errors), errors)
+        restaged_path = self.dev.replace(
+            "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n",
+            "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n"
+            "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(restaged_path, production=False)
+        self.assertTrue(any("must not mount" in error for error in errors), errors)
 
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(

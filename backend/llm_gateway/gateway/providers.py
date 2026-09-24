@@ -137,7 +137,12 @@ class OpenAICompatibleChatCompletionProvider:
                     # body is never surfaced unless LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
                     # is explicitly enabled.
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 body = await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 parsed = _parse_limited_json_response(body)
         except httpx.TimeoutException as exc:
@@ -179,7 +184,12 @@ class OpenAICompatibleChatCompletionProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 async for chunk in response.aiter_bytes():
                     if chunk:
                         yield chunk
@@ -216,7 +226,12 @@ class OpenAICompatibleChatCompletionProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
@@ -349,12 +364,14 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ) -> ProviderResponse:
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         parsed = await self._generate_content(
             payload,
             anchor=provider_ref.model,
             credentials=credentials,
             timeout_ms=timeout_ms,
+            origin_model=origin_model,
         )
         accounting = vertex_usage_from_response(parsed)
         normalized = _vertex_to_openai_response(
@@ -374,9 +391,10 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ):
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(provider_ref.model)
+        attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
         decoder = SSEEventDecoder()
         while attempts:
             model, capacity = attempts.pop(0)
@@ -397,11 +415,18 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if response.status_code >= 400:
                         error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                         self._observe_attempt(model, capacity, response.status_code, error_preview)
-                        recovery = self._recovery_attempts(model, response.status_code, error_preview)
+                        recovery = self._recovery_attempts(
+                            model, response.status_code, error_preview, origin_model=origin_model
+                        )
                         if recovery:
                             attempts = recovery
                             continue
-                        _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                        _raise_for_status(
+                            response.status_code,
+                            error_preview,
+                            credential_mode=credentials.mode,
+                            retry_after_header=response.headers.get('retry-after'),
+                        )
                     self._record_model_available(model)
                     async for chunk in response.aiter_bytes():
                         for event in decoder.feed(chunk):
@@ -448,7 +473,12 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
@@ -477,10 +507,11 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         anchor: str,
         credentials: CredentialContext,
         timeout_ms: int,
+        origin_model: str = '',
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(anchor)
+        attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
         parsed: Mapping[str, Any] | None = None
         while attempts:
@@ -499,16 +530,26 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             except _VertexHttpError as error:
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
-                recovery = self._recovery_attempts(model, error.status_code, error.preview)
+                recovery = self._recovery_attempts(model, error.status_code, error.preview, origin_model=origin_model)
                 if recovery:
                     attempts = recovery
                     continue
-                _raise_for_status(error.status_code, error.preview, credential_mode=credentials.mode)
+                _raise_for_status(
+                    error.status_code,
+                    error.preview,
+                    credential_mode=credentials.mode,
+                    retry_after_header=error.retry_after_header,
+                )
             self._record_model_available(model)
             assert parsed is not None
             return parsed
         assert last_error is not None
-        _raise_for_status(last_error.status_code, last_error.preview, credential_mode=credentials.mode)
+        _raise_for_status(
+            last_error.status_code,
+            last_error.preview,
+            credential_mode=credentials.mode,
+            retry_after_header=last_error.retry_after_header,
+        )
         raise AssertionError('unreachable: _raise_for_status always raises')
 
     async def _generate_content_once(
@@ -532,7 +573,11 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    raise _VertexHttpError(response.status_code, error_preview)
+                    raise _VertexHttpError(
+                        response.status_code,
+                        error_preview,
+                        response.headers.get('retry-after'),
+                    )
                 return _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
@@ -607,6 +652,7 @@ class AnthropicMessagesProvider:
                     response.status_code,
                     response.content[:PROVIDER_ERROR_DETAIL_BYTES],
                     credential_mode=credentials.mode,
+                    retry_after_header=response.headers.get('retry-after'),
                 )
             parsed = response.json()
         except httpx.TimeoutException as exc:
@@ -801,11 +847,26 @@ def _default_fake_response(provider_ref: ProviderRef) -> dict[str, Any]:
     return fake_success_response(provider_ref)
 
 
+def parse_retry_after_seconds(value: str | None) -> float | None:
+    """Return a Retry-After delay when it is a non-negative integer number of seconds.
+
+    HTTP-date values and anything else are ignored so the executor falls back
+    to jittered exponential backoff.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text.isdigit():
+        return None
+    return float(int(text))
+
+
 def _raise_for_status(
     status_code: int,
     body: bytes = b'',
     *,
     credential_mode: CredentialMode = CredentialMode.OMI_PAID,
+    retry_after_header: str | None = None,
 ) -> None:
     byok = credential_mode == CredentialMode.BYOK
     if status_code in {401, 403}:
@@ -821,6 +882,7 @@ def _raise_for_status(
         raise ProviderFailure(
             FailureClass.BYOK_RATE_LIMIT if byok else FailureClass.PROVIDER_429_OMI_PAID,
             safe_message=_provider_error_message(status_code, body),
+            retry_after_seconds=parse_retry_after_seconds(retry_after_header),
         )
     if status_code >= 500:
         raise ProviderFailure(
