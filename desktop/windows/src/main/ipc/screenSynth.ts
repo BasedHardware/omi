@@ -1,4 +1,4 @@
-﻿// src/main/ipc/screenSynth.ts
+// src/main/ipc/screenSynth.ts
 import { ipcMain } from 'electron'
 import { listScreenSynthFrames } from './db'
 import {
