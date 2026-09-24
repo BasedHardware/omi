@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
+import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
@@ -64,7 +65,14 @@ class ConversationDetailHeader extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (recordings.isNotEmpty)
-                    CaptureRecordingsChip(recordings: recordings, onTap: () => onOpenRecordings(recordings)),
+                    CaptureRecordingsChip(
+                      recordings: recordings,
+                      onTap: () {
+                        trackConversationAction(
+                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                        onOpenRecordings(recordings);
+                      },
+                    ),
                   if (people.isNotEmpty) _peopleChip(context, conversation, people),
                   _FolderChip(conversation: conversation, folder: folder),
                   _VisibilityChip(conversation: conversation),
@@ -261,7 +269,10 @@ class _FolderChip extends StatelessWidget {
       label: '${context.l10n.moveToFolder}: $label',
       excludeSemantics: true,
       child: GestureDetector(
-        onTap: () => showConversationFolderSheet(context, conversation, source: 'detail_page_sheet'),
+        onTap: () {
+          trackConversationAction(ConversationActionAction.moveFolder, ConversationActionSurface.detailBody);
+          showConversationFolderSheet(context, conversation, source: 'detail_page_sheet');
+        },
         child: _HeaderChip(
           icon: FaIcon(folderIconToFa(folder?.icon), size: 12, color: color),
           label: label,
@@ -326,6 +337,7 @@ class _VisibilityChip extends StatelessWidget {
       child: GestureDetector(
         onTap: () {
           OmiHaptics.selection();
+          trackConversationAction(ConversationActionAction.visibility, ConversationActionSurface.detailBody);
           _showVisibilitySheet(context, conversation);
         },
         child: _HeaderChip(

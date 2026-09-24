@@ -11,6 +11,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -231,6 +232,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
+  static ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
+        ConversationRowAction.open => ConversationActionAction.open,
+        ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+        ConversationRowAction.move => ConversationActionAction.moveFolder,
+        ConversationRowAction.share => ConversationActionAction.share,
+        ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
+        ConversationRowAction.separate => ConversationActionAction.separate,
+        ConversationRowAction.select => ConversationActionAction.select,
+        ConversationRowAction.delete => ConversationActionAction.delete,
+      };
+
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
     HapticFeedback.mediumImpact();
@@ -241,6 +253,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
       canSelect: widget.allowSelection && provider.isConversationEligibleForMerge(conversation.id),
     );
     if (action == null || !context.mounted) return;
+    trackConversationAction(_rowActionAnalytics(action, conversation.starred), ConversationActionSurface.rowLongPress);
     switch (action) {
       case ConversationRowAction.open:
         await _open(context, provider);
@@ -366,6 +379,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             // One delete path (D5): confirm unless opted out, then Undo.
                             confirmDismiss: (direction) async {
                               HapticFeedback.mediumImpact();
+                              trackConversationAction(
+                                  ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
                               return confirmConversationDelete(context);
                             },
                             onDismissed: (direction) {

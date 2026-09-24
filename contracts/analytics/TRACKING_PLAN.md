@@ -132,3 +132,4 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | productJourneyFirstResult | Product Journey First Result | journey, surface, object_id, duration_ms | active | mobile-product-outcomes |
 | productJourneyOutcome | Product Journey Outcome | journey, surface, object_id, outcome, failure, duration_ms, result_count | active | mobile-product-outcomes |
 | productValueEvent | Product Value | kind, surface, object_id | active | mobile-product-outcomes |
+| conversationAction | Conversation Action | action, surface | active | mobile-conversation-actions |

@@ -16,6 +16,7 @@ import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
@@ -494,6 +495,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   /// Separation is sticky on the server; afterwards the detail and the list
   /// reload so both show the new membership.
   Future<bool> _separateRecording(CaptureRecording recording) {
+    trackConversationAction(ConversationActionAction.separate, ConversationActionSurface.detailBody);
     final detail = context.read<ConversationDetailProvider>();
     final list = context.read<ConversationProvider>();
     return _separation.separate(recording.id, reload: () async {
@@ -502,12 +504,29 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     });
   }
 
+  static const _overflowActions = {
+    'copy_transcript': ConversationActionAction.copyTranscript,
+    'copy_summary': ConversationActionAction.copySummary,
+    'download_audio': ConversationActionAction.shareAudio,
+    'test_prompt': ConversationActionAction.testPrompt,
+    'reprocess': ConversationActionAction.reprocess,
+    'link_event': ConversationActionAction.linkEvent,
+    'copy_conversation_id': ConversationActionAction.copyConversationId,
+    'rename': ConversationActionAction.rename,
+    'move_to_folder': ConversationActionAction.moveFolder,
+    'recordings': ConversationActionAction.recordingsOpen,
+    'delete': ConversationActionAction.delete,
+  };
+
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
       conversationId: provider.conversation.id,
       action: value,
     );
+
+    final tracked = _overflowActions[value];
+    if (tracked != null) trackConversationAction(tracked, ConversationActionSurface.overflow);
 
     switch (value) {
       case 'copy_transcript':
@@ -533,12 +552,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         break;
       case 'copy_conversation_id':
         _copyContent(context, provider.conversation.id, null);
-        break;
-      case 'star':
-        await _toggleStarred(provider);
-        break;
-      case 'share':
-        await _shareConversation(provider);
         break;
       case 'rename':
         final controller = provider.titleController;
@@ -771,21 +784,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     final l10n = context.l10n;
     final showDeveloperTools = conversationDetailShowsDeveloperTools();
     final conversation = provider.conversation;
-    final starred = conversation.starred;
     final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
     return [
-      // The conversation's own actions first (design ruling 2026-09-24): the top bar keeps only
-      // Ask Omi and this one overflow, and Delete stays last.
-      PullDownMenuItem(
-        title: starred ? l10n.unstarConversation : l10n.starConversation,
-        iconWidget: FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
-        onTap: _isTogglingStarred ? null : () => _handleMenuSelection(context, 'star', provider),
-      ),
-      PullDownMenuItem(
-        title: l10n.share,
-        iconWidget: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
-        onTap: _isSharing ? null : () => _handleMenuSelection(context, 'share', provider),
-      ),
+      // The conversation's own actions first; Star and Share live in the top bar; Delete stays last.
       if (!conversation.discarded)
         PullDownMenuItem(
           title: l10n.renameConversation,
@@ -809,6 +810,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           title: l10n.search,
           iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),
           onTap: () {
+            trackConversationAction(ConversationActionAction.search, ConversationActionSurface.overflow);
             if (_isSearching) {
               _closeSearch();
             } else {
@@ -873,23 +875,25 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     ];
   }
 
-  /// Header actions (design ruling 2026-09-24): Ask Omi as the primary and one overflow menu that
-  /// holds star, share, rename, move, recordings and the rest, Delete last.
+  /// Header actions (David, 2026-09-24): Ask Omi as the primary, then Star and Share as 44pt icon
+  /// buttons, then one overflow holding Rename, Move to Folder, Recordings and the rest, Delete last.
   Widget _buildHeaderActions(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
+    final starred = provider.conversation.starred;
     return Padding(
       padding: const EdgeInsets.only(right: OmiSpacing.xxs),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Ask about this conversation (#4515). Chat is a pushed page (D1).
-          OmiButton.secondary(
+          // Ask about this conversation (#4515), the page's primary action. Chat is a pushed page (D1).
+          OmiButton(
             key: const Key('conversation_ask_omi'),
             label: l10n.askOmi,
             icon: Icons.chat_bubble_outline,
             size: OmiButtonSize.compact,
             onPressed: () {
               HapticFeedback.mediumImpact();
+              trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.topBar);
               final convo = provider.conversation;
               routeToPage(
                 context,
@@ -900,24 +904,54 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               );
             },
           ),
-          // Also the share sheet's anchor now that Share lives in this menu (iPad needs one).
+          const SizedBox(width: OmiSpacing.xxs),
+          OmiIconButton.filled(
+            key: const Key('conversation_star'),
+            icon: _isTogglingStarred
+                ? const OmiSpinner(size: OmiSpinnerSize.small)
+                : FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
+            label: starred ? l10n.unstarConversation : l10n.starConversation,
+            color: starred ? Colors.amber : null,
+            onPressed: _isTogglingStarred
+                ? null
+                : () {
+                    trackConversationAction(
+                      starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+                      ConversationActionSurface.topBar,
+                    );
+                    _toggleStarred(provider);
+                  },
+          ),
+          // Also the share sheet's anchor (iPad needs one).
           KeyedSubtree(
             key: _shareButtonKey,
-            child: PullDownButton(
-              itemBuilder: (context) => _menuItems(context, provider),
-              buttonBuilder: (context, showMenu) => OmiIconButton.filled(
-                icon: _isSharing || _isTogglingStarred
-                    ? const OmiSpinner(size: OmiSpinnerSize.small)
-                    : const Icon(Icons.more_horiz),
-                label: l10n.moreOptions,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
-                    conversationId: provider.conversation.id,
-                  );
-                  showMenu();
-                },
-              ),
+            child: OmiIconButton.filled(
+              key: const Key('conversation_share'),
+              icon: _isSharing
+                  ? const OmiSpinner(size: OmiSpinnerSize.small)
+                  : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
+              label: l10n.share,
+              onPressed: _isSharing
+                  ? null
+                  : () {
+                      trackConversationAction(ConversationActionAction.share, ConversationActionSurface.topBar);
+                      _shareConversation(provider);
+                    },
+            ),
+          ),
+          PullDownButton(
+            itemBuilder: (context) => _menuItems(context, provider),
+            buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+              key: const Key('conversation_more'),
+              icon: const Icon(Icons.more_horiz),
+              label: l10n.moreOptions,
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+                  conversationId: provider.conversation.id,
+                );
+                showMenu();
+              },
             ),
           ),
         ],
