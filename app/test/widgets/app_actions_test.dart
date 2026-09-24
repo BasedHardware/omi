@@ -41,15 +41,21 @@ App _app({
 void main() {
   late AppProvider provider;
   late List<String> enabledIds;
+  late List<String> disabledIds;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     enabledIds = [];
+    disabledIds = [];
     provider = AppProvider()
       ..enableAppOverride = (id) async {
         enabledIds.add(id);
         return (true, '');
+      }
+      ..disableAppOverride = (id) async {
+        disabledIds.add(id);
+        return true;
       };
   });
 
@@ -115,5 +121,71 @@ void main() {
     await tester.pumpAndSettle();
     expect(enabledIds, ['app-1']);
     await tearDownProvider(tester);
+  });
+
+  group('Disable is immediate with a 5 s Undo, no confirmation (§4)', () {
+    late List<String> events;
+    bool? outcome;
+
+    Future<void> startDisable(WidgetTester tester) async {
+      final app = _app(enabled: true);
+      provider.apps = [app];
+      events = [];
+      outcome = null;
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppProvider>.value(
+          value: provider,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => disableAppWithUndo(
+                    context,
+                    app,
+                    onHidden: () => events.add('hidden'),
+                    onRestored: () => events.add('restored'),
+                  ).then((value) => outcome = value),
+                  child: const Text('go'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pump();
+    }
+
+    testWidgets('the app hides at once and the server hears nothing until the toast ends', (tester) async {
+      await startDisable(tester);
+      expect(events, ['hidden']);
+      expect(find.text('Notes Sync disabled'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing, reason: 'no confirmation dialog');
+      expect(disabledIds, isEmpty);
+
+      for (var i = 0; i < 70; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(outcome, isTrue);
+      expect(disabledIds, ['app-1']);
+      expect(events, ['hidden']);
+      await tearDownProvider(tester);
+    });
+
+    testWidgets('Undo restores the app and never disables it', (tester) async {
+      await startDisable(tester);
+      await tester.pump(const Duration(milliseconds: 500)); // let the toast finish arriving
+      await tester.tap(find.text('Undo'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(outcome, isFalse);
+      expect(disabledIds, isEmpty);
+      expect(events, ['hidden', 'restored']);
+      await tearDownProvider(tester);
+    });
   });
 }
