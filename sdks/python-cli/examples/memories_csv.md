@@ -12,8 +12,13 @@ authenticated `omi-cli` for the initial export.
 Export your memories to a JSON file:
 
 ```sh
-omi --json memory list --limit 200 > memories.json
+omi --json memory list --limit 200 --offset 0 > memories.json
 ```
+
+Check that the command succeeded before converting the file. Note that `--limit 200`
+is one page and the CLI's maximum, not a complete-account backup. To retrieve another
+page, increase `--offset` by 200 and save to a different file. Changes to the account
+between requests can affect offset pagination.
 
 ---
 
