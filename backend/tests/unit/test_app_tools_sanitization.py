@@ -49,6 +49,76 @@ def _load(module_name, rel_path):
     return mod
 
 
+# Ensure httpx is stubbed if not installed
+try:
+    import httpx
+except ImportError:
+    httpx = _mod("httpx")
+
+    class HTTPError(Exception):
+        pass
+
+    class TimeoutException(HTTPError):
+        pass
+
+    class ConnectError(HTTPError):
+        pass
+
+    class RequestError(HTTPError):
+        pass
+
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message="", *, request=None, response=None):
+            super().__init__(message)
+            self.response = response or MagicMock(status_code=500)
+
+    class Response:
+        status_code = 200
+        text = ""
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+        async def request(self, *args, **kwargs):
+            pass
+
+    httpx.HTTPError = HTTPError
+    httpx.TimeoutException = TimeoutException
+    httpx.ConnectError = ConnectError
+    httpx.RequestError = RequestError
+    httpx.HTTPStatusError = HTTPStatusError
+    httpx.Response = Response
+    httpx.AsyncClient = FakeAsyncClient
+    httpx.Client = MagicMock
+
+# Ensure pydantic is stubbed if not installed
+try:
+    import pydantic
+except ImportError:
+    pydantic = _mod("pydantic")
+
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    def Field(*args, **kwargs):
+        return None
+
+    def create_model(name, **kwargs):
+        return type(name, (BaseModel,), kwargs)
+
+    pydantic.BaseModel = BaseModel
+    pydantic.Field = Field
+    pydantic.create_model = create_model
+
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
