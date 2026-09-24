@@ -10088,4 +10088,52 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearSearch => 'ล้างการค้นหา';
+
+  @override
+  String get captureRecordingsSheetTitle => 'การบันทึกของบทสนทนานี้';
+
+  @override
+  String get captureRecordingSeparate => 'แยก…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'แยกการบันทึกนี้ไหม?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording จะแสดงเป็นบทสนทนาแยก และจะไม่ถูกจัดกลุ่มกับเหตุการณ์นี้อีก';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'แยก';
+
+  @override
+  String get captureRecordingSeparateFailed => 'แยกไม่สำเร็จ ลองอีกครั้ง';
+
+  @override
+  String get captureRecordingOpenFailed => 'เปิดการบันทึกนี้ไม่ได้';
+
+  @override
+  String get captureRecordingViewing => 'คุณกำลังดูการบันทึกนี้';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'บันทึกโดย $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'เดสก์ท็อป';
+
+  @override
+  String get renameConversation => 'เปลี่ยนชื่อ';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count การบันทึก',
+      one: '1 การบันทึก',
+    );
+    return '$_temp0';
+  }
 }

@@ -10160,4 +10160,52 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get clearSearch => 'Обриши претрагу';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Снимци овог разговора';
+
+  @override
+  String get captureRecordingSeparate => 'Одвоји…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Одвојити овај снимак?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ће се приказивати као засебан разговор и више се неће груписати са овим догађајем.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Одвоји';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Одвајање није успело. Покушајте поново.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Није могуће отворити овај снимак.';
+
+  @override
+  String get captureRecordingViewing => 'Прегледате овај снимак';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Снимио: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Рачунар';
+
+  @override
+  String get renameConversation => 'Преименуј';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Снимака: $count',
+      one: '1 снимак',
+    );
+    return '$_temp0';
+  }
 }

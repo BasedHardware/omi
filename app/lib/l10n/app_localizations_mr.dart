@@ -10154,4 +10154,52 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get clearSearch => 'शोध साफ करा';
+
+  @override
+  String get captureRecordingsSheetTitle => 'या संभाषणाची रेकॉर्डिंग';
+
+  @override
+  String get captureRecordingSeparate => 'वेगळे करा…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'हे रेकॉर्डिंग वेगळे करायचे?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording स्वतंत्र संभाषण म्हणून दिसेल आणि या इव्हेंटसोबत पुन्हा गटबद्ध होणार नाही.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'वेगळे करा';
+
+  @override
+  String get captureRecordingSeparateFailed => 'वेगळे करता आले नाही. पुन्हा प्रयत्न करा.';
+
+  @override
+  String get captureRecordingOpenFailed => 'हे रेकॉर्डिंग उघडता आले नाही.';
+
+  @override
+  String get captureRecordingViewing => 'तुम्ही हे रेकॉर्डिंग पाहत आहात';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices ने रेकॉर्ड केले';
+  }
+
+  @override
+  String get captureSourceDesktop => 'डेस्कटॉप';
+
+  @override
+  String get renameConversation => 'नाव बदला';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग',
+      one: '1 रेकॉर्डिंग',
+    );
+    return '$_temp0';
+  }
 }

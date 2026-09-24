@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Què pots fer per mi?} goal{Ajuda’m a fixar un objectiu} activity{Resumeix la meva activitat recent} improve{Com puc millorar?} other{}}",
     "nextWeek": "La setmana que ve",
-    "clearSearch": "Esborra la cerca"
+    "clearSearch": "Esborra la cerca",
+    "captureRecordingsSheetTitle": "Enregistraments d'aquesta conversa",
+    "captureRecordingSeparate": "Separa…",
+    "captureRecordingSeparateTitle": "Vols separar aquest enregistrament?",
+    "captureRecordingSeparateMessage": "{recording} es mostrarà com una conversa pròpia i no es tornarà a agrupar amb aquest esdeveniment.",
+    "captureRecordingSeparateConfirm": "Separa",
+    "captureRecordingSeparateFailed": "No s'ha pogut separar. Torna-ho a provar.",
+    "captureRecordingOpenFailed": "No s'ha pogut obrir aquest enregistrament.",
+    "captureRecordingViewing": "Estàs veient aquest enregistrament",
+    "captureRecordedBy": "Enregistrat per {devices}",
+    "captureSourceDesktop": "Ordinador",
+    "renameConversation": "Canvia el nom",
+    "captureRecordingsCount": "{count, plural, =1{1 enregistrament} other{{count} enregistraments}}"
 }

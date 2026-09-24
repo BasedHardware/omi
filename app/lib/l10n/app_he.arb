@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
     "nextWeek": "בשבוע הבא",
-    "clearSearch": "ניקוי החיפוש"
+    "clearSearch": "ניקוי החיפוש",
+    "captureRecordingsSheetTitle": "הקלטות של השיחה הזו",
+    "captureRecordingSeparate": "הפרד…",
+    "captureRecordingSeparateTitle": "להפריד את ההקלטה הזו?",
+    "captureRecordingSeparateMessage": "{recording} יוצג כשיחה נפרדת ולא יקובץ שוב עם האירוע הזה.",
+    "captureRecordingSeparateConfirm": "הפרד",
+    "captureRecordingSeparateFailed": "ההפרדה נכשלה. נסה שוב.",
+    "captureRecordingOpenFailed": "לא ניתן לפתוח את ההקלטה הזו.",
+    "captureRecordingViewing": "אתה צופה בהקלטה הזו",
+    "captureRecordedBy": "הוקלט על ידי {devices}",
+    "captureSourceDesktop": "מחשב",
+    "renameConversation": "שנה שם",
+    "captureRecordingsCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}"
 }

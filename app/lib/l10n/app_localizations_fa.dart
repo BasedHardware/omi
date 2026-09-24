@@ -10146,4 +10146,52 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get clearSearch => 'پاک کردن جستجو';
+
+  @override
+  String get captureRecordingsSheetTitle => 'ضبط‌های این گفتگو';
+
+  @override
+  String get captureRecordingSeparate => 'جدا کردن…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'این ضبط جدا شود؟';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording به‌عنوان یک گفتگوی جداگانه نمایش داده می‌شود و دیگر با این رویداد گروه‌بندی نمی‌شود.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'جدا کردن';
+
+  @override
+  String get captureRecordingSeparateFailed => 'جدا کردن انجام نشد. دوباره تلاش کنید.';
+
+  @override
+  String get captureRecordingOpenFailed => 'این ضبط باز نشد.';
+
+  @override
+  String get captureRecordingViewing => 'در حال مشاهده این ضبط هستید';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'ضبط‌شده توسط $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'دسکتاپ';
+
+  @override
+  String get renameConversation => 'تغییر نام';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط',
+      one: '۱ ضبط',
+    );
+    return '$_temp0';
+  }
 }

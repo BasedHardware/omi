@@ -10140,4 +10140,52 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get clearSearch => 'Xóa tìm kiếm';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Các bản ghi của cuộc trò chuyện này';
+
+  @override
+  String get captureRecordingSeparate => 'Tách…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Tách bản ghi này?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording sẽ hiển thị như một cuộc trò chuyện riêng và sẽ không được nhóm với sự kiện này nữa.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Tách';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Không thể tách. Hãy thử lại.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Không thể mở bản ghi này.';
+
+  @override
+  String get captureRecordingViewing => 'Bạn đang xem bản ghi này';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Được ghi bởi $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Máy tính';
+
+  @override
+  String get renameConversation => 'Đổi tên';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi',
+      one: '1 bản ghi',
+    );
+    return '$_temp0';
+  }
 }

@@ -10086,4 +10086,52 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get clearSearch => 'مسح البحث';
+
+  @override
+  String get captureRecordingsSheetTitle => 'تسجيلات هذه المحادثة';
+
+  @override
+  String get captureRecordingSeparate => 'فصل…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'فصل هذا التسجيل؟';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return 'سيظهر $recording كمحادثة مستقلة ولن يُجمع مع هذا الحدث مرة أخرى.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'فصل';
+
+  @override
+  String get captureRecordingSeparateFailed => 'تعذّر الفصل. حاول مرة أخرى.';
+
+  @override
+  String get captureRecordingOpenFailed => 'تعذّر فتح هذا التسجيل.';
+
+  @override
+  String get captureRecordingViewing => 'أنت تشاهد هذا التسجيل';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'سجّلها $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'سطح المكتب';
+
+  @override
+  String get renameConversation => 'إعادة تسمية';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات',
+      one: 'تسجيل واحد',
+    );
+    return '$_temp0';
+  }
 }

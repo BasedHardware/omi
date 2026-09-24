@@ -10144,4 +10144,52 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get clearSearch => 'Tøm søk';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Opptak av denne samtalen';
+
+  @override
+  String get captureRecordingSeparate => 'Skill ut…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Skille ut dette opptaket?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording vises som en egen samtale og grupperes ikke med denne hendelsen igjen.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Skill ut';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Kunne ikke skille ut. Prøv igjen.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Kunne ikke åpne dette opptaket.';
+
+  @override
+  String get captureRecordingViewing => 'Du ser på dette opptaket';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Tatt opp av $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Datamaskin';
+
+  @override
+  String get renameConversation => 'Gi nytt navn';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak',
+      one: '1 opptak',
+    );
+    return '$_temp0';
+  }
 }

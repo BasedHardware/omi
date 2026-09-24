@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{तुम मेरे लिए क्या कर सकते हो?} goal{मुझे एक लक्ष्य तय करने में मदद करो} activity{मेरी हाल की गतिविधियों का सारांश दो} improve{मैं कैसे सुधार कर सकता हूँ?} other{}}",
     "nextWeek": "अगले सप्ताह",
-    "clearSearch": "खोज साफ़ करें"
+    "clearSearch": "खोज साफ़ करें",
+    "captureRecordingsSheetTitle": "इस बातचीत की रिकॉर्डिंग",
+    "captureRecordingSeparate": "अलग करें…",
+    "captureRecordingSeparateTitle": "इस रिकॉर्डिंग को अलग करें?",
+    "captureRecordingSeparateMessage": "{recording} एक अलग बातचीत के रूप में दिखेगा और इस इवेंट के साथ फिर से समूहित नहीं होगा।",
+    "captureRecordingSeparateConfirm": "अलग करें",
+    "captureRecordingSeparateFailed": "अलग नहीं किया जा सका। फिर से कोशिश करें।",
+    "captureRecordingOpenFailed": "यह रिकॉर्डिंग नहीं खुल सकी।",
+    "captureRecordingViewing": "आप यह रिकॉर्डिंग देख रहे हैं",
+    "captureRecordedBy": "{devices} द्वारा रिकॉर्ड किया गया",
+    "captureSourceDesktop": "डेस्कटॉप",
+    "renameConversation": "नाम बदलें",
+    "captureRecordingsCount": "{count, plural, =1{1 रिकॉर्डिंग} other{{count} रिकॉर्डिंग}}"
 }

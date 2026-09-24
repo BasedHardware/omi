@@ -10145,4 +10145,52 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get clearSearch => 'Vymazat hledání';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Nahrávky této konverzace';
+
+  @override
+  String get captureRecordingSeparate => 'Oddělit…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Oddělit tuto nahrávku?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording se zobrazí jako samostatná konverzace a s touto událostí už nebude seskupena.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Oddělit';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Oddělení se nezdařilo. Zkuste to znovu.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tuto nahrávku nelze otevřít.';
+
+  @override
+  String get captureRecordingViewing => 'Prohlížíte tuto nahrávku';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Nahráno: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Počítač';
+
+  @override
+  String get renameConversation => 'Přejmenovat';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávek: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
 }

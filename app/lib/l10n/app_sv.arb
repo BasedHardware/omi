@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
     "nextWeek": "Nästa vecka",
-    "clearSearch": "Rensa sökning"
+    "clearSearch": "Rensa sökning",
+    "captureRecordingsSheetTitle": "Inspelningar av det här samtalet",
+    "captureRecordingSeparate": "Separera…",
+    "captureRecordingSeparateTitle": "Separera den här inspelningen?",
+    "captureRecordingSeparateMessage": "{recording} visas som ett eget samtal och grupperas inte med den här händelsen igen.",
+    "captureRecordingSeparateConfirm": "Separera",
+    "captureRecordingSeparateFailed": "Det gick inte att separera. Försök igen.",
+    "captureRecordingOpenFailed": "Det gick inte att öppna den här inspelningen.",
+    "captureRecordingViewing": "Du tittar på den här inspelningen",
+    "captureRecordedBy": "Inspelat av {devices}",
+    "captureSourceDesktop": "Dator",
+    "renameConversation": "Byt namn",
+    "captureRecordingsCount": "{count, plural, =1{1 inspelning} other{{count} inspelningar}}"
 }

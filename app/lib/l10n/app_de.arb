@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Was kannst du für mich tun?} goal{Hilf mir, ein Ziel zu setzen} activity{Fasse meine letzten Aktivitäten zusammen} improve{Wie kann ich mich verbessern?} other{}}",
     "nextWeek": "Nächste Woche",
-    "clearSearch": "Suche löschen"
+    "clearSearch": "Suche löschen",
+    "captureRecordingsSheetTitle": "Aufnahmen dieses Gesprächs",
+    "captureRecordingSeparate": "Trennen…",
+    "captureRecordingSeparateTitle": "Diese Aufnahme trennen?",
+    "captureRecordingSeparateMessage": "{recording} wird als eigenes Gespräch angezeigt und nicht erneut mit diesem Ereignis gruppiert.",
+    "captureRecordingSeparateConfirm": "Trennen",
+    "captureRecordingSeparateFailed": "Trennen fehlgeschlagen. Versuche es erneut.",
+    "captureRecordingOpenFailed": "Diese Aufnahme konnte nicht geöffnet werden.",
+    "captureRecordingViewing": "Du siehst diese Aufnahme",
+    "captureRecordedBy": "Aufgenommen von {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Umbenennen",
+    "captureRecordingsCount": "{count, plural, =1{1 Aufnahme} other{{count} Aufnahmen}}"
 }

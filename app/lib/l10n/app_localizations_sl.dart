@@ -10176,4 +10176,52 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get clearSearch => 'Počisti iskanje';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Posnetki tega pogovora';
+
+  @override
+  String get captureRecordingSeparate => 'Loči…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Ločim ta posnetek?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording bo prikazan kot samostojen pogovor in ne bo več združen s tem dogodkom.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Loči';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Ločevanje ni uspelo. Poskusite znova.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tega posnetka ni bilo mogoče odpreti.';
+
+  @override
+  String get captureRecordingViewing => 'Ogledujete si ta posnetek';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Posnel: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Računalnik';
+
+  @override
+  String get renameConversation => 'Preimenuj';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Posnetkov: $count',
+      one: '1 posnetek',
+    );
+    return '$_temp0';
+  }
 }

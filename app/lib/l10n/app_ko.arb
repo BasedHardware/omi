@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
     "nextWeek": "다음 주",
-    "clearSearch": "검색 지우기"
+    "clearSearch": "검색 지우기",
+    "captureRecordingsSheetTitle": "이 대화의 녹음",
+    "captureRecordingSeparate": "분리…",
+    "captureRecordingSeparateTitle": "이 녹음을 분리할까요?",
+    "captureRecordingSeparateMessage": "{recording}은(는) 별도의 대화로 표시되며 이 이벤트와 다시 묶이지 않습니다.",
+    "captureRecordingSeparateConfirm": "분리",
+    "captureRecordingSeparateFailed": "분리하지 못했습니다. 다시 시도하세요.",
+    "captureRecordingOpenFailed": "이 녹음을 열 수 없습니다.",
+    "captureRecordingViewing": "이 녹음을 보고 있습니다",
+    "captureRecordedBy": "{devices}에서 녹음됨",
+    "captureSourceDesktop": "데스크톱",
+    "renameConversation": "이름 변경",
+    "captureRecordingsCount": "{count, plural, =1{녹음 1개} other{녹음 {count}개}}"
 }

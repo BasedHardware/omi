@@ -10232,4 +10232,52 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get clearSearch => 'Effacer la recherche';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Enregistrements de cette conversation';
+
+  @override
+  String get captureRecordingSeparate => 'Séparer…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Séparer cet enregistrement ?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording apparaîtra comme une conversation distincte et ne sera plus regroupé avec cet événement.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Séparer';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Impossible de séparer. Réessayez.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Impossible d\'ouvrir cet enregistrement.';
+
+  @override
+  String get captureRecordingViewing => 'Vous consultez cet enregistrement';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Enregistré par $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Ordinateur';
+
+  @override
+  String get renameConversation => 'Renommer';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements',
+      one: '1 enregistrement',
+    );
+    return '$_temp0';
+  }
 }

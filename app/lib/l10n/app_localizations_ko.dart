@@ -9978,4 +9978,52 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get clearSearch => '검색 지우기';
+
+  @override
+  String get captureRecordingsSheetTitle => '이 대화의 녹음';
+
+  @override
+  String get captureRecordingSeparate => '분리…';
+
+  @override
+  String get captureRecordingSeparateTitle => '이 녹음을 분리할까요?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording은(는) 별도의 대화로 표시되며 이 이벤트와 다시 묶이지 않습니다.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '분리';
+
+  @override
+  String get captureRecordingSeparateFailed => '분리하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get captureRecordingOpenFailed => '이 녹음을 열 수 없습니다.';
+
+  @override
+  String get captureRecordingViewing => '이 녹음을 보고 있습니다';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices에서 녹음됨';
+  }
+
+  @override
+  String get captureSourceDesktop => '데스크톱';
+
+  @override
+  String get renameConversation => '이름 변경';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+      one: '녹음 1개',
+    );
+    return '$_temp0';
+  }
 }
