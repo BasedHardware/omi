@@ -11186,4 +11186,74 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Tulong at Tungkol';
+
+  @override
+  String get speakerTagPromptTitle => 'Tulungan ang Omi na makilala ang mga boses';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ikaw ba ito?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Si $name ba ito?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Sino ito?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Ako iyan';
+
+  @override
+  String get speakerTagPromptNotMe => 'Hindi ako';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Bagong tao';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Taong hindi ko kilala';
+
+  @override
+  String get speakerTagPromptNotSure => 'Hindi sigurado';
+
+  @override
+  String get speakerTagPromptPlayClip => 'I-play ang clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current sa $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Tandaan ang boses ng mga taong pinangalanan mo';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Nagtatago ang Omi ng maikling sample ng boses para makilala sila sa susunod. Mababago mo ito anumang oras sa Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Salamat! Mas gagaling ang Omi sa pagkilala ng mga boses.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Pangalan nila';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Hindi ma-play ang clip na ito';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Hindi ito ma-save. Pakisubukang muli.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Hilingin sa akin na i-tag ang mga boses';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Paminsan-minsan, itatanong ng Omi kung sino ang nagsasalita sa mga kamakailan mong pag-uusap';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod';
 }

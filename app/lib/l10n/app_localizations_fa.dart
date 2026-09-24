@@ -11086,4 +11086,73 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'راهنما و درباره';
+
+  @override
+  String get speakerTagPromptTitle => 'به Omi در شناختن صداها کمک کنید';
+
+  @override
+  String get speakerTagPromptSubtitle => 'بررسی سریع صداهای دو روز گذشته';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'این شما هستید؟';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'این $name است؟';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'این کیست؟';
+
+  @override
+  String get speakerTagPromptThatsMe => 'این من هستم';
+
+  @override
+  String get speakerTagPromptNotMe => 'من نیستم';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'فردی جدید';
+
+  @override
+  String get speakerTagPromptDontKnow => 'کسی که نمی‌شناسم';
+
+  @override
+  String get speakerTagPromptNotSure => 'مطمئن نیستم';
+
+  @override
+  String get speakerTagPromptPlayClip => 'پخش کلیپ';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current از $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'صدای افرادی را که نام می‌برید به خاطر بسپار';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد آن‌ها را بشناسد. هر زمان می‌توانید این را در تنظیمات تغییر دهید.';
+
+  @override
+  String get speakerTagPromptThanks => 'ممنون! Omi در شناختن صداها بهتر خواهد شد.';
+
+  @override
+  String get speakerTagPromptNameHint => 'نام او';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'پخش این کلیپ ممکن نشد';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'ذخیره نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get voiceSettingsAskToTag => 'از من بخواه صداها را برچسب بزنم';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'گاهی Omi می‌پرسد چه کسی در گفتگوهای اخیر شما صحبت می‌کرد';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'وقتی کسی را نام‌گذاری می‌کنید، Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد او را بشناسد';
 }

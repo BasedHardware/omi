@@ -11078,4 +11078,73 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Help & About';
+
+  @override
+  String get speakerTagPromptTitle => 'Help Omi recognize voices';
+
+  @override
+  String get speakerTagPromptSubtitle => 'A quick check on voices from the last two days';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Is this you?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Is this $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Who is this?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'That\'s me';
+
+  @override
+  String get speakerTagPromptNotMe => 'Not me';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Someone new';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Someone I don\'t know';
+
+  @override
+  String get speakerTagPromptNotSure => 'Not sure';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Play clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Remember voices of people you name';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Thanks! Omi will get better at recognizing voices.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Their name';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Couldn\'t play this clip';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Couldn\'t save that. Please try again.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Ask me to tag voices';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Once in a while, Omi asks who was speaking in your recent conversations';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
 }

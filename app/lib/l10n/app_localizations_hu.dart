@@ -11132,4 +11132,73 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Súgó és névjegy';
+
+  @override
+  String get speakerTagPromptTitle => 'Segíts az Ominak felismerni a hangokat';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Gyors ellenőrzés az elmúlt két nap hangjairól';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ez te vagy?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Ez $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Ki ez?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Ez én vagyok';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nem én vagyok';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Valaki új';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Valaki, akit nem ismerek';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nem tudom';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Részlet lejátszása';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Az általad megnevezett emberek hangjának megjegyzése';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Az Omi egy rövid hangmintát tárol, hogy legközelebb felismerje őket. Ezt bármikor módosíthatod a Beállításokban.';
+
+  @override
+  String get speakerTagPromptThanks => 'Köszönjük! Az Omi egyre jobban fogja felismerni a hangokat.';
+
+  @override
+  String get speakerTagPromptNameHint => 'A neve';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Nem sikerült lejátszani a részletet';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nem sikerült menteni. Próbáld újra.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Kérjen meg a hangok megjelölésére';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Az Omi időnként megkérdezi, ki beszélt a legutóbbi beszélgetéseidben';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Ha megnevezel valakit, az Omi egy rövid hangmintát tárol, hogy legközelebb felismerje';
 }

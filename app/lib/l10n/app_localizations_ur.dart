@@ -11099,4 +11099,73 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'مدد اور تعارف';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi کو آوازیں پہچاننے میں مدد کریں';
+
+  @override
+  String get speakerTagPromptSubtitle => 'پچھلے دو دنوں کی آوازوں کا فوری جائزہ';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'کیا یہ آپ ہیں؟';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'کیا یہ $name ہیں؟';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'یہ کون ہے؟';
+
+  @override
+  String get speakerTagPromptThatsMe => 'یہ میں ہوں';
+
+  @override
+  String get speakerTagPromptNotMe => 'میں نہیں';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'کوئی نیا شخص';
+
+  @override
+  String get speakerTagPromptDontKnow => 'کوئی جسے میں نہیں جانتا';
+
+  @override
+  String get speakerTagPromptNotSure => 'یقین نہیں';
+
+  @override
+  String get speakerTagPromptPlayClip => 'کلپ چلائیں';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'جن لوگوں کا نام آپ دیں ان کی آوازیں یاد رکھیں';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے۔ آپ اسے کسی بھی وقت ترتیبات میں تبدیل کر سکتے ہیں۔';
+
+  @override
+  String get speakerTagPromptThanks => 'شکریہ! Omi آوازیں پہچاننے میں مزید بہتر ہو جائے گا۔';
+
+  @override
+  String get speakerTagPromptNameHint => 'ان کا نام';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'یہ کلپ نہیں چل سکی';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'محفوظ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get voiceSettingsAskToTag => 'مجھ سے آوازیں ٹیگ کرنے کو کہیں';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'کبھی کبھار Omi پوچھے گا کہ آپ کی حالیہ گفتگو میں کون بول رہا تھا';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'جب آپ کسی کا نام دیتے ہیں تو Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے';
 }

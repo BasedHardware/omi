@@ -11101,4 +11101,73 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Yardım ve Hakkında';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi\'nin sesleri tanımasına yardım edin';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Son iki günün seslerine hızlı bir bakış';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Bu siz misiniz?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Bu $name mi?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Bu kim?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Bu benim';
+
+  @override
+  String get speakerTagPromptNotMe => 'Ben değilim';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Yeni biri';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Tanımadığım biri';
+
+  @override
+  String get speakerTagPromptNotSure => 'Emin değilim';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Klibi oynat';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Adlandırdığın kişilerin seslerini hatırla';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi, onları bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar. Bunu istediğin zaman Ayarlar\'dan değiştirebilirsin.';
+
+  @override
+  String get speakerTagPromptThanks => 'Teşekkürler! Omi sesleri daha iyi tanıyacak.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Adı';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Bu klip oynatılamadı';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Kaydedilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Sesleri etiketlememi iste';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi arada bir, son konuşmalarında kimin konuştuğunu sorar';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar';
 }

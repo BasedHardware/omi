@@ -11086,4 +11086,73 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Abi ja teave';
+
+  @override
+  String get speakerTagPromptTitle => 'Aita Omil hääli ära tunda';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Kiire ülevaade viimase kahe päeva häältest';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Kas see oled sina?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Kas see on $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kes see on?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'See olen mina';
+
+  @override
+  String get speakerTagPromptNotMe => 'Pole mina';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Keegi uus';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Keegi, keda ma ei tunne';
+
+  @override
+  String get speakerTagPromptNotSure => 'Pole kindel';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Esita klipp';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Jäta meelde nende inimeste hääled, kellele nime annad';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi hoiab alles lühikese häälenäidise, et neid järgmine kord ära tunda. Saad seda igal ajal seadetes muuta.';
+
+  @override
+  String get speakerTagPromptThanks => 'Aitäh! Omi tunneb hääli nüüd paremini ära.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Nimi';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Seda klippi ei õnnestunud esitada';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Salvestamine ebaõnnestus. Proovi uuesti.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Palu mul hääli märgistada';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Aeg-ajalt küsib Omi, kes sinu hiljutistes vestlustes rääkis';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kui annad kellelegi nime, hoiab Omi alles lühikese häälenäidise, et teda järgmine kord ära tunda';
 }

@@ -11119,4 +11119,73 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Дапамога і пра праграму';
+
+  @override
+  String get speakerTagPromptTitle => 'Дапамажыце Omi распазнаваць галасы';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Хуткая праверка галасоў за апошнія два дні';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Гэта вы?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Гэта $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Хто гэта?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Гэта я';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не я';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Хтосьці новы';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Незнаёмы чалавек';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не ўпэўнены';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Прайграць фрагмент';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запамінаць галасы людзей, якіх вы назвалі';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi захоўвае кароткі ўзор голасу, каб пазнаць іх наступным разам. Гэта можна змяніць у любы час у Наладах.';
+
+  @override
+  String get speakerTagPromptThanks => 'Дзякуй! Omi будзе лепш распазнаваць галасы.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Імя';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Не ўдалося прайграць гэты фрагмент';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не ўдалося захаваць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Прасіць мяне пазначаць галасы';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам';
 }

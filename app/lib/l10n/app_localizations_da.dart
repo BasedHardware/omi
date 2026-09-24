@@ -11075,4 +11075,73 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Hjælp og om';
+
+  @override
+  String get speakerTagPromptTitle => 'Hjælp Omi med at genkende stemmer';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Et hurtigt tjek af stemmer fra de sidste to dage';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Er det dig?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Er det $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Hvem er det?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Det er mig';
+
+  @override
+  String get speakerTagPromptNotMe => 'Ikke mig';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'En ny person';
+
+  @override
+  String get speakerTagPromptDontKnow => 'En, jeg ikke kender';
+
+  @override
+  String get speakerTagPromptNotSure => 'Ikke sikker';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Afspil klip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current af $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Husk stemmer fra personer, du navngiver';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi gemmer en kort stemmeprøve, så den kan genkende dem næste gang. Du kan ændre det når som helst i Indstillinger.';
+
+  @override
+  String get speakerTagPromptThanks => 'Tak! Omi bliver bedre til at genkende stemmer.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Personens navn';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Kunne ikke afspille dette klip';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Kunne ikke gemme. Prøv igen.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Bed mig om at tagge stemmer';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'En gang imellem spørger Omi, hvem der talte i dine seneste samtaler';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang';
 }

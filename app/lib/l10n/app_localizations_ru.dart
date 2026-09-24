@@ -11125,4 +11125,74 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Помощь и о программе';
+
+  @override
+  String get speakerTagPromptTitle => 'Помогите Omi узнавать голоса';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Быстрая проверка голосов за последние два дня';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Это вы?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Это $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Кто это?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Это я';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не я';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Кто-то новый';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Незнакомый человек';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не уверен';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Воспроизвести фрагмент';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current из $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запоминать голоса людей, которых вы назвали';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi сохраняет короткий образец голоса, чтобы узнать человека в следующий раз. Это можно изменить в любой момент в Настройках.';
+
+  @override
+  String get speakerTagPromptThanks => 'Спасибо! Omi будет лучше узнавать голоса.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Имя';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Не удалось воспроизвести фрагмент';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не удалось сохранить. Попробуйте ещё раз.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Просить меня отмечать голоса';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Время от времени Omi спрашивает, кто говорил в ваших недавних разговорах';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз';
 }

@@ -11104,4 +11104,73 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Помоћ и о апликацији';
+
+  @override
+  String get speakerTagPromptTitle => 'Помозите Omi-ју да препознаје гласове';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Брза провера гласова из последња два дана';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Да ли сте ово ви?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Да ли је ово $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Ко је ово?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'То сам ја';
+
+  @override
+  String get speakerTagPromptNotMe => 'Нисам ја';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Неко нови';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Неко кога не познајем';
+
+  @override
+  String get speakerTagPromptNotSure => 'Нисам сигуран';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Пусти исечак';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запамти гласове особа које именујеш';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi чува кратак узорак гласа да би их следећи пут препознао. Ово можете променити било када у Подешавањима.';
+
+  @override
+  String get speakerTagPromptThanks => 'Хвала! Omi ће све боље препознавати гласове.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Име особе';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Није могуће пустити овај исечак';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Чување није успело. Покушајте поново.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Тражи од мене да означим гласове';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Повремено Omi пита ко је говорио у вашим недавним разговорима';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Када некога именујете, Omi чува кратак узорак гласа да би га следећи пут препознао';
 }

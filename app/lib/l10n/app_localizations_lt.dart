@@ -11108,4 +11108,73 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Pagalba ir apie';
+
+  @override
+  String get speakerTagPromptTitle => 'Padėkite Omi atpažinti balsus';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Greita paskutinių dviejų dienų balsų patikra';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ar tai jūs?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Ar tai $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kas tai?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Tai aš';
+
+  @override
+  String get speakerTagPromptNotMe => 'Ne aš';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Kažkas naujas';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Kažkas, ko nepažįstu';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nesu tikras';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Leisti įrašą';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current iš $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Įsiminti žmonių, kuriuos pavadinate, balsus';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi išsaugo trumpą balso pavyzdį, kad kitą kartą juos atpažintų. Tai galite bet kada pakeisti nustatymuose.';
+
+  @override
+  String get speakerTagPromptThanks => 'Ačiū! Omi geriau atpažins balsus.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Vardas';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Nepavyko paleisti šio įrašo';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nepavyko išsaugoti. Bandykite dar kartą.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Prašyti manęs pažymėti balsus';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Kartais Omi paklaus, kas kalbėjo jūsų naujausiuose pokalbiuose';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų';
 }

@@ -10888,4 +10888,71 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get helpAndAbout => '帮助与关于';
+
+  @override
+  String get speakerTagPromptTitle => '帮助 Omi 识别声音';
+
+  @override
+  String get speakerTagPromptSubtitle => '快速确认最近两天的声音';
+
+  @override
+  String get speakerTagPromptIsThisYou => '这是你吗？';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return '这是 $name 吗？';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => '这是谁？';
+
+  @override
+  String get speakerTagPromptThatsMe => '是我';
+
+  @override
+  String get speakerTagPromptNotMe => '不是我';
+
+  @override
+  String get speakerTagPromptSomeoneNew => '新的人';
+
+  @override
+  String get speakerTagPromptDontKnow => '我不认识的人';
+
+  @override
+  String get speakerTagPromptNotSure => '不确定';
+
+  @override
+  String get speakerTagPromptPlayClip => '播放片段';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => '记住你命名的人的声音';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody => 'Omi 会保留一小段声音样本，以便下次认出对方。你可以随时在设置中更改。';
+
+  @override
+  String get speakerTagPromptThanks => '谢谢！Omi 识别声音会越来越准。';
+
+  @override
+  String get speakerTagPromptNameHint => '对方的名字';
+
+  @override
+  String get speakerTagPromptClipUnavailable => '无法播放此片段';
+
+  @override
+  String get speakerTagPromptAnswerFailed => '无法保存，请重试。';
+
+  @override
+  String get voiceSettingsAskToTag => '请我标记声音';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi 偶尔会问你最近的对话中是谁在说话';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
 }

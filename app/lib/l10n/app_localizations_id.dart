@@ -11098,4 +11098,74 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Bantuan & Tentang';
+
+  @override
+  String get speakerTagPromptTitle => 'Bantu Omi mengenali suara';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Pemeriksaan singkat suara dari dua hari terakhir';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Apakah ini Anda?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Apakah ini $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Siapa ini?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Itu saya';
+
+  @override
+  String get speakerTagPromptNotMe => 'Bukan saya';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Orang baru';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Orang yang tidak saya kenal';
+
+  @override
+  String get speakerTagPromptNotSure => 'Tidak yakin';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Putar klip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current dari $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Ingat suara orang yang Anda beri nama';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi menyimpan sampel suara singkat agar bisa mengenali mereka lain kali. Anda bisa mengubahnya kapan saja di Pengaturan.';
+
+  @override
+  String get speakerTagPromptThanks => 'Terima kasih! Omi akan makin pandai mengenali suara.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Namanya';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Tidak dapat memutar klip ini';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Tidak dapat menyimpan. Silakan coba lagi.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Minta saya menandai suara';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Sesekali, Omi akan bertanya siapa yang berbicara dalam percakapan terbaru Anda';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali';
 }

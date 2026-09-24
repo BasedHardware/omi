@@ -133,3 +133,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | productJourneyOutcome | Product Journey Outcome | journey, surface, object_id, outcome, failure, duration_ms, result_count | active | mobile-product-outcomes |
 | productValueEvent | Product Value | kind, surface, object_id | active | mobile-product-outcomes |
 | conversationAction | Conversation Action | action, surface | active | mobile-conversation-actions |
+| speakerTagPromptsViewed | Speaker Tag Prompts Viewed | prompt_count, first_time | active | speaker-tag-prompts-funnel |
+| speakerTagPromptClipPlayed | Speaker Tag Prompt Clip Played | kind, loaded | active | speaker-tag-prompts-funnel |
+| speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
+| speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
+| voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |

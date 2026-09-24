@@ -11091,4 +11091,72 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'সাহায্য ও সম্পর্কে';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi-কে কণ্ঠস্বর চিনতে সাহায্য করুন';
+
+  @override
+  String get speakerTagPromptSubtitle => 'গত দুই দিনের কণ্ঠস্বরের একটি দ্রুত যাচাই';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'এটা কি আপনি?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'এটা কি $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'এটা কে?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'এটা আমি';
+
+  @override
+  String get speakerTagPromptNotMe => 'আমি নই';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'নতুন কেউ';
+
+  @override
+  String get speakerTagPromptDontKnow => 'অপরিচিত কেউ';
+
+  @override
+  String get speakerTagPromptNotSure => 'নিশ্চিত নই';
+
+  @override
+  String get speakerTagPromptPlayClip => 'ক্লিপ চালান';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'যাদের নাম দেন তাদের কণ্ঠস্বর মনে রাখুন';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে। আপনি সেটিংসে যেকোনো সময় এটি পরিবর্তন করতে পারেন।';
+
+  @override
+  String get speakerTagPromptThanks => 'ধন্যবাদ! Omi কণ্ঠস্বর চিনতে আরও ভালো হবে।';
+
+  @override
+  String get speakerTagPromptNameHint => 'তাদের নাম';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'এই ক্লিপটি চালানো যায়নি';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'এটি সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get voiceSettingsAskToTag => 'আমাকে কণ্ঠস্বর চিহ্নিত করতে বলুন';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'মাঝে মাঝে Omi জিজ্ঞাসা করবে আপনার সাম্প্রতিক কথোপকথনে কে কথা বলছিল';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => 'আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে';
 }

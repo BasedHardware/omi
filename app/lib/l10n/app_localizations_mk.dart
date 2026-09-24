@@ -11149,4 +11149,74 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Помош и за апликацијата';
+
+  @override
+  String get speakerTagPromptTitle => 'Помогнете му на Omi да препознава гласови';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Брза проверка на гласовите од последните два дена';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Дали ова сте вие?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Дали ова е $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Кој е ова?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Тоа сум јас';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не сум јас';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Некој нов';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Некој што не го познавам';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не сум сигурен';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Пушти го исечокот';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запомни ги гласовите на луѓето што ги именуваш';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi чува краток примерок од гласот за да ги препознае следниот пат. Ова можете да го промените во секое време во Поставки.';
+
+  @override
+  String get speakerTagPromptThanks => 'Ви благодариме! Omi ќе ги препознава гласовите сè подобро.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Име';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Исечокот не може да се пушти';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не може да се зачува. Обидете се повторно.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Барај од мене да означувам гласови';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Од време на време, Omi прашува кој зборувал во вашите неодамнешни разговори';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Кога ќе именувате некого, Omi чува краток примерок од гласот за да го препознае следниот пат';
 }

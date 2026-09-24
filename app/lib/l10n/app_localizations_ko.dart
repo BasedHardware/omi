@@ -10911,4 +10911,71 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get helpAndAbout => '도움말 및 정보';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi가 목소리를 알아보도록 도와주세요';
+
+  @override
+  String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
+
+  @override
+  String get speakerTagPromptIsThisYou => '본인인가요?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return '$name 님인가요?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => '누구인가요?';
+
+  @override
+  String get speakerTagPromptThatsMe => '저예요';
+
+  @override
+  String get speakerTagPromptNotMe => '제가 아니에요';
+
+  @override
+  String get speakerTagPromptSomeoneNew => '새로운 사람';
+
+  @override
+  String get speakerTagPromptDontKnow => '모르는 사람';
+
+  @override
+  String get speakerTagPromptNotSure => '잘 모르겠어요';
+
+  @override
+  String get speakerTagPromptPlayClip => '클립 재생';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => '이름을 붙인 사람의 목소리 기억하기';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody => '다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요. 설정에서 언제든지 변경할 수 있어요.';
+
+  @override
+  String get speakerTagPromptThanks => '감사합니다! Omi가 목소리를 더 잘 알아보게 될 거예요.';
+
+  @override
+  String get speakerTagPromptNameHint => '이름';
+
+  @override
+  String get speakerTagPromptClipUnavailable => '이 클립을 재생할 수 없어요';
+
+  @override
+  String get speakerTagPromptAnswerFailed => '저장하지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String get voiceSettingsAskToTag => '목소리 태그 요청 받기';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => '가끔 Omi가 최근 대화에서 누가 말했는지 물어봐요';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => '누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요';
 }

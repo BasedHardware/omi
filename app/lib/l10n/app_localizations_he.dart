@@ -10999,4 +10999,73 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'עזרה ואודות';
+
+  @override
+  String get speakerTagPromptTitle => 'עזרו ל-Omi לזהות קולות';
+
+  @override
+  String get speakerTagPromptSubtitle => 'בדיקה מהירה של קולות מהיומיים האחרונים';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'זה אתה?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'זה $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'מי זה?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'זה אני';
+
+  @override
+  String get speakerTagPromptNotMe => 'לא אני';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'מישהו חדש';
+
+  @override
+  String get speakerTagPromptDontKnow => 'מישהו שאני לא מכיר';
+
+  @override
+  String get speakerTagPromptNotSure => 'לא בטוח';
+
+  @override
+  String get speakerTagPromptPlayClip => 'הפעלת הקטע';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current מתוך $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'לזכור את הקולות של אנשים שתתנו להם שם';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi שומר דגימת קול קצרה כדי לזהות אותם בפעם הבאה. אפשר לשנות זאת בכל עת בהגדרות.';
+
+  @override
+  String get speakerTagPromptThanks => 'תודה! Omi ישתפר בזיהוי קולות.';
+
+  @override
+  String get speakerTagPromptNameHint => 'השם שלו/שלה';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'לא ניתן להפעיל את הקטע';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'לא ניתן לשמור. נסו שוב.';
+
+  @override
+  String get voiceSettingsAskToTag => 'בקשו ממני לתייג קולות';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה';
 }

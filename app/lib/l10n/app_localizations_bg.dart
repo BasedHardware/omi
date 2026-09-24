@@ -11131,4 +11131,73 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Помощ и информация';
+
+  @override
+  String get speakerTagPromptTitle => 'Помогнете на Omi да разпознава гласове';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Бърза проверка на гласовете от последните два дни';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Това вие ли сте?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Това $name ли е?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Кой е това?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Това съм аз';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не съм аз';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Някой нов';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Някой, когото не познавам';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не съм сигурен';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Пусни откъса';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current от $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запомняй гласовете на хората, които назовеш';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi пази кратък гласов образец, за да ги разпознае следващия път. Можете да промените това по всяко време в Настройки.';
+
+  @override
+  String get speakerTagPromptThanks => 'Благодарим! Omi ще разпознава гласовете все по-добре.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Име';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Откъсът не може да бъде пуснат';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не можа да се запази. Моля, опитайте отново.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Питай ме за гласовете';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'От време на време Omi ще пита кой е говорил в последните ви разговори';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Когато назовете някого, Omi пази кратък гласов образец, за да го разпознае следващия път';
 }

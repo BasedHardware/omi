@@ -781,6 +781,50 @@ no overflow speaker ID is invented. Backend-side defaults use
 `SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
 Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 
+### 4.1 Speaker tag prompts ("Is this you?" / "Who is this?")
+
+`routers/speaker_tag_prompts.py` serves a small daily set of voices to confirm,
+chosen by the pure `utils/speaker_tag_prompts/selection.py` from conversations
+started in the last **48 hours** that have stored audio (`audio_files`, i.e.
+private cloud sync was on). A candidate is one diarized speaker's longest clean
+stretch: consecutive segments with no other voice between them, at least 5 s,
+clipped to 10 s, never already decided by a manual receipt. Kinds:
+`owner_check` (free: an automatic owner label, or the loudest unnamed voice in a
+conversation with no owner segments or when the owner has no voiceprint),
+`confirm_person` (an unreviewed automatic person match) and `identify` (an
+unnamed voice); the last two need a paid plan (named speaker-ID). At most 4
+prompts, 2 per conversation, 2 owner checks; answered prompt ids are remembered
+for 7 days in `users/{uid}/speaker_tag_prompts/state`.
+
+Pacing is server-owned: `POST /shown` starts a 20 h cooldown, three unanswered
+sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
+for 2 h so repeated app opens do not rescan 30 conversations.
+
+Answers apply through the same `assign_conversation_speaker` transaction as the
+transcript tag sheet (scope: that diarized speaker in that conversation), so a
+prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
+an explicit unknown decision. Voice learning stays behind existing gates:
+
+- **Other people**: `extract_speaker_samples` (unchanged quality gates) — and
+  that function now returns early when the user turned off
+  `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
+  sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
+- **Owner** ("That's me"): the confirmed clip must be the owner's only voice for
+  5-10 s and pass `verify_and_transcribe_sample`; its embedding is pooled into
+  `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
+  voiceprint (`speaker_embedding_base`, refreshed whenever another writer
+  replaced `speaker_embedding` after the last pooling) plus the last 5
+  confirmations (`owner_voice_confirmations`).
+
+`GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
+audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
+privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,sets,answers,
+quality,voice_samples}_total` and `omi_voice_profile_setting_changes_total`
+carry only closed-enum labels. `quality` turns answers into precision
+(`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall
+(`owner_missed`, `person_missed_known`) observations — biased toward what was
+asked, so compare trends per kind rather than reading absolute accuracy.
+
 ## 5. Private Cloud Sync (Audio Upload)
 
 When `private_cloud_sync_enabled` is set for the user.

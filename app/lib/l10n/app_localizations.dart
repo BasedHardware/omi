@@ -20210,6 +20210,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help & About'**
   String get helpAndAbout;
+
+  /// Card title asking the user to label speakers from recent conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Help Omi recognize voices'**
+  String get speakerTagPromptTitle;
+
+  /// Card subtitle for the speaker tagging prompt
+  ///
+  /// In en, this message translates to:
+  /// **'A quick check on voices from the last two days'**
+  String get speakerTagPromptSubtitle;
+
+  /// Question shown under a short audio clip of a speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Is this you?'**
+  String get speakerTagPromptIsThisYou;
+
+  /// Question under an audio clip; {name} is a person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Is this {name}?'**
+  String speakerTagPromptIsThisPerson(String name);
+
+  /// Question under an audio clip of an unknown speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Who is this?'**
+  String get speakerTagPromptWhoIsThis;
+
+  /// Answer button: the clip is the user's own voice
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s me'**
+  String get speakerTagPromptThatsMe;
+
+  /// Answer button: the clip is not the user's voice
+  ///
+  /// In en, this message translates to:
+  /// **'Not me'**
+  String get speakerTagPromptNotMe;
+
+  /// Answer button that opens a field to type a new person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Someone new'**
+  String get speakerTagPromptSomeoneNew;
+
+  /// Answer button: the speaker is a stranger
+  ///
+  /// In en, this message translates to:
+  /// **'Someone I don\'t know'**
+  String get speakerTagPromptDontKnow;
+
+  /// Answer button to skip this question
+  ///
+  /// In en, this message translates to:
+  /// **'Not sure'**
+  String get speakerTagPromptNotSure;
+
+  /// Accessibility label for the play button of the audio clip
+  ///
+  /// In en, this message translates to:
+  /// **'Play clip'**
+  String get speakerTagPromptPlayClip;
+
+  /// Progress indicator, e.g. 2 of 4
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String speakerTagPromptProgress(int current, int total);
+
+  /// Label of an on/off switch to remember voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'Remember voices of people you name'**
+  String get speakerTagPromptSaveVoicesTitle;
+
+  /// Explanation under the remember-voices switch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.'**
+  String get speakerTagPromptSaveVoicesBody;
+
+  /// Shown after answering all speaker questions
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks! Omi will get better at recognizing voices.'**
+  String get speakerTagPromptThanks;
+
+  /// Placeholder text in a name input field
+  ///
+  /// In en, this message translates to:
+  /// **'Their name'**
+  String get speakerTagPromptNameHint;
+
+  /// Error when the audio clip fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t play this clip'**
+  String get speakerTagPromptClipUnavailable;
+
+  /// Error when saving an answer fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save that. Please try again.'**
+  String get speakerTagPromptAnswerFailed;
+
+  /// Settings switch label for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Ask me to tag voices'**
+  String get voiceSettingsAskToTag;
+
+  /// Settings switch explanation for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Once in a while, Omi asks who was speaking in your recent conversations'**
+  String get voiceSettingsAskToTagSubtitle;
+
+  /// Settings switch explanation for remembering voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
+  String get voiceSettingsSaveOthersSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -11080,4 +11080,73 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Pomoc a o aplikácii';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomôžte Omi rozpoznávať hlasy';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Rýchla kontrola hlasov z posledných dvoch dní';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ste to vy?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Je to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kto je to?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To som ja';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nie som to ja';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Niekto nový';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Niekto, koho nepoznám';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nie som si istý';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Prehrať ukážku';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Pamätať si hlasy ľudí, ktorých pomenujete';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi si uchová krátku ukážku hlasu, aby ich nabudúce spoznal. Môžete to kedykoľvek zmeniť v Nastaveniach.';
+
+  @override
+  String get speakerTagPromptThanks => 'Ďakujeme! Omi bude hlasy rozpoznávať čoraz lepšie.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Meno';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Túto ukážku sa nepodarilo prehrať';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nepodarilo sa uložiť. Skúste to znova.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Žiadať ma o označenie hlasov';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi sa občas opýta, kto hovoril vo vašich nedávnych konverzáciách';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Keď niekoho pomenujete, Omi si uchová krátku ukážku hlasu, aby ho nabudúce spoznal';
 }

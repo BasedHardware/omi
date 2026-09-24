@@ -11092,4 +11092,73 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Ohje ja tietoja';
+
+  @override
+  String get speakerTagPromptTitle => 'Auta Omia tunnistamaan äänet';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Nopea tarkistus kahden viime päivän äänistä';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Oletko tämä sinä?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Onko tämä $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kuka tämä on?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Se olen minä';
+
+  @override
+  String get speakerTagPromptNotMe => 'En ole minä';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Joku uusi';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Joku, jota en tunne';
+
+  @override
+  String get speakerTagPromptNotSure => 'En ole varma';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Toista leike';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Muista nimeämiesi ihmisten äänet';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi tallentaa lyhyen ääninäytteen tunnistaakseen heidät ensi kerralla. Voit muuttaa tätä milloin tahansa asetuksista.';
+
+  @override
+  String get speakerTagPromptThanks => 'Kiitos! Omi oppii tunnistamaan äänet paremmin.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Nimi';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Leikettä ei voitu toistaa';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Tallennus epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Pyydä minua merkitsemään äänet';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Silloin tällöin Omi kysyy, kuka puhui viimeaikaisissa keskusteluissasi';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla';
 }

@@ -13136,5 +13136,102 @@
     "helpAndAbout": "Help & About",
     "@helpAndAbout": {
         "description": "Settings group: feedback, help center, what's new and the app version"
+    },
+    "speakerTagPromptTitle": "Help Omi recognize voices",
+    "@speakerTagPromptTitle": {
+        "description": "Card title asking the user to label speakers from recent conversations"
+    },
+    "speakerTagPromptSubtitle": "A quick check on voices from the last two days",
+    "@speakerTagPromptSubtitle": {
+        "description": "Card subtitle for the speaker tagging prompt"
+    },
+    "speakerTagPromptIsThisYou": "Is this you?",
+    "@speakerTagPromptIsThisYou": {
+        "description": "Question shown under a short audio clip of a speaker"
+    },
+    "speakerTagPromptIsThisPerson": "Is this {name}?",
+    "@speakerTagPromptIsThisPerson": {
+        "description": "Question under an audio clip; {name} is a person's name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerTagPromptWhoIsThis": "Who is this?",
+    "@speakerTagPromptWhoIsThis": {
+        "description": "Question under an audio clip of an unknown speaker"
+    },
+    "speakerTagPromptThatsMe": "That's me",
+    "@speakerTagPromptThatsMe": {
+        "description": "Answer button: the clip is the user's own voice"
+    },
+    "speakerTagPromptNotMe": "Not me",
+    "@speakerTagPromptNotMe": {
+        "description": "Answer button: the clip is not the user's voice"
+    },
+    "speakerTagPromptSomeoneNew": "Someone new",
+    "@speakerTagPromptSomeoneNew": {
+        "description": "Answer button that opens a field to type a new person's name"
+    },
+    "speakerTagPromptDontKnow": "Someone I don't know",
+    "@speakerTagPromptDontKnow": {
+        "description": "Answer button: the speaker is a stranger"
+    },
+    "speakerTagPromptNotSure": "Not sure",
+    "@speakerTagPromptNotSure": {
+        "description": "Answer button to skip this question"
+    },
+    "speakerTagPromptPlayClip": "Play clip",
+    "@speakerTagPromptPlayClip": {
+        "description": "Accessibility label for the play button of the audio clip"
+    },
+    "speakerTagPromptProgress": "{current} of {total}",
+    "@speakerTagPromptProgress": {
+        "description": "Progress indicator, e.g. 2 of 4",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerTagPromptSaveVoicesTitle": "Remember voices of people you name",
+    "@speakerTagPromptSaveVoicesTitle": {
+        "description": "Label of an on/off switch to remember voices of people the user names"
+    },
+    "speakerTagPromptSaveVoicesBody": "Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.",
+    "@speakerTagPromptSaveVoicesBody": {
+        "description": "Explanation under the remember-voices switch"
+    },
+    "speakerTagPromptThanks": "Thanks! Omi will get better at recognizing voices.",
+    "@speakerTagPromptThanks": {
+        "description": "Shown after answering all speaker questions"
+    },
+    "speakerTagPromptNameHint": "Their name",
+    "@speakerTagPromptNameHint": {
+        "description": "Placeholder text in a name input field"
+    },
+    "speakerTagPromptClipUnavailable": "Couldn't play this clip",
+    "@speakerTagPromptClipUnavailable": {
+        "description": "Error when the audio clip fails to load"
+    },
+    "speakerTagPromptAnswerFailed": "Couldn't save that. Please try again.",
+    "@speakerTagPromptAnswerFailed": {
+        "description": "Error when saving an answer fails"
+    },
+    "voiceSettingsAskToTag": "Ask me to tag voices",
+    "@voiceSettingsAskToTag": {
+        "description": "Settings switch label for periodic speaker tagging prompts"
+    },
+    "voiceSettingsAskToTagSubtitle": "Once in a while, Omi asks who was speaking in your recent conversations",
+    "@voiceSettingsAskToTagSubtitle": {
+        "description": "Settings switch explanation for periodic speaker tagging prompts"
+    },
+    "voiceSettingsSaveOthersSubtitle": "When you name someone, Omi keeps a short voice sample so it can recognize them next time",
+    "@voiceSettingsSaveOthersSubtitle": {
+        "description": "Settings switch explanation for remembering voices of people the user names"
     }
 }

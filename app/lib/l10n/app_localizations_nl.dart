@@ -11123,4 +11123,73 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Help en over';
+
+  @override
+  String get speakerTagPromptTitle => 'Help Omi stemmen te herkennen';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Een snelle check van stemmen uit de afgelopen twee dagen';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ben jij dit?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Is dit $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Wie is dit?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Dat ben ik';
+
+  @override
+  String get speakerTagPromptNotMe => 'Niet ik';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Iemand nieuws';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Iemand die ik niet ken';
+
+  @override
+  String get speakerTagPromptNotSure => 'Weet ik niet';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Fragment afspelen';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current van $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Stemmen onthouden van mensen die je een naam geeft';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi bewaart een kort stemfragment om ze de volgende keer te herkennen. Je kunt dit altijd wijzigen in Instellingen.';
+
+  @override
+  String get speakerTagPromptThanks => 'Bedankt! Omi wordt beter in het herkennen van stemmen.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Naam';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Kan dit fragment niet afspelen';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Opslaan mislukt. Probeer het opnieuw.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Vraag me stemmen te taggen';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Af en toe vraagt Omi wie er sprak in je recente gesprekken';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen';
 }

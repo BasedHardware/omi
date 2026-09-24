@@ -11140,4 +11140,74 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Ajutor și despre';
+
+  @override
+  String get speakerTagPromptTitle => 'Ajută-l pe Omi să recunoască vocile';
+
+  @override
+  String get speakerTagPromptSubtitle => 'O verificare rapidă a vocilor din ultimele două zile';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Tu ești acesta?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Este $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Cine este?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Sunt eu';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nu sunt eu';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Cineva nou';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Cineva pe care nu-l cunosc';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nu sunt sigur';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Redă fragmentul';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current din $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Ține minte vocile persoanelor pe care le numești';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi păstrează o scurtă mostră de voce pentru a-i recunoaște data viitoare. Poți schimba asta oricând din Setări.';
+
+  @override
+  String get speakerTagPromptThanks => 'Mulțumim! Omi va recunoaște tot mai bine vocile.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Numele persoanei';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Fragmentul nu a putut fi redat';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nu s-a putut salva. Încearcă din nou.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Cere-mi să etichetez vocile';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Din când în când, Omi te întreabă cine vorbea în conversațiile tale recente';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Când numești pe cineva, Omi păstrează o scurtă mostră de voce pentru a-l recunoaște data viitoare';
 }

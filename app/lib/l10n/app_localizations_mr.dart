@@ -11098,4 +11098,73 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'मदत आणि माहिती';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi ला आवाज ओळखायला मदत करा';
+
+  @override
+  String get speakerTagPromptSubtitle => 'गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'हे तुम्ही आहात का?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'हे $name आहेत का?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'हे कोण आहे?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'हा मी आहे';
+
+  @override
+  String get speakerTagPromptNotMe => 'मी नाही';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'नवीन व्यक्ती';
+
+  @override
+  String get speakerTagPromptDontKnow => 'ओळखीचे नसलेले कोणीतरी';
+
+  @override
+  String get speakerTagPromptNotSure => 'खात्री नाही';
+
+  @override
+  String get speakerTagPromptPlayClip => 'क्लिप प्ले करा';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'तुम्ही नाव दिलेल्या लोकांचे आवाज लक्षात ठेवा';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो. तुम्ही हे कधीही सेटिंग्जमध्ये बदलू शकता.';
+
+  @override
+  String get speakerTagPromptThanks => 'धन्यवाद! Omi आवाज ओळखण्यात आणखी चांगला होईल.';
+
+  @override
+  String get speakerTagPromptNameHint => 'त्यांचे नाव';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'ही क्लिप प्ले करता आली नाही';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'सेव्ह करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get voiceSettingsAskToTag => 'मला आवाज टॅग करायला सांगा';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'अधूनमधून Omi विचारेल की तुमच्या अलीकडील संभाषणांमध्ये कोण बोलत होते';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो';
 }

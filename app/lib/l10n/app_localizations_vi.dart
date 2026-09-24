@@ -11083,4 +11083,74 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Trợ giúp & Giới thiệu';
+
+  @override
+  String get speakerTagPromptTitle => 'Giúp Omi nhận ra giọng nói';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Kiểm tra nhanh các giọng nói trong hai ngày qua';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Đây có phải là bạn không?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Đây có phải là $name không?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Đây là ai?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Đó là tôi';
+
+  @override
+  String get speakerTagPromptNotMe => 'Không phải tôi';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Người mới';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Người tôi không quen';
+
+  @override
+  String get speakerTagPromptNotSure => 'Không chắc';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Phát đoạn âm thanh';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Ghi nhớ giọng của những người bạn đặt tên';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau. Bạn có thể thay đổi điều này bất cứ lúc nào trong Cài đặt.';
+
+  @override
+  String get speakerTagPromptThanks => 'Cảm ơn bạn! Omi sẽ nhận ra giọng nói tốt hơn.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Tên của họ';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Không thể phát đoạn âm thanh này';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Không thể lưu. Vui lòng thử lại.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Nhắc tôi gắn thẻ giọng nói';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Thỉnh thoảng, Omi sẽ hỏi ai đã nói trong các cuộc trò chuyện gần đây của bạn';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau';
 }

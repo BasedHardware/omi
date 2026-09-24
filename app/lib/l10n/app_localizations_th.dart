@@ -11024,4 +11024,73 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'ความช่วยเหลือและเกี่ยวกับ';
+
+  @override
+  String get speakerTagPromptTitle => 'ช่วย Omi จดจำเสียง';
+
+  @override
+  String get speakerTagPromptSubtitle => 'ตรวจสอบเสียงจากสองวันที่ผ่านมาแบบรวดเร็ว';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'นี่คือคุณใช่ไหม?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'นี่คือ $name ใช่ไหม?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'นี่คือใคร?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'นี่คือฉัน';
+
+  @override
+  String get speakerTagPromptNotMe => 'ไม่ใช่ฉัน';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'คนใหม่';
+
+  @override
+  String get speakerTagPromptDontKnow => 'คนที่ฉันไม่รู้จัก';
+
+  @override
+  String get speakerTagPromptNotSure => 'ไม่แน่ใจ';
+
+  @override
+  String get speakerTagPromptPlayClip => 'เล่นคลิป';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current จาก $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'จดจำเสียงของคนที่คุณตั้งชื่อ';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi จะเก็บตัวอย่างเสียงสั้นๆ ไว้เพื่อจดจำพวกเขาได้ในครั้งถัดไป คุณเปลี่ยนการตั้งค่านี้ได้ทุกเมื่อในการตั้งค่า';
+
+  @override
+  String get speakerTagPromptThanks => 'ขอบคุณ! Omi จะจดจำเสียงได้ดีขึ้น';
+
+  @override
+  String get speakerTagPromptNameHint => 'ชื่อของเขา';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'ไม่สามารถเล่นคลิปนี้ได้';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'บันทึกไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String get voiceSettingsAskToTag => 'ขอให้ฉันระบุเสียง';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'บางครั้ง Omi จะถามว่าใครพูดอยู่ในบทสนทนาล่าสุดของคุณ';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'เมื่อคุณตั้งชื่อให้ใครสักคน Omi จะเก็บตัวอย่างเสียงสั้นๆ ไว้เพื่อจดจำเขาได้ในครั้งถัดไป';
 }

@@ -11103,4 +11103,74 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Ajuda e sobre';
+
+  @override
+  String get speakerTagPromptTitle => 'Ajude o Omi a reconhecer vozes';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Uma checagem rápida das vozes dos últimos dois dias';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'É você?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'É $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Quem é?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Sou eu';
+
+  @override
+  String get speakerTagPromptNotMe => 'Não sou eu';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Outra pessoa';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Alguém que não conheço';
+
+  @override
+  String get speakerTagPromptNotSure => 'Não sei';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Reproduzir trecho';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Lembrar a voz das pessoas que você nomear';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'O Omi guarda uma pequena amostra de voz para reconhecer a pessoa da próxima vez. Você pode mudar isso a qualquer momento nas Configurações.';
+
+  @override
+  String get speakerTagPromptThanks => 'Obrigado! O Omi vai reconhecer vozes cada vez melhor.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Nome da pessoa';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Não foi possível reproduzir este trecho';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Não foi possível salvar. Tente novamente.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Pedir para eu marcar vozes';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'De vez em quando, o Omi pergunta quem estava falando nas suas conversas recentes';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Quando você nomeia alguém, o Omi guarda uma pequena amostra de voz para reconhecer a pessoa da próxima vez';
 }

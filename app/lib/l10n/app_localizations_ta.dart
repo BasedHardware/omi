@@ -11164,4 +11164,74 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'உதவி மற்றும் பற்றி';
+
+  @override
+  String get speakerTagPromptTitle => 'குரல்களை அடையாளம் காண Omi-க்கு உதவுங்கள்';
+
+  @override
+  String get speakerTagPromptSubtitle => 'கடந்த இரண்டு நாட்களின் குரல்களை விரைவாகச் சரிபார்க்கவும்';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'இது நீங்களா?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'இது $name ஆ?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'இது யார்?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'இது நான்தான்';
+
+  @override
+  String get speakerTagPromptNotMe => 'நான் இல்லை';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'புதிய நபர்';
+
+  @override
+  String get speakerTagPromptDontKnow => 'எனக்குத் தெரியாத ஒருவர்';
+
+  @override
+  String get speakerTagPromptNotSure => 'உறுதியாகத் தெரியவில்லை';
+
+  @override
+  String get speakerTagPromptPlayClip => 'கிளிப்பை இயக்கு';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'நீங்கள் பெயரிடும் நபர்களின் குரல்களை நினைவில் வை';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும். இதை எப்போது வேண்டுமானாலும் அமைப்புகளில் மாற்றலாம்.';
+
+  @override
+  String get speakerTagPromptThanks => 'நன்றி! Omi குரல்களை இன்னும் சிறப்பாக அடையாளம் காணும்.';
+
+  @override
+  String get speakerTagPromptNameHint => 'அவரது பெயர்';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'இந்தக் கிளிப்பை இயக்க முடியவில்லை';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get voiceSettingsAskToTag => 'குரல்களைக் குறிக்க என்னிடம் கேள்';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'அவ்வப்போது, உங்கள் சமீபத்திய உரையாடல்களில் யார் பேசினார்கள் என்று Omi கேட்கும்';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்';
 }

@@ -11137,4 +11137,73 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'సహాయం & గురించి';
+
+  @override
+  String get speakerTagPromptTitle => 'గొంతులను గుర్తించడంలో Omi కి సహాయం చేయండి';
+
+  @override
+  String get speakerTagPromptSubtitle => 'గత రెండు రోజుల గొంతులను త్వరగా పరిశీలించండి';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'ఇది మీరేనా?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'ఇది $name నా?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'ఇది ఎవరు?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'ఇది నేనే';
+
+  @override
+  String get speakerTagPromptNotMe => 'నేను కాదు';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'కొత్త వ్యక్తి';
+
+  @override
+  String get speakerTagPromptDontKnow => 'నాకు తెలియని వ్యక్తి';
+
+  @override
+  String get speakerTagPromptNotSure => 'ఖచ్చితంగా తెలియదు';
+
+  @override
+  String get speakerTagPromptPlayClip => 'క్లిప్ ప్లే చేయండి';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'మీరు పేరు పెట్టిన వ్యక్తుల గొంతులను గుర్తుంచుకోండి';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది. మీరు దీన్ని ఎప్పుడైనా సెట్టింగ్‌లలో మార్చవచ్చు.';
+
+  @override
+  String get speakerTagPromptThanks => 'ధన్యవాదాలు! Omi గొంతులను మరింత బాగా గుర్తిస్తుంది.';
+
+  @override
+  String get speakerTagPromptNameHint => 'వారి పేరు';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'ఈ క్లిప్‌ను ప్లే చేయలేకపోయాం';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'సేవ్ చేయలేకపోయాం. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get voiceSettingsAskToTag => 'గొంతులను ట్యాగ్ చేయమని నన్ను అడగండి';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'అప్పుడప్పుడు, మీ ఇటీవలి సంభాషణల్లో ఎవరు మాట్లాడారో Omi అడుగుతుంది';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'మీరు ఎవరికైనా పేరు పెట్టినప్పుడు, తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది';
 }

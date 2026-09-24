@@ -11165,4 +11165,73 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Βοήθεια & σχετικά';
+
+  @override
+  String get speakerTagPromptTitle => 'Βοηθήστε το Omi να αναγνωρίζει φωνές';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Γρήγορος έλεγχος φωνών από τις δύο τελευταίες ημέρες';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Είστε εσείς;';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Είναι ο/η $name;';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Ποιος είναι αυτός;';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Είμαι εγώ';
+
+  @override
+  String get speakerTagPromptNotMe => 'Δεν είμαι εγώ';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Κάποιος νέος';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Κάποιος που δεν γνωρίζω';
+
+  @override
+  String get speakerTagPromptNotSure => 'Δεν είμαι σίγουρος';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Αναπαραγωγή αποσπάσματος';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current από $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Απομνημόνευση φωνών των ατόμων που ονομάζετε';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Το Omi κρατά ένα σύντομο δείγμα φωνής για να τους αναγνωρίσει την επόμενη φορά. Μπορείτε να το αλλάξετε ανά πάσα στιγμή στις Ρυθμίσεις.';
+
+  @override
+  String get speakerTagPromptThanks => 'Ευχαριστούμε! Το Omi θα αναγνωρίζει τις φωνές όλο και καλύτερα.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Το όνομά του/της';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Δεν ήταν δυνατή η αναπαραγωγή αυτού του αποσπάσματος';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Δεν ήταν δυνατή η αποθήκευση. Δοκιμάστε ξανά.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Να μου ζητείται να επισημαίνω φωνές';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Κάθε τόσο, το Omi ρωτά ποιος μιλούσε στις πρόσφατες συνομιλίες σας';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά';
 }

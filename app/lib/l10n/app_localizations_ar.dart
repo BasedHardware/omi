@@ -11021,4 +11021,73 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'المساعدة وحول التطبيق';
+
+  @override
+  String get speakerTagPromptTitle => 'ساعد Omi على التعرّف على الأصوات';
+
+  @override
+  String get speakerTagPromptSubtitle => 'مراجعة سريعة للأصوات من آخر يومين';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'هل هذا أنت؟';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'هل هذا $name؟';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'من هذا؟';
+
+  @override
+  String get speakerTagPromptThatsMe => 'هذا أنا';
+
+  @override
+  String get speakerTagPromptNotMe => 'ليس أنا';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'شخص جديد';
+
+  @override
+  String get speakerTagPromptDontKnow => 'شخص لا أعرفه';
+
+  @override
+  String get speakerTagPromptNotSure => 'لست متأكدًا';
+
+  @override
+  String get speakerTagPromptPlayClip => 'تشغيل المقطع';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current من $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'تذكّر أصوات الأشخاص الذين تسمّيهم';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليهم في المرة القادمة. يمكنك تغيير ذلك في أي وقت من الإعدادات.';
+
+  @override
+  String get speakerTagPromptThanks => 'شكرًا! سيصبح Omi أفضل في التعرّف على الأصوات.';
+
+  @override
+  String get speakerTagPromptNameHint => 'اسمه';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'تعذّر تشغيل هذا المقطع';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'تعذّر حفظ ذلك. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get voiceSettingsAskToTag => 'اطلب مني تسمية الأصوات';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'من حين لآخر، يسألك Omi عمّن كان يتحدث في محادثاتك الأخيرة';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'عندما تسمّي شخصًا، يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليه في المرة القادمة';
 }

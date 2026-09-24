@@ -11123,4 +11123,74 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ';
+
+  @override
+  String get speakerTagPromptTitle => 'ಧ್ವನಿಗಳನ್ನು ಗುರುತಿಸಲು Omi ಗೆ ಸಹಾಯ ಮಾಡಿ';
+
+  @override
+  String get speakerTagPromptSubtitle => 'ಕಳೆದ ಎರಡು ದಿನಗಳ ಧ್ವನಿಗಳ ತ್ವರಿತ ಪರಿಶೀಲನೆ';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'ಇದು ನೀವೇನಾ?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'ಇದು $name ಅವರೇನಾ?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'ಇದು ಯಾರು?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'ಇದು ನಾನೇ';
+
+  @override
+  String get speakerTagPromptNotMe => 'ನಾನಲ್ಲ';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'ಹೊಸ ವ್ಯಕ್ತಿ';
+
+  @override
+  String get speakerTagPromptDontKnow => 'ನನಗೆ ಪರಿಚಯವಿಲ್ಲದವರು';
+
+  @override
+  String get speakerTagPromptNotSure => 'ಖಚಿತವಿಲ್ಲ';
+
+  @override
+  String get speakerTagPromptPlayClip => 'ಕ್ಲಿಪ್ ಪ್ಲೇ ಮಾಡಿ';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'ನೀವು ಹೆಸರಿಸುವ ಜನರ ಧ್ವನಿಗಳನ್ನು ನೆನಪಿಡಿ';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಇದನ್ನು ಬದಲಾಯಿಸಬಹುದು.';
+
+  @override
+  String get speakerTagPromptThanks => 'ಧನ್ಯವಾದಗಳು! Omi ಧ್ವನಿಗಳನ್ನು ಇನ್ನಷ್ಟು ಚೆನ್ನಾಗಿ ಗುರುತಿಸುತ್ತದೆ.';
+
+  @override
+  String get speakerTagPromptNameHint => 'ಅವರ ಹೆಸರು';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'ಈ ಕ್ಲಿಪ್ ಪ್ಲೇ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get voiceSettingsAskToTag => 'ಧ್ವನಿಗಳನ್ನು ಟ್ಯಾಗ್ ಮಾಡಲು ನನ್ನನ್ನು ಕೇಳಿ';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'ಆಗಾಗ, ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದರು ಎಂದು Omi ಕೇಳುತ್ತದೆ';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ';
 }

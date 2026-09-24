@@ -11121,4 +11121,73 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Pomoč in o aplikaciji';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomagajte Omiju prepoznavati glasove';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Hiter pregled glasov iz zadnjih dveh dni';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ste to vi?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Je to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kdo je to?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To sem jaz';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nisem jaz';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Nekdo nov';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Nekdo, ki ga ne poznam';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nisem prepričan';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Predvajaj posnetek';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Zapomni si glasove oseb, ki jih poimenuješ';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi shrani kratek vzorec glasu, da jih naslednjič prepozna. To lahko kadar koli spremenite v Nastavitvah.';
+
+  @override
+  String get speakerTagPromptThanks => 'Hvala! Omi bo glasove prepoznaval vedno bolje.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Ime osebe';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Posnetka ni bilo mogoče predvajati';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Shranjevanje ni uspelo. Poskusite znova.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Prosi me za označevanje glasov';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Občasno vas Omi vpraša, kdo je govoril v vaših nedavnih pogovorih';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna';
 }
