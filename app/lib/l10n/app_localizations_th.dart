@@ -10149,4 +10149,86 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'อัปเดตเฟิร์มแวร์ OmiGlass';
+
+  @override
+  String get deviceConnecting => 'กำลังเชื่อมต่อ…';
+
+  @override
+  String get recordOptionsTip => 'เคล็ดลับ: กดปุ่มบันทึกค้างไว้เพื่อบันทึกการโทร';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'อัปเดตไม่สำเร็จ';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'การอัปเดตไม่เสร็จสมบูรณ์ อุปกรณ์ของคุณยังใช้เฟิร์มแวร์เดิมและใช้งานได้อย่างปลอดภัย ชาร์จไว้และวางใกล้โทรศัพท์ แล้วลองอีกครั้ง';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'ดาวน์โหลดอัปเดตไม่ได้ และอุปกรณ์ของคุณไม่มีการเปลี่ยนแปลง ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองอีกครั้ง';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'แบตเตอรี่อยู่ที่ $level% ชาร์จอุปกรณ์ให้ได้อย่างน้อย 15% ก่อนอัปเดต';
+  }
+
+  @override
+  String get startUpdate => 'เริ่มอัปเดต';
+
+  @override
+  String get otaNotSupported => 'เฟิร์มแวร์นี้อัปเดตผ่าน Wi-Fi ไม่ได้';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'เชื่อมต่อกับ $deviceName ไม่ได้ เปิดเครื่องไว้และวางไว้ใกล้ๆ แล้วลองอีกครั้ง';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'การอัปเดตนี้ยังไม่พร้อมใช้งานตอนนี้ โปรดลองใหม่ภายหลัง';
+
+  @override
+  String get otaStarting => 'กำลังเริ่มอัปเดต…';
+
+  @override
+  String get otaStartFailed => 'เริ่มการอัปเดตไม่ได้ ตรวจสอบชื่อและรหัสผ่าน Wi-Fi แล้วลองอีกครั้ง';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName กำลังรีสตาร์ตพร้อมเฟิร์มแวร์ใหม่';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'ยกเลิกการอัปเดตแล้ว';
+
+  @override
+  String get cancelUpdate => 'ยกเลิกการอัปเดต';
+
+  @override
+  String get otaKeepNearby => 'ระหว่างอัปเดต ให้เปิดอุปกรณ์ไว้และวางใกล้ๆ และอย่าปิดแอป';
+
+  @override
+  String get otaWifiConnecting => 'กำลังเชื่อมต่อ Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'เชื่อมต่อ Wi-Fi แล้ว';
+
+  @override
+  String get otaWifiFailed => 'เชื่อมต่อ Wi-Fi ไม่ได้ ตรวจสอบชื่อเครือข่ายและรหัสผ่าน';
+
+  @override
+  String get otaDownloadFailed => 'ดาวน์โหลดเฟิร์มแวร์ไม่สำเร็จ ตรวจสอบการเชื่อมต่อ Wi-Fi แล้วลองอีกครั้ง';
+
+  @override
+  String get otaInstallFailed => 'ติดตั้งไม่สำเร็จ อุปกรณ์ของคุณยังใช้เฟิร์มแวร์เดิม';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName อัปเดตแล้วและจะรีสตาร์ตเอง';
+  }
+
+  @override
+  String get showPassword => 'แสดงรหัสผ่าน';
+
+  @override
+  String get hidePassword => 'ซ่อนรหัสผ่าน';
 }

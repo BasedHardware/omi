@@ -10221,4 +10221,86 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Perbarui Firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Menghubungkan…';
+
+  @override
+  String get recordOptionsTip => 'Tips: tekan lama tombol rekam untuk merekam panggilan telepon.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Pembaruan Gagal';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Pembaruan tidak selesai. Perangkat Anda masih memakai firmware saat ini dan aman digunakan. Pastikan terisi daya dan dekat ponsel, lalu coba lagi.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterai $level%. Isi daya perangkat minimal 15% sebelum memperbarui.';
+  }
+
+  @override
+  String get startUpdate => 'Mulai Pembaruan';
+
+  @override
+  String get otaNotSupported => 'Firmware ini tidak dapat diperbarui melalui Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Tidak dapat terhubung ke $deviceName. Biarkan tetap menyala dan dekat, lalu coba lagi.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Pembaruan ini belum tersedia saat ini. Coba lagi nanti.';
+
+  @override
+  String get otaStarting => 'Memulai pembaruan…';
+
+  @override
+  String get otaStartFailed => 'Tidak dapat memulai pembaruan. Periksa nama dan kata sandi Wi-Fi, lalu coba lagi.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName sedang dimulai ulang dengan firmware baru.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Pembaruan dibatalkan';
+
+  @override
+  String get cancelUpdate => 'Batalkan Pembaruan';
+
+  @override
+  String get otaKeepNearby => 'Selama pembaruan, biarkan perangkat menyala dan dekat, dan jangan tutup aplikasi.';
+
+  @override
+  String get otaWifiConnecting => 'Menghubungkan ke Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Terhubung ke Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Tidak dapat bergabung ke Wi-Fi. Periksa nama jaringan dan kata sandi.';
+
+  @override
+  String get otaDownloadFailed => 'Unduhan firmware gagal. Periksa koneksi Wi-Fi dan coba lagi.';
+
+  @override
+  String get otaInstallFailed => 'Instalasi gagal. Perangkat Anda masih memakai firmware saat ini.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName sudah diperbarui dan akan memulai ulang sendiri.';
+  }
+
+  @override
+  String get showPassword => 'Tampilkan kata sandi';
+
+  @override
+  String get hidePassword => 'Sembunyikan kata sandi';
 }

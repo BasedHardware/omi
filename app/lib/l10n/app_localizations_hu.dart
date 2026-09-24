@@ -10250,4 +10250,88 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass firmware frissítése';
+
+  @override
+  String get deviceConnecting => 'Csatlakozás…';
+
+  @override
+  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez tartsd lenyomva a felvétel gombot.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'A frissítés nem fejeződött be. Az eszközöd továbbra is a jelenlegi firmware-t használja, és biztonságosan használható. Tartsd feltöltve és a telefon közelében, majd próbáld újra.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Az akkumulátor $level%-on áll. Frissítés előtt töltsd legalább 15%-ra.';
+  }
+
+  @override
+  String get startUpdate => 'Frissítés indítása';
+
+  @override
+  String get otaNotSupported => 'Ez a firmware nem frissíthető Wi-Fi-n keresztül.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Nem sikerült csatlakozni ehhez: $deviceName. Tartsd bekapcsolva és a közelben, majd próbáld újra.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Ez a frissítés most nem érhető el. Próbáld újra később.';
+
+  @override
+  String get otaStarting => 'Frissítés indítása…';
+
+  @override
+  String get otaStartFailed =>
+      'Nem sikerült elindítani a frissítést. Ellenőrizd a Wi-Fi nevét és jelszavát, majd próbáld újra.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'A(z) $deviceName újraindul az új firmware-rel.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Frissítés megszakítva';
+
+  @override
+  String get cancelUpdate => 'Frissítés megszakítása';
+
+  @override
+  String get otaKeepNearby =>
+      'A frissítés alatt tartsd bekapcsolva és a közelben az eszközt, és ne zárd be az alkalmazást.';
+
+  @override
+  String get otaWifiConnecting => 'Csatlakozás a Wi-Fi-hez…';
+
+  @override
+  String get otaWifiConnected => 'Csatlakozva a Wi-Fi-hez';
+
+  @override
+  String get otaWifiFailed => 'Nem sikerült csatlakozni a Wi-Fi-hez. Ellenőrizd a hálózat nevét és jelszavát.';
+
+  @override
+  String get otaDownloadFailed => 'A firmware letöltése nem sikerült. Ellenőrizd a Wi-Fi-kapcsolatot, és próbáld újra.';
+
+  @override
+  String get otaInstallFailed => 'A telepítés nem sikerült. Az eszköz továbbra is a jelenlegi firmware-t használja.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'A(z) $deviceName frissült, és magától újraindul.';
+  }
+
+  @override
+  String get showPassword => 'Jelszó megjelenítése';
+
+  @override
+  String get hidePassword => 'Jelszó elrejtése';
 }

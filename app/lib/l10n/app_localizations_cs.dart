@@ -10209,4 +10209,86 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Aktualizovat firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Připojování…';
+
+  @override
+  String get recordOptionsTip => 'Tip: podržením tlačítka nahrávání nahrajete telefonní hovor.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Aktualizace nebyla dokončena. Zařízení má stále současný firmware a je bezpečné ho používat. Nabijte ho, mějte ho u telefonu a zkuste to znovu.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Spustit aktualizaci';
+
+  @override
+  String get otaNotSupported => 'Tento firmware nelze aktualizovat přes Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'K zařízení $deviceName se nepodařilo připojit. Nechte ho zapnuté a poblíž a zkuste to znovu.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Tato aktualizace teď není k dispozici. Zkuste to později.';
+
+  @override
+  String get otaStarting => 'Spouštění aktualizace…';
+
+  @override
+  String get otaStartFailed => 'Aktualizaci se nepodařilo spustit. Zkontrolujte název a heslo Wi-Fi a zkuste to znovu.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName se restartuje s novým firmwarem.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Aktualizace byla zrušena';
+
+  @override
+  String get cancelUpdate => 'Zrušit aktualizaci';
+
+  @override
+  String get otaKeepNearby => 'Během aktualizace nechte zařízení zapnuté a poblíž a nezavírejte aplikaci.';
+
+  @override
+  String get otaWifiConnecting => 'Připojování k Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Připojeno k Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'K Wi-Fi se nepodařilo připojit. Zkontrolujte název sítě a heslo.';
+
+  @override
+  String get otaDownloadFailed => 'Stažení firmwaru se nezdařilo. Zkontrolujte připojení Wi-Fi a zkuste to znovu.';
+
+  @override
+  String get otaInstallFailed => 'Instalace se nezdařila. Zařízení má stále současný firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName je aktualizováno a samo se restartuje.';
+  }
+
+  @override
+  String get showPassword => 'Zobrazit heslo';
+
+  @override
+  String get hidePassword => 'Skrýt heslo';
 }

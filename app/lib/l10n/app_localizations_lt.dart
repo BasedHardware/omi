@@ -10228,4 +10228,88 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Atnaujinti OmiGlass programinę aparatinę įrangą';
+
+  @override
+  String get deviceConnecting => 'Jungiamasi…';
+
+  @override
+  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, paspauskite ir palaikykite įrašymo mygtuką.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Atnaujinti nepavyko';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Atnaujinimas nebaigtas. Įrenginyje vis dar yra dabartinė programinė aparatinė įranga, jį saugu naudoti. Įkraukite jį, laikykite prie telefono ir bandykite dar kartą.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Atnaujinimo atsisiųsti nepavyko, įrenginys nepakeistas. Patikrinkite interneto ryšį ir bandykite dar kartą.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Akumuliatorius $level %. Prieš atnaujindami įkraukite įrenginį bent iki 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Pradėti atnaujinimą';
+
+  @override
+  String get otaNotSupported => 'Šios programinės aparatinės įrangos negalima atnaujinti per „Wi-Fi“.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Nepavyko prisijungti prie $deviceName. Laikykite jį įjungtą ir netoli, tada bandykite dar kartą.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Šis atnaujinimas dabar nepasiekiamas. Bandykite vėliau.';
+
+  @override
+  String get otaStarting => 'Pradedamas atnaujinimas…';
+
+  @override
+  String get otaStartFailed =>
+      'Nepavyko pradėti atnaujinimo. Patikrinkite „Wi-Fi“ pavadinimą ir slaptažodį ir bandykite dar kartą.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName paleidžiamas iš naujo su nauja programine aparatine įranga.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Atnaujinimas atšauktas';
+
+  @override
+  String get cancelUpdate => 'Atšaukti atnaujinimą';
+
+  @override
+  String get otaKeepNearby => 'Atnaujinimo metu laikykite įrenginį įjungtą ir netoli, neuždarykite programėlės.';
+
+  @override
+  String get otaWifiConnecting => 'Jungiamasi prie „Wi-Fi“…';
+
+  @override
+  String get otaWifiConnected => 'Prisijungta prie „Wi-Fi“';
+
+  @override
+  String get otaWifiFailed => 'Nepavyko prisijungti prie „Wi-Fi“. Patikrinkite tinklo pavadinimą ir slaptažodį.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Nepavyko atsisiųsti programinės aparatinės įrangos. Patikrinkite „Wi-Fi“ ryšį ir bandykite dar kartą.';
+
+  @override
+  String get otaInstallFailed => 'Įdiegti nepavyko. Įrenginyje vis dar yra dabartinė programinė aparatinė įranga.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName atnaujintas ir pats pasileis iš naujo.';
+  }
+
+  @override
+  String get showPassword => 'Rodyti slaptažodį';
+
+  @override
+  String get hidePassword => 'Slėpti slaptažodį';
 }

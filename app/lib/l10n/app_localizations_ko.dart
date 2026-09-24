@@ -10039,4 +10039,85 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass 펌웨어 업데이트';
+
+  @override
+  String get deviceConnecting => '연결 중…';
+
+  @override
+  String get recordOptionsTip => '팁: 녹음 버튼을 길게 누르면 전화 통화를 녹음할 수 있습니다.';
+
+  @override
+  String get firmwareUpdateFailedTitle => '업데이트 실패';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      '업데이트가 완료되지 않았습니다. 기기는 현재 펌웨어를 그대로 사용하며 안전하게 쓸 수 있습니다. 충전한 상태로 휴대폰 가까이에 두고 다시 시도하세요.';
+
+  @override
+  String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
+  }
+
+  @override
+  String get startUpdate => '업데이트 시작';
+
+  @override
+  String get otaNotSupported => '이 펌웨어는 Wi-Fi로 업데이트할 수 없습니다.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName에 연결하지 못했습니다. 전원을 켠 채 가까이에 두고 다시 시도하세요.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '이 업데이트는 지금 사용할 수 없습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get otaStarting => '업데이트 시작 중…';
+
+  @override
+  String get otaStartFailed => '업데이트를 시작하지 못했습니다. Wi-Fi 이름과 비밀번호를 확인한 후 다시 시도하세요.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName이(가) 새 펌웨어로 다시 시작하는 중입니다.';
+  }
+
+  @override
+  String get otaUpdateCancelled => '업데이트가 취소됨';
+
+  @override
+  String get cancelUpdate => '업데이트 취소';
+
+  @override
+  String get otaKeepNearby => '업데이트하는 동안 기기를 켜 두고 가까이에 두며 앱을 닫지 마세요.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi에 연결 중…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi에 연결됨';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi에 연결하지 못했습니다. 네트워크 이름과 비밀번호를 확인하세요.';
+
+  @override
+  String get otaDownloadFailed => '펌웨어 다운로드에 실패했습니다. Wi-Fi 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String get otaInstallFailed => '설치에 실패했습니다. 기기는 현재 펌웨어를 그대로 사용합니다.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName이(가) 업데이트되었으며 자동으로 다시 시작됩니다.';
+  }
+
+  @override
+  String get showPassword => '비밀번호 표시';
+
+  @override
+  String get hidePassword => '비밀번호 숨기기';
 }

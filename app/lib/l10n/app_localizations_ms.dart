@@ -10238,4 +10238,87 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Kemas Kini Perisian Tegar OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Menyambung…';
+
+  @override
+  String get recordOptionsTip => 'Petua: tekan dan tahan butang rakam untuk merakam panggilan telefon.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Kemas kini tidak selesai. Peranti anda masih menggunakan perisian tegar semasa dan selamat digunakan. Pastikan ia dicas dan dekat dengan telefon, kemudian cuba lagi.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Kemas kini tidak dapat dimuat turun dan peranti anda tidak berubah. Semak sambungan internet, kemudian cuba lagi.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Bateri pada $level%. Cas peranti sekurang-kurangnya 15% sebelum mengemas kini.';
+  }
+
+  @override
+  String get startUpdate => 'Mulakan Kemas Kini';
+
+  @override
+  String get otaNotSupported => 'Perisian tegar ini tidak boleh dikemas kini melalui Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Tidak dapat menyambung ke $deviceName. Pastikan ia hidup dan dekat, kemudian cuba lagi.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Kemas kini ini tidak tersedia sekarang. Cuba lagi nanti.';
+
+  @override
+  String get otaStarting => 'Memulakan kemas kini…';
+
+  @override
+  String get otaStartFailed =>
+      'Tidak dapat memulakan kemas kini. Semak nama dan kata laluan Wi-Fi, kemudian cuba lagi.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName sedang dimulakan semula dengan perisian tegar baharu.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Kemas kini dibatalkan';
+
+  @override
+  String get cancelUpdate => 'Batalkan Kemas Kini';
+
+  @override
+  String get otaKeepNearby => 'Semasa kemas kini, pastikan peranti hidup dan dekat, dan jangan tutup apl.';
+
+  @override
+  String get otaWifiConnecting => 'Menyambung ke Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Disambungkan ke Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Tidak dapat menyertai Wi-Fi. Semak nama rangkaian dan kata laluan.';
+
+  @override
+  String get otaDownloadFailed => 'Muat turun perisian tegar gagal. Semak sambungan Wi-Fi dan cuba lagi.';
+
+  @override
+  String get otaInstallFailed => 'Pemasangan gagal. Peranti anda masih menggunakan perisian tegar semasa.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName telah dikemas kini dan akan dimulakan semula sendiri.';
+  }
+
+  @override
+  String get showPassword => 'Tunjukkan kata laluan';
+
+  @override
+  String get hidePassword => 'Sembunyikan kata laluan';
 }

@@ -10246,4 +10246,86 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Обновить прошивку OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Подключение…';
+
+  @override
+  String get recordOptionsTip => 'Совет: нажмите и удерживайте кнопку записи, чтобы записать телефонный звонок.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Не удалось обновить';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Обновление не завершилось. На устройстве осталась текущая прошивка, им можно безопасно пользоваться. Зарядите его, держите рядом с телефоном и повторите попытку.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Не удалось скачать обновление, устройство не изменилось. Проверьте подключение к интернету и повторите попытку.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Заряд батареи $level%. Перед обновлением зарядите устройство хотя бы до 15%.';
+  }
+
+  @override
+  String get startUpdate => 'Начать обновление';
+
+  @override
+  String get otaNotSupported => 'Эту прошивку нельзя обновить по Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Не удалось подключиться к $deviceName. Держите устройство включённым и рядом, затем повторите попытку.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Это обновление сейчас недоступно. Попробуйте позже.';
+
+  @override
+  String get otaStarting => 'Запуск обновления…';
+
+  @override
+  String get otaStartFailed => 'Не удалось начать обновление. Проверьте имя и пароль Wi-Fi и повторите попытку.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName перезапускается с новой прошивкой.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Обновление отменено';
+
+  @override
+  String get cancelUpdate => 'Отменить обновление';
+
+  @override
+  String get otaKeepNearby => 'Во время обновления держите устройство включённым и рядом и не закрывайте приложение.';
+
+  @override
+  String get otaWifiConnecting => 'Подключение к Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Подключено к Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Не удалось подключиться к Wi-Fi. Проверьте имя сети и пароль.';
+
+  @override
+  String get otaDownloadFailed => 'Не удалось скачать прошивку. Проверьте подключение к Wi-Fi и повторите попытку.';
+
+  @override
+  String get otaInstallFailed => 'Установка не удалась. На устройстве осталась текущая прошивка.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName обновлено и перезапустится само.';
+  }
+
+  @override
+  String get showPassword => 'Показать пароль';
+
+  @override
+  String get hidePassword => 'Скрыть пароль';
 }

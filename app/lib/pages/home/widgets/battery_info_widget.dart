@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -20,12 +19,16 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
 /// The header pills paint 36pt tall; this transparent margin, inside an opaque
 /// GestureDetector, makes the touch target [kMinTapTarget] without moving them
 /// (the app bar centers the row, and the toolbar is taller than the target).
 const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2);
+
+/// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
+const int kLowBatteryPercent = 20;
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -52,62 +55,63 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
           ),
           builder: (context, data, child) {
             final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
+            final l10n = context.l10n;
             if (connectedDevice != null) {
-              final batteryPill = GestureDetector(
-                behavior: HitTestBehavior.opaque,
+              final hasBattery = batteryLevel > 0;
+              final low = hasBattery && batteryLevel <= kLowBatteryPercent && !isCharging;
+              final semantics = [
+                connectedDevice.name,
+                if (hasBattery) l10n.batteryLevelSemantics(batteryLevel),
+                if (isCharging) l10n.charging,
+              ].join(', ');
+              final batteryPill = _DevicePill(
+                semanticsLabel: semantics,
                 onTap: () {
+                  OmiHaptics.selection();
                   routeToPage(context, const ConnectedDevice());
                   PlatformManager.instance.analytics.batteryIndicatorClicked();
                 },
-                child: Container(
-                  height: 36,
-                  margin: _pillTargetMargin,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Add device icon
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: Image.asset(
-                          DeviceUtils.getDeviceImagePath(
-                            deviceType: connectedDevice.type,
-                            modelNumber: connectedDevice.modelNumber,
-                            deviceName: connectedDevice.name,
-                          ),
-                          fit: BoxFit.contain,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: Image.asset(
+                      DeviceUtils.getDeviceImagePath(
+                        deviceType: connectedDevice.type,
+                        modelNumber: connectedDevice.modelNumber,
+                        deviceName: connectedDevice.name,
+                      ),
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  // Only show battery indicator and percentage when battery level is valid (> 0)
+                  if (hasBattery) ...[
+                    const SizedBox(width: 6.0),
+                    if (isCharging)
+                      const Icon(Icons.bolt, color: OmiColors.success, size: 14)
+                    else if (low)
+                      // Low battery reads as a glyph and a colour, not a colour alone.
+                      const Icon(Icons.battery_alert, color: OmiColors.danger, size: 14)
+                    else
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: batteryLevel > 75 ? OmiColors.success : OmiColors.warning,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      // Only show battery indicator and percentage when battery level is valid (> 0)
-                      if (batteryLevel > 0) ...[
-                        const SizedBox(width: 6.0),
-                        if (isCharging)
-                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
-                        else
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: batteryLevel > 75
-                                  ? const Color.fromARGB(255, 0, 255, 8)
-                                  : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        const SizedBox(width: 4.0),
-                        Text(
-                          '$batteryLevel%',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                    const SizedBox(width: 4.0),
+                    Text(
+                      '$batteryLevel%',
+                      style: OmiType.caption.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: low ? OmiColors.danger : OmiColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ],
               );
               if (!isMemoriesPage) return batteryPill;
               return Row(
@@ -118,95 +122,62 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   // its 36pt circle by 4pt.
                   const SizedBox(width: 4),
                   HeaderCircleButton(
-                    semanticLabel: context.l10n.phoneCallsWithOmi,
+                    semanticLabel: l10n.phoneCallsWithOmi,
                     icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
                     onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
+                      OmiHaptics.selection();
+                      routeToPage(context, const PhoneCallsPage());
                     },
                   ),
                 ],
               );
             } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
-              // Device is paired but disconnected
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
+              // Paired but not connected: "Connecting…" while a reconnect runs, otherwise one word,
+              // "Disconnected" (the device page uses the same word).
+              final status = isConnecting ? l10n.deviceConnecting : l10n.disconnected;
+              return _DevicePill(
+                semanticsLabel: '${pairedDevice.name}, $status',
                 onTap: () async {
+                  OmiHaptics.selection();
                   await routeToPage(context, const ConnectedDevice());
                 },
-                child: Container(
-                  height: 36,
-                  margin: _pillTargetMargin,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Device icon with slash line
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: Stack(
-                          children: [
-                            Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
-                            // Slash line across the image
-                            Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6.0),
-                      Text(
-                        context.l10n.disconnected,
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            } else {
-              return Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () async {
-                      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                        routeToPage(context, const ConnectDevicePage());
-                        PlatformManager.instance.analytics.connectFriendClicked();
-                      } else {
-                        await routeToPage(context, const ConnectedDevice());
-                      }
-                    },
-                    child: Container(
-                      height: 36,
-                      margin: _pillTargetMargin,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
-                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                          isConnecting && isMemoriesPage
-                              ? Text(
-                                  context.l10n.searching,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                                )
-                              : isMemoriesPage
-                                  ? Text(context.l10n.connect,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12))
-                                  : const SizedBox.shrink(),
-                        ],
-                      ),
+                  // Device icon with slash line
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: Stack(
+                      children: [
+                        Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
+                        if (!isConnecting) Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 6.0),
+                  Text(status, style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                ],
+              );
+            } else {
+              final label = isConnecting ? l10n.searching : l10n.connect;
+              return _DevicePill(
+                semanticsLabel: label,
+                onTap: () async {
+                  OmiHaptics.selection();
+                  if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+                    routeToPage(context, const ConnectDevicePage());
+                    PlatformManager.instance.analytics.connectFriendClicked();
+                  } else {
+                    await routeToPage(context, const ConnectedDevice());
+                  }
+                },
+                children: [
+                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                  // Home has room for the word; the other tabs keep the logo alone (it still has a
+                  // spoken label).
+                  if (isMemoriesPage) ...[
+                    const SizedBox(width: 6),
+                    Text(label, style: OmiType.caption.copyWith(fontSize: 12)),
+                  ],
                 ],
               );
             }
@@ -217,8 +188,39 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
   }
 }
 
+/// A 36pt header pill inside a 44pt target, announced as one button (device details / connect).
+class _DevicePill extends StatelessWidget {
+  const _DevicePill({required this.semanticsLabel, required this.onTap, required this.children});
+
+  final String semanticsLabel;
+  final VoidCallback onTap;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: 36,
+          margin: _pillTargetMargin,
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
+        ),
+      ),
+    );
+  }
+}
+
 /// Circular phone-mic record button shown to the right of the home chat bar.
-/// Tap starts/stops recording; long-press opens the record options sheet.
+/// Tap starts/stops recording; long-press opens the record options sheet (phone call). The options
+/// are announced as the long-press action, and a one-time tip points them out after the first
+/// recording.
 class HomeRecordButton extends StatefulWidget {
   const HomeRecordButton({super.key});
 
@@ -227,12 +229,13 @@ class HomeRecordButton extends StatefulWidget {
 }
 
 class _HomeRecordButtonState extends State<HomeRecordButton> {
+  static const _optionsTipKey = 'v2/homeRecordOptionsTipShown';
+
   void _showRecordOptions(BuildContext context) {
-    HapticFeedback.lightImpact();
-    showModalBottomSheet(
+    OmiHaptics.light();
+    SharedPreferencesUtil().saveBool(_optionsTipKey, true);
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
       builder: (sheetContext) => RecordOptionsSheet(
         onPickPhoneMic: () {
           Navigator.pop(sheetContext);
@@ -241,16 +244,24 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         onPickPhoneCall: () {
           Navigator.pop(sheetContext);
           if (!context.mounted) return;
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
+          routeToPage(context, const PhoneCallsPage());
         },
       ),
     );
   }
 
+  /// Once, after the first recording stops: say that holding the button offers more ways to record.
+  void _maybeShowOptionsTip(BuildContext context) {
+    final prefs = SharedPreferencesUtil();
+    if (prefs.getBool(_optionsTipKey)) return;
+    prefs.saveBool(_optionsTipKey, true);
+    OmiFeedback.info(context, context.l10n.recordOptionsTip);
+  }
+
   Future<void> _startRecording(BuildContext context) async {
-    HapticFeedback.mediumImpact();
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
+    OmiHaptics.medium();
     if (captureProvider.recordingState == RecordingState.record) {
       // Batch reports RecordingState.record too, but has no in-progress conversation
       // to force-process — stopStreamRecording finalizes the local .bin on its own.
@@ -258,6 +269,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       await captureProvider.stopStreamRecording();
       if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      if (context.mounted) _maybeShowOptionsTip(context);
       return;
     }
     await captureProvider.streamRecording();
@@ -271,12 +283,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       return;
     }
     if (context.mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
-        ),
-      );
+      routeToPage(context, ConversationCapturingPage(topConversationId: captureProvider.topConversationId));
     }
   }
 
@@ -286,28 +293,34 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       builder: (context, captureProvider, _) {
         final isRecording = captureProvider.recordingState == RecordingState.record;
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _startRecording(context),
-          onLongPress: isRecording || isInitialising ? null : () => _showRecordOptions(context),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 62,
-            height: 62,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
-              shape: BoxShape.circle,
+        final canShowOptions = !isRecording && !isInitialising;
+        final l10n = context.l10n;
+        return Semantics(
+          button: true,
+          label: isRecording ? l10n.stopRecording : l10n.startRecording,
+          enabled: !isInitialising,
+          onLongPressHint: canShowOptions ? l10n.moreOptions : null,
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _startRecording(context),
+            onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
+            child: AnimatedContainer(
+              duration: OmiMotion.of(context).quick,
+              width: 62,
+              height: 62,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                // Idle is the neutral accent (INV-UI-1); red is the recording state.
+                color: isRecording ? OmiColors.danger : OmiColors.accent,
+                shape: BoxShape.circle,
+              ),
+              child: isRecording
+                  ? const Icon(Icons.stop_rounded, size: 26, color: OmiColors.textPrimary)
+                  : isInitialising
+                      ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
+                      : const Icon(Icons.fiber_manual_record, size: 26, color: OmiColors.danger),
             ),
-            child: isRecording
-                ? const Icon(Icons.stop_rounded, size: 24, color: Colors.white)
-                : isInitialising
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.add, size: 28, color: Colors.white),
           ),
         );
       },
@@ -319,7 +332,7 @@ class SlashLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.red
+      ..color = OmiColors.danger
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -348,6 +361,7 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+/// Ways to record, opened by holding the home record button. Shown in the shared sheet shell.
 class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
@@ -356,24 +370,12 @@ class RecordOptionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1F1F25),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 18),
           _RecordOption(
             icon: FontAwesomeIcons.microphone,
             title: context.l10n.recordWithPhoneMic,
@@ -403,54 +405,47 @@ class _RecordOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: const Color(0xFF2A2A33), borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
+    return Semantics(
+      button: true,
+      label: title,
+      hint: subtitle,
+      excludeSemantics: true,
+      child: Material(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.lgAll,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            OmiHaptics.selection();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.sm),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
+                  child: FaIcon(icon, color: OmiColors.textPrimary, size: 18),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.35),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ],
                   ),
-                ],
-              ),
-              child: FaIcon(icon, color: Colors.white, size: 18),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: Colors.grey[500], size: 22),
-          ],
+          ),
         ),
       ),
     );

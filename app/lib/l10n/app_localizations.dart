@@ -18848,6 +18848,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update OmiGlass Firmware'**
   String get updateOmiGlassFirmware;
+
+  /// Header device pill while a paired device reconnects
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get deviceConnecting;
+
+  /// One-time hint after the first phone-mic recording
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: press and hold the record button to record a phone call.'**
+  String get recordOptionsTip;
+
+  /// Title of the firmware update failed state
+  ///
+  /// In en, this message translates to:
+  /// **'Update Failed'**
+  String get firmwareUpdateFailedTitle;
+
+  /// Firmware update failed while installing
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.'**
+  String get firmwareUpdateFailedMessage;
+
+  /// Firmware download failed
+  ///
+  /// In en, this message translates to:
+  /// **'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.'**
+  String get firmwareDownloadFailedMessage;
+
+  /// Firmware update blocked by low battery
+  ///
+  /// In en, this message translates to:
+  /// **'Battery is at {level}%. Charge your device to at least 15% before updating.'**
+  String firmwareBatteryTooLow(int level);
+
+  /// Pre-flight sheet button that starts a firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Start Update'**
+  String get startUpdate;
+
+  /// OmiGlass OTA not supported on current firmware
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware can\'t be updated over Wi-Fi.'**
+  String get otaNotSupported;
+
+  /// OmiGlass OTA could not reach the device
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t connect to {deviceName}. Keep it on and nearby, then try again.'**
+  String otaConnectFailed(String deviceName);
+
+  /// OmiGlass OTA has no download URL
+  ///
+  /// In en, this message translates to:
+  /// **'This update isn\'t available right now. Try again later.'**
+  String get otaUpdateUnavailable;
+
+  /// OmiGlass OTA starting
+  ///
+  /// In en, this message translates to:
+  /// **'Starting update…'**
+  String get otaStarting;
+
+  /// OmiGlass OTA failed to start
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t start the update. Check the Wi-Fi name and password, then try again.'**
+  String get otaStartFailed;
+
+  /// OmiGlass OTA installed, device rebooting
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is restarting with the new firmware.'**
+  String otaRebooting(String deviceName);
+
+  /// Toast after cancelling an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update cancelled'**
+  String get otaUpdateCancelled;
+
+  /// Button that stops an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Update'**
+  String get cancelUpdate;
+
+  /// Shown before an OmiGlass update starts
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your device on and nearby during the update, and don\'t close the app.'**
+  String get otaKeepNearby;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to Wi-Fi…'**
+  String get otaWifiConnecting;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to Wi-Fi'**
+  String get otaWifiConnected;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t join Wi-Fi. Check the network name and password.'**
+  String get otaWifiFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'The firmware download failed. Check the Wi-Fi connection and try again.'**
+  String get otaDownloadFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed. Your device is still on its current firmware.'**
+  String get otaInstallFailed;
+
+  /// OmiGlass OTA success message
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is updated and will restart on its own.'**
+  String otaUpdatedMessage(String deviceName);
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get showPassword;
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get hidePassword;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

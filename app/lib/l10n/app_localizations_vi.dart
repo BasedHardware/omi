@@ -10204,4 +10204,86 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Cập nhật firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Đang kết nối…';
+
+  @override
+  String get recordOptionsTip => 'Mẹo: nhấn giữ nút ghi âm để ghi âm cuộc gọi điện thoại.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Bản cập nhật chưa hoàn tất. Thiết bị vẫn dùng firmware hiện tại và an toàn để sử dụng. Hãy sạc và để gần điện thoại, rồi thử lại.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.';
+  }
+
+  @override
+  String get startUpdate => 'Bắt đầu cập nhật';
+
+  @override
+  String get otaNotSupported => 'Không thể cập nhật firmware này qua Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Không thể kết nối với $deviceName. Hãy bật thiết bị và để gần, rồi thử lại.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Bản cập nhật này hiện chưa có. Hãy thử lại sau.';
+
+  @override
+  String get otaStarting => 'Đang bắt đầu cập nhật…';
+
+  @override
+  String get otaStartFailed => 'Không thể bắt đầu cập nhật. Hãy kiểm tra tên và mật khẩu Wi-Fi rồi thử lại.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName đang khởi động lại với firmware mới.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Đã hủy cập nhật';
+
+  @override
+  String get cancelUpdate => 'Hủy cập nhật';
+
+  @override
+  String get otaKeepNearby => 'Trong khi cập nhật, hãy bật thiết bị, để gần và không đóng ứng dụng.';
+
+  @override
+  String get otaWifiConnecting => 'Đang kết nối Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Đã kết nối Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Không thể kết nối Wi-Fi. Hãy kiểm tra tên mạng và mật khẩu.';
+
+  @override
+  String get otaDownloadFailed => 'Tải firmware thất bại. Hãy kiểm tra kết nối Wi-Fi rồi thử lại.';
+
+  @override
+  String get otaInstallFailed => 'Cài đặt thất bại. Thiết bị vẫn dùng firmware hiện tại.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName đã được cập nhật và sẽ tự khởi động lại.';
+  }
+
+  @override
+  String get showPassword => 'Hiện mật khẩu';
+
+  @override
+  String get hidePassword => 'Ẩn mật khẩu';
 }

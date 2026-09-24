@@ -10235,4 +10235,88 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Atjaunināt OmiGlass programmaparatūru';
+
+  @override
+  String get deviceConnecting => 'Savienojas…';
+
+  @override
+  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, nospiediet un turiet ieraksta pogu.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Atjaunināšana netika pabeigta. Ierīcē joprojām ir pašreizējā programmaparatūra, un to ir droši lietot. Uzlādējiet to, turiet tālruņa tuvumā un mēģiniet vēlreiz.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Akumulators ir $level%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 15%.';
+  }
+
+  @override
+  String get startUpdate => 'Sākt atjaunināšanu';
+
+  @override
+  String get otaNotSupported => 'Šo programmaparatūru nevar atjaunināt, izmantojot Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Neizdevās izveidot savienojumu ar $deviceName. Turiet to ieslēgtu un tuvumā un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Šis atjauninājums pašlaik nav pieejams. Mēģiniet vēlāk.';
+
+  @override
+  String get otaStarting => 'Sāk atjaunināšanu…';
+
+  @override
+  String get otaStartFailed =>
+      'Neizdevās sākt atjaunināšanu. Pārbaudiet Wi-Fi nosaukumu un paroli un mēģiniet vēlreiz.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName tiek restartēta ar jauno programmaparatūru.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Atjaunināšana atcelta';
+
+  @override
+  String get cancelUpdate => 'Atcelt atjaunināšanu';
+
+  @override
+  String get otaKeepNearby => 'Atjaunināšanas laikā turiet ierīci ieslēgtu un tuvumā un neaizveriet lietotni.';
+
+  @override
+  String get otaWifiConnecting => 'Savienojas ar Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Savienots ar Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Neizdevās pievienoties Wi-Fi. Pārbaudiet tīkla nosaukumu un paroli.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Programmaparatūras lejupielāde neizdevās. Pārbaudiet Wi-Fi savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get otaInstallFailed => 'Instalēšana neizdevās. Ierīcē joprojām ir pašreizējā programmaparatūra.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName ir atjaunināta un pati restartēsies.';
+  }
+
+  @override
+  String get showPassword => 'Rādīt paroli';
+
+  @override
+  String get hidePassword => 'Slēpt paroli';
 }

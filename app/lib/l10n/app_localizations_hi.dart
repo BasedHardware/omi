@@ -10190,4 +10190,86 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass फ़र्मवेयर अपडेट करें';
+
+  @override
+  String get deviceConnecting => 'कनेक्ट हो रहा है…';
+
+  @override
+  String get recordOptionsTip => 'सुझाव: फ़ोन कॉल रिकॉर्ड करने के लिए रिकॉर्ड बटन दबाकर रखें।';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'अपडेट विफल रहा';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'अपडेट पूरा नहीं हुआ। आपका डिवाइस अभी भी मौजूदा फ़र्मवेयर पर है और इस्तेमाल के लिए सुरक्षित है। उसे चार्ज और फ़ोन के पास रखें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'अपडेट डाउनलोड नहीं हो सका और आपके डिवाइस में कोई बदलाव नहीं हुआ। इंटरनेट कनेक्शन जाँचें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'बैटरी $level% है। अपडेट से पहले डिवाइस को कम से कम 15% तक चार्ज करें।';
+  }
+
+  @override
+  String get startUpdate => 'अपडेट शुरू करें';
+
+  @override
+  String get otaNotSupported => 'यह फ़र्मवेयर Wi-Fi से अपडेट नहीं हो सकता।';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName से कनेक्ट नहीं हो सका। उसे चालू और पास रखें, फिर दोबारा कोशिश करें।';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'यह अपडेट अभी उपलब्ध नहीं है। बाद में फिर कोशिश करें।';
+
+  @override
+  String get otaStarting => 'अपडेट शुरू हो रहा है…';
+
+  @override
+  String get otaStartFailed => 'अपडेट शुरू नहीं हो सका। Wi-Fi का नाम और पासवर्ड जाँचें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName नए फ़र्मवेयर के साथ फिर से शुरू हो रहा है।';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'अपडेट रद्द किया गया';
+
+  @override
+  String get cancelUpdate => 'अपडेट रद्द करें';
+
+  @override
+  String get otaKeepNearby => 'अपडेट के दौरान डिवाइस को चालू और पास रखें, और ऐप बंद न करें।';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi से कनेक्ट हो रहा है…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi से कनेक्ट है';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi से नहीं जुड़ सका। नेटवर्क का नाम और पासवर्ड जाँचें।';
+
+  @override
+  String get otaDownloadFailed => 'फ़र्मवेयर डाउनलोड विफल रहा। Wi-Fi कनेक्शन जाँचें और दोबारा कोशिश करें।';
+
+  @override
+  String get otaInstallFailed => 'इंस्टॉल विफल रहा। आपका डिवाइस अभी भी मौजूदा फ़र्मवेयर पर है।';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName अपडेट हो गया है और अपने आप फिर से शुरू होगा।';
+  }
+
+  @override
+  String get showPassword => 'पासवर्ड दिखाएँ';
+
+  @override
+  String get hidePassword => 'पासवर्ड छिपाएँ';
 }

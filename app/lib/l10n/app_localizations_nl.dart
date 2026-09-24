@@ -10237,4 +10237,88 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass-firmware bijwerken';
+
+  @override
+  String get deviceConnecting => 'Verbinden…';
+
+  @override
+  String get recordOptionsTip => 'Tip: houd de opnameknop ingedrukt om een telefoongesprek op te nemen.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Update mislukt';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'De update is niet voltooid. Je apparaat draait nog op de huidige firmware en is veilig te gebruiken. Houd het opgeladen en dicht bij je telefoon en probeer het opnieuw.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'De batterij staat op $level%. Laad je apparaat op tot minstens 15% voordat je bijwerkt.';
+  }
+
+  @override
+  String get startUpdate => 'Update starten';
+
+  @override
+  String get otaNotSupported => 'Deze firmware kan niet via wifi worden bijgewerkt.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Kan geen verbinding maken met $deviceName. Houd het aan en in de buurt en probeer het opnieuw.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Deze update is nu niet beschikbaar. Probeer het later opnieuw.';
+
+  @override
+  String get otaStarting => 'Update wordt gestart…';
+
+  @override
+  String get otaStartFailed =>
+      'Kan de update niet starten. Controleer de wifinaam en het wachtwoord en probeer het opnieuw.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName start opnieuw op met de nieuwe firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Update geannuleerd';
+
+  @override
+  String get cancelUpdate => 'Update annuleren';
+
+  @override
+  String get otaKeepNearby => 'Houd je apparaat tijdens de update aan en in de buurt, en sluit de app niet.';
+
+  @override
+  String get otaWifiConnecting => 'Verbinden met wifi…';
+
+  @override
+  String get otaWifiConnected => 'Verbonden met wifi';
+
+  @override
+  String get otaWifiFailed => 'Kan geen verbinding maken met wifi. Controleer de netwerknaam en het wachtwoord.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Het downloaden van de firmware is mislukt. Controleer de wifiverbinding en probeer het opnieuw.';
+
+  @override
+  String get otaInstallFailed => 'Installatie mislukt. Je apparaat draait nog op de huidige firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName is bijgewerkt en start vanzelf opnieuw op.';
+  }
+
+  @override
+  String get showPassword => 'Wachtwoord tonen';
+
+  @override
+  String get hidePassword => 'Wachtwoord verbergen';
 }

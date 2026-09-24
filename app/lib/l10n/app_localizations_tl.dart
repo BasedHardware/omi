@@ -10302,4 +10302,89 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'I-update ang Firmware ng OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Kumokonekta…';
+
+  @override
+  String get recordOptionsTip => 'Tip: pindutin nang matagal ang record button para mag-record ng tawag.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Nasa $level% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.';
+  }
+
+  @override
+  String get startUpdate => 'Simulan ang Update';
+
+  @override
+  String get otaNotSupported => 'Hindi maa-update ang firmware na ito sa Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Hindi makakonekta sa $deviceName. Panatilihin itong naka-on at malapit, saka subukang muli.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Hindi available ang update na ito ngayon. Subukang muli mamaya.';
+
+  @override
+  String get otaStarting => 'Sinisimulan ang update…';
+
+  @override
+  String get otaStartFailed =>
+      'Hindi masimulan ang update. Tingnan ang pangalan at password ng Wi-Fi, saka subukang muli.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'Nagre-restart ang $deviceName gamit ang bagong firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Kinansela ang update';
+
+  @override
+  String get cancelUpdate => 'Kanselahin ang Update';
+
+  @override
+  String get otaKeepNearby =>
+      'Habang nag-a-update, panatilihing naka-on at malapit ang device, at huwag isara ang app.';
+
+  @override
+  String get otaWifiConnecting => 'Kumokonekta sa Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Nakakonekta sa Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Hindi makasali sa Wi-Fi. Tingnan ang pangalan ng network at password.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Nabigo ang pag-download ng firmware. Tingnan ang koneksyon sa Wi-Fi at subukang muli.';
+
+  @override
+  String get otaInstallFailed => 'Nabigo ang pag-install. Nasa kasalukuyang firmware pa rin ang device mo.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'Na-update na ang $deviceName at kusa itong magre-restart.';
+  }
+
+  @override
+  String get showPassword => 'Ipakita ang password';
+
+  @override
+  String get hidePassword => 'Itago ang password';
 }

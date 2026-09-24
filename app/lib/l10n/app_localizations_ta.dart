@@ -10281,4 +10281,88 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass ஃபர்ம்வேரைப் புதுப்பி';
+
+  @override
+  String get deviceConnecting => 'இணைக்கிறது…';
+
+  @override
+  String get recordOptionsTip => 'குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானை அழுத்திப் பிடிக்கவும்.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'புதுப்பிப்பு தோல்வியடைந்தது';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'புதுப்பிப்பு முடியவில்லை. உங்கள் சாதனம் இன்னும் தற்போதைய ஃபர்ம்வேரில் உள்ளது, பயன்படுத்தப் பாதுகாப்பானது. சார்ஜ் செய்து ஃபோன் அருகில் வைத்து மீண்டும் முயலுங்கள்.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை, உங்கள் சாதனம் மாற்றப்படவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'பேட்டரி $level% உள்ளது. புதுப்பிக்கும் முன் சாதனத்தை குறைந்தது 15% சார்ஜ் செய்யவும்.';
+  }
+
+  @override
+  String get startUpdate => 'புதுப்பிப்பைத் தொடங்கு';
+
+  @override
+  String get otaNotSupported => 'இந்த ஃபர்ம்வேரை Wi-Fi மூலம் புதுப்பிக்க முடியாது.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName உடன் இணைக்க முடியவில்லை. அதை இயக்கத்திலும் அருகிலும் வைத்து மீண்டும் முயலுங்கள்.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'இந்தப் புதுப்பிப்பு இப்போது கிடைக்கவில்லை. பிறகு முயலுங்கள்.';
+
+  @override
+  String get otaStarting => 'புதுப்பிப்பு தொடங்குகிறது…';
+
+  @override
+  String get otaStartFailed =>
+      'புதுப்பிப்பைத் தொடங்க முடியவில்லை. Wi-Fi பெயர் மற்றும் கடவுச்சொல்லைச் சரிபார்த்து மீண்டும் முயலுங்கள்.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'புதிய ஃபர்ம்வேருடன் $deviceName மறுதொடக்கம் ஆகிறது.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'புதுப்பிப்பு ரத்துசெய்யப்பட்டது';
+
+  @override
+  String get cancelUpdate => 'புதுப்பிப்பை ரத்துசெய்';
+
+  @override
+  String get otaKeepNearby => 'புதுப்பிப்பின்போது சாதனத்தை இயக்கத்திலும் அருகிலும் வைத்திருங்கள், ஆப்ஸை மூடாதீர்கள்.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi உடன் இணைக்கிறது…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi உடன் இணைக்கப்பட்டது';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi உடன் சேர முடியவில்லை. நெட்வொர்க் பெயர், கடவுச்சொல்லைச் சரிபார்க்கவும்.';
+
+  @override
+  String get otaDownloadFailed =>
+      'ஃபர்ம்வேர் பதிவிறக்கம் தோல்வியடைந்தது. Wi-Fi இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.';
+
+  @override
+  String get otaInstallFailed => 'நிறுவல் தோல்வியடைந்தது. உங்கள் சாதனம் இன்னும் தற்போதைய ஃபர்ம்வேரில் உள்ளது.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName புதுப்பிக்கப்பட்டது, தானாகவே மறுதொடக்கம் ஆகும்.';
+  }
+
+  @override
+  String get showPassword => 'கடவுச்சொல்லைக் காட்டு';
+
+  @override
+  String get hidePassword => 'கடவுச்சொல்லை மறை';
 }

@@ -10294,4 +10294,88 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass-Firmware aktualisieren';
+
+  @override
+  String get deviceConnecting => 'Verbindung wird hergestellt…';
+
+  @override
+  String get recordOptionsTip => 'Tipp: Halte die Aufnahmetaste gedrückt, um ein Telefonat aufzunehmen.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Update fehlgeschlagen';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Das Update wurde nicht abgeschlossen. Dein Gerät läuft weiter mit der aktuellen Firmware und kann sicher genutzt werden. Lade es auf, halte es in der Nähe deines Telefons und versuche es erneut.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Das Update konnte nicht geladen werden, dein Gerät wurde nicht verändert. Prüfe deine Internetverbindung und versuche es erneut.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Der Akku steht bei $level %. Lade dein Gerät vor dem Update auf mindestens 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Update starten';
+
+  @override
+  String get otaNotSupported => 'Diese Firmware kann nicht über WLAN aktualisiert werden.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Keine Verbindung zu $deviceName. Lass es eingeschaltet und in der Nähe und versuche es erneut.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Dieses Update ist gerade nicht verfügbar. Versuche es später erneut.';
+
+  @override
+  String get otaStarting => 'Update wird gestartet…';
+
+  @override
+  String get otaStartFailed =>
+      'Das Update konnte nicht gestartet werden. Prüfe WLAN-Name und Passwort und versuche es erneut.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName startet mit der neuen Firmware neu.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Update abgebrochen';
+
+  @override
+  String get cancelUpdate => 'Update abbrechen';
+
+  @override
+  String get otaKeepNearby =>
+      'Lass dein Gerät während des Updates eingeschaltet und in der Nähe und schließe die App nicht.';
+
+  @override
+  String get otaWifiConnecting => 'Verbindung mit WLAN…';
+
+  @override
+  String get otaWifiConnected => 'Mit WLAN verbunden';
+
+  @override
+  String get otaWifiFailed => 'WLAN-Verbindung fehlgeschlagen. Prüfe Netzwerkname und Passwort.';
+
+  @override
+  String get otaDownloadFailed => 'Firmware-Download fehlgeschlagen. Prüfe die WLAN-Verbindung und versuche es erneut.';
+
+  @override
+  String get otaInstallFailed => 'Installation fehlgeschlagen. Dein Gerät läuft weiter mit der aktuellen Firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName ist aktualisiert und startet von selbst neu.';
+  }
+
+  @override
+  String get showPassword => 'Passwort anzeigen';
+
+  @override
+  String get hidePassword => 'Passwort ausblenden';
 }

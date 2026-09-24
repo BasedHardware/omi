@@ -10243,4 +10243,87 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ';
+
+  @override
+  String get deviceConnecting => 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'ಬ್ಯಾಟರಿ $level% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 15% ಚಾರ್ಜ್ ಮಾಡಿ.';
+  }
+
+  @override
+  String get startUpdate => 'ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭಿಸಿ';
+
+  @override
+  String get otaNotSupported => 'ಈ ಫರ್ಮ್‌ವೇರ್ ಅನ್ನು Wi-Fi ಮೂಲಕ ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName ಗೆ ಸಂಪರ್ಕಿಸಲು ಆಗಲಿಲ್ಲ. ಅದನ್ನು ಆನ್ ಆಗಿ ಹತ್ತಿರ ಇಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'ಈ ಅಪ್‌ಡೇಟ್ ಈಗ ಲಭ್ಯವಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get otaStarting => 'ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get otaStartFailed =>
+      'ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭಿಸಲು ಆಗಲಿಲ್ಲ. Wi-Fi ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'ಹೊಸ ಫರ್ಮ್‌ವೇರ್‌ನೊಂದಿಗೆ $deviceName ಮರುಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'ಅಪ್‌ಡೇಟ್ ರದ್ದುಗೊಂಡಿದೆ';
+
+  @override
+  String get cancelUpdate => 'ಅಪ್‌ಡೇಟ್ ರದ್ದುಮಾಡಿ';
+
+  @override
+  String get otaKeepNearby => 'ಅಪ್‌ಡೇಟ್ ಸಮಯದಲ್ಲಿ ಸಾಧನವನ್ನು ಆನ್ ಆಗಿ ಹತ್ತಿರ ಇಡಿ ಮತ್ತು ಆ್ಯಪ್ ಮುಚ್ಚಬೇಡಿ.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi ಗೆ ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi ಗೆ ಸಂಪರ್ಕಗೊಂಡಿದೆ';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi ಸೇರಲು ಆಗಲಿಲ್ಲ. ನೆಟ್‌ವರ್ಕ್ ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get otaDownloadFailed => 'ಫರ್ಮ್‌ವೇರ್ ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ. Wi-Fi ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get otaInstallFailed => 'ಇನ್‌ಸ್ಟಾಲ್ ವಿಫಲವಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName ಅಪ್‌ಡೇಟ್ ಆಗಿದೆ ಮತ್ತು ತಾನಾಗಿಯೇ ಮರುಪ್ರಾರಂಭವಾಗುತ್ತದೆ.';
+  }
+
+  @override
+  String get showPassword => 'ಪಾಸ್‌ವರ್ಡ್ ತೋರಿಸಿ';
+
+  @override
+  String get hidePassword => 'ಪಾಸ್‌ವರ್ಡ್ ಮರೆಮಾಡಿ';
 }

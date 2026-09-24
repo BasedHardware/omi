@@ -10242,4 +10242,87 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Posodobi strojno programsko opremo OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Povezovanje…';
+
+  @override
+  String get recordOptionsTip => 'Namig: pridržite gumb za snemanje, da posnamete telefonski klic.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Posodobitev se ni dokončala. Naprava ima še vedno trenutno strojno programsko opremo in je varna za uporabo. Imejte jo napolnjeno in blizu telefona ter poskusite znova.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Posodobitve ni bilo mogoče prenesti in naprava ni bila spremenjena. Preverite internetno povezavo in poskusite znova.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterija je na $level %. Pred posodobitvijo napolnite napravo na vsaj 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Začni posodobitev';
+
+  @override
+  String get otaNotSupported => 'Te strojne programske opreme ni mogoče posodobiti prek Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Povezave z napravo $deviceName ni bilo mogoče vzpostaviti. Naj bo vklopljena in blizu, nato poskusite znova.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Ta posodobitev trenutno ni na voljo. Poskusite pozneje.';
+
+  @override
+  String get otaStarting => 'Zaganjanje posodobitve…';
+
+  @override
+  String get otaStartFailed => 'Posodobitve ni bilo mogoče zagnati. Preverite ime in geslo Wi-Fi ter poskusite znova.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName se znova zaganja z novo strojno programsko opremo.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Posodobitev preklicana';
+
+  @override
+  String get cancelUpdate => 'Prekliči posodobitev';
+
+  @override
+  String get otaKeepNearby => 'Med posodobitvijo naj bo naprava vklopljena in blizu, aplikacije pa ne zaprite.';
+
+  @override
+  String get otaWifiConnecting => 'Povezovanje z Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Povezano z Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Povezava z Wi-Fi ni uspela. Preverite ime omrežja in geslo.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Prenos strojne programske opreme ni uspel. Preverite povezavo Wi-Fi in poskusite znova.';
+
+  @override
+  String get otaInstallFailed => 'Namestitev ni uspela. Naprava ima še vedno trenutno strojno programsko opremo.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName je posodobljena in se bo sama znova zagnala.';
+  }
+
+  @override
+  String get showPassword => 'Pokaži geslo';
+
+  @override
+  String get hidePassword => 'Skrij geslo';
 }

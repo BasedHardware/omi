@@ -10036,4 +10036,85 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass のファームウェアを更新';
+
+  @override
+  String get deviceConnecting => '接続中…';
+
+  @override
+  String get recordOptionsTip => 'ヒント：録音ボタンを長押しすると通話を録音できます。';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。';
+
+  @override
+  String get firmwareDownloadFailedMessage => 'アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'バッテリー残量は $level% です。アップデート前に 15% 以上まで充電してください。';
+  }
+
+  @override
+  String get startUpdate => 'アップデートを開始';
+
+  @override
+  String get otaNotSupported => 'このファームウェアは Wi-Fi 経由で更新できません。';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName に接続できませんでした。電源を入れたまま近くに置いて、もう一度お試しください。';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'このアップデートは現在利用できません。後でもう一度お試しください。';
+
+  @override
+  String get otaStarting => 'アップデートを開始しています…';
+
+  @override
+  String get otaStartFailed => 'アップデートを開始できませんでした。Wi-Fi の名前とパスワードを確認して、もう一度お試しください。';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName は新しいファームウェアで再起動しています。';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'アップデートをキャンセルしました';
+
+  @override
+  String get cancelUpdate => 'アップデートをキャンセル';
+
+  @override
+  String get otaKeepNearby => 'アップデート中はデバイスの電源を入れたまま近くに置き、アプリを閉じないでください。';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi に接続しています…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi に接続しました';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi に接続できませんでした。ネットワーク名とパスワードを確認してください。';
+
+  @override
+  String get otaDownloadFailed => 'ファームウェアのダウンロードに失敗しました。Wi-Fi 接続を確認して、もう一度お試しください。';
+
+  @override
+  String get otaInstallFailed => 'インストールに失敗しました。デバイスは現在のファームウェアのままです。';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName は更新され、自動的に再起動します。';
+  }
+
+  @override
+  String get showPassword => 'パスワードを表示';
+
+  @override
+  String get hidePassword => 'パスワードを隠す';
 }

@@ -10223,4 +10223,86 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass Yazılımını Güncelle';
+
+  @override
+  String get deviceConnecting => 'Bağlanıyor…';
+
+  @override
+  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesini basılı tutun.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Güncelleme tamamlanmadı. Cihazınız hâlâ mevcut yazılımda ve güvenle kullanılabilir. Şarjlı ve telefonunuza yakın tutun, sonra tekrar deneyin.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Güncelleme indirilemedi ve cihazınız değişmedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Pil %$level seviyesinde. Güncellemeden önce cihazınızı en az %15\'e kadar şarj edin.';
+  }
+
+  @override
+  String get startUpdate => 'Güncellemeyi Başlat';
+
+  @override
+  String get otaNotSupported => 'Bu yazılım Wi-Fi üzerinden güncellenemez.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName cihazına bağlanılamadı. Açık ve yakında tutun, sonra tekrar deneyin.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Bu güncelleme şu anda kullanılamıyor. Daha sonra tekrar deneyin.';
+
+  @override
+  String get otaStarting => 'Güncelleme başlatılıyor…';
+
+  @override
+  String get otaStartFailed => 'Güncelleme başlatılamadı. Wi-Fi adını ve şifresini kontrol edip tekrar deneyin.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName yeni yazılımla yeniden başlatılıyor.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Güncelleme iptal edildi';
+
+  @override
+  String get cancelUpdate => 'Güncellemeyi İptal Et';
+
+  @override
+  String get otaKeepNearby => 'Güncelleme sırasında cihazınızı açık ve yakında tutun, uygulamayı kapatmayın.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi\'a bağlanıyor…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi\'a bağlandı';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi\'a katılınamadı. Ağ adını ve şifreyi kontrol edin.';
+
+  @override
+  String get otaDownloadFailed => 'Yazılım indirilemedi. Wi-Fi bağlantısını kontrol edip tekrar deneyin.';
+
+  @override
+  String get otaInstallFailed => 'Yükleme başarısız. Cihazınız hâlâ mevcut yazılımda.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName güncellendi ve kendiliğinden yeniden başlayacak.';
+  }
+
+  @override
+  String get showPassword => 'Şifreyi göster';
+
+  @override
+  String get hidePassword => 'Şifreyi gizle';
 }

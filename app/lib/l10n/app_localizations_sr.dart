@@ -10224,4 +10224,87 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Ажурирај фирмвер за OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Повезивање…';
+
+  @override
+  String get recordOptionsTip => 'Савет: притисните и задржите дугме за снимање да бисте снимили телефонски позив.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Ажурирање није успело';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Ажурирање није завршено. Уређај је и даље на тренутном фирмверу и безбедан је за употребу. Држите га напуњеним и близу телефона, па покушајте поново.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Батерија је на $level%. Пре ажурирања напуните уређај на најмање 15%.';
+  }
+
+  @override
+  String get startUpdate => 'Започни ажурирање';
+
+  @override
+  String get otaNotSupported => 'Овај фирмвер не може да се ажурира преко Wi-Fi мреже.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Повезивање са уређајем $deviceName није успело. Држите га укљученим и близу, па покушајте поново.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Ово ажурирање тренутно није доступно. Покушајте касније.';
+
+  @override
+  String get otaStarting => 'Покретање ажурирања…';
+
+  @override
+  String get otaStartFailed =>
+      'Ажурирање није могло да почне. Проверите назив и лозинку Wi-Fi мреже, па покушајте поново.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName се поново покреће са новим фирмвером.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Ажурирање је отказано';
+
+  @override
+  String get cancelUpdate => 'Откажи ажурирање';
+
+  @override
+  String get otaKeepNearby => 'Током ажурирања држите уређај укљученим и близу и не затварајте апликацију.';
+
+  @override
+  String get otaWifiConnecting => 'Повезивање на Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Повезано на Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Повезивање на Wi-Fi није успело. Проверите назив мреже и лозинку.';
+
+  @override
+  String get otaDownloadFailed => 'Преузимање фирмвера није успело. Проверите Wi-Fi везу и покушајте поново.';
+
+  @override
+  String get otaInstallFailed => 'Инсталација није успела. Уређај је и даље на тренутном фирмверу.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName је ажуриран и сам ће се поново покренути.';
+  }
+
+  @override
+  String get showPassword => 'Прикажи лозинку';
+
+  @override
+  String get hidePassword => 'Сакриј лозинку';
 }

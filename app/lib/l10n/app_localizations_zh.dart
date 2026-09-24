@@ -10017,4 +10017,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => '更新 OmiGlass 固件';
+
+  @override
+  String get deviceConnecting => '正在连接…';
+
+  @override
+  String get recordOptionsTip => '提示：长按录音按钮即可录制电话通话。';
+
+  @override
+  String get firmwareUpdateFailedTitle => '更新失败';
+
+  @override
+  String get firmwareUpdateFailedMessage => '更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。';
+
+  @override
+  String get firmwareDownloadFailedMessage => '无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '电量为 $level%。更新前请将设备充电至至少 15%。';
+  }
+
+  @override
+  String get startUpdate => '开始更新';
+
+  @override
+  String get otaNotSupported => '此固件无法通过 Wi-Fi 更新。';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '无法连接到 $deviceName。请保持设备开启并靠近，然后重试。';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '此更新暂不可用。请稍后重试。';
+
+  @override
+  String get otaStarting => '正在开始更新…';
+
+  @override
+  String get otaStartFailed => '无法开始更新。请检查 Wi-Fi 名称和密码，然后重试。';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName 正在使用新固件重新启动。';
+  }
+
+  @override
+  String get otaUpdateCancelled => '已取消更新';
+
+  @override
+  String get cancelUpdate => '取消更新';
+
+  @override
+  String get otaKeepNearby => '更新期间请保持设备开启并靠近，不要关闭应用。';
+
+  @override
+  String get otaWifiConnecting => '正在连接 Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => '已连接 Wi-Fi';
+
+  @override
+  String get otaWifiFailed => '无法连接 Wi-Fi。请检查网络名称和密码。';
+
+  @override
+  String get otaDownloadFailed => '固件下载失败。请检查 Wi-Fi 连接后重试。';
+
+  @override
+  String get otaInstallFailed => '安装失败。你的设备仍使用当前固件。';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName 已更新，将自动重新启动。';
+  }
+
+  @override
+  String get showPassword => '显示密码';
+
+  @override
+  String get hidePassword => '隐藏密码';
 }

@@ -10209,4 +10209,86 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Oppdater OmiGlass-fastvare';
+
+  @override
+  String get deviceConnecting => 'Kobler til…';
+
+  @override
+  String get recordOptionsTip => 'Tips: trykk og hold opptaksknappen for å ta opp en telefonsamtale.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Oppdateringen mislyktes';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Oppdateringen ble ikke fullført. Enheten bruker fortsatt nåværende fastvare og er trygg å bruke. Hold den ladet og nær telefonen, og prøv igjen.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Oppdateringen kunne ikke lastes ned, og enheten er ikke endret. Sjekk internettforbindelsen og prøv igjen.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Batteriet er på $level %. Lad enheten til minst 15 % før du oppdaterer.';
+  }
+
+  @override
+  String get startUpdate => 'Start oppdatering';
+
+  @override
+  String get otaNotSupported => 'Denne fastvaren kan ikke oppdateres over Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Kunne ikke koble til $deviceName. Hold den påslått og i nærheten, og prøv igjen.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Denne oppdateringen er ikke tilgjengelig nå. Prøv igjen senere.';
+
+  @override
+  String get otaStarting => 'Starter oppdatering…';
+
+  @override
+  String get otaStartFailed => 'Kunne ikke starte oppdateringen. Sjekk Wi-Fi-navnet og passordet, og prøv igjen.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName starter på nytt med den nye fastvaren.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Oppdateringen er avbrutt';
+
+  @override
+  String get cancelUpdate => 'Avbryt oppdatering';
+
+  @override
+  String get otaKeepNearby => 'Hold enheten påslått og i nærheten under oppdateringen, og ikke lukk appen.';
+
+  @override
+  String get otaWifiConnecting => 'Kobler til Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Koblet til Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Kunne ikke koble til Wi-Fi. Sjekk nettverksnavnet og passordet.';
+
+  @override
+  String get otaDownloadFailed => 'Nedlasting av fastvare mislyktes. Sjekk Wi-Fi-tilkoblingen og prøv igjen.';
+
+  @override
+  String get otaInstallFailed => 'Installasjonen mislyktes. Enheten bruker fortsatt nåværende fastvare.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName er oppdatert og starter på nytt av seg selv.';
+  }
+
+  @override
+  String get showPassword => 'Vis passord';
+
+  @override
+  String get hidePassword => 'Skjul passord';
 }

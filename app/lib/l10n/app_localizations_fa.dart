@@ -10209,4 +10209,86 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'به‌روزرسانی میان‌افزار OmiGlass';
+
+  @override
+  String get deviceConnecting => 'در حال اتصال…';
+
+  @override
+  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، دکمه ضبط را لمس کرده و نگه دارید.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'به‌روزرسانی کامل نشد. دستگاه شما همچنان میان‌افزار فعلی را دارد و استفاده از آن امن است. آن را شارژ و نزدیک تلفن نگه دارید، سپس دوباره امتحان کنید.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'باتری $level٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۱۵٪ شارژ کنید.';
+  }
+
+  @override
+  String get startUpdate => 'شروع به‌روزرسانی';
+
+  @override
+  String get otaNotSupported => 'این میان‌افزار از طریق Wi-Fi به‌روز نمی‌شود.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'اتصال به $deviceName ممکن نشد. آن را روشن و نزدیک نگه دارید و دوباره امتحان کنید.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'این به‌روزرسانی اکنون در دسترس نیست. بعداً دوباره امتحان کنید.';
+
+  @override
+  String get otaStarting => 'در حال شروع به‌روزرسانی…';
+
+  @override
+  String get otaStartFailed => 'شروع به‌روزرسانی ممکن نشد. نام و رمز Wi-Fi را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName با میان‌افزار جدید در حال راه‌اندازی مجدد است.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'به‌روزرسانی لغو شد';
+
+  @override
+  String get cancelUpdate => 'لغو به‌روزرسانی';
+
+  @override
+  String get otaKeepNearby => 'در طول به‌روزرسانی، دستگاه را روشن و نزدیک نگه دارید و برنامه را نبندید.';
+
+  @override
+  String get otaWifiConnecting => 'در حال اتصال به Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'به Wi-Fi متصل شد';
+
+  @override
+  String get otaWifiFailed => 'اتصال به Wi-Fi ممکن نشد. نام شبکه و رمز را بررسی کنید.';
+
+  @override
+  String get otaDownloadFailed => 'دانلود میان‌افزار ناموفق بود. اتصال Wi-Fi را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String get otaInstallFailed => 'نصب ناموفق بود. دستگاه شما همچنان میان‌افزار فعلی را دارد.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName به‌روز شد و خودکار راه‌اندازی مجدد می‌شود.';
+  }
+
+  @override
+  String get showPassword => 'نمایش رمز عبور';
+
+  @override
+  String get hidePassword => 'پنهان کردن رمز عبور';
 }

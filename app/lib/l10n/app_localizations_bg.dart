@@ -10249,4 +10249,88 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Актуализиране на фърмуера на OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Свързване…';
+
+  @override
+  String get recordOptionsTip => 'Съвет: натиснете и задръжте бутона за запис, за да запишете телефонно обаждане.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Актуализацията не завърши. Устройството ви е с текущия фърмуер и е безопасно за използване. Дръжте го заредено и близо до телефона и опитайте отново.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Актуализацията не можа да бъде изтеглена и устройството не е променено. Проверете интернет връзката и опитайте отново.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Батерията е $level%. Заредете устройството поне до 15%, преди да актуализирате.';
+  }
+
+  @override
+  String get startUpdate => 'Започване на актуализацията';
+
+  @override
+  String get otaNotSupported => 'Този фърмуер не може да се актуализира през Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Неуспешно свързване с $deviceName. Дръжте го включено и наблизо и опитайте отново.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Тази актуализация не е налична в момента. Опитайте по-късно.';
+
+  @override
+  String get otaStarting => 'Започване на актуализацията…';
+
+  @override
+  String get otaStartFailed =>
+      'Актуализацията не можа да започне. Проверете името и паролата на Wi-Fi и опитайте отново.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName се рестартира с новия фърмуер.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Актуализацията е отменена';
+
+  @override
+  String get cancelUpdate => 'Отказ на актуализацията';
+
+  @override
+  String get otaKeepNearby =>
+      'По време на актуализацията дръжте устройството включено и наблизо и не затваряйте приложението.';
+
+  @override
+  String get otaWifiConnecting => 'Свързване с Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Свързано с Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Неуспешно свързване с Wi-Fi. Проверете името на мрежата и паролата.';
+
+  @override
+  String get otaDownloadFailed => 'Изтеглянето на фърмуера не бе успешно. Проверете Wi-Fi връзката и опитайте отново.';
+
+  @override
+  String get otaInstallFailed => 'Инсталирането не бе успешно. Устройството ви е с текущия фърмуер.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName е актуализирано и ще се рестартира само.';
+  }
+
+  @override
+  String get showPassword => 'Показване на паролата';
+
+  @override
+  String get hidePassword => 'Скриване на паролата';
 }

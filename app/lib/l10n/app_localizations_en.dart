@@ -10200,4 +10200,86 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Update OmiGlass Firmware';
+
+  @override
+  String get deviceConnecting => 'Connecting…';
+
+  @override
+  String get recordOptionsTip => 'Tip: press and hold the record button to record a phone call.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Update Failed';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Battery is at $level%. Charge your device to at least 15% before updating.';
+  }
+
+  @override
+  String get startUpdate => 'Start Update';
+
+  @override
+  String get otaNotSupported => 'This firmware can\'t be updated over Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Couldn\'t connect to $deviceName. Keep it on and nearby, then try again.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'This update isn\'t available right now. Try again later.';
+
+  @override
+  String get otaStarting => 'Starting update…';
+
+  @override
+  String get otaStartFailed => 'Couldn\'t start the update. Check the Wi-Fi name and password, then try again.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName is restarting with the new firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Update cancelled';
+
+  @override
+  String get cancelUpdate => 'Cancel Update';
+
+  @override
+  String get otaKeepNearby => 'Keep your device on and nearby during the update, and don\'t close the app.';
+
+  @override
+  String get otaWifiConnecting => 'Connecting to Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Connected to Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Couldn\'t join Wi-Fi. Check the network name and password.';
+
+  @override
+  String get otaDownloadFailed => 'The firmware download failed. Check the Wi-Fi connection and try again.';
+
+  @override
+  String get otaInstallFailed => 'Installation failed. Your device is still on its current firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName is updated and will restart on its own.';
+  }
+
+  @override
+  String get showPassword => 'Show password';
+
+  @override
+  String get hidePassword => 'Hide password';
 }

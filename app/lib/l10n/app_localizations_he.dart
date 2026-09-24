@@ -10125,4 +10125,86 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'עדכון קושחת OmiGlass';
+
+  @override
+  String get deviceConnecting => 'מתחבר…';
+
+  @override
+  String get recordOptionsTip => 'טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'העדכון נכשל';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'הסוללה על $level%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.';
+  }
+
+  @override
+  String get startUpdate => 'התחלת העדכון';
+
+  @override
+  String get otaNotSupported => 'לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'לא ניתן להתחבר אל $deviceName. השאירו אותו דלוק וקרוב ונסו שוב.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.';
+
+  @override
+  String get otaStarting => 'מתחיל בעדכון…';
+
+  @override
+  String get otaStartFailed => 'לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName מופעל מחדש עם הקושחה החדשה.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'העדכון בוטל';
+
+  @override
+  String get cancelUpdate => 'ביטול העדכון';
+
+  @override
+  String get otaKeepNearby => 'במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.';
+
+  @override
+  String get otaWifiConnecting => 'מתחבר ל-Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'מחובר ל-Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.';
+
+  @override
+  String get otaDownloadFailed => 'הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.';
+
+  @override
+  String get otaInstallFailed => 'ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName עודכן ויופעל מחדש מעצמו.';
+  }
+
+  @override
+  String get showPassword => 'הצגת הסיסמה';
+
+  @override
+  String get hidePassword => 'הסתרת הסיסמה';
 }

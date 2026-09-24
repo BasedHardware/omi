@@ -10240,4 +10240,86 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Абнавіць прашыўку OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Падключэнне…';
+
+  @override
+  String get recordOptionsTip => 'Парада: націсніце і ўтрымлівайце кнопку запісу, каб запісаць тэлефонны званок.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Зарад батарэі $level%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.';
+  }
+
+  @override
+  String get startUpdate => 'Пачаць абнаўленне';
+
+  @override
+  String get otaNotSupported => 'Гэтую прашыўку нельга абнавіць праз Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Не ўдалося падключыцца да $deviceName. Трымайце прыладу ўключанай і побач, потым паспрабуйце зноў.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Гэтае абнаўленне зараз недаступнае. Паспрабуйце пазней.';
+
+  @override
+  String get otaStarting => 'Пачатак абнаўлення…';
+
+  @override
+  String get otaStartFailed => 'Не ўдалося пачаць абнаўленне. Праверце назву і пароль Wi-Fi, потым паспрабуйце зноў.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName перазапускаецца з новай прашыўкай.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Абнаўленне скасавана';
+
+  @override
+  String get cancelUpdate => 'Скасаваць абнаўленне';
+
+  @override
+  String get otaKeepNearby => 'Падчас абнаўлення трымайце прыладу ўключанай і побач і не закрывайце праграму.';
+
+  @override
+  String get otaWifiConnecting => 'Падключэнне да Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Падключана да Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Не ўдалося падключыцца да Wi-Fi. Праверце назву сеткі і пароль.';
+
+  @override
+  String get otaDownloadFailed => 'Не ўдалося спампаваць прашыўку. Праверце падключэнне Wi-Fi і паспрабуйце зноў.';
+
+  @override
+  String get otaInstallFailed => 'Усталяванне не ўдалося. Прылада працуе на бягучай прашыўцы.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName абноўлена і перазапусціцца сама.';
+  }
+
+  @override
+  String get showPassword => 'Паказаць пароль';
+
+  @override
+  String get hidePassword => 'Схаваць пароль';
 }

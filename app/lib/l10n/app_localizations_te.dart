@@ -10258,4 +10258,86 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి';
+
+  @override
+  String get deviceConnecting => 'కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌ను నొక్కి పట్టుకోండి.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'అప్‌డేట్ విఫలమైంది';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'అప్‌డేట్ పూర్తి కాలేదు. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది, ఉపయోగించడం సురక్షితం. ఛార్జ్ చేసి ఫోన్ దగ్గర ఉంచి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'బ్యాటరీ $level% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 15% ఛార్జ్ చేయండి.';
+  }
+
+  @override
+  String get startUpdate => 'అప్‌డేట్ ప్రారంభించండి';
+
+  @override
+  String get otaNotSupported => 'ఈ ఫర్మ్‌వేర్‌ను Wi-Fi ద్వారా అప్‌డేట్ చేయలేము.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceNameకి కనెక్ట్ కాలేకపోయాం. దాన్ని ఆన్‌లో, దగ్గరగా ఉంచి మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'ఈ అప్‌డేట్ ఇప్పుడు అందుబాటులో లేదు. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get otaStarting => 'అప్‌డేట్ ప్రారంభమవుతోంది…';
+
+  @override
+  String get otaStartFailed => 'అప్‌డేట్ ప్రారంభించలేకపోయాం. Wi-Fi పేరు, పాస్‌వర్డ్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'కొత్త ఫర్మ్‌వేర్‌తో $deviceName రీస్టార్ట్ అవుతోంది.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'అప్‌డేట్ రద్దు చేయబడింది';
+
+  @override
+  String get cancelUpdate => 'అప్‌డేట్ రద్దు చేయండి';
+
+  @override
+  String get otaKeepNearby => 'అప్‌డేట్ సమయంలో పరికరాన్ని ఆన్‌లో, దగ్గరగా ఉంచండి; యాప్‌ను మూసివేయవద్దు.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fiకి కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fiకి కనెక్ట్ అయింది';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fiలో చేరలేకపోయాం. నెట్‌వర్క్ పేరు, పాస్‌వర్డ్ తనిఖీ చేయండి.';
+
+  @override
+  String get otaDownloadFailed => 'ఫర్మ్‌వేర్ డౌన్‌లోడ్ విఫలమైంది. Wi-Fi కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get otaInstallFailed => 'ఇన్‌స్టాలేషన్ విఫలమైంది. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName అప్‌డేట్ అయింది, అదే రీస్టార్ట్ అవుతుంది.';
+  }
+
+  @override
+  String get showPassword => 'పాస్‌వర్డ్ చూపించు';
+
+  @override
+  String get hidePassword => 'పాస్‌వర్డ్ దాచు';
 }

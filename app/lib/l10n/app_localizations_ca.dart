@@ -10269,4 +10269,87 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Actualitza el firmware de l\'OmiGlass';
+
+  @override
+  String get deviceConnecting => 'S\'està connectant…';
+
+  @override
+  String get recordOptionsTip => 'Consell: mantén premut el botó de gravació per gravar una trucada.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'L\'actualització no ha acabat. El dispositiu continua amb el firmware actual i es pot fer servir amb seguretat. Mantén-lo carregat i a prop del telèfon i torna-ho a provar.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'No s\'ha pogut baixar l\'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'La bateria és al $level%. Carrega el dispositiu com a mínim fins al 15% abans d\'actualitzar.';
+  }
+
+  @override
+  String get startUpdate => 'Inicia l\'actualització';
+
+  @override
+  String get otaNotSupported => 'Aquest firmware no es pot actualitzar per Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'No s\'ha pogut connectar a $deviceName. Mantén-lo encès i a prop i torna-ho a provar.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Aquesta actualització no està disponible ara. Torna-ho a provar més tard.';
+
+  @override
+  String get otaStarting => 'S\'està iniciant l\'actualització…';
+
+  @override
+  String get otaStartFailed =>
+      'No s\'ha pogut iniciar l\'actualització. Comprova el nom i la contrasenya de la Wi-Fi i torna-ho a provar.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName s\'està reiniciant amb el firmware nou.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'S\'ha cancel·lat l\'actualització';
+
+  @override
+  String get cancelUpdate => 'Cancel·la l\'actualització';
+
+  @override
+  String get otaKeepNearby => 'Durant l\'actualització, mantén el dispositiu encès i a prop i no tanquis l\'app.';
+
+  @override
+  String get otaWifiConnecting => 'S\'està connectant a la Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Connectat a la Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'No s\'ha pogut connectar a la Wi-Fi. Comprova el nom de la xarxa i la contrasenya.';
+
+  @override
+  String get otaDownloadFailed => 'No s\'ha pogut baixar el firmware. Comprova la connexió Wi-Fi i torna-ho a provar.';
+
+  @override
+  String get otaInstallFailed => 'La instal·lació ha fallat. El dispositiu continua amb el firmware actual.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName s\'ha actualitzat i es reiniciarà sol.';
+  }
+
+  @override
+  String get showPassword => 'Mostra la contrasenya';
+
+  @override
+  String get hidePassword => 'Amaga la contrasenya';
 }

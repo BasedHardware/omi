@@ -10214,4 +10214,86 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'OmiGlass ফার্মওয়্যার আপডেট করুন';
+
+  @override
+  String get deviceConnecting => 'সংযোগ হচ্ছে…';
+
+  @override
+  String get recordOptionsTip => 'টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতাম চেপে ধরে রাখুন।';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'আপডেট ব্যর্থ হয়েছে';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'আপডেট শেষ হয়নি। আপনার ডিভাইস এখনও বর্তমান ফার্মওয়্যারে আছে এবং ব্যবহার নিরাপদ। চার্জ দিয়ে ফোনের কাছে রাখুন, তারপর আবার চেষ্টা করুন।';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'আপডেট ডাউনলোড করা যায়নি, আপনার ডিভাইসে কোনো পরিবর্তন হয়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'ব্যাটারি $level%। আপডেটের আগে ডিভাইসটি অন্তত 15% চার্জ করুন।';
+  }
+
+  @override
+  String get startUpdate => 'আপডেট শুরু করুন';
+
+  @override
+  String get otaNotSupported => 'এই ফার্মওয়্যার Wi-Fi-এর মাধ্যমে আপডেট করা যায় না।';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName-এর সাথে সংযোগ করা যায়নি। এটি চালু ও কাছে রাখুন, তারপর আবার চেষ্টা করুন।';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'এই আপডেট এখন পাওয়া যাচ্ছে না। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get otaStarting => 'আপডেট শুরু হচ্ছে…';
+
+  @override
+  String get otaStartFailed => 'আপডেট শুরু করা যায়নি। Wi-Fi-এর নাম ও পাসওয়ার্ড দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'নতুন ফার্মওয়্যার নিয়ে $deviceName রিস্টার্ট হচ্ছে।';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'আপডেট বাতিল হয়েছে';
+
+  @override
+  String get cancelUpdate => 'আপডেট বাতিল করুন';
+
+  @override
+  String get otaKeepNearby => 'আপডেটের সময় ডিভাইসটি চালু ও কাছে রাখুন এবং অ্যাপ বন্ধ করবেন না।';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi-তে সংযোগ হচ্ছে…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi-তে সংযুক্ত';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi-তে যোগ দেওয়া যায়নি। নেটওয়ার্কের নাম ও পাসওয়ার্ড দেখুন।';
+
+  @override
+  String get otaDownloadFailed => 'ফার্মওয়্যার ডাউনলোড ব্যর্থ হয়েছে। Wi-Fi সংযোগ দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get otaInstallFailed => 'ইনস্টল ব্যর্থ হয়েছে। আপনার ডিভাইস এখনও বর্তমান ফার্মওয়্যারে আছে।';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName আপডেট হয়েছে এবং নিজে থেকেই রিস্টার্ট হবে।';
+  }
+
+  @override
+  String get showPassword => 'পাসওয়ার্ড দেখান';
+
+  @override
+  String get hidePassword => 'পাসওয়ার্ড লুকান';
 }

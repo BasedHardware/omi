@@ -12052,5 +12052,121 @@
     "updateOmiGlassFirmware": "Update OmiGlass Firmware",
     "@updateOmiGlassFirmware": {
         "description": "Card on the capture screen opening the OmiGlass update"
+    },
+    "deviceConnecting": "Connecting…",
+    "@deviceConnecting": {
+        "description": "Header device pill while a paired device reconnects"
+    },
+    "recordOptionsTip": "Tip: press and hold the record button to record a phone call.",
+    "@recordOptionsTip": {
+        "description": "One-time hint after the first phone-mic recording"
+    },
+    "firmwareUpdateFailedTitle": "Update Failed",
+    "@firmwareUpdateFailedTitle": {
+        "description": "Title of the firmware update failed state"
+    },
+    "firmwareUpdateFailedMessage": "The update didn't finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.",
+    "@firmwareUpdateFailedMessage": {
+        "description": "Firmware update failed while installing"
+    },
+    "firmwareDownloadFailedMessage": "The update couldn't be downloaded, and your device wasn't changed. Check your internet connection, then try again.",
+    "@firmwareDownloadFailedMessage": {
+        "description": "Firmware download failed"
+    },
+    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 15% before updating.",
+    "@firmwareBatteryTooLow": {
+        "description": "Firmware update blocked by low battery",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    },
+    "startUpdate": "Start Update",
+    "@startUpdate": {
+        "description": "Pre-flight sheet button that starts a firmware update"
+    },
+    "otaNotSupported": "This firmware can't be updated over Wi-Fi.",
+    "@otaNotSupported": {
+        "description": "OmiGlass OTA not supported on current firmware"
+    },
+    "otaConnectFailed": "Couldn't connect to {deviceName}. Keep it on and nearby, then try again.",
+    "@otaConnectFailed": {
+        "description": "OmiGlass OTA could not reach the device",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "otaUpdateUnavailable": "This update isn't available right now. Try again later.",
+    "@otaUpdateUnavailable": {
+        "description": "OmiGlass OTA has no download URL"
+    },
+    "otaStarting": "Starting update…",
+    "@otaStarting": {
+        "description": "OmiGlass OTA starting"
+    },
+    "otaStartFailed": "Couldn't start the update. Check the Wi-Fi name and password, then try again.",
+    "@otaStartFailed": {
+        "description": "OmiGlass OTA failed to start"
+    },
+    "otaRebooting": "{deviceName} is restarting with the new firmware.",
+    "@otaRebooting": {
+        "description": "OmiGlass OTA installed, device rebooting",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "otaUpdateCancelled": "Update cancelled",
+    "@otaUpdateCancelled": {
+        "description": "Toast after cancelling an OmiGlass update"
+    },
+    "cancelUpdate": "Cancel Update",
+    "@cancelUpdate": {
+        "description": "Button that stops an OmiGlass update"
+    },
+    "otaKeepNearby": "Keep your device on and nearby during the update, and don't close the app.",
+    "@otaKeepNearby": {
+        "description": "Shown before an OmiGlass update starts"
+    },
+    "otaWifiConnecting": "Connecting to Wi-Fi…",
+    "@otaWifiConnecting": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaWifiConnected": "Connected to Wi-Fi",
+    "@otaWifiConnected": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaWifiFailed": "Couldn't join Wi-Fi. Check the network name and password.",
+    "@otaWifiFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaDownloadFailed": "The firmware download failed. Check the Wi-Fi connection and try again.",
+    "@otaDownloadFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaInstallFailed": "Installation failed. Your device is still on its current firmware.",
+    "@otaInstallFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaUpdatedMessage": "{deviceName} is updated and will restart on its own.",
+    "@otaUpdatedMessage": {
+        "description": "OmiGlass OTA success message",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "showPassword": "Show password",
+    "@showPassword": {
+        "description": "Tooltip on the password visibility toggle"
+    },
+    "hidePassword": "Hide password",
+    "@hidePassword": {
+        "description": "Tooltip on the password visibility toggle"
     }
 }

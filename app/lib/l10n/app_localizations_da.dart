@@ -10197,4 +10197,86 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Opdater OmiGlass-firmware';
+
+  @override
+  String get deviceConnecting => 'Opretter forbindelse…';
+
+  @override
+  String get recordOptionsTip => 'Tip: tryk og hold på optageknappen for at optage et telefonopkald.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Opdateringen mislykkedes';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Opdateringen blev ikke færdig. Din enhed kører stadig den nuværende firmware og er sikker at bruge. Hold den opladet og tæt på telefonen, og prøv igen.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Opdateringen kunne ikke hentes, og din enhed er ikke ændret. Tjek din internetforbindelse, og prøv igen.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Batteriet er på $level %. Oplad enheden til mindst 15 %, før du opdaterer.';
+  }
+
+  @override
+  String get startUpdate => 'Start opdatering';
+
+  @override
+  String get otaNotSupported => 'Denne firmware kan ikke opdateres via Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Kunne ikke oprette forbindelse til $deviceName. Hold den tændt og tæt på, og prøv igen.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Denne opdatering er ikke tilgængelig lige nu. Prøv igen senere.';
+
+  @override
+  String get otaStarting => 'Starter opdatering…';
+
+  @override
+  String get otaStartFailed => 'Opdateringen kunne ikke startes. Tjek Wi-Fi-navn og adgangskode, og prøv igen.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName genstarter med den nye firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Opdateringen er annulleret';
+
+  @override
+  String get cancelUpdate => 'Annuller opdatering';
+
+  @override
+  String get otaKeepNearby => 'Hold enheden tændt og tæt på under opdateringen, og luk ikke appen.';
+
+  @override
+  String get otaWifiConnecting => 'Opretter forbindelse til Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Forbundet til Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Kunne ikke oprette forbindelse til Wi-Fi. Tjek netværksnavn og adgangskode.';
+
+  @override
+  String get otaDownloadFailed => 'Download af firmware mislykkedes. Tjek Wi-Fi-forbindelsen, og prøv igen.';
+
+  @override
+  String get otaInstallFailed => 'Installationen mislykkedes. Din enhed kører stadig den nuværende firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName er opdateret og genstarter af sig selv.';
+  }
+
+  @override
+  String get showPassword => 'Vis adgangskode';
+
+  @override
+  String get hidePassword => 'Skjul adgangskode';
 }

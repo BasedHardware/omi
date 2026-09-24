@@ -10258,4 +10258,86 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Actualizează firmware-ul OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Se conectează…';
+
+  @override
+  String get recordOptionsTip => 'Sfat: ține apăsat butonul de înregistrare pentru a înregistra un apel.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Actualizarea a eșuat';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Actualizarea nu s-a încheiat. Dispozitivul are în continuare firmware-ul actual și poate fi folosit în siguranță. Ține-l încărcat și aproape de telefon, apoi încearcă din nou.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Actualizarea nu a putut fi descărcată, iar dispozitivul nu a fost modificat. Verifică conexiunea la internet, apoi încearcă din nou.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Bateria este la $level%. Încarcă dispozitivul la cel puțin 15% înainte de actualizare.';
+  }
+
+  @override
+  String get startUpdate => 'Pornește actualizarea';
+
+  @override
+  String get otaNotSupported => 'Acest firmware nu poate fi actualizat prin Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Nu s-a putut conecta la $deviceName. Ține-l pornit și aproape, apoi încearcă din nou.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Această actualizare nu este disponibilă acum. Încearcă mai târziu.';
+
+  @override
+  String get otaStarting => 'Se pornește actualizarea…';
+
+  @override
+  String get otaStartFailed => 'Actualizarea nu a putut porni. Verifică numele și parola Wi-Fi, apoi încearcă din nou.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName repornește cu noul firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Actualizare anulată';
+
+  @override
+  String get cancelUpdate => 'Anulează actualizarea';
+
+  @override
+  String get otaKeepNearby => 'În timpul actualizării, ține dispozitivul pornit și aproape și nu închide aplicația.';
+
+  @override
+  String get otaWifiConnecting => 'Conectare la Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Conectat la Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Nu s-a putut conecta la Wi-Fi. Verifică numele rețelei și parola.';
+
+  @override
+  String get otaDownloadFailed => 'Descărcarea firmware-ului a eșuat. Verifică conexiunea Wi-Fi și încearcă din nou.';
+
+  @override
+  String get otaInstallFailed => 'Instalarea a eșuat. Dispozitivul are în continuare firmware-ul actual.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName a fost actualizat și va reporni singur.';
+  }
+
+  @override
+  String get showPassword => 'Afișează parola';
+
+  @override
+  String get hidePassword => 'Ascunde parola';
 }

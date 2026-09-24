@@ -10214,4 +10214,86 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Päivitä OmiGlassin laiteohjelmisto';
+
+  @override
+  String get deviceConnecting => 'Yhdistetään…';
+
+  @override
+  String get recordOptionsTip => 'Vinkki: tallenna puhelu painamalla tallennuspainiketta pitkään.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Päivitys ei valmistunut. Laitteessasi on yhä nykyinen laiteohjelmisto, ja sitä on turvallista käyttää. Pidä se ladattuna ja lähellä puhelinta ja yritä uudelleen.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Akun varaus on $level %. Lataa laite vähintään 15 %:iin ennen päivitystä.';
+  }
+
+  @override
+  String get startUpdate => 'Aloita päivitys';
+
+  @override
+  String get otaNotSupported => 'Tätä laiteohjelmistoa ei voi päivittää Wi-Fin kautta.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Laitteeseen $deviceName ei saatu yhteyttä. Pidä se päällä ja lähellä ja yritä uudelleen.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Tämä päivitys ei ole juuri nyt saatavilla. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get otaStarting => 'Aloitetaan päivitystä…';
+
+  @override
+  String get otaStartFailed => 'Päivitystä ei voitu aloittaa. Tarkista Wi-Fin nimi ja salasana ja yritä uudelleen.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName käynnistyy uudelleen uudella laiteohjelmistolla.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Päivitys peruttiin';
+
+  @override
+  String get cancelUpdate => 'Peruuta päivitys';
+
+  @override
+  String get otaKeepNearby => 'Pidä laite päivityksen ajan päällä ja lähellä, äläkä sulje sovellusta.';
+
+  @override
+  String get otaWifiConnecting => 'Yhdistetään Wi-Fiin…';
+
+  @override
+  String get otaWifiConnected => 'Yhdistetty Wi-Fiin';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fiin ei voitu liittyä. Tarkista verkon nimi ja salasana.';
+
+  @override
+  String get otaDownloadFailed => 'Laiteohjelmiston lataus epäonnistui. Tarkista Wi-Fi-yhteys ja yritä uudelleen.';
+
+  @override
+  String get otaInstallFailed => 'Asennus epäonnistui. Laitteessasi on yhä nykyinen laiteohjelmisto.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName on päivitetty ja käynnistyy uudelleen itsestään.';
+  }
+
+  @override
+  String get showPassword => 'Näytä salasana';
+
+  @override
+  String get hidePassword => 'Piilota salasana';
 }

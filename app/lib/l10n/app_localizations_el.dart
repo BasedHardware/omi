@@ -10282,4 +10282,87 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Ενημέρωση υλικολογισμικού OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Σύνδεση…';
+
+  @override
+  String get recordOptionsTip => 'Συμβουλή: πατήστε παρατεταμένα το κουμπί εγγραφής για να καταγράψετε μια κλήση.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Η ενημέρωση δεν ολοκληρώθηκε. Η συσκευή σας έχει ακόμη το τρέχον υλικολογισμικό και μπορεί να χρησιμοποιηθεί με ασφάλεια. Κρατήστε τη φορτισμένη και κοντά στο τηλέφωνο και δοκιμάστε ξανά.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Δεν ήταν δυνατή η λήψη της ενημέρωσης και η συσκευή σας δεν άλλαξε. Ελέγξτε τη σύνδεση στο διαδίκτυο και δοκιμάστε ξανά.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Η μπαταρία είναι στο $level%. Φορτίστε τη συσκευή τουλάχιστον στο 15% πριν από την ενημέρωση.';
+  }
+
+  @override
+  String get startUpdate => 'Έναρξη ενημέρωσης';
+
+  @override
+  String get otaNotSupported => 'Αυτό το υλικολογισμικό δεν μπορεί να ενημερωθεί μέσω Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Δεν ήταν δυνατή η σύνδεση με $deviceName. Κρατήστε τη συσκευή ενεργή και κοντά και δοκιμάστε ξανά.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Αυτή η ενημέρωση δεν είναι διαθέσιμη τώρα. Δοκιμάστε αργότερα.';
+
+  @override
+  String get otaStarting => 'Έναρξη ενημέρωσης…';
+
+  @override
+  String get otaStartFailed =>
+      'Δεν ήταν δυνατή η έναρξη της ενημέρωσης. Ελέγξτε το όνομα και τον κωδικό του Wi-Fi και δοκιμάστε ξανά.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'Η συσκευή $deviceName επανεκκινείται με το νέο υλικολογισμικό.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Η ενημέρωση ακυρώθηκε';
+
+  @override
+  String get cancelUpdate => 'Ακύρωση ενημέρωσης';
+
+  @override
+  String get otaKeepNearby => 'Κατά την ενημέρωση κρατήστε τη συσκευή ενεργή και κοντά και μην κλείσετε την εφαρμογή.';
+
+  @override
+  String get otaWifiConnecting => 'Σύνδεση σε Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Συνδέθηκε σε Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Δεν ήταν δυνατή η σύνδεση στο Wi-Fi. Ελέγξτε το όνομα δικτύου και τον κωδικό.';
+
+  @override
+  String get otaDownloadFailed => 'Η λήψη του υλικολογισμικού απέτυχε. Ελέγξτε τη σύνδεση Wi-Fi και δοκιμάστε ξανά.';
+
+  @override
+  String get otaInstallFailed => 'Η εγκατάσταση απέτυχε. Η συσκευή σας έχει ακόμη το τρέχον υλικολογισμικό.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'Η συσκευή $deviceName ενημερώθηκε και θα επανεκκινηθεί αυτόματα.';
+  }
+
+  @override
+  String get showPassword => 'Εμφάνιση κωδικού';
+
+  @override
+  String get hidePassword => 'Απόκρυψη κωδικού';
 }

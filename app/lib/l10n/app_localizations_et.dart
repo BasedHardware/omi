@@ -10206,4 +10206,87 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get updateOmiGlassFirmware => 'Värskenda OmiGlassi püsivara';
+
+  @override
+  String get deviceConnecting => 'Ühendamine…';
+
+  @override
+  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks vajuta salvestusnuppu ja hoia all.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Värskendus ei lõppenud. Seadmel on endiselt praegune püsivara ja seda on ohutu kasutada. Hoia see laetuna ja telefoni lähedal ning proovi uuesti.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Värskendust ei õnnestunud alla laadida ja seadet ei muudetud. Kontrolli internetiühendust ja proovi uuesti.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Aku on $level%. Lae seade enne värskendamist vähemalt 15%-ni.';
+  }
+
+  @override
+  String get startUpdate => 'Alusta värskendamist';
+
+  @override
+  String get otaNotSupported => 'Seda püsivara ei saa Wi-Fi kaudu värskendada.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Seadmega $deviceName ei saanud ühendust. Hoia see sisse lülitatuna ja lähedal ning proovi uuesti.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'See värskendus pole praegu saadaval. Proovi hiljem uuesti.';
+
+  @override
+  String get otaStarting => 'Värskenduse alustamine…';
+
+  @override
+  String get otaStartFailed =>
+      'Värskendust ei õnnestunud alustada. Kontrolli Wi-Fi nime ja parooli ning proovi uuesti.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName taaskäivitub uue püsivaraga.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Värskendus tühistati';
+
+  @override
+  String get cancelUpdate => 'Tühista värskendus';
+
+  @override
+  String get otaKeepNearby => 'Hoia seade värskenduse ajal sisse lülitatuna ja lähedal ning ära sulge rakendust.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi-ga ühendamine…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi-ga ühendatud';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi-ga ei õnnestunud liituda. Kontrolli võrgu nime ja parooli.';
+
+  @override
+  String get otaDownloadFailed => 'Püsivara allalaadimine ebaõnnestus. Kontrolli Wi-Fi-ühendust ja proovi uuesti.';
+
+  @override
+  String get otaInstallFailed => 'Installimine ebaõnnestus. Seadmel on endiselt praegune püsivara.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName on värskendatud ja taaskäivitub ise.';
+  }
+
+  @override
+  String get showPassword => 'Näita parooli';
+
+  @override
+  String get hidePassword => 'Peida parool';
 }
