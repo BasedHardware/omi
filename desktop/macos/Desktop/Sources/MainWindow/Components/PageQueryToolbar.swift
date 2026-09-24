@@ -148,7 +148,9 @@ struct PageQueryControlLabel: View {
 /// Textual action chrome for page-level operations. Primary actions invert the
 /// shared ink; secondary actions retain the neutral chip treatment.
 struct PageQueryActionLabel: View {
-  let icon: String
+  /// A glyph the chip can collapse to when the toolbar is narrow. `nil` draws the word alone —
+  /// for an action whose word already says everything a glyph could.
+  var icon: String? = nil
   let title: String
   var isPrimary = false
   @State private var isHovering = false
@@ -156,15 +158,19 @@ struct PageQueryActionLabel: View {
   var body: some View {
     ViewThatFits(in: .horizontal) {
       HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
+        if let icon {
+          Image(systemName: icon)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+        }
         Text(title)
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .lineLimit(1)
       }
 
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
+      if let icon {
+        Image(systemName: icon)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
     }
     .foregroundStyle(isPrimary ? Ink.surface : Ink.primary)
     .tint(isPrimary ? Ink.surface : Ink.primary)
