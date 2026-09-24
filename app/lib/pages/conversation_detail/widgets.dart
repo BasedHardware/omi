@@ -98,6 +98,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
       decoration: InputDecoration(
         border: const OutlineInputBorder(borderSide: BorderSide.none),
         contentPadding: EdgeInsets.zero,
+        isDense: true,
         hintText: context.l10n.untitledConversation,
         hintStyle: widget.style.copyWith(color: OmiColors.textTertiary),
       ),

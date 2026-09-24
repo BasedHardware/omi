@@ -79,14 +79,11 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title3.copyWith(height: 1.25);
+    // The title is one line, so the emoji centres on it.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!conversation.discarded) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: ExcludeSemantics(child: Text(conversation.structured.getEmoji(), style: titleStyle)),
-          ),
+          ExcludeSemantics(child: Text(conversation.structured.getEmoji(), style: titleStyle)),
           const SizedBox(width: 10),
         ],
         Expanded(
