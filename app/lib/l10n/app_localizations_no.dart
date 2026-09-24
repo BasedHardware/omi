@@ -11060,4 +11060,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Anheng';
+
+  @override
+  String get conversationDeveloperTools => 'Utviklerverktøy i samtaler';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Vis Kopier samtale-ID og Test ledetekst i samtalens meny';
 }

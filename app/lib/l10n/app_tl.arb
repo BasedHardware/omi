@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Desktop",
     "renameConversation": "Palitan ang pangalan",
     "captureRecordingsCount": "{count, plural, =1{1 recording} other{{count} recording}}",
-    "captureSourcePendant": "Pendant"
+    "captureSourcePendant": "Pendant",
+    "conversationDeveloperTools": "Mga developer tool sa mga usapan",
+    "conversationDeveloperToolsDescription": "Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan"
 }

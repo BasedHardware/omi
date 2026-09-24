@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Računalo",
     "renameConversation": "Preimenuj",
     "captureRecordingsCount": "{count, plural, =1{1 snimka} other{Snimki: {count}}}",
-    "captureSourcePendant": "Privjesak"
+    "captureSourcePendant": "Privjesak",
+    "conversationDeveloperTools": "Alati za razvojne programere u razgovorima",
+    "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj upit u izborniku razgovora"
 }

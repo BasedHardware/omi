@@ -10996,4 +10996,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'จี้';
+
+  @override
+  String get conversationDeveloperTools => 'เครื่องมือนักพัฒนาในบทสนทนา';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'แสดง คัดลอก ID บทสนทนา และ ทดสอบพรอมต์ ในเมนูของบทสนทนา';
 }

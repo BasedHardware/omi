@@ -11081,4 +11081,11 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Кулон';
+
+  @override
+  String get conversationDeveloperTools => 'Інструменти розробника в розмовах';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Показувати «Копіювати ID розмови» і «Перевірити промпт» у меню розмови';
 }

@@ -3532,5 +3532,7 @@
     "captureSourceDesktop": "Komputer",
     "renameConversation": "Zmień nazwę",
     "captureRecordingsCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}",
-    "captureSourcePendant": "Wisiorek"
+    "captureSourcePendant": "Wisiorek",
+    "conversationDeveloperTools": "Narzędzia deweloperskie w rozmowach",
+    "conversationDeveloperToolsDescription": "Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy"
 }

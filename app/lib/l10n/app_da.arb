@@ -3539,5 +3539,7 @@
     "captureSourceDesktop": "Computer",
     "renameConversation": "Omdøb",
     "captureRecordingsCount": "{count, plural, =1{1 optagelse} other{{count} optagelser}}",
-    "captureSourcePendant": "Vedhæng"
+    "captureSourcePendant": "Vedhæng",
+    "conversationDeveloperTools": "Udviklerværktøjer i samtaler",
+    "conversationDeveloperToolsDescription": "Vis Kopiér samtale-id og Test prompt i samtalens menu"
 }

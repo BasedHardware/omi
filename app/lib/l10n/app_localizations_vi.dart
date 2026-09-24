@@ -11054,4 +11054,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Mặt dây chuyền';
+
+  @override
+  String get conversationDeveloperTools => 'Công cụ nhà phát triển trong cuộc trò chuyện';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện';
 }

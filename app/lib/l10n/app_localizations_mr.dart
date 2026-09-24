@@ -11069,4 +11069,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'पेंडंट';
+
+  @override
+  String get conversationDeveloperTools => 'संभाषणांमधील डेव्हलपर साधने';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा';
 }

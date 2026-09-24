@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "ڈیسک ٹاپ",
     "renameConversation": "نام تبدیل کریں",
     "captureRecordingsCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}",
-    "captureSourcePendant": "پینڈنٹ"
+    "captureSourcePendant": "پینڈنٹ",
+    "conversationDeveloperTools": "گفتگو میں ڈویلپر ٹولز",
+    "conversationDeveloperToolsDescription": "گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں"
 }

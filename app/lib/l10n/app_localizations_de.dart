@@ -11152,4 +11152,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Anhänger';
+
+  @override
+  String get conversationDeveloperTools => 'Entwicklertools in Gesprächen';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      '„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen';
 }

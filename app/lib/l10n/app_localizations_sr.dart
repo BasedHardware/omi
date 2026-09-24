@@ -11075,4 +11075,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Привезак';
+
+  @override
+  String get conversationDeveloperTools => 'Алати за програмере у разговорима';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Прикажи „Копирај ID разговора“ и „Тестирај упит“ у менију разговора';
 }

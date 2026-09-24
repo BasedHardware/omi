@@ -10993,4 +10993,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'القلادة';
+
+  @override
+  String get conversationDeveloperTools => 'أدوات المطوّر في المحادثات';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة';
 }

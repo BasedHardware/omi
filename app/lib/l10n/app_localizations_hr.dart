@@ -11097,4 +11097,11 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Privjesak';
+
+  @override
+  String get conversationDeveloperTools => 'Alati za razvojne programere u razgovorima';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Prikaži Kopiraj ID razgovora i Testiraj upit u izborniku razgovora';
 }

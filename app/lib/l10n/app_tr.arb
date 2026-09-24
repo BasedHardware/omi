@@ -3532,5 +3532,7 @@
     "captureSourceDesktop": "Bilgisayar",
     "renameConversation": "Yeniden adlandır",
     "captureRecordingsCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}",
-    "captureSourcePendant": "Kolye"
+    "captureSourcePendant": "Kolye",
+    "conversationDeveloperTools": "Konuşmalarda geliştirici araçları",
+    "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster"
 }

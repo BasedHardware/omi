@@ -11090,4 +11090,11 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Privjesak';
+
+  @override
+  String get conversationDeveloperTools => 'Alati za programere u razgovorima';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora';
 }

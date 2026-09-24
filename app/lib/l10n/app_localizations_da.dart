@@ -11047,4 +11047,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Vedhæng';
+
+  @override
+  String get conversationDeveloperTools => 'Udviklerværktøjer i samtaler';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Vis Kopiér samtale-id og Test prompt i samtalens menu';
 }

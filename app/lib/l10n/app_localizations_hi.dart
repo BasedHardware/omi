@@ -11040,4 +11040,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'पेंडेंट';
+
+  @override
+  String get conversationDeveloperTools => 'बातचीत में डेवलपर टूल';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'बातचीत के मेनू में बातचीत आईडी कॉपी करें और प्रॉम्प्ट टेस्ट करें दिखाएँ';
 }

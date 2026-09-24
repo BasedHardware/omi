@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Tietokone",
     "renameConversation": "Nimeä uudelleen",
     "captureRecordingsCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}",
-    "captureSourcePendant": "Riipus"
+    "captureSourcePendant": "Riipus",
+    "conversationDeveloperTools": "Kehittäjätyökalut keskusteluissa",
+    "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa"
 }

@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Počítač",
     "renameConversation": "Přejmenovat",
     "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávek: {count}}}",
-    "captureSourcePendant": "Přívěsek"
+    "captureSourcePendant": "Přívěsek",
+    "conversationDeveloperTools": "Vývojářské nástroje v konverzacích",
+    "conversationDeveloperToolsDescription": "Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace"
 }

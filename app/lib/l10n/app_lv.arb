@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Dators",
     "renameConversation": "Pārdēvēt",
     "captureRecordingsCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}",
-    "captureSourcePendant": "Kulons"
+    "captureSourcePendant": "Kulons",
+    "conversationDeveloperTools": "Izstrādātāja rīki sarunās",
+    "conversationDeveloperToolsDescription": "Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”"
 }

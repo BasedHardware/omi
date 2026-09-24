@@ -11057,4 +11057,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Přívěsek';
+
+  @override
+  String get conversationDeveloperTools => 'Vývojářské nástroje v konverzacích';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace';
 }

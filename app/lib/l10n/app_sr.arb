@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Рачунар",
     "renameConversation": "Преименуј",
     "captureRecordingsCount": "{count, plural, =1{1 снимак} other{Снимака: {count}}}",
-    "captureSourcePendant": "Привезак"
+    "captureSourcePendant": "Привезак",
+    "conversationDeveloperTools": "Алати за програмере у разговорима",
+    "conversationDeveloperToolsDescription": "Прикажи „Копирај ID разговора“ и „Тестирај упит“ у менију разговора"
 }

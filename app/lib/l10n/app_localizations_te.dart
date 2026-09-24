@@ -11108,4 +11108,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'పెండెంట్';
+
+  @override
+  String get conversationDeveloperTools => 'సంభాషణల్లో డెవలపర్ సాధనాలు';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు';
 }

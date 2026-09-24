@@ -11088,4 +11088,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Kulons';
+
+  @override
+  String get conversationDeveloperTools => 'Izstrādātāja rīki sarunās';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”';
 }

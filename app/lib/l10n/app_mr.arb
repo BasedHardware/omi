@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "डेस्कटॉप",
     "renameConversation": "नाव बदला",
     "captureRecordingsCount": "{count, plural, =1{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
-    "captureSourcePendant": "पेंडंट"
+    "captureSourcePendant": "पेंडंट",
+    "conversationDeveloperTools": "संभाषणांमधील डेव्हलपर साधने",
+    "conversationDeveloperToolsDescription": "संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा"
 }

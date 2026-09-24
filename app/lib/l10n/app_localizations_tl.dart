@@ -11157,4 +11157,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pendant';
+
+  @override
+  String get conversationDeveloperTools => 'Mga developer tool sa mga usapan';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan';
 }

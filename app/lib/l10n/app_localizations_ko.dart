@@ -10883,4 +10883,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureSourcePendant => '펜던트';
+
+  @override
+  String get conversationDeveloperTools => '대화의 개발자 도구';
+
+  @override
+  String get conversationDeveloperToolsDescription => '대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시';
 }

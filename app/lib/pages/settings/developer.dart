@@ -267,6 +267,13 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       header: l10n.experimental,
       children: [
         OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.code),
+          title: l10n.conversationDeveloperTools,
+          subtitle: l10n.conversationDeveloperToolsDescription,
+          value: SharedPreferencesUtil().devModeEnabled,
+          onChanged: (v) => setState(() => SharedPreferencesUtil().devModeEnabled = v),
+        ),
+        OmiSettingsRow.toggle(
           leading: const FaIcon(FontAwesomeIcons.stethoscope),
           title: l10n.transcriptionDiagnostics,
           subtitle: l10n.detailedDiagnosticMessages,

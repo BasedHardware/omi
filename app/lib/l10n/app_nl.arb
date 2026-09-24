@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Computer",
     "renameConversation": "Naam wijzigen",
     "captureRecordingsCount": "{count, plural, =1{1 opname} other{{count} opnamen}}",
-    "captureSourcePendant": "Hanger"
+    "captureSourcePendant": "Hanger",
+    "conversationDeveloperTools": "Ontwikkelaarstools in gesprekken",
+    "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek"
 }

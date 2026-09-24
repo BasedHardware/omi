@@ -11070,4 +11070,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Hänge';
+
+  @override
+  String get conversationDeveloperTools => 'Utvecklarverktyg i samtal';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Visa Kopiera samtals-ID och Testa prompt i samtalets meny';
 }

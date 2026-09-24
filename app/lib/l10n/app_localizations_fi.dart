@@ -11063,4 +11063,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Riipus';
+
+  @override
+  String get conversationDeveloperTools => 'Kehittäjätyökalut keskusteluissa';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa';
 }

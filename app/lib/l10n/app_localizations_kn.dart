@@ -11094,4 +11094,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'ಪೆಂಡೆಂಟ್';
+
+  @override
+  String get conversationDeveloperTools => 'ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ';
 }

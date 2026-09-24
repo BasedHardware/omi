@@ -11094,4 +11094,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Hanger';
+
+  @override
+  String get conversationDeveloperTools => 'Ontwikkelaarstools in gesprekken';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek';
 }

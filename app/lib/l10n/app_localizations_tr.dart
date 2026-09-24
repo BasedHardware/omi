@@ -11072,4 +11072,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Kolye';
+
+  @override
+  String get conversationDeveloperTools => 'Konuşmalarda geliştirici araçları';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster';
 }

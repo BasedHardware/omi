@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Arvuti",
     "renameConversation": "Nimeta ümber",
     "captureRecordingsCount": "{count, plural, =1{1 salvestis} other{{count} salvestist}}",
-    "captureSourcePendant": "Ripats"
+    "captureSourcePendant": "Ripats",
+    "conversationDeveloperTools": "Arendaja tööriistad vestlustes",
+    "conversationDeveloperToolsDescription": "Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa"
 }

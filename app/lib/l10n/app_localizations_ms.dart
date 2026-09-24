@@ -11088,4 +11088,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Loket';
+
+  @override
+  String get conversationDeveloperTools => 'Alat pembangun dalam perbualan';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan';
 }

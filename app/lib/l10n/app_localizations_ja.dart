@@ -10879,4 +10879,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'ペンダント';
+
+  @override
+  String get conversationDeveloperTools => '会話の開発者ツール';
+
+  @override
+  String get conversationDeveloperToolsDescription => '会話のメニューに「会話IDをコピー」と「プロンプトをテスト」を表示';
 }

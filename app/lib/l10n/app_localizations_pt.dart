@@ -11074,4 +11074,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pendente';
+
+  @override
+  String get conversationDeveloperTools => 'Ferramentas de programador nas conversas';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Mostrar Copiar ID da conversa e Testar prompt no menu da conversa';
 }

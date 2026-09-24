@@ -11070,4 +11070,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Liontin';
+
+  @override
+  String get conversationDeveloperTools => 'Alat pengembang di percakapan';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan';
 }

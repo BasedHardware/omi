@@ -20174,6 +20174,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant'**
   String get captureSourcePendant;
+
+  /// Developer Settings switch that shows developer actions in a conversation's menu
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Developer Tools'**
+  String get conversationDeveloperTools;
+
+  /// Subtitle of the Conversation Developer Tools switch
+  ///
+  /// In en, this message translates to:
+  /// **'Show Copy Conversation ID and Test Prompt in a conversation\'s menu'**
+  String get conversationDeveloperToolsDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

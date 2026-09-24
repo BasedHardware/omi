@@ -11103,4 +11103,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Medál';
+
+  @override
+  String get conversationDeveloperTools => 'Fejlesztői eszközök a beszélgetésekben';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'A beszélgetés menüjében jelenjen meg a Beszélgetésazonosító másolása és a Prompt tesztelése';
 }

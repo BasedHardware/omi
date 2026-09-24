@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Компютър",
     "renameConversation": "Преименувай",
     "captureRecordingsCount": "{count, plural, =1{1 запис} other{{count} записа}}",
-    "captureSourcePendant": "Висулка"
+    "captureSourcePendant": "Висулка",
+    "conversationDeveloperTools": "Инструменти за разработчици в разговорите",
+    "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора"
 }

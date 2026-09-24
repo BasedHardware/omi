@@ -10971,4 +10971,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'תליון';
+
+  @override
+  String get conversationDeveloperTools => 'כלי מפתחים בשיחות';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה';
 }

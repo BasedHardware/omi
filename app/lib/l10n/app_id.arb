@@ -3532,5 +3532,7 @@
     "captureSourceDesktop": "Desktop",
     "renameConversation": "Ganti nama",
     "captureRecordingsCount": "{count, plural, =1{1 rekaman} other{{count} rekaman}}",
-    "captureSourcePendant": "Liontin"
+    "captureSourcePendant": "Liontin",
+    "conversationDeveloperTools": "Alat pengembang di percakapan",
+    "conversationDeveloperToolsDescription": "Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan"
 }

@@ -11090,4 +11090,11 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Кулон';
+
+  @override
+  String get conversationDeveloperTools => 'Інструменты распрацоўшчыка ў размовах';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы';
 }

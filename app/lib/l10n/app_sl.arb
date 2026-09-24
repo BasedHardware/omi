@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Računalnik",
     "renameConversation": "Preimenuj",
     "captureRecordingsCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}",
-    "captureSourcePendant": "Obesek"
+    "captureSourcePendant": "Obesek",
+    "conversationDeveloperTools": "Razvijalska orodja v pogovorih",
+    "conversationDeveloperToolsDescription": "Pokaži Kopiraj ID pogovora in Preizkusi poziv v meniju pogovora"
 }

@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Компјутер",
     "renameConversation": "Преименувај",
     "captureRecordingsCount": "{count, plural, =1{1 снимка} other{{count} снимки}}",
-    "captureSourcePendant": "Приврзок"
+    "captureSourcePendant": "Приврзок",
+    "conversationDeveloperTools": "Алатки за програмери во разговорите",
+    "conversationDeveloperToolsDescription": "Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот"
 }

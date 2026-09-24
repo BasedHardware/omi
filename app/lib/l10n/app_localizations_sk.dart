@@ -11051,4 +11051,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Prívesok';
+
+  @override
+  String get conversationDeveloperTools => 'Vývojárske nástroje v konverzáciách';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie';
 }

@@ -11093,4 +11093,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Obesek';
+
+  @override
+  String get conversationDeveloperTools => 'Razvijalska orodja v pogovorih';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Pokaži Kopiraj ID pogovora in Preizkusi poziv v meniju pogovora';
 }

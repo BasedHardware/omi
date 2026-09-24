@@ -11070,4 +11070,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'پینڈنٹ';
+
+  @override
+  String get conversationDeveloperTools => 'گفتگو میں ڈویلپر ٹولز';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں';
 }

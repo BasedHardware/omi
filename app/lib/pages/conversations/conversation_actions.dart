@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -152,22 +153,39 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
   );
 }
 
-/// Makes [conversation] shareable and opens the system share sheet with its link.
+/// Shares [conversation]'s link, the same way the conversation page does: a private conversation
+/// first asks ("Anyone with the link can view"), becomes shared, and goes back to private when the
+/// share sheet is dismissed without sharing.
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
-  final ok = await setConversationVisibility(conversation.id);
-  if (!context.mounted) return;
-  if (!ok) {
-    OmiFeedback.error(context, l10n.conversationUrlNotShared);
-    return;
+  final wasPrivate = conversation.visibility != ConversationVisibility.shared;
+  if (wasPrivate) {
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.shareConversationQuestion,
+      message: l10n.anyoneWithLinkCanView,
+      confirmLabel: l10n.share,
+    );
+    if (!confirmed || !context.mounted) return;
+    final ok = await setConversationVisibility(conversation.id);
+    if (!context.mounted) return;
+    if (!ok) {
+      OmiFeedback.error(context, l10n.conversationUrlNotShared);
+      return;
+    }
+    conversation.visibility = ConversationVisibility.shared;
   }
-  conversation.visibility = ConversationVisibility.shared;
   PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
   final box = context.findRenderObject() as RenderBox?;
-  shareConversationLink(
+  final outcome = await shareConversationLink(
     conversation,
-    sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+    sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
   );
+  if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
+    final reverted =
+        await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+    if (reverted) conversation.visibility = ConversationVisibility.private_;
+  }
 }
 
 /// Moves one conversation into a folder the reader picks.
@@ -247,13 +265,17 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   );
 }
 
+/// Builds the separation controller the row menu uses; tests inject a fake server call.
+@visibleForTesting
+CaptureGroupSeparationController Function() rowSeparationController = CaptureGroupSeparationController.new;
+
 /// The recordings of a grouped row's event, in the same sheet the conversation page uses: a row opens
 /// that recording's conversation; Separate… confirms, separates and reloads the list.
 Future<void> showConversationRowRecordings(BuildContext context, ServerConversation conversation) async {
   final recordings = CaptureGroupPresentation.recordings(conversation);
   if (recordings.length < 2) return;
   final list = context.read<ConversationProvider>();
-  final controller = CaptureGroupSeparationController();
+  final controller = rowSeparationController();
   try {
     await showCaptureRecordingsSheet(
       context,
@@ -277,9 +299,13 @@ Future<void> separateFromConversationRow(BuildContext context, ServerConversatio
   if (!await confirmCaptureRecordingSeparation(context, recording) || !context.mounted) return;
   final list = context.read<ConversationProvider>();
   final failed = context.l10n.captureRecordingSeparateFailed;
-  final controller = CaptureGroupSeparationController();
-  final separated = await controller.separate(recording.id, reload: () => _reloadConversationList(list));
-  controller.dispose();
+  final controller = rowSeparationController();
+  final bool separated;
+  try {
+    separated = await controller.separate(recording.id, reload: () => _reloadConversationList(list));
+  } finally {
+    controller.dispose();
+  }
   if (!separated && context.mounted) OmiFeedback.error(context, failed);
 }
 

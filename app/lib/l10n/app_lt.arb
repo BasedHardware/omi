@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Kompiuteris",
     "renameConversation": "Pervadinti",
     "captureRecordingsCount": "{count, plural, =1{1 įrašas} other{Įrašų: {count}}}",
-    "captureSourcePendant": "Pakabukas"
+    "captureSourcePendant": "Pakabukas",
+    "conversationDeveloperTools": "Kūrėjo įrankiai pokalbiuose",
+    "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“"
 }

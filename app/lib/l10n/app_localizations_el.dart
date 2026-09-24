@@ -11136,4 +11136,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Μενταγιόν';
+
+  @override
+  String get conversationDeveloperTools => 'Εργαλεία προγραμματιστή στις συνομιλίες';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας';
 }

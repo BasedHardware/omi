@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Desktop",
     "renameConversation": "Umbenennen",
     "captureRecordingsCount": "{count, plural, =1{1 Aufnahme} other{{count} Aufnahmen}}",
-    "captureSourcePendant": "Anhänger"
+    "captureSourcePendant": "Anhänger",
+    "conversationDeveloperTools": "Entwicklertools in Gesprächen",
+    "conversationDeveloperToolsDescription": "„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen"
 }

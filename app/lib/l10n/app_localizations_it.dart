@@ -11122,4 +11122,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Ciondolo';
+
+  @override
+  String get conversationDeveloperTools => 'Strumenti per sviluppatori nelle conversazioni';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Mostra Copia ID conversazione e Prova prompt nel menu della conversazione';
 }

@@ -11123,4 +11123,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Penjoll';
+
+  @override
+  String get conversationDeveloperTools => 'Eines de desenvolupador a les converses';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Mostra Copia l\'ID de la conversa i Prova la indicació al menú de la conversa';
 }

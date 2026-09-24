@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "デスクトップ",
     "renameConversation": "名前を変更",
     "captureRecordingsCount": "{count, plural, =1{1件の録音} other{{count}件の録音}}",
-    "captureSourcePendant": "ペンダント"
+    "captureSourcePendant": "ペンダント",
+    "conversationDeveloperTools": "会話の開発者ツール",
+    "conversationDeveloperToolsDescription": "会話のメニューに「会話IDをコピー」と「プロンプトをテスト」を表示"
 }

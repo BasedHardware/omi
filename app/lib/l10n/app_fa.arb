@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "دسکتاپ",
     "renameConversation": "تغییر نام",
     "captureRecordingsCount": "{count, plural, =1{۱ ضبط} other{{count} ضبط}}",
-    "captureSourcePendant": "آویز"
+    "captureSourcePendant": "آویز",
+    "conversationDeveloperTools": "ابزارهای توسعه‌دهنده در گفتگوها",
+    "conversationDeveloperToolsDescription": "نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو"
 }

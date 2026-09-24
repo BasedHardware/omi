@@ -13104,5 +13104,13 @@
     "captureSourcePendant": "Pendant",
     "@captureSourcePendant": {
         "description": "Name of the Omi wearable pendant as a capture source (which device recorded a conversation)"
+    },
+    "conversationDeveloperTools": "Conversation Developer Tools",
+    "@conversationDeveloperTools": {
+        "description": "Developer Settings switch that shows developer actions in a conversation's menu"
+    },
+    "conversationDeveloperToolsDescription": "Show Copy Conversation ID and Test Prompt in a conversation's menu",
+    "@conversationDeveloperToolsDescription": {
+        "description": "Subtitle of the Conversation Developer Tools switch"
     }
 }

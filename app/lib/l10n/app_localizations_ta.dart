@@ -11135,4 +11135,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'பதக்கம்';
+
+  @override
+  String get conversationDeveloperTools => 'உரையாடல்களில் டெவலப்பர் கருவிகள்';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'உரையாடலின் மெனுவில் உரையாடல் ஐடியை நகலெடு மற்றும் ப்ராம்ப்டைச் சோதி காட்டு';
 }

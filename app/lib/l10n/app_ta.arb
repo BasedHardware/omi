@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "டெஸ்க்டாப்",
     "renameConversation": "பெயர்மாற்று",
     "captureRecordingsCount": "{count, plural, =1{1 பதிவு} other{{count} பதிவுகள்}}",
-    "captureSourcePendant": "பதக்கம்"
+    "captureSourcePendant": "பதக்கம்",
+    "conversationDeveloperTools": "உரையாடல்களில் டெவலப்பர் கருவிகள்",
+    "conversationDeveloperToolsDescription": "உரையாடலின் மெனுவில் உரையாடல் ஐடியை நகலெடு மற்றும் ப்ராம்ப்டைச் சோதி காட்டு"
 }

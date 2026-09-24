@@ -11155,4 +11155,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pendentif';
+
+  @override
+  String get conversationDeveloperTools => 'Outils de développement dans les conversations';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Afficher Copier l\'ID de la conversation et Tester le prompt dans le menu d\'une conversation';
 }

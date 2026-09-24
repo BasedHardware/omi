@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Computer",
     "renameConversation": "Redenumește",
     "captureRecordingsCount": "{count, plural, =1{1 înregistrare} other{Înregistrări: {count}}}",
-    "captureSourcePendant": "Pandantiv"
+    "captureSourcePendant": "Pandantiv",
+    "conversationDeveloperTools": "Instrumente pentru dezvoltatori în conversații",
+    "conversationDeveloperToolsDescription": "Afișează Copiază ID-ul conversației și Testează promptul în meniul conversației"
 }

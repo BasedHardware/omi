@@ -11090,4 +11090,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Colgante';
+
+  @override
+  String get conversationDeveloperTools => 'Herramientas de desarrollador en conversaciones';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Mostrar Copiar ID de conversación y Probar indicación en el menú de la conversación';
 }

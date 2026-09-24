@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "데스크톱",
     "renameConversation": "이름 변경",
     "captureRecordingsCount": "{count, plural, =1{녹음 1개} other{녹음 {count}개}}",
-    "captureSourcePendant": "펜던트"
+    "captureSourcePendant": "펜던트",
+    "conversationDeveloperTools": "대화의 개발자 도구",
+    "conversationDeveloperToolsDescription": "대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시"
 }

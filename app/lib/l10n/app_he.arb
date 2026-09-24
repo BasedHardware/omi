@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "מחשב",
     "renameConversation": "שנה שם",
     "captureRecordingsCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
-    "captureSourcePendant": "תליון"
+    "captureSourcePendant": "תליון",
+    "conversationDeveloperTools": "כלי מפתחים בשיחות",
+    "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה"
 }

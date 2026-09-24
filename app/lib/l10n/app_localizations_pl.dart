@@ -11095,4 +11095,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Wisiorek';
+
+  @override
+  String get conversationDeveloperTools => 'Narzędzia deweloperskie w rozmowach';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy';
 }

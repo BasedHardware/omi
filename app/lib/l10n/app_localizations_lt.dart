@@ -11079,4 +11079,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pakabukas';
+
+  @override
+  String get conversationDeveloperTools => 'Kūrėjo įrankiai pokalbiuose';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“';
 }

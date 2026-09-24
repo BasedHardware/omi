@@ -11057,4 +11057,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Ripats';
+
+  @override
+  String get conversationDeveloperTools => 'Arendaja tööriistad vestlustes';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa';
 }

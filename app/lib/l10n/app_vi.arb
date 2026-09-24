@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Máy tính",
     "renameConversation": "Đổi tên",
     "captureRecordingsCount": "{count, plural, =1{1 bản ghi} other{{count} bản ghi}}",
-    "captureSourcePendant": "Mặt dây chuyền"
+    "captureSourcePendant": "Mặt dây chuyền",
+    "conversationDeveloperTools": "Công cụ nhà phát triển trong cuộc trò chuyện",
+    "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện"
 }

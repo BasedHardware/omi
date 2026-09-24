@@ -11096,4 +11096,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Кулон';
+
+  @override
+  String get conversationDeveloperTools => 'Инструменты разработчика в разговорах';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора';
 }

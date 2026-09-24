@@ -10860,4 +10860,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureSourcePendant => '吊坠';
+
+  @override
+  String get conversationDeveloperTools => '对话中的开发者工具';
+
+  @override
+  String get conversationDeveloperToolsDescription => '在对话菜单中显示“复制对话 ID”和“测试提示词”';
 }

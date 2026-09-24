@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "Камп'ютар",
     "renameConversation": "Перайменаваць",
     "captureRecordingsCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}",
-    "captureSourcePendant": "Кулон"
+    "captureSourcePendant": "Кулон",
+    "conversationDeveloperTools": "Інструменты распрацоўшчыка ў размовах",
+    "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы"
 }

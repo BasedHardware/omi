@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "డెస్క్‌టాప్",
     "renameConversation": "పేరు మార్చు",
     "captureRecordingsCount": "{count, plural, =1{1 రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
-    "captureSourcePendant": "పెండెంట్"
+    "captureSourcePendant": "పెండెంట్",
+    "conversationDeveloperTools": "సంభాషణల్లో డెవలపర్ సాధనాలు",
+    "conversationDeveloperToolsDescription": "సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు"
 }

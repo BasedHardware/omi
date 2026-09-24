@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -173,6 +175,49 @@ void main() {
     expect(find.textContaining('Pendant'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Separate… from a grouped row separates on confirm and reloads the list', (tester) async {
+    final separated = <String>[];
+    rowSeparationController = () => CaptureGroupSeparationController(separate: (id) async {
+          separated.add(id);
+          return CaptureGroupSeparationResult.separated;
+        });
+    addTearDown(() => rowSeparationController = CaptureGroupSeparationController.new);
+    final grouped = ServerConversation(
+      id: 'a',
+      createdAt: DateTime(2026, 9, 20, 10),
+      structured: Structured('Design review', 'Overview'),
+      status: ConversationStatus.completed,
+      captureGroup: const CaptureGroup(
+        id: 'event-1',
+        primaryId: 'a',
+        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+      ),
+    );
+    provider.conversations = [grouped];
+    await pump(tester, ConversationListItem(conversation: grouped, date: DateTime(2026, 9, 20), conversationIdx: 0));
+    await tester.longPress(find.byType(ConversationListItem));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('conversation_action_separate')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Separate').last);
+    await tester.pumpAndSettle();
+    expect(separated, ['b'], reason: 'the other recording, never the row itself');
+  });
+
+  testWidgets('Share on a private row asks before making it public', (tester) async {
+    final a = _conversation('a');
+    provider.conversations = [a];
+    await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
+    await tester.longPress(find.byType(ConversationListItem));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('conversation_action_share')));
+    await tester.pumpAndSettle();
+    expect(find.text('Anyone with the link can view'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(a.visibility, isNot(ConversationVisibility.shared));
   });
 
   group('row titles (hub audit #21)', () {

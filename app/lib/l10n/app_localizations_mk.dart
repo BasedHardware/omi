@@ -11120,4 +11120,11 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Приврзок';
+
+  @override
+  String get conversationDeveloperTools => 'Алатки за програмери во разговорите';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот';
 }

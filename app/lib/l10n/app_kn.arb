@@ -11069,5 +11069,7 @@
     "captureSourceDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್",
     "renameConversation": "ಮರುಹೆಸರಿಸಿ",
     "captureRecordingsCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
-    "captureSourcePendant": "ಪೆಂಡೆಂಟ್"
+    "captureSourcePendant": "ಪೆಂಡೆಂಟ್",
+    "conversationDeveloperTools": "ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು",
+    "conversationDeveloperToolsDescription": "ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ"
 }

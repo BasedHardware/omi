@@ -3497,5 +3497,7 @@
     "captureSourceDesktop": "Dator",
     "renameConversation": "Byt namn",
     "captureRecordingsCount": "{count, plural, =1{1 inspelning} other{{count} inspelningar}}",
-    "captureSourcePendant": "Hänge"
+    "captureSourcePendant": "Hänge",
+    "conversationDeveloperTools": "Utvecklarverktyg i samtal",
+    "conversationDeveloperToolsDescription": "Visa Kopiera samtals-ID och Testa prompt i samtalets meny"
 }

@@ -11049,4 +11049,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pendant';
+
+  @override
+  String get conversationDeveloperTools => 'Conversation Developer Tools';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Show Copy Conversation ID and Test Prompt in a conversation\'s menu';
 }

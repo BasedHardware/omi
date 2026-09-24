@@ -3532,5 +3532,7 @@
     "captureSourceDesktop": "Компьютер",
     "renameConversation": "Переименовать",
     "captureRecordingsCount": "{count, plural, =1{1 запись} other{Записей: {count}}}",
-    "captureSourcePendant": "Кулон"
+    "captureSourcePendant": "Кулон",
+    "conversationDeveloperTools": "Инструменты разработчика в разговорах",
+    "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора"
 }

@@ -11111,4 +11111,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Pandantiv';
+
+  @override
+  String get conversationDeveloperTools => 'Instrumente pentru dezvoltatori în conversații';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Afișează Copiază ID-ul conversației și Testează promptul în meniul conversației';
 }

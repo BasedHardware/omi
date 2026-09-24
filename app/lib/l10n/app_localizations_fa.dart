@@ -11058,4 +11058,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'آویز';
+
+  @override
+  String get conversationDeveloperTools => 'ابزارهای توسعه‌دهنده در گفتگوها';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو';
 }

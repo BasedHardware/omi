@@ -11063,4 +11063,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'পেন্ডেন্ট';
+
+  @override
+  String get conversationDeveloperTools => 'কথোপকথনে ডেভেলপার টুল';
+
+  @override
+  String get conversationDeveloperToolsDescription => 'কথোপকথনের মেনুতে কথোপকথন আইডি কপি ও প্রম্পট পরীক্ষা দেখান';
 }

@@ -11102,4 +11102,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureSourcePendant => 'Висулка';
+
+  @override
+  String get conversationDeveloperTools => 'Инструменти за разработчици в разговорите';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора';
 }
