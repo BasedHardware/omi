@@ -44,10 +44,19 @@ def _fake_requests_module() -> types.ModuleType:
             super().__init__(*args)
             self.response = response
 
+    class Response:
+        """Annotation target for server.py's _response_json signature.
+
+        Python evaluates that annotation at import time before 3.14's deferred
+        evaluation, so the stub has to carry every attribute server.py names at
+        module scope, not just the ones tests call.
+        """
+
     def _blocked(*args, **kwargs):
         raise AssertionError("requests stub: network access is not allowed in tests")
 
     module.HTTPError = HTTPError
+    module.Response = Response
     module.get = _blocked
     module.post = _blocked
     module.delete = _blocked
