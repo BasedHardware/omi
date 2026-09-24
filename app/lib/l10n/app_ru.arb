@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Очистить все узлы и соединения",
     "addToClaudeDesktopConfig": "Добавить в claude_desktop_config.json",
     "connectAiAssistantsToData": "Подключите AI-помощников к вашим данным",
-    "useYourMcpApiKey": "Используйте свой MCP API-ключ",
     "autoCreateWhenNameDetected": "Автоматически создавать при обнаружении имени",
     "trackPersonalGoalsOnHomepage": "Отслеживайте личные цели на главной странице",
     "uploadingVoiceProfile": "Загрузка вашего голосового профиля….",
@@ -3535,5 +3534,7 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Инструменты разработчика в разговорах",
     "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора",
-    "participantsSummary": "{name} + {count, plural, =1{ещё 1} few{ещё {count}} many{ещё {count}} other{ещё {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{ещё 1} few{ещё {count}} many{ещё {count}} other{ещё {count}}}",
+    "leaveBlank": "Оставьте пустым",
+    "mcpOAuthSetup": "На claude.ai добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth."
 }

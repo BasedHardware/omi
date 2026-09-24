@@ -41,7 +41,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       useDevelopmentBackends: useDevelopmentBackends,
       bundleIdentifier: bundleIdentifier,
       environmentValue: environmentValue
-    ) + "v1/mcp/sse"
+    ) + mcpEndpointPath
   }
 
   static func mcpAuthorizeURL(
@@ -74,8 +74,16 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     ) + "token"
   }
 
-  /// The hosted Omi MCP SSE endpoint every client connects to.
-  static var mcpServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
+  /// Canonical hosted MCP path (Streamable HTTP); the backend keeps `/v1/mcp/sse`
+  /// as a permanent compatibility alias but clients target `/v1/mcp`.
+  static let mcpEndpointPath = "v1/mcp"
+
+  /// The canonical hosted Omi MCP endpoint every client connects to.
+  static var mcpServerURL: String { "\(mcpBaseURL)\(mcpEndpointPath)" }
+
+  /// Legacy SSE alias the backend keeps serving and that older client configs
+  /// already contain; detection accepts it alongside the canonical URL.
+  static var mcpLegacyServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
 
   /// OAuth endpoints exposed by the same backend for MCP custom-connector setup.
   static var mcpAuthorizeURL: String { "\(mcpOAuthBaseURL)authorize" }
@@ -1136,8 +1144,16 @@ actor MemoryExportService {
     guard let httpResponse = response as? HTTPURLResponse else {
       throw MemoryExportError.requestFailed("Hosted MCP returned an invalid response.")
     }
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw MemoryExportError.requestFailed("Hosted MCP returned HTTP \(httpResponse.statusCode).")
+    return try Self.parseHostedMCPMemoryCount(data: data, statusCode: httpResponse.statusCode)
+  }
+
+  /// Parses a hosted ``tools/call get_memories`` response into a memory count.
+  /// Tool failures arrive as ``isError`` results, not JSON-RPC errors — the
+  /// real reason lives in ``structuredContent.error.message``, with the
+  /// serialized ``{"error": ...}`` text block as the fallback.
+  static func parseHostedMCPMemoryCount(data: Data, statusCode: Int) throws -> Int {
+    guard (200...299).contains(statusCode) else {
+      throw MemoryExportError.requestFailed("Hosted MCP returned HTTP \(statusCode).")
     }
 
     let rpc = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -1146,10 +1162,17 @@ actor MemoryExportService {
     {
       throw MemoryExportError.requestFailed("Hosted MCP failed: \(message)")
     }
+    guard let result = rpc?["result"] as? [String: Any] else {
+      throw MemoryExportError.requestFailed("Hosted MCP did not return memory data.")
+    }
+    let content = result["content"] as? [[String: Any]]
+    let text = content?.first?["text"] as? String
+    if result["isError"] as? Bool == true {
+      throw MemoryExportError.requestFailed(
+        "Hosted MCP failed: \(hostedMCPToolErrorMessage(result: result, text: text))")
+    }
     guard
-      let result = rpc?["result"] as? [String: Any],
-      let content = result["content"] as? [[String: Any]],
-      let text = content.first?["text"] as? String,
+      let text,
       let textData = text.data(using: .utf8),
       let payload = try JSONSerialization.jsonObject(with: textData) as? [String: Any],
       let memories = payload["memories"] as? [Any]
@@ -1158,6 +1181,27 @@ actor MemoryExportService {
     }
 
     return memories.count
+  }
+
+  /// Hosted MCP tool failures arrive as ``isError`` results, not JSON-RPC
+  /// errors — the real reason lives in ``structuredContent.error.message``,
+  /// with the serialized ``{"error": ...}`` text block as the fallback.
+  static func hostedMCPToolErrorMessage(result: [String: Any], text: String?) -> String {
+    if let structured = result["structuredContent"] as? [String: Any],
+      let error = structured["error"] as? [String: Any],
+      let message = error["message"] as? String
+    {
+      return message
+    }
+    if let text,
+      let textData = text.data(using: .utf8),
+      let parsed = try? JSONSerialization.jsonObject(with: textData) as? [String: Any],
+      let error = parsed["error"] as? [String: Any],
+      let message = error["message"] as? String
+    {
+      return message
+    }
+    return text ?? "Tool call failed."
   }
 
   private func testLocalAgentToolCount(token: String) async throws -> Int {

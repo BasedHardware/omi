@@ -2442,9 +2442,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectAiAssistantsToData => 'AI 어시스턴트를 데이터에 연결';
 
   @override
-  String get useYourMcpApiKey => 'MCP API 키 사용';
-
-  @override
   String get realTimeTranscript => '실시간 대화 내용';
 
   @override
@@ -10902,4 +10899,11 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => '비워 두세요';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.';
 }

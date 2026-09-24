@@ -2497,9 +2497,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get connectAiAssistantsToData => 'Csatlakoztassa AI asszisztenseit az adataihoz';
 
   @override
-  String get useYourMcpApiKey => 'Használja MCP API kulcsát';
-
-  @override
   String get realTimeTranscript => 'Valós idejű átirat';
 
   @override
@@ -11123,4 +11120,11 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Hagyd üresen';
+
+  @override
+  String get mcpOAuthSetup =>
+      'A claude.ai oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
 }

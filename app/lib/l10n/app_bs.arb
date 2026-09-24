@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "Koristi svoj MCP API ključ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "Privjesak",
     "conversationDeveloperTools": "Alati za programere u razgovorima",
     "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora",
-    "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}",
+    "leaveBlank": "Ostavite prazno",
+    "mcpOAuthSetup": "Na claude.ai dodajte prilagođeni konektor i zalijepite URL servera. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu."
 }

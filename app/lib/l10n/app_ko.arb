@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "모든 노드와 연결 지우기",
     "addToClaudeDesktopConfig": "claude_desktop_config.json에 추가",
     "connectAiAssistantsToData": "AI 어시스턴트를 데이터에 연결",
-    "useYourMcpApiKey": "MCP API 키 사용",
     "autoCreateWhenNameDetected": "이름 감지 시 자동 생성",
     "trackPersonalGoalsOnHomepage": "홈페이지에서 개인 목표 추적",
     "uploadingVoiceProfile": "음성 프로필 업로드 중….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "펜던트",
     "conversationDeveloperTools": "대화의 개발자 도구",
     "conversationDeveloperToolsDescription": "대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시",
-    "participantsSummary": "{name} + {count, plural, =1{1명} few{{count}명} many{{count}명} other{{count}명}}"
+    "participantsSummary": "{name} + {count, plural, =1{1명} few{{count}명} many{{count}명} other{{count}명}}",
+    "leaveBlank": "비워 두세요",
+    "mcpOAuthSetup": "claude.ai에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요."
 }

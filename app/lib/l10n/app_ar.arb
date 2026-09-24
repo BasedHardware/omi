@@ -762,7 +762,6 @@
     "clearAllNodesAndConnections": "مسح جميع العقد والاتصالات",
     "addToClaudeDesktopConfig": "أضف إلى claude_desktop_config.json",
     "connectAiAssistantsToData": "اربط مساعدي الذكاء الاصطناعي ببياناتك",
-    "useYourMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
     "realTimeTranscript": "نسخ في الوقت الفعلي",
     "experimental": "تجريبي",
     "transcriptionDiagnostics": "تشخيصات النسخ",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "القلادة",
     "conversationDeveloperTools": "أدوات المطوّر في المحادثات",
     "conversationDeveloperToolsDescription": "إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة",
-    "participantsSummary": "{name} + {count, plural, =1{1 آخر} few{{count} آخرين} many{{count} آخرين} other{{count} آخرين}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 آخر} few{{count} آخرين} many{{count} آخرين} other{{count} آخرين}}",
+    "leaveBlank": "اتركه فارغًا",
+    "mcpOAuthSetup": "في claude.ai، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth."
 }

@@ -17,10 +17,12 @@ import { dirname, join, basename } from 'path'
 // the temp name (no Math.random / Date — deterministic for tests).
 let seq = 0
 
-export function atomicWriteFileSync(path: string, data: string): void {
+export function atomicWriteFileSync(path: string, data: string, mode?: number): void {
   const tmp = join(dirname(path), `.${basename(path)}.omi-tmp-${process.pid}-${seq++}`)
   try {
-    writeFileSync(tmp, data, 'utf8')
+    // `mode` applies only when the temp is created; on Windows POSIX permission
+    // bits are ignored by libuv, so callers get a graceful no-op there.
+    writeFileSync(tmp, data, mode === undefined ? 'utf8' : { encoding: 'utf8', mode })
     renameSync(tmp, path)
   } catch (e) {
     try {

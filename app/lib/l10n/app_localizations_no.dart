@@ -2480,9 +2480,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get connectAiAssistantsToData => 'Koble AI-assistenter til dataene dine';
 
   @override
-  String get useYourMcpApiKey => 'Bruk din MCP API-nøkkel';
-
-  @override
   String get realTimeTranscript => 'Sanntidstranskript';
 
   @override
@@ -11079,4 +11076,11 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'La stå tomt';
+
+  @override
+  String get mcpOAuthSetup =>
+      'På claude.ai legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet.';
 }

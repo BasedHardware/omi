@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "आपली MCP API की वापरा",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "पेंडंट",
     "conversationDeveloperTools": "संभाषणांमधील डेव्हलपर साधने",
     "conversationDeveloperToolsDescription": "संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा",
-    "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}",
+    "leaveBlank": "रिक्त ठेवा",
+    "mcpOAuthSetup": "claude.ai वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका."
 }

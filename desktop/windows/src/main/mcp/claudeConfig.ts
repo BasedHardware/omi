@@ -1,7 +1,7 @@
 // Claude Code MCP config-write. Claude Code reads a single JSON file at
 // ~/.claude.json (same path on Windows — %USERPROFILE%\.claude.json). We add one
-// `mcpServers["omi-memory"]` HTTP entry pointing at Omi's hosted MCP SSE endpoint,
-// authenticated by the hosted MCP key.
+// `mcpServers["omi-memory"]` HTTP entry pointing at Omi's canonical hosted MCP
+// endpoint (Streamable HTTP), authenticated by the hosted MCP key.
 //
 // SAFETY (never corrupt an existing config):
 //   • parse-modify-write — read the whole file, preserve every unknown key,

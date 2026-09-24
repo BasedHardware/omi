@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "सभी नोड्स और कनेक्शन साफ़ करें",
     "addToClaudeDesktopConfig": "claude_desktop_config.json में जोड़ें",
     "connectAiAssistantsToData": "AI सहायकों को अपने डेटा से कनेक्ट करें",
-    "useYourMcpApiKey": "अपनी MCP API कुंजी का उपयोग करें",
     "autoCreateWhenNameDetected": "नाम पता चलने पर स्वचालित रूप से बनाएं",
     "trackPersonalGoalsOnHomepage": "होमपेज पर अपने व्यक्तिगत लक्ष्यों को ट्रैक करें",
     "uploadingVoiceProfile": "आपकी वॉइस प्रोफाइल अपलोड हो रही है….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "पेंडेंट",
     "conversationDeveloperTools": "बातचीत में डेवलपर टूल",
     "conversationDeveloperToolsDescription": "बातचीत के मेनू में बातचीत आईडी कॉपी करें और प्रॉम्प्ट टेस्ट करें दिखाएँ",
-    "participantsSummary": "{name} + {count, plural, =1{1 अन्य} few{{count} अन्य} many{{count} अन्य} other{{count} अन्य}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 अन्य} few{{count} अन्य} many{{count} अन्य} other{{count} अन्य}}",
+    "leaveBlank": "खाली छोड़ें",
+    "mcpOAuthSetup": "claude.ai पर एक कस्टम कनेक्टर जोड़ें और सर्वर URL पेस्ट करें। यदि Claude एक एडवांस्ड OAuth Client ID मांगता है, तो नीचे दिया गया मान उपयोग करें और सीक्रेट खाली छोड़ें — अपनी MCP API कुंजी को कभी भी OAuth सीक्रेट के रूप में उपयोग न करें।"
 }

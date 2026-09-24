@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Εκκαθάριση όλων των κόμβων και συνδέσεων",
     "addToClaudeDesktopConfig": "Προσθήκη στο claude_desktop_config.json",
     "connectAiAssistantsToData": "Συνδέστε βοηθούς AI με τα δεδομένα σας",
-    "useYourMcpApiKey": "Χρησιμοποιήστε το κλειδί MCP API σας",
     "autoCreateWhenNameDetected": "Αυτόματη δημιουργία όταν ανιχνευθεί όνομα",
     "trackPersonalGoalsOnHomepage": "Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα",
     "uploadingVoiceProfile": "Μεταφόρτωση του φωνητικού σας προφίλ….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Μενταγιόν",
     "conversationDeveloperTools": "Εργαλεία προγραμματιστή στις συνομιλίες",
     "conversationDeveloperToolsDescription": "Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας",
-    "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} few{ακόμη {count}} many{ακόμη {count}} other{ακόμη {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} few{ακόμη {count}} many{ακόμη {count}} other{ακόμη {count}}}",
+    "leaveBlank": "Αφήστε το κενό",
+    "mcpOAuthSetup": "Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth."
 }

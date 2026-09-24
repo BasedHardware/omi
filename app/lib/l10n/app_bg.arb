@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Изчистване на всички възли и връзки",
     "addToClaudeDesktopConfig": "Добавяне към claude_desktop_config.json",
     "connectAiAssistantsToData": "Свържете AI асистенти с вашите данни",
-    "useYourMcpApiKey": "Използвайте вашия MCP API ключ",
     "autoCreateWhenNameDetected": "Автоматично създаване при откриване на име",
     "trackPersonalGoalsOnHomepage": "Проследявайте личните си цели на началната страница",
     "uploadingVoiceProfile": "Качване на гласовия ви профил….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Висулка",
     "conversationDeveloperTools": "Инструменти за разработчици в разговорите",
     "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора",
-    "participantsSummary": "{name} + {count, plural, =1{1 друг} few{{count} други} many{{count} други} other{{count} други}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 друг} few{{count} други} many{{count} други} other{{count} други}}",
+    "leaveBlank": "Оставете празно",
+    "mcpOAuthSetup": "В claude.ai добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна."
 }

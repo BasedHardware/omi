@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Xóa tất cả các nút và kết nối",
     "addToClaudeDesktopConfig": "Thêm vào claude_desktop_config.json",
     "connectAiAssistantsToData": "Kết nối trợ lý AI với dữ liệu của bạn",
-    "useYourMcpApiKey": "Sử dụng khóa API MCP của bạn",
     "autoCreateWhenNameDetected": "Tự động tạo khi phát hiện tên",
     "trackPersonalGoalsOnHomepage": "Theo dõi mục tiêu cá nhân trên trang chủ",
     "uploadingVoiceProfile": "Đang tải lên hồ sơ giọng nói của bạn….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Mặt dây chuyền",
     "conversationDeveloperTools": "Công cụ nhà phát triển trong cuộc trò chuyện",
     "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện",
-    "participantsSummary": "{name} + {count, plural, =1{1 người khác} few{{count} người khác} many{{count} người khác} other{{count} người khác}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 người khác} few{{count} người khác} many{{count} người khác} other{{count} người khác}}",
+    "leaveBlank": "Để trống",
+    "mcpOAuthSetup": "Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth."
 }

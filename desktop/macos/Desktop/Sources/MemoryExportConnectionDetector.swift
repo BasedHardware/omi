@@ -191,7 +191,8 @@ enum MemoryExportConnectionDetector {
   }
 
   private static func bodyContainsCurrentOmiMCP(_ body: String, matchingKey key: String) -> Bool {
-    body.range(of: MemoryExportDestination.mcpServerURL, options: [.caseInsensitive]) != nil
+    (body.range(of: MemoryExportDestination.mcpServerURL, options: [.caseInsensitive]) != nil
+      || body.range(of: MemoryExportDestination.mcpLegacyServerURL, options: [.caseInsensitive]) != nil)
       && bearerTokens(in: body).contains(key)
   }
 

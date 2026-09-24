@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "Gamitin ang iyong MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "Pendant",
     "conversationDeveloperTools": "Mga developer tool sa mga usapan",
     "conversationDeveloperToolsDescription": "Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan",
-    "participantsSummary": "{name} + {count, plural, =1{1 iba pa} few{{count} iba pa} many{{count} iba pa} other{{count} iba pa}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 iba pa} few{{count} iba pa} many{{count} iba pa} other{{count} iba pa}}",
+    "leaveBlank": "Iwanang blangko",
+    "mcpOAuthSetup": "Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret."
 }

@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Tüm düğümleri ve bağlantıları temizle",
     "addToClaudeDesktopConfig": "claude_desktop_config.json dosyasına ekle",
     "connectAiAssistantsToData": "AI asistanlarını verilerinize bağlayın",
-    "useYourMcpApiKey": "MCP API anahtarınızı kullanın",
     "autoCreateWhenNameDetected": "İsim algılandığında otomatik oluştur",
     "trackPersonalGoalsOnHomepage": "Ana sayfada kişisel hedeflerinizi takip edin",
     "uploadingVoiceProfile": "Ses profiliniz yükleniyor….",
@@ -3535,5 +3534,7 @@
     "captureSourcePendant": "Kolye",
     "conversationDeveloperTools": "Konuşmalarda geliştirici araçları",
     "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster",
-    "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} few{{count} kişi daha} many{{count} kişi daha} other{{count} kişi daha}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} few{{count} kişi daha} many{{count} kişi daha} other{{count} kişi daha}}",
+    "leaveBlank": "Boş bırakın",
+    "mcpOAuthSetup": "claude.ai'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın."
 }

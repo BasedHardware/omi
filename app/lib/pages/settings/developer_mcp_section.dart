@@ -9,6 +9,7 @@ import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/mcp_config.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 const _mono = 'Ubuntu Mono';
@@ -33,23 +34,14 @@ class DeveloperDocsButton extends StatelessWidget {
   }
 }
 
-/// Developer Settings → MCP: the keys, the Claude Desktop snippet and the server URL/auth details.
+/// Developer Settings → MCP: the keys, the Claude hosted-HTTP snippet and the server URL/auth details.
 class DeveloperMcpSection extends StatelessWidget {
   const DeveloperMcpSection({super.key});
-
-  static const _claudeConfig = '''{
-  "mcpServers": {
-    "omi": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server:latest"]
-    }
-  }
-}''';
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
+    final mcpUrl = hostedMcpUrl(Env.apiBaseUrl ?? '');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -84,13 +76,13 @@ class DeveloperMcpSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: OmiSpacing.md),
-                  _CodeBlock(child: _claudeConfigSpan()),
+                  _CodeBlock(child: _claudeConfigSpan(mcpUrl)),
                   const SizedBox(height: OmiSpacing.sm),
                   OmiButton.secondary(
                     label: l10n.copyConfig,
                     icon: Icons.copy,
                     expand: true,
-                    onPressed: () => OmiClipboard.copy(context, _claudeConfig),
+                    onPressed: () => OmiClipboard.copy(context, hostedMcpConfigJson(mcpUrl)),
                   ),
                 ],
               ),
@@ -123,9 +115,14 @@ class DeveloperMcpSection extends StatelessWidget {
                   const SizedBox(height: OmiSpacing.lg),
                   _Label(l10n.oAuth),
                   const SizedBox(height: OmiSpacing.xs),
-                  _KeyValue(label: l10n.clientId, value: 'omi', copyable: true),
+                  Text(
+                    l10n.mcpOAuthSetup,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                  const SizedBox(height: OmiSpacing.sm),
+                  _KeyValue(label: l10n.clientId, value: kMcpOAuthClientId, copyable: true),
                   const SizedBox(height: OmiSpacing.xs),
-                  _KeyValue(label: l10n.clientSecret, value: l10n.useYourMcpApiKey, isHint: true),
+                  _KeyValue(label: l10n.clientSecret, value: l10n.leaveBlank, isHint: true),
                 ],
               ),
             ),
@@ -135,35 +132,18 @@ class DeveloperMcpSection extends StatelessWidget {
     );
   }
 
-  static TextSpan _claudeConfigSpan() {
-    TextSpan plain(String t) => TextSpan(text: t);
-    TextSpan key(String t) => TextSpan(text: t, style: const TextStyle(color: OmiColors.textSecondary));
-    TextSpan str(String t) => TextSpan(text: t, style: const TextStyle(color: OmiColors.warning));
+  static TextSpan _claudeConfigSpan(String mcpUrl) {
     return TextSpan(
       children: [
-        plain('{\n  '),
-        key('"mcpServers"'),
-        plain(': {\n    '),
-        key('"omi"'),
-        plain(': {\n      '),
-        key('"command"'),
-        plain(': '),
-        str('"docker"'),
-        plain(',\n      '),
-        key('"args"'),
-        plain(': [\n        '),
-        str('"run"'),
-        plain(', '),
-        str('"--rm"'),
-        plain(', '),
-        str('"-i"'),
-        plain(', '),
-        str('"-e"'),
-        plain(',\n        '),
-        str('"OMI_API_KEY=<your_key>"'),
-        plain(',\n        '),
-        str('"omiai/mcp-server:latest"'),
-        plain('\n      ]\n    }\n  }\n}'),
+        for (final (kind, text) in hostedMcpConfigTokens(mcpUrl))
+          TextSpan(
+            text: text,
+            style: switch (kind) {
+              McpJsonToken.plain => null,
+              McpJsonToken.key => const TextStyle(color: OmiColors.textSecondary),
+              McpJsonToken.string => const TextStyle(color: OmiColors.warning),
+            },
+          ),
       ],
     );
   }

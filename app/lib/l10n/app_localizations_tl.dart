@@ -2504,9 +2504,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get connectAiAssistantsToData => 'Ikonekta ang mga AI assistant sa iyong data';
 
   @override
-  String get useYourMcpApiKey => 'Gamitin ang iyong MCP API key';
-
-  @override
   String get realTimeTranscript => 'Real-time Transcript';
 
   @override
@@ -11177,4 +11174,11 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Iwanang blangko';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
 }

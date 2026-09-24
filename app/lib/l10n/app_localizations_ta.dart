@@ -2502,9 +2502,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get connectAiAssistantsToData => 'AI உதவிக்காரர்களை உங்கள் தரவுக்கு இணைக்கவும்';
 
   @override
-  String get useYourMcpApiKey => 'உங்கள் MCP API விசையைப் பயன்படுத்தவும்';
-
-  @override
   String get realTimeTranscript => 'நிகழ்நேர மொழிபெயர்ப்பு';
 
   @override
@@ -11155,4 +11152,11 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'வெற்றாக விடவும்';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
 }

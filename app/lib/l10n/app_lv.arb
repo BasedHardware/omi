@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Notīrīt visus mezglus un savienojumus",
     "addToClaudeDesktopConfig": "Pievienot claude_desktop_config.json",
     "connectAiAssistantsToData": "Savienojiet AI asistentus ar saviem datiem",
-    "useYourMcpApiKey": "Izmantojiet savu MCP API atslēgu",
     "autoCreateWhenNameDetected": "Automātiski izveidot, kad konstatēts vārds",
     "trackPersonalGoalsOnHomepage": "Izsekojiet savus personīgos mērķus sākumlapā",
     "uploadingVoiceProfile": "Augšupielādē jūsu balss profilu….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Kulons",
     "conversationDeveloperTools": "Izstrādātāja rīki sarunās",
     "conversationDeveloperToolsDescription": "Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”",
-    "participantsSummary": "{name} + {count, plural, =1{vēl 1} few{vēl {count}} many{vēl {count}} other{vēl {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{vēl 1} few{vēl {count}} many{vēl {count}} other{vēl {count}}}",
+    "leaveBlank": "Atstājiet tukšu",
+    "mcpOAuthSetup": "Vietnē claude.ai pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu."
 }

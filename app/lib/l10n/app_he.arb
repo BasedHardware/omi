@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "השתמש במפתח ה-API של MCP שלך",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "תליון",
     "conversationDeveloperTools": "כלי מפתחים בשיחות",
     "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה",
-    "participantsSummary": "{name} + {count, plural, =1{1 נוסף} few{{count} נוספים} many{{count} נוספים} other{{count} נוספים}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 נוסף} few{{count} נוספים} many{{count} נוספים} other{{count} נוספים}}",
+    "leaveBlank": "השאר ריק",
+    "mcpOAuthSetup": "ב-claude.ai הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth."
 }

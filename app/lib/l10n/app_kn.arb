@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "ನಿಮ್ಮ MCP API ಕೀ ಬಳಸಿ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "ಪೆಂಡೆಂಟ್",
     "conversationDeveloperTools": "ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು",
     "conversationDeveloperToolsDescription": "ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ",
-    "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}",
+    "leaveBlank": "ಖಾಲಿ ಬಿಡಿ",
+    "mcpOAuthSetup": "claude.ai ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ."
 }

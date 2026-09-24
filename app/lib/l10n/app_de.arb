@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Alle Knoten und Verbindungen löschen",
     "addToClaudeDesktopConfig": "Zu claude_desktop_config.json hinzufügen",
     "connectAiAssistantsToData": "KI-Assistenten mit Ihren Daten verbinden",
-    "useYourMcpApiKey": "Verwenden Sie Ihren MCP-API-Schlüssel",
     "autoCreateWhenNameDetected": "Automatisch erstellen, wenn Name erkannt wird",
     "trackPersonalGoalsOnHomepage": "Verfolgen Sie Ihre persönlichen Ziele auf der Startseite",
     "uploadingVoiceProfile": "Ihr Stimmprofil wird hochgeladen….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Anhänger",
     "conversationDeveloperTools": "Entwicklertools in Gesprächen",
     "conversationDeveloperToolsDescription": "„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen",
-    "participantsSummary": "{name} + {count, plural, =1{1 weitere Person} few{{count} weitere} many{{count} weitere} other{{count} weitere}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 weitere Person} few{{count} weitere} many{{count} weitere} other{{count} weitere}}",
+    "leaveBlank": "Leer lassen",
+    "mcpOAuthSetup": "Fügen Sie auf claude.ai einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret."
 }

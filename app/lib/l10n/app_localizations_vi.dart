@@ -2485,9 +2485,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get connectAiAssistantsToData => 'Kết nối trợ lý AI với dữ liệu của bạn';
 
   @override
-  String get useYourMcpApiKey => 'Sử dụng khóa API MCP của bạn';
-
-  @override
   String get realTimeTranscript => 'Bản ghi âm Thời gian thực';
 
   @override
@@ -11074,4 +11071,11 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Để trống';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
 }

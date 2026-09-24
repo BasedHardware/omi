@@ -2437,9 +2437,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
 
   @override
-  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
-
-  @override
   String get realTimeTranscript => '实时转录';
 
   @override
@@ -10879,4 +10876,11 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => '留空';
+
+  @override
+  String get mcpOAuthSetup =>
+      '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
 }

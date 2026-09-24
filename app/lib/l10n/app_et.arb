@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Kustuta kõik sõlmed ja ühendused",
     "addToClaudeDesktopConfig": "Lisa faili claude_desktop_config.json",
     "connectAiAssistantsToData": "Ühenda AI-assistendid oma andmetega",
-    "useYourMcpApiKey": "Kasuta oma MCP API võtit",
     "autoCreateWhenNameDetected": "Loo automaatselt nime tuvastamisel",
     "trackPersonalGoalsOnHomepage": "Jälgi oma isiklikke eesmärke avalehel",
     "uploadingVoiceProfile": "Teie hääleprofiili üleslaadimine….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Ripats",
     "conversationDeveloperTools": "Arendaja tööriistad vestlustes",
     "conversationDeveloperToolsDescription": "Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa",
-    "participantsSummary": "{name} + {count, plural, =1{1 teine} few{{count} teist} many{{count} teist} other{{count} teist}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 teine} few{{count} teist} many{{count} teist} other{{count} teist}}",
+    "leaveBlank": "Jäta tühjaks",
+    "mcpOAuthSetup": "Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena."
 }

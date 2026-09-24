@@ -2724,10 +2724,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "Use your MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -13124,5 +13120,13 @@
                 "type": "int"
             }
         }
+    },
+    "leaveBlank": "Leave blank",
+    "@leaveBlank": {
+        "description": "Hint for an intentionally empty field (e.g. OAuth client secret)"
+    },
+    "mcpOAuthSetup": "On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@mcpOAuthSetup": {
+        "description": "OAuth connector setup instructions for the hosted MCP server"
     }
 }

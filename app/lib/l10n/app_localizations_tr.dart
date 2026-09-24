@@ -2489,9 +2489,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get connectAiAssistantsToData => 'AI asistanlarını verilerinize bağlayın';
 
   @override
-  String get useYourMcpApiKey => 'MCP API anahtarınızı kullanın';
-
-  @override
   String get realTimeTranscript => 'Gerçek Zamanlı Transkript';
 
   @override
@@ -11092,4 +11089,11 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Boş bırakın';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
 }

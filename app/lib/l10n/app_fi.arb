@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Tyhjennä kaikki solmut ja yhteydet",
     "addToClaudeDesktopConfig": "Lisää claude_desktop_config.json-tiedostoon",
     "connectAiAssistantsToData": "Yhdistä AI-avustajat tietoihisi",
-    "useYourMcpApiKey": "Käytä MCP API -avaintasi",
     "autoCreateWhenNameDetected": "Luo automaattisesti kun nimi havaitaan",
     "trackPersonalGoalsOnHomepage": "Seuraa henkilökohtaisia tavoitteitasi etusivulla",
     "uploadingVoiceProfile": "Ladataan ääniprofiiliasi….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Riipus",
     "conversationDeveloperTools": "Kehittäjätyökalut keskusteluissa",
     "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa",
-    "participantsSummary": "{name} + {count, plural, =1{1 muu} few{{count} muuta} many{{count} muuta} other{{count} muuta}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 muu} few{{count} muuta} many{{count} muuta} other{{count} muuta}}",
+    "leaveBlank": "Jätä tyhjäksi",
+    "mcpOAuthSetup": "Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena."
 }

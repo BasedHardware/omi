@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Ryd alle noder og forbindelser",
     "addToClaudeDesktopConfig": "Tilføj til claude_desktop_config.json",
     "connectAiAssistantsToData": "Forbind AI-assistenter til dine data",
-    "useYourMcpApiKey": "Brug din MCP API-nøgle",
     "autoCreateWhenNameDetected": "Opret automatisk når navn registreres",
     "trackPersonalGoalsOnHomepage": "Spor dine personlige mål på startsiden",
     "uploadingVoiceProfile": "Uploader din stemmeprofil….",
@@ -3542,5 +3541,7 @@
     "captureSourcePendant": "Vedhæng",
     "conversationDeveloperTools": "Udviklerværktøjer i samtaler",
     "conversationDeveloperToolsDescription": "Vis Kopiér samtale-id og Test prompt i samtalens menu",
-    "participantsSummary": "{name} + {count, plural, =1{1 anden} few{{count} andre} many{{count} andre} other{{count} andre}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 anden} few{{count} andre} many{{count} andre} other{{count} andre}}",
+    "leaveBlank": "Lad stå tomt",
+    "mcpOAuthSetup": "På claude.ai skal du tilføje en brugerdefineret connector og indsætte server-URL'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed."
 }

@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "Выкарыстоўвайце ваш MCP ключ API",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Інструменты распрацоўшчыка ў размовах",
     "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы",
-    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}",
+    "leaveBlank": "Пакіньце пустым",
+    "mcpOAuthSetup": "На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth."
 }

@@ -2504,9 +2504,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get connectAiAssistantsToData => 'Connectez des assistants IA à vos données';
 
   @override
-  String get useYourMcpApiKey => 'Utilisez votre clé API MCP';
-
-  @override
   String get realTimeTranscript => 'Transcription en temps réel';
 
   @override
@@ -11175,4 +11172,11 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Laisser vide';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Sur claude.ai, ajoutez un connecteur personnalisé et collez l\'URL du serveur. Si Claude demande un Client ID OAuth avancé, utilisez la valeur ci-dessous et laissez le secret vide — n\'utilisez jamais votre clé API MCP comme secret OAuth.';
 }

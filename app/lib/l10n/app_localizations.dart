@@ -4809,12 +4809,6 @@ abstract class AppLocalizations {
   /// **'Connect AI assistants to your data'**
   String get connectAiAssistantsToData;
 
-  /// Hint for client secret value
-  ///
-  /// In en, this message translates to:
-  /// **'Use your MCP API key'**
-  String get useYourMcpApiKey;
-
   /// Webhook type for real-time transcript
   ///
   /// In en, this message translates to:
@@ -20192,6 +20186,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + {count, plural, =1{1 other} few{{count} others} many{{count} others} other{{count} others}}'**
   String participantsSummary(String name, int count);
+
+  /// Hint for an intentionally empty field (e.g. OAuth client secret)
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank'**
+  String get leaveBlank;
+
+  /// OAuth connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get mcpOAuthSetup;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

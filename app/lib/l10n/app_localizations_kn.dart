@@ -2494,9 +2494,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get connectAiAssistantsToData => 'AI ಸಹಾಯಕಗಳನ್ನು ನಿಮ್ಮ ಡೇಟಾಗೆ ಸಂಪರ್ಕಿಸಿ';
 
   @override
-  String get useYourMcpApiKey => 'ನಿಮ್ಮ MCP API ಕೀ ಬಳಸಿ';
-
-  @override
   String get realTimeTranscript => 'ರಿಯಲ್-ಟೈಮ್ ಪ್ರತಿಲೇಖನ';
 
   @override
@@ -11114,4 +11111,11 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'ಖಾಲಿ ಬಿಡಿ';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.';
 }

@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Alle knooppunten en verbindingen wissen",
     "addToClaudeDesktopConfig": "Toevoegen aan claude_desktop_config.json",
     "connectAiAssistantsToData": "Verbind AI-assistenten met je gegevens",
-    "useYourMcpApiKey": "Gebruik je MCP API-sleutel",
     "autoCreateWhenNameDetected": "Automatisch aanmaken wanneer naam gedetecteerd wordt",
     "trackPersonalGoalsOnHomepage": "Volg je persoonlijke doelen op de startpagina",
     "uploadingVoiceProfile": "Je stemprofiel wordt geüpload….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Hanger",
     "conversationDeveloperTools": "Ontwikkelaarstools in gesprekken",
     "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek",
-    "participantsSummary": "{name} + {count, plural, =1{1 ander} few{{count} anderen} many{{count} anderen} other{{count} anderen}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ander} few{{count} anderen} many{{count} anderen} other{{count} anderen}}",
+    "leaveBlank": "Leeg laten",
+    "mcpOAuthSetup": "Voeg op claude.ai een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim."
 }

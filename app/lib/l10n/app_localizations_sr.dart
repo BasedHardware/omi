@@ -2488,9 +2488,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get connectAiAssistantsToData => 'Повежи AI асистенте са својим подацима';
 
   @override
-  String get useYourMcpApiKey => 'Користи свој MCP API кључ';
-
-  @override
   String get realTimeTranscript => 'Транскрипт у реалном времену';
 
   @override
@@ -11095,4 +11092,11 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Оставите празно';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.';
 }

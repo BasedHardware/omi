@@ -2170,7 +2170,6 @@
     "useMcpApiKey": "Naudokite savo MCP API raktą",
     "useMobileAppToCapture": "Naudokite mobilią programą garso įrašymui",
     "useTemplateFrom": "Naudoti šabloną iš",
-    "useYourMcpApiKey": "Naudokite savo MCP API raktą",
     "user": "Vartotojas",
     "userId": "Vartotojo ID",
     "userIdCopied": "Naudotojo ID nukopijuotas į iškarpinę",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Pakabukas",
     "conversationDeveloperTools": "Kūrėjo įrankiai pokalbiuose",
     "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“",
-    "participantsSummary": "{name} + {count, plural, =1{dar 1} few{dar {count}} many{dar {count}} other{dar {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{dar 1} few{dar {count}} many{dar {count}} other{dar {count}}}",
+    "leaveBlank": "Palikite tuščią",
+    "mcpOAuthSetup": "claude.ai svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties."
 }

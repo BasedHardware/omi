@@ -31,6 +31,7 @@ from utils.mcp_analytics import schedule_mcp_tool_call  # noqa: F401 — compat 
 from utils.mcp_server import metadata as _metadata
 from utils.mcp_server import oauth as _oauth
 from utils.mcp_server import transport as _transport
+from utils.mcp_server.versions import PROTOCOL_VERSION_2026
 from utils.mcp_server.auth import (  # noqa: F401 — compat re-exports
     MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS,
     MCP_LEGACY_API_KEY_SCOPES,
@@ -249,9 +250,11 @@ def mcp_sse_info(request: Request):
     """
     base_url = str(request.base_url).rstrip("/")
     return {
-        "endpoint": "/v1/mcp/sse",
+        # Instructional payload advertises the canonical endpoint; the /sse
+        # path hosting this route stays a permanent alias for released clients.
+        "endpoint": "/v1/mcp",
         "transport": "streamable-http",
-        "protocol_version": "2025-03-26",
+        "protocol_version": PROTOCOL_VERSION_2026,
         "authentication": {
             "methods": ["oauth2", "api_key"],
             "api_key": {"header": "Authorization", "format": "Bearer <api_key>"},
@@ -264,7 +267,7 @@ def mcp_sse_info(request: Request):
         },
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
-            "step2": f"Set Server URL to: {base_url}/v1/mcp/sse",
+            "step2": f"Set Server URL to: {base_url}/v1/mcp",
             "step3": "Set Authorization header to your key",
         },
     }

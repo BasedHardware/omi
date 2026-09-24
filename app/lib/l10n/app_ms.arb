@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Kosongkan semua nod dan sambungan",
     "addToClaudeDesktopConfig": "Tambah ke claude_desktop_config.json",
     "connectAiAssistantsToData": "Sambungkan pembantu AI ke data anda",
-    "useYourMcpApiKey": "Gunakan kunci API MCP anda",
     "autoCreateWhenNameDetected": "Cipta automatik apabila nama dikesan",
     "trackPersonalGoalsOnHomepage": "Jejaki matlamat peribadi anda di laman utama",
     "uploadingVoiceProfile": "Memuat naik profil suara anda….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Loket",
     "conversationDeveloperTools": "Alat pembangun dalam perbualan",
     "conversationDeveloperToolsDescription": "Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan",
-    "participantsSummary": "{name} + {count, plural, =1{1 lagi} few{{count} lagi} many{{count} lagi} other{{count} lagi}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 lagi} few{{count} lagi} many{{count} lagi} other{{count} lagi}}",
+    "leaveBlank": "Biarkan kosong",
+    "mcpOAuthSetup": "Di claude.ai, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth."
 }

@@ -2483,9 +2483,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get connectAiAssistantsToData => 'Ühenda AI-assistendid oma andmetega';
 
   @override
-  String get useYourMcpApiKey => 'Kasuta oma MCP API võtit';
-
-  @override
   String get realTimeTranscript => 'Reaalajas transkriptsioon';
 
   @override
@@ -11077,4 +11074,11 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Jäta tühjaks';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
 }

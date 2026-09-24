@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Vymazat všechny uzly a spojení",
     "addToClaudeDesktopConfig": "Přidat do claude_desktop_config.json",
     "connectAiAssistantsToData": "Připojte AI asistenty k vašim datům",
-    "useYourMcpApiKey": "Použijte svůj MCP API klíč",
     "autoCreateWhenNameDetected": "Automaticky vytvořit při detekci jména",
     "trackPersonalGoalsOnHomepage": "Sledujte své osobní cíle na domovské stránce",
     "uploadingVoiceProfile": "Nahrávání vašeho hlasového profilu….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Přívěsek",
     "conversationDeveloperTools": "Vývojářské nástroje v konverzacích",
     "conversationDeveloperToolsDescription": "Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace",
-    "participantsSummary": "{name} + {count, plural, =1{1 další} few{{count} další} many{{count} dalších} other{{count} dalších}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 další} few{{count} další} many{{count} dalších} other{{count} dalších}}",
+    "leaveBlank": "Nechte prázdné",
+    "mcpOAuthSetup": "Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret."
 }

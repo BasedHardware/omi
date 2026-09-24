@@ -2674,10 +2674,6 @@
     "@clientSecret": {
         "description": "OAuth client secret label"
     },
-    "useYourMcpApiKey": "உங்கள் MCP API விசையைப் பயன்படுத்தவும்",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
-    },
     "@webhooks": {
         "description": "Webhooks section header"
     },
@@ -11072,5 +11068,7 @@
     "captureSourcePendant": "பதக்கம்",
     "conversationDeveloperTools": "உரையாடல்களில் டெவலப்பர் கருவிகள்",
     "conversationDeveloperToolsDescription": "உரையாடலின் மெனுவில் உரையாடல் ஐடியை நகலெடு மற்றும் ப்ராம்ப்டைச் சோதி காட்டு",
-    "participantsSummary": "{name} + {count, plural, =1{1 மற்றவர்} few{{count} மற்றவர்கள்} many{{count} மற்றவர்கள்} other{{count} மற்றவர்கள்}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 மற்றவர்} few{{count} மற்றவர்கள்} many{{count} மற்றவர்கள்} other{{count} மற்றவர்கள்}}",
+    "leaveBlank": "வெற்றாக விடவும்",
+    "mcpOAuthSetup": "claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்."
 }

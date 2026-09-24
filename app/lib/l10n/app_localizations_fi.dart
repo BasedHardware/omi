@@ -2482,9 +2482,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get connectAiAssistantsToData => 'Yhdistä AI-avustajat tietoihisi';
 
   @override
-  String get useYourMcpApiKey => 'Käytä MCP API -avaintasi';
-
-  @override
   String get realTimeTranscript => 'Reaaliaikainen litterointi';
 
   @override
@@ -11083,4 +11080,11 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Jätä tyhjäksi';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.';
 }

@@ -2487,9 +2487,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get connectAiAssistantsToData => 'Savienojiet AI asistentus ar saviem datiem';
 
   @override
-  String get useYourMcpApiKey => 'Izmantojiet savu MCP API atslēgu';
-
-  @override
   String get realTimeTranscript => 'Reāllaika transkripcija';
 
   @override
@@ -11107,4 +11104,11 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get leaveBlank => 'Atstājiet tukšu';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Vietnē claude.ai pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.';
 }

@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Összes csomópont és kapcsolat törlése",
     "addToClaudeDesktopConfig": "Hozzáadás a claude_desktop_config.json fájlhoz",
     "connectAiAssistantsToData": "Csatlakoztassa AI asszisztenseit az adataihoz",
-    "useYourMcpApiKey": "Használja MCP API kulcsát",
     "autoCreateWhenNameDetected": "Automatikus létrehozás név észlelésekor",
     "trackPersonalGoalsOnHomepage": "Kövesse személyes céljait a kezdőlapon",
     "uploadingVoiceProfile": "Hangprofil feltöltése….",
@@ -3596,5 +3595,7 @@
     "captureSourcePendant": "Medál",
     "conversationDeveloperTools": "Fejlesztői eszközök a beszélgetésekben",
     "conversationDeveloperToolsDescription": "A beszélgetés menüjében jelenjen meg a Beszélgetésazonosító másolása és a Prompt tesztelése",
-    "participantsSummary": "{name} + {count, plural, =1{1 másik} few{{count} másik} many{{count} másik} other{{count} másik}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 másik} few{{count} másik} many{{count} másik} other{{count} másik}}",
+    "leaveBlank": "Hagyd üresen",
+    "mcpOAuthSetup": "A claude.ai oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként."
 }

@@ -210,6 +210,15 @@ class TestRouteParity:
         assert "client_registration_endpoint" not in doc  # no DCR/CIMD claimed
         assert doc["code_challenge_methods_supported"] == ["S256"]
 
+    def test_sse_info_advertises_canonical_endpoint_on_legacy_path(self, client):
+        """The info route lives on the legacy /sse path but must teach the
+        canonical /v1/mcp URL and current protocol revision."""
+        payload = client.get("/v1/mcp/sse/info").json()
+        assert payload["endpoint"] == "/v1/mcp"
+        assert payload["protocol_version"] == PROTOCOL_VERSION_2026
+        assert payload["instructions"]["step2"].endswith("/v1/mcp")
+        assert "/v1/mcp/sse" not in payload["instructions"]["step2"]
+
 
 class TestVersionNegotiation:
     @pytest.mark.parametrize("version", HANDSHAKE_PROTOCOL_VERSIONS)

@@ -553,6 +553,112 @@ final class MemoryExportStatusTests: XCTestCase {
     )
   }
 
+  /// Hosted MCP tool failures arrive as ``isError`` results — the status check
+  /// must surface ``structuredContent.error.message`` rather than reporting a
+  /// generic "did not return memory data".
+  func testHostedMCPToolErrorReadsStructuredMessage() {
+    let result: [String: Any] = [
+      "isError": true,
+      "content": [["type": "text", "text": "{\"error\":{\"code\":\"unavailable\",\"message\":\"wire text\"}}"]],
+      "structuredContent": ["error": ["code": "paid_plan_required", "message": "A paid plan is required."]],
+    ]
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: "{\"error\":{\"message\":\"wire text\"}}"),
+      "A paid plan is required."
+    )
+  }
+
+  func testHostedMCPToolErrorFallsBackToTextBlock() {
+    let result: [String: Any] = ["isError": true]
+    let message = MemoryExportService.hostedMCPToolErrorMessage(
+      result: result,
+      text: "{\"error\":{\"code\":\"not_found\",\"message\":\"Memory not found\"}}"
+    )
+    XCTAssertEqual(message, "Memory not found")
+  }
+
+  func testHostedMCPToolErrorFallsBackToRawTextThenGeneric() {
+    let result: [String: Any] = ["isError": true]
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: "plain failure text"),
+      "plain failure text"
+    )
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: nil),
+      "Tool call failed."
+    )
+  }
+
+  // The production response path in ``testHostedMCPMemoryCount`` delegates to
+  // ``parseHostedMCPMemoryCount`` — these tests exercise that path end to end
+  // from wire bytes rather than the message helper alone.
+
+  func testHostedMCPResponseParsesMemoryCount() throws {
+    let text = #"{"memories":[{"id":"m1"},{"id":"m2"},{"id":"m3"}]}"#
+    let rpc: [String: Any] = [
+      "result": ["content": [["type": "text", "text": text]]]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    XCTAssertEqual(try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200), 3)
+  }
+
+  func testHostedMCPResponseThrowsStructuredToolError() throws {
+    let rpc: [String: Any] = [
+      "result": [
+        "isError": true,
+        "content": [["type": "text", "text": #"{"error":{"message":"wire text"}}"#]],
+        "structuredContent": ["error": ["code": "paid_plan_required", "message": "A paid plan is required."]],
+      ]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200)
+      XCTFail("An isError result must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP failed: A paid plan is required.")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
+  }
+
+  func testHostedMCPResponseThrowsTextBlockToolError() throws {
+    let rpc: [String: Any] = [
+      "result": [
+        "isError": true,
+        "content": [["type": "text", "text": #"{"error":{"message":"Memory not found"}}"#]],
+      ]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200)
+      XCTFail("An isError result must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP failed: Memory not found")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
+  }
+
+  func testHostedMCPResponseRejectsNon2xxBeforeParsing() {
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: Data(), statusCode: 401)
+      XCTFail("A non-2xx status must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP returned HTTP 401.")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
+  }
+
   private func resetMemoryExportDefaults() {
     let defaults = UserDefaults.standard
     defaults.removeObject(forKey: "auth_userId")

@@ -1730,7 +1730,6 @@
     "clearAllNodesAndConnections": "Esborra tots els nodes i connexions",
     "addToClaudeDesktopConfig": "Afegeix a claude_desktop_config.json",
     "connectAiAssistantsToData": "Connecta assistents d'IA a les teves dades",
-    "useYourMcpApiKey": "Utilitza la teva clau API MCP",
     "autoCreateWhenNameDetected": "Crea automàticament quan es detecti un nom",
     "trackPersonalGoalsOnHomepage": "Segueix els teus objectius personals a la pàgina d'inici",
     "uploadingVoiceProfile": "Pujant el teu perfil de veu….",
@@ -3500,5 +3499,7 @@
     "captureSourcePendant": "Penjoll",
     "conversationDeveloperTools": "Eines de desenvolupador a les converses",
     "conversationDeveloperToolsDescription": "Mostra Copia l'ID de la conversa i Prova la indicació al menú de la conversa",
-    "participantsSummary": "{name} + {count, plural, =1{1 altre} few{{count} altres} many{{count} altres} other{{count} altres}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 altre} few{{count} altres} many{{count} altres} other{{count} altres}}",
+    "leaveBlank": "Deixa-ho en blanc",
+    "mcpOAuthSetup": "A claude.ai, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth."
 }
