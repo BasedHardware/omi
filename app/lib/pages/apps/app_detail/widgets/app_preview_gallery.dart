@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/pages/apps/widgets/app_form_fields.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 /// An app's screenshots, scrolled horizontally. Tapping one opens the media viewer as a modal
@@ -20,18 +20,7 @@ class AppPreviewGallery extends StatelessWidget {
 
   void _open(BuildContext context, int index) {
     onImageOpened?.call(index);
-    Navigator.of(context).push(
-      omiPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => MediaViewerPage(
-          items: imageUrls.map((url) => MediaViewerItem(imageUrl: url)).toList(),
-          initialIndex: index,
-          maxScaleMultiplier: 2,
-          showCloseButton: true,
-          wrapBodyInSafeArea: false,
-        ),
-      ),
-    );
+    openAppScreenshots(context, imageUrls, index);
   }
 
   @override

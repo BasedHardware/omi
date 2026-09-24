@@ -120,10 +120,7 @@ class FilterBottomSheet extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-    );
+    return Text(title, style: OmiType.headline);
   }
 
   Widget _buildRatingSelector(AppProvider provider) {
@@ -144,19 +141,18 @@ class FilterBottomSheet extends StatelessWidget {
               );
             },
             child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              margin: const EdgeInsets.only(right: OmiSpacing.xs),
+              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withValues(alpha: 0.22) : const Color(0xFF35343B),
-                borderRadius: BorderRadius.circular(8),
+                color: isSelected ? OmiColors.textPrimary.withValues(alpha: 0.22) : OmiColors.surface2,
+                borderRadius: OmiRadius.smAll,
               ),
               child: Center(
                 child: Text(
                   '$rating+',
-                  style: TextStyle(
-                    fontSize: 16,
+                  style: OmiType.callout.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : Colors.grey.shade400,
+                    color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
                   ),
                 ),
               ),
@@ -181,17 +177,16 @@ class FilterBottomSheet extends StatelessWidget {
             PlatformManager.instance.analytics.appsTypeFilter('My Apps', !isSelected);
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.white.withValues(alpha: 0.22) : const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(20),
+              color: isSelected ? OmiColors.textPrimary.withValues(alpha: 0.22) : OmiColors.surface2,
+              borderRadius: OmiRadius.pillAll,
             ),
             child: Text(
               AppLocalizations.of(context).myApps,
-              style: TextStyle(
-                fontSize: 13,
+              style: OmiType.footnote.copyWith(
                 fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey.shade300,
+                color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
               ),
             ),
           ),
@@ -216,17 +211,16 @@ class FilterBottomSheet extends StatelessWidget {
             );
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.white.withValues(alpha: 0.22) : const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(20),
+              color: isSelected ? OmiColors.textPrimary.withValues(alpha: 0.22) : OmiColors.surface2,
+              borderRadius: OmiRadius.pillAll,
             ),
             child: Text(
               category.getLocalizedTitle(context),
-              style: TextStyle(
-                fontSize: 13,
+              style: OmiType.footnote.copyWith(
                 fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey.shade300,
+                color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
               ),
             ),
           ),
@@ -250,7 +244,7 @@ class FilterBottomSheet extends StatelessWidget {
         final isSelected = provider.isFilterSelected(option['key']!, 'Sort');
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
           child: GestureDetector(
             onTap: () {
               provider.addOrRemoveFilter(option['key']!, 'Sort');
@@ -260,11 +254,11 @@ class FilterBottomSheet extends StatelessWidget {
               );
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25).withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+                color: OmiColors.surface1.withValues(alpha: 0.5),
+                borderRadius: OmiRadius.mdAll,
+                border: isSelected ? Border.all(color: OmiColors.textPrimary, width: 2) : null,
               ),
               child: Row(
                 children: [
@@ -273,17 +267,19 @@ class FilterBottomSheet extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? Colors.white : Colors.transparent,
-                      border: Border.all(color: isSelected ? Colors.white : Colors.grey.shade500, width: 2),
+                      color: isSelected ? OmiColors.textPrimary : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary,
+                        width: 2,
+                      ),
                     ),
-                    child: isSelected ? const Icon(Icons.check, size: 12, color: Colors.black) : null,
+                    child: isSelected ? const Icon(Icons.check, size: 12, color: OmiColors.onAccent) : null,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: OmiSpacing.sm),
                   Text(
                     option['label']!,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isSelected ? Colors.white : Colors.grey.shade300,
+                    style: OmiType.callout.copyWith(
+                      color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
                       fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
                     ),
                   ),
@@ -312,17 +308,16 @@ class FilterBottomSheet extends StatelessWidget {
             );
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.white.withValues(alpha: 0.22) : const Color(0xFF35343B),
-              borderRadius: BorderRadius.circular(20),
+              color: isSelected ? OmiColors.textPrimary.withValues(alpha: 0.22) : OmiColors.surface2,
+              borderRadius: OmiRadius.pillAll,
             ),
             child: Text(
               capability.getLocalizedTitle(context),
-              style: TextStyle(
-                fontSize: 13,
+              style: OmiType.footnote.copyWith(
                 fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey.shade300,
+                color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
               ),
             ),
           ),
