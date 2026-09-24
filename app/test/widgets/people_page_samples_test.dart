@@ -65,10 +65,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Speech Profile'), findsOneWidget);
+    expect(find.text('Voice Profile'), findsOneWidget);
     expect(find.text('Tap to delete'), findsNothing);
 
-    await tester.tap(find.text('Speech Profile'));
+    await tester.tap(find.text('Voice Profile'));
     await tester.pumpAndSettle();
     expect(people.played, [(0, 0)]);
     expect(find.text('Delete Sample?'), findsNothing, reason: 'a tap plays, it never deletes');
