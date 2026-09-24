@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -16,11 +18,11 @@ class EmptyConversationsWidget extends StatelessWidget {
       padding: const EdgeInsets.only(top: 48),
       child: isStarredFilterActive
           ? OmiEmptyState(
-              icon: Icons.star_outline_rounded,
+              glyph: const FaIcon(FontAwesomeIcons.star),
               title: l10n.noStarredConversations,
               message: l10n.starConversationHint,
             )
-          : OmiEmptyState(icon: Icons.forum_outlined, title: l10n.noConversationsYet),
+          : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
     );
   }
 }

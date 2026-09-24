@@ -946,7 +946,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             itemBuilder: (context) => _menuItems(context, provider),
             buttonBuilder: (context, showMenu) => OmiIconButton.filled(
               key: const Key('conversation_more'),
-              icon: const Icon(Icons.more_horiz),
+              icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
               label: l10n.moreOptions,
               onPressed: () {
                 HapticFeedback.mediumImpact();

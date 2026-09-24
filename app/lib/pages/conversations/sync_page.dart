@@ -629,11 +629,13 @@ class _SyncPageState extends State<SyncPage> {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
     return OmiEmptyState(
-      icon: isPending
-          ? Icons.check_circle_outline_rounded
-          : isCorrupted
-              ? Icons.warning_amber_rounded
-              : Icons.history_rounded,
+      glyph: FaIcon(
+        isPending
+            ? FontAwesomeIcons.circleCheck
+            : isCorrupted
+                ? FontAwesomeIcons.triangleExclamation
+                : FontAwesomeIcons.clockRotateLeft,
+      ),
       title: isPending
           ? context.l10n.noPendingRecordings
           : isCorrupted
@@ -718,7 +720,7 @@ class _SyncPageState extends State<SyncPage> {
 
   Widget _buildEmptyState(BuildContext context) {
     return OmiEmptyState(
-      icon: Icons.mic_none_rounded,
+      glyph: const FaIcon(FontAwesomeIcons.microphone),
       title: context.l10n.noRecordings,
       message: context.l10n.audioFromOmiWillAppearHere,
     );
@@ -735,7 +737,7 @@ class _SyncPageState extends State<SyncPage> {
             title: Text(context.l10n.offlineSync),
             actions: [
               OmiIconButton(
-                icon: const Icon(Icons.more_horiz_rounded),
+                icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
                 label: context.l10n.manageStorage,
                 onPressed: () {
                   HapticFeedback.mediumImpact();

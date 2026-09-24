@@ -92,13 +92,13 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                       // Bulk actions (hub audit #7): move and delete work on any selection; merge needs two.
                       OmiIconButton(
                         key: const Key('selection_bar_move'),
-                        icon: const Icon(Icons.drive_file_move_outline),
+                        icon: const Icon(Icons.folder_outlined),
                         label: context.l10n.moveToFolder,
                         onPressed: count > 0 ? () => moveSelectedConversationsToFolder(context) : null,
                       ),
                       OmiIconButton(
                         key: const Key('selection_bar_delete'),
-                        icon: const Icon(Icons.delete_outline_rounded),
+                        icon: const Icon(Icons.delete_outline),
                         label: context.l10n.delete,
                         isDestructive: true,
                         onPressed: count > 0 ? () => confirmAndDeleteSelectedConversations(context) : null,

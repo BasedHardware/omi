@@ -244,7 +244,7 @@ Future<ConversationRowAction?> showConversationActionsSheet(
       return SingleChildScrollView(
         child: OmiSettingsGroup(
           children: [
-            row(ConversationRowAction.open, Icons.open_in_new_rounded, l10n.open),
+            row(ConversationRowAction.open, Icons.open_in_full_rounded, l10n.open),
             row(
               ConversationRowAction.star,
               conversation.starred ? Icons.star_rounded : Icons.star_outline_rounded,
@@ -257,7 +257,7 @@ Future<ConversationRowAction?> showConversationActionsSheet(
               row(ConversationRowAction.separate, Icons.call_split_rounded, l10n.captureRecordingSeparate),
             ],
             if (canSelect) row(ConversationRowAction.select, Icons.check_circle_outline_rounded, l10n.selectOption),
-            row(ConversationRowAction.delete, Icons.delete_outline_rounded, l10n.delete, destructive: true),
+            row(ConversationRowAction.delete, Icons.delete_outline, l10n.delete, destructive: true),
           ],
         ),
       );
