@@ -48,6 +48,7 @@ from database.memory_apply_store import (
     CanonicalReviewResolution,
     CanonicalReviewResolutionConflict,
     ConversationSourceReplacementConflict,
+    EvidenceIdentityConflict,
     apply_direct_user_long_term_patch_firestore,
     apply_long_term_patch_firestore,
     read_trigger_feedback_replay_firestore,
@@ -75,6 +76,7 @@ from models.memory_domain import (
 from models.memory_evidence import (
     ArtifactRef,
     ArtifactPreservationState,
+    EVIDENCE_IDENTITY_FIELDS,
     MemoryEvidence,
     SourceState,
 )
@@ -1969,6 +1971,7 @@ def write_canonical_extraction_memory(
 
 _EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
 _EXTERNAL_MEMORY_ID_REISSUE_LIMIT = 25
+_EXTERNAL_WRITE_CONFLICT_ATTEMPTS = 3
 
 
 def _is_content_derived_memory_id(memory_id: Any, content: Any) -> bool:
@@ -2007,13 +2010,21 @@ def _available_external_memory_id(uid: str, memory_id: str, content: Any, *, db_
     raise RuntimeError("canonical external write exhausted memory identity reissues")
 
 
+_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS = set(EVIDENCE_IDENTITY_FIELDS) - {"evidence_id"}
+
+
+def _external_evidence_source_identity(evidence: MemoryEvidence) -> Dict[str, Any]:
+    """Immutable identity fields that name the source an evidence id stands for."""
+    return evidence.model_dump(mode="json", include=_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS)
+
+
 def _reissued_external_evidence(
     uid: str,
     evidence_items: List[MemoryEvidence],
     *,
     db_client: Any,
 ) -> List[MemoryEvidence]:
-    """Mint a fresh evidence identity when an external submission reuses a retired one.
+    """Mint a fresh evidence identity when an external submission reuses a taken one.
 
     External evidence ids are derived from the submitted content, and evidence
     source_state is monotonic per identity. Deleting a memory tombstones its
@@ -2029,6 +2040,7 @@ def _reissued_external_evidence(
         if item.conversation_id or item.source_type == "conversation":
             reissued.append(item)
             continue
+        proposed_identity = _external_evidence_source_identity(item)
         evidence_id = item.evidence_id
         for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
             snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
@@ -2036,12 +2048,17 @@ def _reissued_external_evidence(
                 break
             stored = _snapshot_payload(snapshot)
             if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
-                break
+                if _external_evidence_source_identity(MemoryEvidence(**stored)) == proposed_identity:
+                    break
             evidence_id = (
                 "ev_"
                 + deterministic_contract_id(
                     "canonical-external-evidence-reissue",
-                    {"evidence_id": item.evidence_id, "attempt": attempt},
+                    {
+                        "evidence_id": item.evidence_id,
+                        "identity": proposed_identity,
+                        "attempt": attempt,
+                    },
                 )[:32]
             )
         else:
@@ -2068,8 +2085,6 @@ def write_canonical_external_memory(
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     original_evidence = _evidence_items_from_payload(data)
-    reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
-    payload = dict(data)
     original_memory_id = str(data.get("id") or "").strip()
     was_privacy_deleted = False
     if original_memory_id:
@@ -2078,49 +2093,58 @@ def write_canonical_external_memory(
             f"{privacy_deletion_receipt_id(uid, original_memory_id)}"
         ).get()
         was_privacy_deleted = bool(getattr(receipt, "exists", False))
-    if was_privacy_deleted and not any(
+    has_conversation_evidence = any(
         item.conversation_id or item.source_type == "conversation" for item in original_evidence
-    ):
-        reissued_evidence = [
-            item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
-        ]
-        payload["id"] = f"mem_{secrets.token_hex(16)}"
-    if [item.evidence_id for item in reissued_evidence] != [item.evidence_id for item in original_evidence]:
-        # A manually re-added fact is a new source artifact. Give the new row a
-        # fresh deterministic identity derived from its newly minted evidence;
-        # the deleted row and evidence remain immutable history.
-        if not was_privacy_deleted:
-            payload["id"] = (
-                "mem_"
-                + deterministic_contract_id(
-                    "canonical-external-memory-reissue",
-                    {
-                        "uid": uid,
-                        "original_memory_id": data.get("id"),
-                        "evidence_ids": [item.evidence_id for item in reissued_evidence],
-                    },
-                )[:32]
-            )
-    if _is_content_derived_memory_id(payload.get("id"), payload.get("content")):
-        payload["id"] = _available_external_memory_id(uid, str(payload["id"]), payload.get("content"), db_client=client)
-    memory_id = write_canonical_extraction_memory(
-        uid,
-        payload,
-        db_client=client,
-        evidence_items=reissued_evidence,
-        review_resolution=review_resolution,
-        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
-        admit_neighbors=False,
     )
+    is_content_derived = _is_content_derived_memory_id(original_memory_id, data.get("content"))
+    last_conflict: Optional[EvidenceIdentityConflict] = None
+    memory_id: Optional[str] = None
+    for _conflict_attempt in range(_EXTERNAL_WRITE_CONFLICT_ATTEMPTS):
+        if not was_privacy_deleted and is_content_derived:
+            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{original_memory_id}").get()
+            if getattr(snapshot, "exists", False) and _is_live_identical_row(
+                MemoryItem(**_snapshot_payload(snapshot)), data.get("content")
+            ):
+                return original_memory_id
+        payload = dict(data)
+        reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
+        if was_privacy_deleted and not has_conversation_evidence:
+            reissued_evidence = [
+                item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
+            ]
+            payload["id"] = f"mem_{secrets.token_hex(16)}"
+        if _is_content_derived_memory_id(payload.get("id"), payload.get("content")):
+            payload["id"] = _available_external_memory_id(
+                uid, str(payload["id"]), payload.get("content"), db_client=client
+            )
+        try:
+            memory_id = write_canonical_extraction_memory(
+                uid,
+                payload,
+                db_client=client,
+                evidence_items=reissued_evidence,
+                review_resolution=review_resolution,
+                _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+                admit_neighbors=False,
+            )
+        except EvidenceIdentityConflict as exc:
+            if was_privacy_deleted or has_conversation_evidence or not is_content_derived:
+                raise
+            last_conflict = exc
+            continue
+        break
+    if memory_id is None:
+        assert last_conflict is not None
+        raise last_conflict
     if belief_model_enabled():
         from utils.memory.belief_evidence import schedule_belief_admission
 
         schedule_belief_admission(
             uid,
             memory_id,
-            str(payload.get("content") or ""),
+            str(data.get("content") or ""),
             db_client=client,
-            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+            new_user_asserted=bool(data.get("manually_added") or data.get("user_asserted")),
         )
     return memory_id
 
