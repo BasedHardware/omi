@@ -132,8 +132,8 @@ def serialize_timestamp(value: Any) -> str:
     return str(value)
 
 
-def conversation_keyset_position(position: Dict[str, Any]) -> Tuple[datetime, str]:
-    """Extract a ``{"ts", "id"}`` position as a (created_at, doc id) keyset."""
+def timestamp_keyset_position(position: Dict[str, Any]) -> Tuple[datetime, str]:
+    """Extract a ``{"ts", "id"}`` position as a (datetime, doc id) keyset."""
     timestamp, doc_id = keyset_position(position)
     try:
         return DatetimeWithNanoseconds.from_rfc3339(timestamp), doc_id
@@ -144,6 +144,11 @@ def conversation_keyset_position(position: Dict[str, Any]) -> Tuple[datetime, st
     except ValueError:
         raise _invalid_cursor()
     return parsed, doc_id
+
+
+# Kept for the conversation-list call sites; the same ``{"ts", "id"}`` keyset
+# serves the action-item sync feed ordered on ``updated_at``.
+conversation_keyset_position = timestamp_keyset_position
 
 
 def offset_page(fetched: List[Any], limit: int) -> Tuple[List[Any], int, bool]:

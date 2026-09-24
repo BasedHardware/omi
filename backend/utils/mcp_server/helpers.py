@@ -51,12 +51,13 @@ def bounded_transcript_segments(
     *,
     max_segments: int,
     max_chars: int,
+    extra_keys: Tuple[str, ...] = (),
 ) -> Tuple[List[Dict[str, Any]], bool]:
     source = [segment for segment in segments if isinstance(segment, dict)] if isinstance(segments, list) else []
     bounded: List[Dict[str, Any]] = []
     used_chars = 0
     truncated = False
-    allowed_keys = ("id", "text", "speaker_id", "is_user", "person_id", "start", "end")
+    allowed_keys = ("id", "text", "speaker_id", "is_user", "person_id", "start", "end") + tuple(extra_keys)
 
     for index, segment in enumerate(source):
         if index >= max_segments or used_chars >= max_chars:

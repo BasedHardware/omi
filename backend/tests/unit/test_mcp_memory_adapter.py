@@ -106,13 +106,15 @@ def test_mcp_rest_routes_keep_scope_grants_and_use_universal_service():
 
     assert "get_mcp_memory_default_memory_read_context" in search_route
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in search_route
-    assert "memory_service = MemoryService(db_client=db)" in search_route
-    assert "memory_service.search_mcp(uid, query, limit=limit)" in search_route
+    # The search read is delegated to the shared registry handler, which owns
+    # the MemoryService.search_mcp path for both MCP and REST.
+    assert '_call_tool_handler("search_memories"' in search_route
     assert "read_default_read_rollout" not in search_route
     assert "search_default_mcp_memories_vector" not in search_route
     assert "memories_db" not in search_route
-    assert "MemoryService(db_client=db).read" in list_route
-    assert "collect_filtered_memories" in list_route
+    # The list read is delegated to the shared handler core, which owns the
+    # MemoryService read/collect path for both MCP and REST.
+    assert "mcp_memory_handlers.memories_page_core(" in list_route
     assert "read_default_read_rollout" not in list_route
     assert "memories_db" not in list_route
 

@@ -657,6 +657,14 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 "completed": {"type": "boolean", "description": "Filter by completion status (omit for all)"},
                 "due_start_date": {"type": "string", "description": "Only items due on/after this date (yyyy-mm-dd)"},
                 "due_end_date": {"type": "string", "description": "Only items due on/before this date (yyyy-mm-dd)"},
+                "updated_since": {
+                    "type": "string",
+                    "description": (
+                        "Incremental sync: only items updated on/after this ISO 8601 timestamp "
+                        "(timezone offset required), ordered by (updated_at, id). Cannot be combined "
+                        "with completed/due-date filters; page further with cursor."
+                    ),
+                },
                 "limit": {"type": "integer", "description": "Number of action items to retrieve", "default": 100},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
                 "cursor": _CURSOR_INPUT,

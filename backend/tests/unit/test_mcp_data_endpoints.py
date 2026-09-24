@@ -74,8 +74,10 @@ _stubs = [
     'database._client',
     'database.redis_db',
     'database.conversations',
+    'database.mcp_conversation_pages',
     'database.memories',
     'database.action_items',
+    'database.action_item_sync',
     'database.folders',
     'database.users',
     'database.user_usage',
@@ -193,9 +195,11 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     memory_service.read.return_value = []
     with (
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
-        patch.object(rest, "MemoryService", return_value=memory_service),
+        # The list now reads through the shared handler core, which binds
+        # MemoryService in the handler module rather than the router.
+        patch.object(sse_memories, "MemoryService", return_value=memory_service),
     ):
-        assert rest.get_memories(auth_context=auth_context) == []
+        assert rest.get_memories(SimpleNamespace(headers={}), auth_context=auth_context) == []
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
     memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
@@ -478,7 +482,9 @@ def _fat_conversation():
 
 def test_conversation_list_and_search_return_cards_without_heavy_fields():
     with patch.object(
-        sse.conversations_db, 'get_mcp_conversation_cards_page', return_value=([_fat_conversation()], None)
+        sse_conversations.mcp_conversation_pages,
+        'get_mcp_conversation_cards_page',
+        return_value=([_fat_conversation()], None),
     ):
         listed = sse.execute_tool(UID, 'get_conversations', {})['conversations'][0]
 
@@ -539,7 +545,7 @@ async def test_conversation_index_failure_is_json_rpc_http_200(tool_name, argume
     with (
         patch.object(sse_transport, 'run_blocking', side_effect=_run_blocking_inline),
         patch.object(sse_transport, 'authenticate_mcp_request', return_value=auth_context),
-        patch.object(sse.conversations_db, 'get_mcp_conversation_cards_page', side_effect=failure),
+        patch.object(sse_conversations.mcp_conversation_pages, 'get_mcp_conversation_cards_page', side_effect=failure),
         patch.object(sse_conversations, 'resolve_mcp_conversation_search_ids', side_effect=failure),
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
@@ -763,19 +769,20 @@ def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False,
 
 
 class TestActionItems:
-    @patch('routers.mcp.action_items_db')
+    @patch('utils.mcp_server.handlers.action_items.action_items_db')
     def test_rest_returns_items_and_drops_deleted(self, mock_db):
         mock_db.get_action_items.return_value = [_action_item('a1'), _action_item('a2', deleted=True)]
-        result = rest.get_action_items(uid=UID)
+        result = rest.get_action_items(SimpleNamespace(headers={}), uid=UID)
         assert [i['id'] for i in result] == ['a1']
         assert result[0]['description'] == 'Email Bob'
 
-    @patch('routers.mcp.action_items_db')
+    @patch('utils.mcp_server.handlers.action_items.action_items_db')
     def test_rest_limit_clamped(self, mock_db):
         mock_db.get_action_items.return_value = []
-        rest.get_action_items(limit=99999, uid=UID)
+        rest.get_action_items(SimpleNamespace(headers={}), limit=99999, uid=UID)
         _, kwargs = mock_db.get_action_items.call_args
-        assert kwargs['limit'] == 500
+        # REST clamps the page to 500; the shared core fetches limit+1 lookahead.
+        assert kwargs['limit'] == 501
 
     @patch('utils.mcp_server.handlers.action_items.action_items_db')
     def test_tool_dispatch(self, mock_db):
@@ -814,12 +821,12 @@ class TestGoals:
 
 
 class TestChat:
-    @patch('routers.mcp.chat_db')
+    @patch('utils.mcp_server.handlers.other.chat_db')
     def test_rest_shapes_message(self, mock_db):
         mock_db.get_messages.return_value = [
             {'id': 'm1', 'text': 'hi', 'sender': 'human', 'type': 'text', 'created_at': NOW, 'files_id': []}
         ]
-        result = rest.get_chat_messages(uid=UID)
+        result = rest.get_chat_messages(SimpleNamespace(headers={}), uid=UID)
         assert result == [{'id': 'm1', 'text': 'hi', 'sender': 'human', 'type': 'text', 'created_at': NOW}]
 
     @patch('utils.mcp_server.handlers.other.chat_db')
@@ -871,8 +878,10 @@ class TestScreenActivity:
             'capture_completeness': 'unknown',
         }
         summary = {'apps': {}, 'total_screenshots': 5000, 'coverage': coverage}
-        monkeypatch.setattr(rest.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
-        monkeypatch.setattr(sse.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
+        monkeypatch.setattr(
+            rest.mcp_other_handlers.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary
+        )
+        monkeypatch.setattr(sse_other.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
         app = FastAPI()
         app.include_router(rest.router)
         app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
@@ -891,10 +900,10 @@ class TestScreenActivity:
             'ocrText': 'def foo',
         }
 
-    @patch('routers.mcp.screen_activity_db')
+    @patch('utils.mcp_server.handlers.other.screen_activity_db')
     def test_rest_rows(self, mock_db):
-        mock_db.get_screen_activity.return_value = [self._row()]
-        result = rest.get_screen_activity(uid=UID)
+        mock_db.get_screen_activity_page.return_value = ([self._row()], False)
+        result = rest.get_screen_activity(SimpleNamespace(headers={}), uid=UID)
         assert result == [
             {
                 'id': 's1',
@@ -905,12 +914,12 @@ class TestScreenActivity:
             }
         ]
 
-    @patch('routers.mcp.screen_activity_db')
+    @patch('utils.mcp_server.handlers.other.screen_activity_db')
     def test_rest_summary_mode(self, mock_db):
         mock_db.get_screen_activity_summary.return_value = {'apps': {'Cursor': {'count': 1}}, 'total_screenshots': 1}
-        result = rest.get_screen_activity(summary=True, uid=UID)
+        result = rest.get_screen_activity(SimpleNamespace(headers={}), summary=True, uid=UID)
         assert result['total_screenshots'] == 1
-        mock_db.get_screen_activity.assert_not_called()
+        mock_db.get_screen_activity_page.assert_not_called()
 
     @patch('utils.mcp_server.handlers.other.screen_activity_db')
     def test_tool_rows(self, mock_db):
@@ -947,10 +956,10 @@ class TestScreenActivity:
 
 
 class TestDailySummaries:
-    @patch('routers.mcp.daily_summaries_db')
+    @patch('utils.mcp_server.handlers.other.daily_summaries_db')
     def test_rest(self, mock_db):
         mock_db.get_daily_summaries.return_value = [{'date': '2026-06-11', 'content': 'Worked on MCP'}]
-        result = rest.get_daily_summaries(uid=UID)
+        result = rest.get_daily_summaries(SimpleNamespace(headers={}), uid=UID)
         assert result[0]['date'] == '2026-06-11'
 
     @patch('utils.mcp_server.handlers.other.daily_summaries_db')
@@ -1035,7 +1044,10 @@ def _rest_universal_patches(result):
     service.search_mcp.return_value = []
     return (
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
-        patch.object(rest, 'MemoryService', return_value=service),
+        # REST memory reads delegate to the shared registry handler, whose own
+        # grant check and MemoryService binding live in sse_memories.
+        patch.object(sse_memories, 'authorize_memory_external_default_memory_read', return_value=result),
+        patch.object(sse_memories, 'MemoryService', return_value=service),
         patch.object(rest, 'logger'),
     )
 
@@ -1051,14 +1063,14 @@ def _sse_universal_patches(result):
 
 
 def _run_rest_list(result):
-    a, b, c = _rest_universal_patches(result)
-    with a, b, c:
-        return rest.get_memories(auth_context=SimpleNamespace(uid=UID))
+    a, b, c, d = _rest_universal_patches(result)
+    with a, b, c, d:
+        return rest.get_memories(SimpleNamespace(headers={}), auth_context=SimpleNamespace(uid=UID))
 
 
 def _run_rest_search(result):
-    a, b, c = _rest_universal_patches(result)
-    with a, b, c:
+    a, b, c, d = _rest_universal_patches(result)
+    with a, b, c, d:
         return rest.search_memories(query='espresso', auth_context=SimpleNamespace(uid=UID))
 
 

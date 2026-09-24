@@ -236,7 +236,11 @@ def conversations_db():
             "database.conversations",
             os.path.join(str(_BACKEND), "database", "conversations.py"),
         )
-        yield module, firestore
+        pages_module = load_module_fresh(
+            "database.mcp_conversation_pages",
+            os.path.join(str(_BACKEND), "database", "mcp_conversation_pages.py"),
+        )
+        yield module, pages_module, firestore
 
 
 def _conversation(conversation_id, *, created_at, source, status="completed", discarded=False):
@@ -250,7 +254,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
 
 
 def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
         _conversation("failed-omi", created_at=7, source="omi", status="failed"),
@@ -297,7 +301,7 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -320,7 +324,7 @@ def test_sources_honor_legacy_include_discarded_default(conversations_db):
 
 
 def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -336,7 +340,7 @@ def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
 
 
 def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db):
-    module, firestore = conversations_db
+    module, pages_module, firestore = conversations_db
     firestore.rows = [
         {
             **_conversation("conversation-1", created_at=1, source="omi"),
@@ -349,7 +353,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
         }
     ]
 
-    result = module.get_mcp_conversation_cards(
+    result = pages_module.get_mcp_conversation_cards(
         "user-1",
         20,
         0,

@@ -129,3 +129,12 @@ to `unknown` rather than logging attacker-controlled content.
 Tool-level exceptions log via `logger.exception` with the normalized tool name
 only — arguments and user data never reach the log message; memory-grant
 denials log a WARNING carrying only the grant's safe observability reason.
+
+## REST sync/export surface
+
+The REST `/v1/mcp/*` incremental-sync contract — `X-Next-Cursor` pagination,
+the `updated_since` feed on action-items, the explicit
+`incremental_sync_unavailable` 503 gates on conversations/memories (with
+rollout prerequisites), and deletion/tombstone semantics — is documented in
+[`mcp-rest-sync.md`](./mcp-rest-sync.md). The gates are deferred follow-ups,
+not implemented behavior.

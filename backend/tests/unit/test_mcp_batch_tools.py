@@ -705,14 +705,14 @@ class _DescKeysetQuery:
 
 class TestConversationKeysetPage:
     def _stub_client(self, query):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         client = MagicMock()
         client.collection.return_value.document.return_value.collection.return_value = query
-        return patch.object(conversations_db, "get_firestore_client", return_value=client)
+        return patch.object(pages_db, "get_firestore_client", return_value=client)
 
     def test_tombstones_are_skipped_and_the_lookahead_row_is_not_lost(self):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
         docs = [
@@ -725,7 +725,7 @@ class TestConversationKeysetPage:
         ]
         query = _DescKeysetQuery(docs)
         with self._stub_client(query):
-            page, resume = conversations_db.get_mcp_conversation_cards_page(UID, 2)
+            page, resume = pages_db.get_mcp_conversation_cards_page(UID, 2)
         # Each raw-window rebuild reorders (created_at, __name__) descending.
         assert query.order_fields[:2] == ["created_at", "__name__"]
         assert len(query.order_fields) % 2 == 0
@@ -739,12 +739,12 @@ class TestConversationKeysetPage:
 
         query2 = _DescKeysetQuery(docs)
         with self._stub_client(query2):
-            page2, resume2 = conversations_db.get_mcp_conversation_cards_page(UID, 2, after=resume)
+            page2, resume2 = pages_db.get_mcp_conversation_cards_page(UID, 2, after=resume)
         assert [d["id"] for d in page2] == ["v2", "v0"]
         assert resume2 is None
 
     def test_equal_created_at_rows_resume_by_document_id(self):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
         docs = [
@@ -753,43 +753,43 @@ class TestConversationKeysetPage:
         ]
         query = _DescKeysetQuery(docs)
         with self._stub_client(query):
-            page, resume = conversations_db.get_mcp_conversation_cards_page(UID, 1)
+            page, resume = pages_db.get_mcp_conversation_cards_page(UID, 1)
         assert [d["id"] for d in page] == ["b"]
         assert resume == (t0, "b")
 
         query2 = _DescKeysetQuery(docs)
         with self._stub_client(query2):
-            page2, resume2 = conversations_db.get_mcp_conversation_cards_page(UID, 1, after=resume)
+            page2, resume2 = pages_db.get_mcp_conversation_cards_page(UID, 1, after=resume)
         assert [d["id"] for d in page2] == ["a"]
         assert resume2 is None
 
     def test_scan_budget_resumes_past_scanned_tombstones(self):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
         docs = [
             _FakeDoc(f"t{i:03d}", {"created_at": t0 - timedelta(minutes=i), "deleted": True})
-            for i in range(conversations_db._MCP_CARD_PAGE_SCAN_BUDGET + 50)
+            for i in range(pages_db.MCP_CARD_PAGE_SCAN_BUDGET + 50)
         ]
         query = _DescKeysetQuery(docs)
         with self._stub_client(query):
             # limit=9 gives 10-row windows landing exactly on the scan budget.
-            page, resume = conversations_db.get_mcp_conversation_cards_page(UID, 9)
+            page, resume = pages_db.get_mcp_conversation_cards_page(UID, 9)
         assert page == []
         # The budget-truncated scan still advances the resume position past
         # every scanned tombstone, so the next page makes progress.
         assert resume is not None
-        last_scanned = docs[conversations_db._MCP_CARD_PAGE_SCAN_BUDGET - 1]
+        last_scanned = docs[pages_db.MCP_CARD_PAGE_SCAN_BUDGET - 1]
         assert resume == (last_scanned._data["created_at"], last_scanned.id)
 
         query2 = _DescKeysetQuery(docs)
         with self._stub_client(query2):
-            page2, resume2 = conversations_db.get_mcp_conversation_cards_page(UID, 10, after=resume)
+            page2, resume2 = pages_db.get_mcp_conversation_cards_page(UID, 10, after=resume)
         assert page2 == []
         assert resume2 is None
 
     def test_enhanced_rows_pass_through_decrypt_seam(self):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
         docs = [
@@ -803,25 +803,27 @@ class TestConversationKeysetPage:
         query = _DescKeysetQuery(docs)
         with (
             self._stub_client(query),
-            patch.object(conversations_db, "_decrypt_conversation_data", side_effect=marked),
+            patch.object(
+                _import_real_module("database.conversations"), "_decrypt_conversation_data", side_effect=marked
+            ),
         ):
-            page, _resume = conversations_db.get_mcp_conversation_cards_page(UID, 5)
+            page, _resume = pages_db.get_mcp_conversation_cards_page(UID, 5)
         assert page[0]["decrypted_for"] == UID
         assert "decrypted_for" not in page[1]  # standard level untouched
 
     def test_none_created_at_resume_position_is_rejected(self):
-        conversations_db = _import_real_module("database.conversations")
+        pages_db = _import_real_module("database.mcp_conversation_pages")
 
         query = _DescKeysetQuery([])
         with self._stub_client(query), pytest.raises(ValueError, match="keyset timestamp"):
-            conversations_db.get_mcp_conversation_cards_page(UID, 1, after=(None, "x"))
+            pages_db.get_mcp_conversation_cards_page(UID, 1, after=(None, "x"))
 
 
 class TestGetConversationsKeysetCursor:
     def test_cursor_roundtrip_resumes_keyset(self):
         t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
         page_fn = MagicMock(side_effect=[([_conversation("c2")], (t0, "c2")), ([_conversation("c1")], None)])
-        with patch.object(conversations_handler.conversations_db, "get_mcp_conversation_cards_page", page_fn):
+        with patch.object(conversations_handler.mcp_conversation_pages, "get_mcp_conversation_cards_page", page_fn):
             page1 = sse.execute_tool(UID, "get_conversations", {"limit": 1})
             assert page_fn.call_args.kwargs["after"] is None
             page2 = sse.execute_tool(UID, "get_conversations", {"limit": 1, "cursor": page1["next_cursor"]})

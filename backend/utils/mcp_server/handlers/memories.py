@@ -185,6 +185,47 @@ def get_memories(
             "memories.read permission, or reconnect the account."
         )
 
+    return memories_page_core(
+        uid,
+        limit=limit,
+        offset=offset,
+        cursor_token=arguments.get("cursor"),
+        reviewed=reviewed,
+        manually_added=manually_added,
+        include_activity=include_activity,
+        include_sensitive=include_sensitive,
+        updated_after=updated_after,
+        sort=sort,
+        categories=valid_categories,
+        cursor_kind="get_memories",
+    )
+
+
+def memories_page_core(
+    uid: str,
+    *,
+    limit: int,
+    offset: int = 0,
+    cursor_token: Optional[str] = None,
+    reviewed: Optional[bool] = None,
+    manually_added: Optional[bool] = None,
+    include_activity: bool = False,
+    include_sensitive: bool = True,
+    updated_after: Any = None,
+    sort: str = "created_desc",
+    categories: Optional[List[str]] = None,
+    max_scan: int = MCP_MEMORY_LIST_MAX_SCAN,
+    cursor_kind: str,
+) -> Dict[str, Any]:
+    """Shared validated memory page for the MCP ``get_memories`` tool and REST list.
+
+    ``cursor_kind`` binds the opaque cursor to the calling surface so tokens
+    minted on one surface cannot resume the other. ``max_scan`` bounds the
+    filtered-scan path — REST keeps its released 5000-row window while the
+    tool uses the smaller MCP cap. Callers must authorize the read grant
+    first — this function performs no product authorization.
+    """
+    valid_categories = list(categories or [])
     filters = {
         "categories": sorted(valid_categories),
         "sort": sort,
@@ -194,12 +235,11 @@ def get_memories(
         "include_activity": include_activity,
         "include_sensitive": include_sensitive,
     }
-    cursor_token = arguments.get("cursor")
     uml_cursor = None
     if cursor_token is not None:
         if offset != 0:
             raise ToolExecutionError("cursor and offset are mutually exclusive.", code=-32602)
-        position = decode_cursor(cursor_token, kind="get_memories", uid=uid, filters=filters)
+        position = decode_cursor(cursor_token, kind=cursor_kind, uid=uid, filters=filters)
         if "uml" in position:
             uml_cursor = uml_position(position)
         else:
@@ -233,7 +273,7 @@ def get_memories(
             updated_after=updated_after,
             sort=sort,
             categories=valid_categories or None,
-            max_scan=MCP_MEMORY_LIST_MAX_SCAN,
+            max_scan=max_scan,
         )
         resume_uml = None
         # The bounded scan walks at most max_scan raw rows per call, so an
@@ -242,7 +282,7 @@ def get_memories(
         # the boundary instead of a dangling position.
         if result.get("more_in_window"):
             result["next_cursor"] = encode_cursor(
-                kind="get_memories",
+                kind=cursor_kind,
                 uid=uid,
                 position={"offset": offset + len(result["memories"])},
                 filters=filters,
@@ -255,7 +295,7 @@ def get_memories(
 
     if resume_uml is not None:
         result["next_cursor"] = encode_cursor(
-            kind="get_memories",
+            kind=cursor_kind,
             uid=uid,
             position={"uml": resume_uml},
             filters=filters,
@@ -293,9 +333,14 @@ def _resolve_memory_category(raw_category: Any, content: str) -> MemoryCategory:
     return category
 
 
-def _create_one_memory(uid: str, content: str, category: MemoryCategory, *, operation: str) -> MemoryDB:
+def _create_one_memory(
+    uid: str,
+    memory: Memory,
+    *,
+    operation: str,
+    upsert_vector: bool = False,
+) -> MemoryDB:
     """Create one memory through the same external write path as ``create_memory``."""
-    memory = Memory(content=content, category=category)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memory_db = MemoryService(db_client=db).create_external_memory(
         uid,
@@ -303,7 +348,7 @@ def _create_one_memory(uid: str, content: str, category: MemoryCategory, *, oper
         memory_system=MemorySystem.CANONICAL,
         consumer='mcp',
         operation=operation,
-        upsert_vector=False,
+        upsert_vector=upsert_vector,
         require_canonical_promotion=True,
     )
     capture_memory_write(
@@ -354,7 +399,11 @@ def create_memory(
 
     category = _resolve_memory_category(arguments.get("category"), content)
     try:
-        memory_db = _create_one_memory(uid, content, category, operation="mcp_tool_memory_create")
+        memory_db = _create_one_memory(
+            uid,
+            Memory(content=content, category=category),
+            operation="mcp_tool_memory_create",
+        )
     except HTTPException as exc:
         raise_tool_error_from_http(exc)
 
@@ -429,7 +478,11 @@ def create_memories(
 
         category = _resolve_memory_category(item.get("category"), content)
         try:
-            memory_db = _create_one_memory(uid, content, category, operation="mcp_tool_memories_create")
+            memory_db = _create_one_memory(
+                uid,
+                Memory(content=content, category=category),
+                operation="mcp_tool_memories_create",
+            )
         except HTTPException as exc:
             results.append({"index": index, "status": "error", "error": _batch_item_error(exc)})
             continue

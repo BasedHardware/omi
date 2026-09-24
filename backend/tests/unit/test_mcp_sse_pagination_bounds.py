@@ -38,10 +38,10 @@ def mcp():
 def conversations_db():
     # Patch the handler's own module binding: test_mcp_search_date_utc's
     # sys.modules stub isolation can leave the router and the handler holding
-    # different `database.conversations` objects in a combined run.
+    # different `database` objects in a combined run.
     from utils.mcp_server.handlers import conversations as mcp_conversations
 
-    return mcp_conversations.conversations_db
+    return mcp_conversations.mcp_conversation_pages
 
 
 def test_get_conversations_negative_offset_is_clamped(mcp, conversations_db):

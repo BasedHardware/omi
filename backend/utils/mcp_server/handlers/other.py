@@ -256,7 +256,37 @@ def get_screen_activity(
     group_by = arguments.get("group_by") or "none"
     if group_by not in _SCREEN_ACTIVITY_GROUP_BY:
         raise ToolExecutionError("Invalid group_by. Expected one of: none, app, hour, day.", code=-32602)
-    cursor_token = arguments.get("cursor")
+    return screen_activity_core(
+        uid,
+        start=start,
+        end=end,
+        app=app,
+        summary=summary,
+        group_by=group_by,
+        limit=limit,
+        cursor_token=arguments.get("cursor"),
+        cursor_kind="get_screen_activity",
+    )
+
+
+def screen_activity_core(
+    uid: str,
+    *,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    app: Optional[str],
+    summary: bool,
+    group_by: str,
+    limit: int,
+    cursor_token: Optional[str] = None,
+    cursor_kind: str,
+) -> Dict[str, Any]:
+    """Shared screen-activity read for the MCP tool and the REST endpoint.
+
+    ``cursor_kind`` binds the keyset cursor to the calling surface. Callers
+    validate/parse their own inputs (dates arrive as datetimes; REST always
+    passes ``group_by="none"``).
+    """
     if summary and group_by == "none":
         # The legacy aggregate path is unchanged: one bounded scan with
         # explicit coverage, no cursor (a cursor here could never resume).
@@ -276,7 +306,7 @@ def get_screen_activity(
     after = None
     seed_row: Optional[Dict[str, Any]] = None
     if cursor_token is not None:
-        position = decode_cursor(cursor_token, kind="get_screen_activity", uid=uid, filters=filters)
+        position = decode_cursor(cursor_token, kind=cursor_kind, uid=uid, filters=filters)
         after = keyset_position(position)
         # Carry the boundary row's app so a gap bridging pages still counts.
         seed_row = {"appName": position.get("app"), "timestamp": position.get("ts")}
@@ -296,7 +326,7 @@ def get_screen_activity(
     if has_more and rows:
         last = rows[-1]
         next_cursor = encode_cursor(
-            kind="get_screen_activity",
+            kind=cursor_kind,
             uid=uid,
             position={
                 "ts": str(last.get("timestamp") or ""),

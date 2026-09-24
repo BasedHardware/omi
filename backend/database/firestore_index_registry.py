@@ -306,6 +306,22 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('completed'), _asc('conversation_id'), _asc('due_at'), _asc('__name__')),
     ),
+    # GET /v1/mcp/action-items?updated_since=... incremental sync walks
+    # (updated_at ASC, __name__ ASC) with a range predicate on updated_at;
+    # the DESC twin keeps the newest-first revision scan cheap for callers
+    # polling the head of the feed.
+    FirestoreIndexRequirement(
+        'action_items_updated_asc_name_asc',
+        'action_items',
+        'COLLECTION',
+        (_asc('updated_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'action_items_updated_desc_name_desc',
+        'action_items',
+        'COLLECTION',
+        (_desc('updated_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'candidate_integration_outbox_generation_status',
         'candidate_integration_outbox',

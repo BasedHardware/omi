@@ -17,6 +17,12 @@ MCP_MEMORY_BATCH_MAX_ITEMS = 25
 MCP_SCREEN_ACTIVITY_OBSERVATION_GAP_SECONDS = 300
 MCP_SCREEN_ACTIVITY_TOP_TITLES = 10
 
+# REST /v1/mcp detail bounds: released REST clients fetch the full transcript
+# in one shot, so the shared bounded reader runs with much wider caps than the
+# hosted tool defaults while still bounding the response.
+MCP_REST_CONVERSATION_MAX_SEGMENTS = 4096
+MCP_REST_CONVERSATION_MAX_CHARS = 500_000
+
 # JSON-RPC batch (array) requests are a pre-2025-06-18 transport feature. The
 # cap keeps a single POST from fanning out into unbounded per-message work.
 MCP_MAX_BATCH_MESSAGES = 20

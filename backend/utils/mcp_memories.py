@@ -159,6 +159,24 @@ def parse_mcp_datetime(value: Optional[str], field_name: str) -> Optional[dateti
         raise ValueError(f"Invalid {field_name} format: '{value}'. Expected ISO 8601.") from e
 
 
+def parse_sync_timestamp(value: Optional[str], field_name: str) -> Optional[datetime]:
+    """Parse ``updated_since``-style ISO 8601 input that MUST carry a timezone.
+
+    A naive timestamp would silently adopt the server's local zone and shift
+    the incremental feed window, so it is rejected rather than coerced. A
+    present-but-empty value is likewise rejected — treating it as absent would
+    silently turn a sync request into an unfiltered one.
+    """
+    if value is not None and not str(value).strip():
+        raise ValueError(f"Invalid {field_name} format: empty value. Expected ISO 8601 with a timezone offset.")
+    parsed = parse_mcp_datetime(value, field_name)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        raise ValueError(f"Invalid {field_name} format: '{value}'. Expected ISO 8601 with an explicit timezone offset.")
+    return parsed
+
+
 def parse_mcp_int(value: Any, field_name: str, *, default: int, minimum: int, maximum: int) -> int:
     if value is None:
         parsed = default
