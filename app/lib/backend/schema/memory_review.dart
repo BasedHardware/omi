@@ -16,7 +16,7 @@ class MemoryReviewItem {
 
   factory MemoryReviewItem.fromGenerated(wire.GeneratedLearnedMemoryRef generated) {
     return MemoryReviewItem(
-      memoryId: generated.memoryId,
+      memoryId: generated.id,
       content: generated.content,
       category: generated.category,
       capturedAt: generated.capturedAt,

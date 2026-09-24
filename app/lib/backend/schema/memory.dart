@@ -312,7 +312,6 @@ class Memory {
       'category': category.toString().split('.').last,
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
-      'memory_id': conversationId,
       'conversation_id': conversationId,
       'reviewed': reviewed,
       'user_review': userReview,
