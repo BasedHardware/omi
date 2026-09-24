@@ -695,3 +695,50 @@ def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, c
     assert "Invalid value for 'local_token'" in result.output
     config = cfg.load()
     assert config.get_profile("default").local_token is None
+
+
+def test_config_get_unknown_key_fails(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["config", "get", "unknown_key"])
+    assert result.exit_code != 0
+    assert "Unknown config key 'unknown_key'" in result.output
+
+
+def test_config_get_reads_api_base(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["config", "get", "api_base"])
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == cfg.DEFAULT_API_BASE
+
+    json_result = cli_runner.invoke(app, ["--json", "config", "get", "api_base"])
+    assert json_result.exit_code == 0, json_result.output
+    payload = json.loads(json_result.output)
+    assert payload["key"] == "api_base"
+    assert payload["value"] == cfg.DEFAULT_API_BASE
+    assert payload["profile"] == "default"
+
+
+def test_config_get_local_token_masking(config_path: Path, cli_runner) -> None:
+    # Set a secret local token
+    cli_runner.invoke(app, ["config", "set", "local_token", "secret123456789"])
+
+    # Default should be masked
+    masked_res = cli_runner.invoke(app, ["config", "get", "local_token"])
+    assert masked_res.exit_code == 0
+    assert "…" in masked_res.output
+    assert "secret123456789" not in masked_res.output
+
+    # With --unmasked, should print raw token
+    unmasked_res = cli_runner.invoke(app, ["config", "get", "local_token", "--unmasked"])
+    assert unmasked_res.exit_code == 0
+    assert unmasked_res.output.strip() == "secret123456789"
+
+
+def test_config_get_and_set_normalizes_case_and_dashes(config_path: Path, cli_runner) -> None:
+    # Set via uppercase and dash
+    set_res = cli_runner.invoke(app, ["config", "set", "LOCAL-API-URL", "http://127.0.0.1:9000"])
+    assert set_res.exit_code == 0, set_res.output
+
+    # Get via mixed case and dash
+    get_res = cli_runner.invoke(app, ["config", "get", "local-api-url"])
+    assert get_res.exit_code == 0, get_res.output
+    assert get_res.output.strip() == "http://127.0.0.1:9000"
+

@@ -63,6 +63,48 @@ def path(typer_ctx: typer.Context) -> None:
 
 
 _SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
+_GETTABLE_KEYS = {"api_base", "auth_method", "local_api_url", "local_token"}
+
+
+def _normalize_key(key: str) -> str:
+    return key.strip().lower().replace("-", "_")
+
+
+@app.command("get", help="Print a single configuration key value.")
+def get_value(
+    typer_ctx: typer.Context,
+    key: str = typer.Argument(..., help=f"Config key to read. One of: {sorted(_GETTABLE_KEYS)}"),
+    unmasked: bool = typer.Option(
+        False,
+        "--unmasked",
+        help="Print raw unmasked value for secret fields (e.g. local_token).",
+    ),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    norm_key = _normalize_key(key)
+    if norm_key not in _GETTABLE_KEYS:
+        raise UsageError(
+            message=f"Unknown config key '{key}'",
+            detail=f"Gettable keys: {sorted(_GETTABLE_KEYS)}",
+        )
+    config = ctx.load_config()
+    profile = config.get_profile(ctx.profile_name)
+
+    if norm_key == "api_base":
+        val = profile.api_base
+    elif norm_key == "auth_method":
+        val = profile.auth_method or ""
+    elif norm_key == "local_api_url":
+        val = profile.local_api_url or ""
+    elif norm_key == "local_token":
+        val = (profile.local_token or "") if unmasked else (profile.masked_local_token() or "")
+    else:  # pragma: no cover
+        val = ""
+
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"profile": profile.name, "key": norm_key, "value": val})
+    else:
+        typer.echo(val)
 
 
 @app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
@@ -72,11 +114,13 @@ def set_value(
     value: str = typer.Argument(..., help="New value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if key not in _SETTABLE_KEYS:
+    norm_key = _normalize_key(key)
+    if norm_key not in _SETTABLE_KEYS:
         raise UsageError(
             message=f"Unknown config key '{key}'",
             detail=f"Settable keys: {sorted(_SETTABLE_KEYS)}",
         )
+    key = norm_key
     config = ctx.load_config()
     profile = config.get_profile(ctx.profile_name)
     if key in {"api_base", "local_api_url"}:
