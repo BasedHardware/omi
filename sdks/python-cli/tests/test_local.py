@@ -77,6 +77,46 @@ def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli
     assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
 
 
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "not-a-url",
+        "ftp://127.0.0.1:47778",
+        "http://",
+        "://missing-scheme",
+    ],
+)
+def test_local_configure_rejects_invalid_url(config_path: Path, cli_runner, invalid_url: str) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["local", "configure", "--url", invalid_url, "--token", FAKE_LOCAL_TOKEN],
+    )
+    assert result.exit_code == 1
+    assert "Invalid local API URL" in result.stderr
+
+
+@pytest.mark.parametrize("empty_token", ["", "   ", "\t"])
+def test_local_configure_rejects_empty_token(config_path: Path, cli_runner, empty_token: str) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["local", "configure", "--url", FAKE_LOCAL_URL, "--token", empty_token],
+    )
+    assert result.exit_code == 1
+    assert "Invalid local token" in result.stderr
+
+
+def test_local_client_rejects_invalid_or_missing_api_url() -> None:
+    with pytest.raises(CliError, match="Local API URL is not configured"):
+        LocalOmiClient(api_url="  ", token="secret")
+    with pytest.raises(CliError, match="Local API URL is invalid"):
+        LocalOmiClient(api_url="ftp://127.0.0.1", token="secret")
+
+
+def test_local_client_rejects_empty_or_whitespace_token() -> None:
+    with pytest.raises(CliError, match="Local API token is not configured"):
+        LocalOmiClient(api_url=FAKE_LOCAL_URL, token="  ")
+
+
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--json", "local", "status"])
 

@@ -6,6 +6,7 @@ import errno
 import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -27,13 +28,21 @@ class LocalOmiClient:
         timeout: Optional[httpx.Timeout] = None,
         verbose: bool = False,
     ) -> None:
-        if not api_url:
+        if not api_url or not api_url.strip():
             raise CliError(
                 message="Local API URL is not configured",
                 detail="Run `omi local configure --url URL --token TOKEN` or set OMI_LOCAL_API_URL.",
                 exit_code=2,
             )
-        if not token:
+        cleaned_url = api_url.strip().rstrip("/")
+        parsed = urlsplit(cleaned_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise CliError(
+                message="Local API URL is invalid",
+                detail=f"Local API URL must be an http:// or https:// URL with a valid host (got '{api_url}').",
+                exit_code=2,
+            )
+        if not token or not token.strip():
             raise CliError(
                 message="Local API token is not configured",
                 detail="Run `omi local configure --url URL --token TOKEN` or set OMI_LOCAL_TOKEN.",
@@ -42,9 +51,9 @@ class LocalOmiClient:
 
         self._verbose = verbose
         self._http = httpx.Client(
-            base_url=api_url.rstrip("/"),
+            base_url=cleaned_url,
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {token.strip()}",
                 "User-Agent": USER_AGENT,
                 "Accept": "application/json",
             },
