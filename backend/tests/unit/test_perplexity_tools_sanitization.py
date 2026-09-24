@@ -49,17 +49,43 @@ def _load(module_name, rel_path):
     return mod
 
 
+# Ensure httpx is stubbed if not installed
+try:
+    import httpx
+except ImportError:
+    httpx = _mod("httpx")
+
+    class HTTPError(Exception):
+        pass
+
+    class TimeoutException(HTTPError):
+        pass
+
+    class Response:
+        status_code = 200
+        text = ""
+
+    httpx.HTTPError = HTTPError
+    httpx.TimeoutException = TimeoutException
+    httpx.Response = Response
+
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
+
+
 def _tool_decorator(fn=None, **kwargs):
     if fn is not None and callable(fn):
         fn.func = fn
         return fn
+
     def dec(func):
         func.func = func
         return func
+
     return dec
+
+
 _lc_tools.tool = _tool_decorator
 
 for _p in [
@@ -97,7 +123,9 @@ pt = _load(
 class TestPerplexityToolsSanitization(unittest.TestCase):
     def test_perplexity_unexpected_exception_sanitized(self):
         async def _run():
-            with patch.object(pt, "_post_gateway_chat_completion", side_effect=RuntimeError("internal gateway credentials secret")):
+            with patch.object(
+                pt, "_post_gateway_chat_completion", side_effect=RuntimeError("internal gateway credentials secret")
+            ):
                 result = await pt._perplexity_gateway_search("test query")
                 self.assertEqual("Error: An unexpected error occurred while searching. Please try again later.", result)
                 self.assertNotIn("internal gateway credentials secret", result)
