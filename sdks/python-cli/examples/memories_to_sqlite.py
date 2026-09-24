@@ -57,12 +57,12 @@ def rows_from(source):
     content = Path(source).read_bytes().decode("utf-8-sig")
     items = json.loads(content)
     if isinstance(items, dict):
-        items = (
-            items.get("memories")
-            or items.get("items")
-            or items.get("data")
-            or [items]
-        )
+        for key in ("memories", "items", "data"):
+            if isinstance(items.get(key), list):
+                items = items[key]
+                break
+        else:
+            items = [items]
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing memories")
     rows = []

@@ -142,6 +142,17 @@ class TestMemoriesToSqlite(unittest.TestCase):
         with self.assertRaises(ValueError):
             load(str(self.db_path), [str(bad_file)])
 
+    def test_empty_wrapped_payload(self):
+        for wrapper_key in ("memories", "items", "data"):
+            empty_wrapped = {wrapper_key: []}
+            ew_file = self.dir_path / f"empty_{wrapper_key}.json"
+            ew_file.write_text(json.dumps(empty_wrapped), encoding="utf-8")
+
+            loaded, added, total = load(str(self.db_path), [str(ew_file)])
+            self.assertEqual(loaded, 0)
+            self.assertEqual(added, 0)
+            self.assertEqual(total, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

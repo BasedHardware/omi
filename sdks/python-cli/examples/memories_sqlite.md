@@ -4,6 +4,7 @@ Use this recipe to store, query, and search your Omi memories in a local SQLite
 database. It reads saved JSON exports, makes no network requests, and normalises
 timestamps to UTC text so SQLite date and time functions work seamlessly. You need
 Python 3.10+ and an authenticated `omi-cli` for the initial export.
+The `python -m sqlite3` interactive shell examples below require Python 3.12+.
 
 Export up to 200 memories:
 
@@ -79,12 +80,12 @@ def rows_from(source):
     content = Path(source).read_bytes().decode("utf-8-sig")
     items = json.loads(content)
     if isinstance(items, dict):
-        items = (
-            items.get("memories")
-            or items.get("items")
-            or items.get("data")
-            or [items]
-        )
+        for key in ("memories", "items", "data"):
+            if isinstance(items.get(key), list):
+                items = items[key]
+                break
+        else:
+            items = [items]
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing memories")
     rows = []
