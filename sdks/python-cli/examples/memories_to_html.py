@@ -1,55 +1,17 @@
-# Build a self-contained HTML knowledge vault of your memories
+"""
+Convert Omi memory list JSON exports to a standalone HTML second brain knowledge vault dashboard.
 
-Use this recipe to browse, search, or print a structured second-brain dashboard
-of your captured Omi memories, facts, learnings, and preferences without the CLI
-or a spreadsheet. It transforms one or more `memory list` exports into an
-offline, interactive HTML dashboard featuring:
+Usage:
+    # Direct pipeline export (stdin to HTML)
+    omi --json memory list --limit 200 | python memories_to_html.py - memories_vault.html
 
-- **Knowledge metrics overview**: total memories count, categories breakdown, unique tags, and real-time visible counter.
-- **Client-side live filter**: instant search across memory texts, categories, and tags as you type with zero server dependencies.
-- **Color-coded categories & tag pills**: distinct visual cards for work, learnings, skills, and personal preferences.
-- **Zero external assets**: no external CSS/JS CDNs or remote trackers; 100% self-contained, private, and print-ready (`@media print`).
+    # Convert from saved JSON file
+    python memories_to_html.py memories.json memories_vault.html
 
-You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
+    # Filter specific categories
+    python memories_to_html.py memories.json work_vault.html --category work,learnings
+"""
 
----
-
-## Quickstart
-
-### 1. Direct Pipeline Export (Stdout to HTML)
-
-Stream up to 200 memories directly into an interactive HTML vault:
-
-```sh
-omi --json memory list --limit 200 | python examples/memories_to_html.py - memories_vault.html
-```
-
-### 2. Export from a Saved JSON File
-
-If you have already saved an export:
-
-```sh
-omi --json memory list --limit 200 --offset 0 > memories.json
-python examples/memories_to_html.py memories.json memories_vault.html
-```
-
-Check that the command succeeded before converting the file.
-
-### 3. Filter by Category
-
-Export a dedicated dashboard for specific categories:
-
-```sh
-python examples/memories_to_html.py memories.json work_learnings.html --category work,learnings
-```
-
----
-
-## Standalone Converter Script
-
-The standalone exporter is located at `examples/memories_to_html.py`:
-
-```python
 import argparse
 import json
 import sys
@@ -370,4 +332,3 @@ if __name__ == "__main__":
         sys.exit(f"Conversion failed: {exc}")
 
     print(f"Successfully rendered {count} memor{'ies' if count != 1 else 'y'} to {args.destination}")
-```
