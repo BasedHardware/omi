@@ -69,6 +69,16 @@ checks:
     triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
+  - id: whoop-tools-auth-tests
+    command: ["python3", "plugins/omi-whoop-app/test_whoop_tools_auth.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14453: /tools/* routes require caller authentication (shared-secret guard); fail-closed 503 when unconfigured, 401 on missing/wrong token"
+  - id: whoop-tools-no-leak-tests
+    command: ["python3", "plugins/omi-whoop-app/test_whoop_tools_no_leak.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14453: /tools/* handlers must not leak raw exception text in error responses"
   - id: gcal-null-params-tests
     command: ["python3", "plugins/omi-google-calendar-app/test_main.py"]
     triggers: ["plugins/omi-google-calendar-app/**"]
