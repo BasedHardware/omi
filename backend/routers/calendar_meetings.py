@@ -46,13 +46,14 @@ def store_calendar_meeting(
     request: StoreMeetingRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Store or update a calendar meeting in Firestore."""
-    start_utc = _to_utc(request.start_time)
-    end_utc = _to_utc(request.end_time)
+    """
+    Store or update a calendar meeting in Firestore.
+    If a meeting with the same calendar_event_id and calendar_source exists, it will be updated.
+    """
+    start_utc, end_utc = _to_utc(request.start_time), _to_utc(request.end_time)
     if end_utc <= start_utc:
         raise HTTPException(status_code=422, detail="end_time must be after start_time")
     duration_minutes = int((end_utc - start_utc).total_seconds() / 60)
-
     meeting_context = CalendarMeetingContext(
         calendar_event_id=request.calendar_event_id,
         title=request.title,
@@ -64,10 +65,8 @@ def store_calendar_meeting(
         notes=request.notes,
         calendar_source=request.calendar_source,
     )
-
     meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = end_utc
-
     existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
         uid, request.calendar_event_id, request.calendar_source
     )
@@ -76,7 +75,6 @@ def store_calendar_meeting(
         meeting_id = existing_meeting_id
     else:
         meeting_id = calendar_db.create_meeting(uid, meeting_dict)
-
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
 
 
