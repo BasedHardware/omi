@@ -133,10 +133,6 @@
 	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Omi needs access to your calendar to view and create events from your conversations and action items.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Omi needs access to your calendar to view and create events from your conversations and action items.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Omi needs access to your camera to take photos and attach them directly to your chat messages and notes.</string>
 	<key>NSContactsUsageDescription</key>
