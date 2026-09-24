@@ -771,6 +771,38 @@ class TestRequestAnalytics:
         assert kwargs["uid"] == "mcp-anonymous"
         assert kwargs["http_status"] == 401
 
+    @pytest.mark.parametrize(("path", "label"), [("/v1/mcp", "canonical"), ("/v1/mcp/sse", "legacy_sse")])
+    def test_request_event_on_auth_403_uses_anonymous_id(self, client, path, label):
+        """A 403 raised inside authentication still emits exactly one request
+        event per POST, labeled by path, before any uid is known."""
+        with (
+            patch.object(
+                mcp_transport,
+                "authenticate_mcp_request",
+                side_effect=HTTPException(status_code=403, detail="blocked"),
+            ),
+            patch.object(mcp_transport, "schedule_mcp_request") as request_event,
+        ):
+            response = _post(client, path, _msg("ping"))
+        assert response.status_code == 403
+        request_event.assert_called_once()
+        kwargs = request_event.call_args.kwargs
+        assert kwargs["uid"] == "mcp-anonymous"
+        assert kwargs["http_status"] == 403
+        assert kwargs["path"] == label
+
+    def test_request_event_on_admission_403_keeps_known_uid(self, client, authed):
+        """A 403 raised after authentication (admission limiter) still emits one
+        request event carrying the resolved uid."""
+        authed.admission.side_effect = HTTPException(status_code=403, detail="blocked")
+        response = _post(client, "/v1/mcp", _msg("ping"))
+        assert response.status_code == 403
+        authed.request_event.assert_called_once()
+        kwargs = authed.request_event.call_args.kwargs
+        assert kwargs["uid"] == "uid-test"
+        assert kwargs["http_status"] == 403
+        assert kwargs["path"] == "canonical"
+
     def test_request_event_on_admission_429(self, client, authed):
         with patch.object(
             mcp_transport,
@@ -974,6 +1006,19 @@ class TestPostHogClientSplit:
         monkeypatch.setattr(it, "_build_posthog_client", build)
         assert it._get_posthog_capture_client() is None
         assert it.get_posthog_client_for_decisions() == "client:project-key"
+
+    def test_events_key_only_captures_and_never_builds_decision_client(self, monkeypatch):
+        """POSTHOG_EVENTS_API_KEY alone serves event capture while the decision
+        getter returns None and never builds a client from the events key."""
+        it = self._reset(monkeypatch)
+        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
+        fake = MagicMock()
+        build = MagicMock(return_value=fake)
+        monkeypatch.setattr(it, "_build_posthog_client", build)
+        it.emit_posthog_event("u", "MCP Request", {"http_status": 200})
+        fake.capture.assert_called_once_with(distinct_id="u", event="MCP Request", properties={"http_status": 200})
+        assert it.get_posthog_client_for_decisions() is None
+        build.assert_called_once_with("events-key")
 
 
 class TestMemoryToolBehavior:
