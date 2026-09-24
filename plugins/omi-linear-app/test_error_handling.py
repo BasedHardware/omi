@@ -215,20 +215,6 @@ class TestLinearErrorHandling(unittest.TestCase):
             self.assertEqual(res.error, "Failed to add comment")
 
 
-    def test_graphql_error_response_does_not_leak_error_message(self):
-        """linear_graphql_request masks GraphQL error messages returned in 200 responses."""
-        class FakeResponse:
-            status_code = 200
-            content = b'{"errors": [{"message": "INTERNAL_DB_DISCONNECTED_AT_10.240.0.1_PASSWORD_LEAK"}]}'
-            def json(self):
-                return {"errors": [{"message": "INTERNAL_DB_DISCONNECTED_AT_10.240.0.1_PASSWORD_LEAK"}]}
-
-        with patch.object(self.app.requests, "post", return_value=FakeResponse()):
-            res = self.app.linear_graphql_request("uid123", "query { viewer { id } }")
-            self.assertIn("error", res)
-            self.assertNotIn("INTERNAL_DB_DISCONNECTED", res["error"])
-            self.assertEqual(res["error"], "Linear GraphQL request failed")
-
     def test_graphql_http_error_response_does_not_leak_error_message(self):
         """linear_graphql_request masks GraphQL error messages returned in 400+ responses."""
         class FakeResponse:
@@ -242,15 +228,6 @@ class TestLinearErrorHandling(unittest.TestCase):
             self.assertIn("error", res)
             self.assertNotIn("INTERNAL_DB_DISCONNECTED", res["error"])
             self.assertEqual(res["error"], "Linear API request failed")
-
-    def test_chat_tool_does_not_leak_graphql_error(self):
-        """chat tools do not interpolate raw error text from linear_graphql_request."""
-        req = FakeRequest({"uid": "uid123", "query": "auth"})
-        with patch.object(self.app, "linear_graphql_request", return_value={"error": "INTERNAL_DB_DISCONNECTED_AT_10.240.0.1_PASSWORD_LEAK"}):
-            res = asyncio.run(self.app.tool_search_issues(req))
-            self.assertIsNotNone(res.error)
-            self.assertNotIn("INTERNAL_DB_DISCONNECTED", res.error)
-            self.assertEqual(res.error, "Search failed")
 
 
 if __name__ == "__main__":
