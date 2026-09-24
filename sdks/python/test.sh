@@ -18,5 +18,6 @@ fi
 
 exec uv run --no-project --python 3.11 \
   --with 'pytest==8.4.1' \
+  --with "$(sed -n '/^bleak==/p' requirements.txt)" \
   --with "websockets==$minimum_websockets" \
   python -m pytest tests -q

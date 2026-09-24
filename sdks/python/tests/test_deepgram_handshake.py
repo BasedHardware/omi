@@ -13,7 +13,7 @@ def test_deepgram_authorization_is_a_handshake_header(monkeypatch):
         received = asyncio.Event()
         audio_sent = asyncio.Event()
         headers = []
-        sent_audio = []
+        sent_messages = []
         transcripts = []
         pcm = b"\x00\x00" * 80
 
@@ -28,7 +28,7 @@ def test_deepgram_authorization_is_a_handshake_header(monkeypatch):
                 pass
 
             async def send(self, message):
-                sent_audio.append(message)
+                sent_messages.append(message)
                 audio_sent.set()
 
             async def messages(self):
@@ -78,7 +78,7 @@ def test_deepgram_authorization_is_a_handshake_header(monkeypatch):
             await asyncio.gather(worker, completed, return_exceptions=True)
 
         assert headers == [{"Authorization": "Token test-key"}]
-        assert sent_audio == [pcm]
+        assert sent_messages == [pcm, json.dumps({"type": "CloseStream"})]
         assert transcripts == ["test transcript"]
 
     asyncio.run(scenario())
