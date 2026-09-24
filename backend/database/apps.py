@@ -56,8 +56,7 @@ def get_audio_apps_count(app_ids: List[str]) -> int:
 def get_private_apps_db(uid: str) -> List[Dict[str, Any]]:
     filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True)]
     private_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
-    data = [_typed_doc(doc) for doc in private_apps]
-    return data
+    return [_typed_doc(doc) for doc in private_apps]
 
 
 # This returns public unapproved apps of all users
