@@ -46,7 +46,7 @@ from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MIN_CLIP_SECONDS,
     PROMPT_WINDOW,
-    _speaker_id,
+    speaker_id_of,
     select_prompts,
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
@@ -245,10 +245,10 @@ def _resolve_person(uid: str, request: SpeakerTagPromptAnswerRequest) -> Tuple[s
     if request.answer == SpeakerTagPromptAnswer.person:
         if not request.person_id:
             raise TagPromptInvalid('person_id is required')
-        person = users_db.get_person(uid, request.person_id)
-        if not person:
+        found: Optional[Dict[str, Any]] = users_db.get_person(uid, request.person_id)
+        if not found:
             raise LookupError('Person not found')
-        return request.person_id, person
+        return request.person_id, found
     name = (request.name or '').strip()
     if len(name) < 2:
         raise TagPromptInvalid('name is required')
@@ -256,9 +256,10 @@ def _resolve_person(uid: str, request: SpeakerTagPromptAnswerRequest) -> Tuple[s
     if existing:
         return existing['id'], existing
     now = datetime.now(timezone.utc)
-    person = {'id': str(uuid.uuid4()), 'name': name, 'created_at': now, 'updated_at': now}
+    person_id = str(uuid.uuid4())
+    person: Dict[str, Any] = {'id': person_id, 'name': name, 'created_at': now, 'updated_at': now}
     users_db.create_person(uid, person)
-    return person['id'], person
+    return person_id, person
 
 
 def apply_answer(
@@ -387,7 +388,7 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
     ]
     if not chosen or len(chosen) != len(wanted):
         return None
-    speaker_ids = {_speaker_id(segment) for segment in chosen}
+    speaker_ids = {speaker_id_of(segment) for segment in chosen}
     if len(speaker_ids) != 1:
         return None
     speaker_id = speaker_ids.pop()
@@ -404,7 +405,7 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
         for segment in conversation.get('transcript_segments') or []
         if float(segment.get('start') or 0) < end
         and float(segment.get('end') or 0) > start
-        and _speaker_id(segment) != speaker_id
+        and speaker_id_of(segment) != speaker_id
     ]
     if others:
         return None
@@ -425,7 +426,10 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
     outcome = 'error'
     try:
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
-        window = owner_clip_window(conversation or {}, segment_ids) if conversation else None
+        if not conversation:
+            outcome = 'clip_not_clean'
+            return outcome
+        window = owner_clip_window(conversation, segment_ids)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
@@ -443,7 +447,7 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
             outcome = 'transient_failure' if reason.startswith('transcription_failed') else 'rejected_quality'
             return outcome
         embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav, 'owner_confirmation.wav')
-        if embedding is None or not np.isfinite(embedding).all() or not np.any(embedding):
+        if not np.isfinite(embedding).all() or not np.any(embedding):
             outcome = 'rejected_embedding'
             return outcome
         await run_blocking(

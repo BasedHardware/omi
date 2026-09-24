@@ -6,10 +6,11 @@ are seconds from ``conversation.started_at``, the same frame as transcript
 segments.
 """
 
+import io
+import wave
 from typing import Any, List, Mapping, Optional
 
 from utils.other.storage import download_audio_chunks_and_merge
-from utils.speaker_identification import _pcm_to_wav_bytes, _trim_pcm_audio
 
 CLIP_SAMPLE_RATE = 16000
 MAX_CLIP_REQUEST_SECONDS = 12.0
@@ -54,9 +55,22 @@ def conversation_clip_pcm(
 
     merged = download_audio_chunks_and_merge(uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate)
     buffer_start = min(relevant)
-    pcm = _trim_pcm_audio(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
+    pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
     return pcm or None
 
 
+def trim_pcm16(pcm: bytes, sample_rate: int, start: float, end: float) -> bytes:
+    """Sample-accurate cut of PCM16 mono: two bytes per sample, so the cut is byte arithmetic."""
+    first = max(0, int(round(start * sample_rate))) * 2
+    last = max(0, int(round(end * sample_rate))) * 2
+    return pcm[first:last]
+
+
 def pcm_to_wav(pcm: bytes, sample_rate: int = CLIP_SAMPLE_RATE) -> bytes:
-    return _pcm_to_wav_bytes(pcm, sample_rate)
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm)
+    return buffer.getvalue()

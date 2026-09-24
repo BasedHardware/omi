@@ -68,7 +68,7 @@ def _as_utc(value: Any) -> Optional[datetime]:
     return None
 
 
-def _speaker_id(segment: Mapping[str, Any]) -> int:
+def speaker_id_of(segment: Mapping[str, Any]) -> int:
     raw = segment.get('speaker_id')
     if isinstance(raw, int):
         return raw
@@ -93,7 +93,7 @@ def _normalized_segments(conversation: Mapping[str, Any]) -> List[Dict[str, Any]
         segment = dict(raw)
         if not segment.get('id'):
             segment['id'] = legacy_conversation_segment_id(conversation['id'], index)
-        segment['speaker_id'] = _speaker_id(segment)
+        segment['speaker_id'] = speaker_id_of(segment)
         segments.append(segment)
     segments.sort(key=lambda s: (float(s.get('start') or 0), float(s.get('end') or 0)))
     return segments
@@ -209,9 +209,11 @@ def select_prompts(
         conversation_id = conversation['id']
         segments = _normalized_segments(conversation)
         decided_speakers, decided_segments = _manually_decided(conversation)
-        talk: Counter = Counter()
+        talk: Dict[int, float] = {}
         for segment in segments:
-            talk[segment['speaker_id']] += max(0.0, float(segment.get('end') or 0) - float(segment.get('start') or 0))
+            talk[segment['speaker_id']] = talk.get(segment['speaker_id'], 0.0) + max(
+                0.0, float(segment.get('end') or 0) - float(segment.get('start') or 0)
+            )
         has_owner = any(segment.get('is_user') for segment in segments)
         labeled_here = {s['person_id'] for s in segments if s.get('person_id')}
 
@@ -229,7 +231,7 @@ def select_prompts(
 
         unnamed = sorted(
             (run for (_, identity), run in best_run.items() if identity == 'none'),
-            key=lambda run: talk[run.speaker_id],
+            key=lambda run: talk.get(run.speaker_id, 0.0),
             reverse=True,
         )
         freshness = max(0.0, 1.0 - (now - started) / PROMPT_WINDOW) * 0.5
@@ -289,7 +291,7 @@ def select_prompts(
                     run,
                     SpeakerTagPromptKind.identify,
                     SpeakerTagPromptOrigin.unnamed,
-                    1.0 + min(talk[run.speaker_id], 120.0) / 120.0,
+                    1.0 + min(talk.get(run.speaker_id, 0.0), 120.0) / 120.0,
                     suggested_person_ids=suggestions,
                 )
 
