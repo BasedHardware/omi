@@ -1582,6 +1582,46 @@ class GeneratedSyncJobStatusResponse {
   }
 }
 
+class GeneratedStatusResponse {
+  final String status;
+
+  const GeneratedStatusResponse({
+    required this.status,
+  });
+
+  factory GeneratedStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedStatusResponse(
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+    };
+  }
+}
+
+class GeneratedConversationStatusResponse {
+  final String status;
+
+  const GeneratedConversationStatusResponse({
+    required this.status,
+  });
+
+  factory GeneratedConversationStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationStatusResponse(
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+    };
+  }
+}
+
 class GeneratedSyncCaptureManifestFile {
   final String name;
   final String sha256;

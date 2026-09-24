@@ -71,6 +71,8 @@ SCHEMA_GROUPS = {
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',
             'SyncJobStatusResponse',
+            'StatusResponse',
+            'ConversationStatusResponse',
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
