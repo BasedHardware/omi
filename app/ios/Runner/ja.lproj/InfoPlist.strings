@@ -3,8 +3,8 @@
 "NSBluetoothAlwaysUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
 "NSBluetoothPeripheralUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
 
-"NSCalendarsUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";
-"NSCalendarsFullAccessUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";
+"NSCalendarsUsageDescription" = "Omi の会話やアクションアイテムから予定を表示・作成するためにカレンダーへのアクセスが必要です。";
+"NSCalendarsFullAccessUsageDescription" = "Omi の会話やアクションアイテムから予定を表示・作成するためにカレンダーへのアクセスが必要です。";
 
 "NSContactsUsageDescription" = "予定の出席者の編集や、会話のサマリーを SMS で共有するために連絡先にアクセスします。";
 
@@ -12,7 +12,7 @@
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
 "NSLocationUsageDescription" = "記憶を作成する際に、どこで作成されたかを判定するために位置情報を使用します。";
 
-"NSMicrophoneUsageDescription" = "発見した不具合の音声説明の共有や、音声コマンドの利用のためにマイクへのアクセスが必要です。";
+"NSMicrophoneUsageDescription" = "Omi は端末で直接録音された会話を文字起こしし、音声プロファイルを作成するためにマイクを使用します。";
 
 "NSSpeechRecognitionUsageDescription" = "音声をテキストに変換する処理をデバイス上で行うため、音声認識を使用します。";
 
@@ -22,6 +22,6 @@
 "NSHealthShareUsageDescription" = "Omi は Apple ヘルスケアから歩数、ウォーキング・ランニングの距離、アクティブエネルギー、心拍数、睡眠、ワークアウトを読み取り、フィットネス・睡眠・アクティビティについて Omi チャットで質問できるようにします。Omi が Apple ヘルスケアにデータを書き込むことはありません。";
 "NSHealthUpdateUsageDescription" = "Omi は Apple ヘルスケアにデータを一切書き込みません。この説明文は HealthKit フレームワークをリンクしている関係で iOS が必須としているため記載しています。";
 
-"NSPhotoLibraryUsageDescription" = "Instabug を通じて写真をアップロード・共有できるように、写真ライブラリへのアクセスが必要です。";
+"NSPhotoLibraryUsageDescription" = "Omi チャットのメッセージやメモに写真を選択して添付できるように、写真ライブラリへのアクセスが必要です。";
 
-"NSCameraUsageDescription" = "不具合を報告するためにカメラへのアクセスが必要です。";
+"NSCameraUsageDescription" = "Omi チャットのメッセージやメモに直接写真を撮影して添付できるように、カメラへのアクセスが必要です。";

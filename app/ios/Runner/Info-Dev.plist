@@ -147,11 +147,11 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi needs access to your calendar to view and create events from your conversations and action items.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi needs access to your calendar to view and create events from your conversations and action items.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required to report issues</string>
+	<string>Omi needs access to your camera to take photos and attach them directly to your chat messages and notes.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Access contacts for event attendee editing and to share conversation summaries via SMS.</string>
 	<key>NSHealthShareUsageDescription</key>
@@ -165,9 +165,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone so you can share audio explanations of Bugs you find, and for voice commands.</string>
+	<string>Omi uses your microphone to transcribe conversations recorded directly with your phone and to create your voice profile.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
+	<string>Omi needs access to your photo library to select and attach photos to your chat messages and notes.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
 	<key>NSRemindersUsageDescription</key>
