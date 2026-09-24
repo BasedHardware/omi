@@ -7,6 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, cast
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -42,12 +43,19 @@ def create_focus_session(uid: str, status: str, app_or_site: str, description: s
     return doc
 
 
-def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def get_focus_sessions(
+    uid: str,
+    date: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    tz: Optional[ZoneInfo] = None,
+) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     if date:
-        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        zone = tz or timezone.utc
+        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=zone)
         day_end = day_start + timedelta(days=1)
         query = query.where(filter=FieldFilter('created_at', '>=', day_start))
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
@@ -69,8 +77,8 @@ def delete_focus_session(uid: str, session_id: str) -> bool:
     return True
 
 
-def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
-    sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0)
+def get_focus_stats(uid: str, date: Optional[str] = None, tz: Optional[ZoneInfo] = None) -> Dict[str, Any]:
+    sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0, tz=tz)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
@@ -92,7 +100,7 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     top = sorted(distractions.items(), key=lambda x: x[1]['total_seconds'], reverse=True)[:5]
 
     return {
-        'date': date or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        'date': date or datetime.now(tz or timezone.utc).strftime('%Y-%m-%d'),
         'focused_minutes': total_focus_seconds // 60,
         'distracted_minutes': total_distracted_seconds // 60,
         'session_count': focused_count + distracted_count,

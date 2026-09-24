@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -35,6 +36,16 @@ class CreateFocusSessionRequest(BaseModel):
 # ============================================================================
 
 
+def _user_zone(uid: str) -> ZoneInfo:
+    """Resolve lazily: database.notifications pulls Firestore symbols at import time."""
+    from database.notifications import resolve_user_timezone
+
+    try:
+        return ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        return ZoneInfo("UTC")
+
+
 @router.post('/v1/focus-sessions', tags=['focus-sessions'], response_model=FocusSession)
 def create_focus_session(
     request: CreateFocusSessionRequest,
@@ -58,7 +69,7 @@ def get_focus_sessions(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
+    return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date, tz=_user_zone(uid))
 
 
 @router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
@@ -76,7 +87,7 @@ def get_focus_stats(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_stats(uid, date=date)
+    return focus_sessions_db.get_focus_stats(uid, date=date, tz=_user_zone(uid))
 
 
 class ScreenActivityRow(BaseModel):
