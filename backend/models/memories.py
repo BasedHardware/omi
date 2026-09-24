@@ -580,9 +580,6 @@ class MemoryDB(Memory):
     created_at: datetime
     updated_at: datetime
 
-    # TODO: remove these fields and use conversation_id and conversation_category after migration
-    memory_id: Optional[str] = None
-
     conversation_id: Optional[str] = None
 
     reviewed: bool = False
@@ -649,15 +646,6 @@ class MemoryDB(Memory):
     # Assessment time is distinct from as_of (the original evidence clock).
     # Clients retain it when caching a read-side belief projection.
     belief_computed_at: Optional[datetime] = None
-
-    def __init__(self, **data: Any) -> None:
-        super().__init__(**data)
-        # Deprecated alias for legacy clients: always mirror `id`. Older code stored
-        # `memory_id = conversation_id` on the doc; serving that stored value makes
-        # desktop's ServerMemory decoder reject the whole memories list, so the alias
-        # must be normalized here rather than trusted from Firestore.
-        self.memory_id = self.id
-
     @property
     def is_active(self) -> bool:
         """A memory is active (currently true) until it is invalidated."""
