@@ -219,6 +219,39 @@ async def test_openai_compatible_provider_maps_status_without_leaking_body(monke
 
     assert exc_info.value.failure_class == failure_class
     assert raw_body not in str(exc_info.value)
+    assert exc_info.value.retry_after_seconds is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('header', 'expected'),
+    [
+        ('12', 12.0),
+        ('0', 0.0),
+        ('Wed, 21 Oct 2015 07:28:00 GMT', None),
+        (None, None),
+    ],
+)
+async def test_openai_compatible_provider_keeps_seconds_form_retry_after(monkeypatch, header, expected):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
+    headers = {} if header is None else {'Retry-After': header}
+    provider = OpenAICompatibleChatCompletionProvider(
+        http_client=httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(429, headers=headers, text='slow down'))
+        ),
+    )
+
+    with pytest.raises(ProviderFailure) as exc_info:
+        await provider.create_chat_completion(
+            {'model': 'gpt-4.1-mini', 'messages': [{'role': 'user', 'content': 'secret'}], 'stream': False},
+            provider_ref=ProviderRef(provider='openai', model='gpt-4.1-mini'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=8000,
+        )
+
+    assert exc_info.value.failure_class == FailureClass.PROVIDER_429_OMI_PAID
+    assert exc_info.value.retry_after_seconds == expected
+    assert 'slow down' not in str(exc_info.value)
 
 
 @pytest.mark.asyncio

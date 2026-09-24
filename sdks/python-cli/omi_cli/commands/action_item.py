@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
@@ -144,7 +145,7 @@ def update_action_item(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body=body)
-    ctx.renderer.success(f"Updated action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Updated action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -156,7 +157,7 @@ def complete_action_item(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body={"completed": True})
-    ctx.renderer.success(f"Completed action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Completed action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -173,4 +174,4 @@ def delete_action_item(
         result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Deleted action item [bold]{escape(action_item_id)}[/bold].")

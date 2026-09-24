@@ -1998,6 +1998,16 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         updates = {'discarded': False, 'sync_relevance_user_kept': True}
         if current.get('sync_relevance') == 'review':
             updates['sync_relevance'] = 'keep'
+        relevance_decision = current.get('relevance_decision')
+        if (
+            current.get('discarded')
+            and isinstance(relevance_decision, Mapping)
+            and relevance_decision.get('verdict') == 'discard'
+            and relevance_decision.get('decided_by') == 'jev'
+        ):
+            # Restored-from-Jev stays countable after reassessment replaces
+            # relevance_decision; the marker is written once and never cleared.
+            updates['jev_discard_restored'] = True
         transaction.update(conversation_ref, updates)
         return True
 

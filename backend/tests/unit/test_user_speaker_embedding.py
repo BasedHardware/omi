@@ -317,6 +317,9 @@ def live_owner_profile(monkeypatch):
         store=MagicMock(return_value=True),
         people=MagicMock(return_value=[{'id': 'untaught', 'name': 'Contact', 'speech_samples_version': 3}]),
     )
+    # Owner display names come from the shared resolver, not a hardcoded label.
+    world.name = MagicMock(return_value='David')
+    monkeypatch.setattr(speakers_module, 'get_user_name', world.name)
     monkeypatch.setattr(runtime_module.user_db, 'get_user_speaker_embedding', world.embedding)
     monkeypatch.setattr(runtime_module, 'get_user_has_speech_profile', world.blob)
     monkeypatch.setattr(speakers_module, 'get_profile_audio_if_exists', world.audio)
@@ -378,7 +381,7 @@ class TestTranscribeFirestoreLoading:
         assert runtime.has_speech_profile
         assert runtime.state.audio_ring_buffer is not None
         cached = runtime.speakers.person_embeddings[USER_SELF_PERSON_ID]
-        assert cached['name'] == 'User'
+        assert cached['name'] == 'David'
         assert cached['embedding'].shape == (1, 256)
         assert cached['embedding'].dtype == np.float32
         np.testing.assert_array_equal(cached['embedding'], np.full((1, 256), 0.25, dtype=np.float32))

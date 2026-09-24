@@ -59,6 +59,17 @@ _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
 
+_MISSING_CUSTOMER_DATA_IDENTITY = (
+    'missing customer-data identity: secret SERVICE_ACCOUNT_JSON or env OMI_CUSTOMER_DATA_PROJECT'
+)
+
+
+def _has_customer_data_identity(env_map: object, secrets_map: object) -> bool:
+    """A job reaches customer data through the legacy JSON key or a keyless runtime identity pin."""
+    if isinstance(secrets_map, dict) and 'SERVICE_ACCOUNT_JSON' in secrets_map:
+        return True
+    return bool((_manifest_literal_env_value(env_map, 'OMI_CUSTOMER_DATA_PROJECT') or '').strip())
+
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
     """Return (scope, env-map) for every surface that can enable canonical memory."""
@@ -281,6 +292,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
     }
     for forbidden_name in sorted(daily_sweep_env_names.intersection(job_env)):
         errors.append(
@@ -325,8 +337,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     ):
         if required_env not in job_env:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
+    if not _has_customer_data_identity(job_env, job_secrets):
+        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
     for required_secret in (
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
@@ -548,7 +561,9 @@ def _validate_daily_memory_sweep_job_contract(env: str, env_config: ConfigDict) 
     ):
         if required_env not in env_map:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
-    for required_secret in ('SERVICE_ACCOUNT_JSON', 'ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'POSTHOG_PROJECT_API_KEY'):
+    if not _has_customer_data_identity(env_map, secrets):
+        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
+    for required_secret in ('ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'POSTHOG_PROJECT_API_KEY'):
         if required_secret not in secrets:
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))
     return errors

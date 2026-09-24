@@ -187,6 +187,13 @@ and the daily sweep share that policy:
   `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
   demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
   rewriting it as a third-party fact.
+- Capture only, behind `MEMORY_OWNER_JEV_FLIP_ENABLED` (default off): a
+  candidate resolved to a third party is asked the Jev owner question
+  (`utils/conversations/owner_jev.py`); at P(user) >= 0.9 it is stored as the
+  user's (`subject_entity_id=user`, `subject_scope=primary_user`, category
+  `system`) with `promotion.source_attribution.override` recording the
+  probability and the original subject. Nothing flips toward a third party.
+  The consolidation planner still reads only the three subject fields.
 - Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
   and `uncertain` rows are omitted (`dropped_subjectless`). An omitted `about`
   on the structured-output schema defaults to empty so one subjectless row

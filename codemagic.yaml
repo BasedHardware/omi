@@ -55,33 +55,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -290,33 +266,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -471,35 +423,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -685,31 +611,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -920,35 +825,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -1119,35 +998,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -1238,31 +1091,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -1825,35 +1657,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |

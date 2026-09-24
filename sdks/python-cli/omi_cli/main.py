@@ -104,6 +104,7 @@ def _version_callback(value: bool) -> None:
         typer.echo(f"omi-cli {__version__}")
         raise typer.Exit(code=0)
 
+
 def _profile_completion(incomplete: str) -> list[str]:
     """Return configured profile names matching the partially typed value."""
     return [name for name in cfg.load().list_profiles() if name.startswith(incomplete)]
@@ -240,8 +241,17 @@ def main() -> None:
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
         # Click's own usage errors (unknown flag, missing argument, etc.).
-        # Let Click format it the way users expect; honor its exit_code.
-        exc.show()
+        # In JSON mode, emit a structured JSON error object on stderr so
+        # agents and scripts parsing stderr get valid JSON. In pretty mode,
+        # let Click format it the way users expect. Preserve exit_code.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        if renderer.json_mode:
+            message = exc.format_message() or "Usage error."
+            renderer.error(message)
+        else:
+            exc.show()
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
@@ -256,7 +266,13 @@ def main() -> None:
         sys.stderr.write("\nAborted.\n")
         sys.exit(130)
     except Exception as exc:  # noqa: BLE001 — last-chance handler
-        sys.stderr.write(f"omi: unexpected error: {exc}\n")
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        if renderer.json_mode:
+            renderer.error(f"unexpected error: {exc}")
+        else:
+            sys.stderr.write(f"omi: unexpected error: {exc}\n")
         sys.exit(1)
 
 
