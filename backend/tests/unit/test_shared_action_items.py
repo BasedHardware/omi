@@ -1,6 +1,6 @@
 """Unit tests for shared action items acceptance endpoints."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 
@@ -10,127 +10,120 @@ from routers.action_items import (
 )
 
 
-def test_accept_shared_action_items_token_not_found():
-    with patch("routers.action_items.redis_db.get_task_share", return_value=None):
-        with pytest.raises(HTTPException) as exc_info:
-            accept_shared_action_items(
-                AcceptSharedTasksRequest(token="invalid_token"),
-                uid="recipient_123",
-            )
-        assert exc_info.value.status_code == 404
-        assert "Share link expired or not found" in exc_info.value.detail
+@pytest.fixture
+def sample_payload():
+    return AcceptSharedTasksRequest(
+        token="test-token-uuid",
+        task_ids=["task-1", "task-2"],
+        sender_id="sender-user-123",
+    )
 
 
-def test_accept_shared_action_items_self_accept_rejected():
-    share_data = {
-        "uid": "user_same",
-        "display_name": "Alice",
-        "task_ids": ["task_1"],
-    }
-    with patch("routers.action_items.redis_db.get_task_share", return_value=share_data):
-        with pytest.raises(HTTPException) as exc_info:
-            accept_shared_action_items(
-                AcceptSharedTasksRequest(token="valid_token"),
-                uid="user_same",
-            )
-        assert exc_info.value.status_code == 400
-        assert "Cannot accept your own shared tasks" in exc_info.value.detail
+@patch("routers.action_items._wake_task_changes")
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_all_deleted_returns_404(
+    mock_redis, mock_db, mock_wake, sample_payload
+):
+    mock_redis.verify_task_share_token.return_value = True
+    mock_db.get_action_items_by_ids.return_value = []
+
+    with pytest.raises(HTTPException) as exc_info:
+        accept_shared_action_items(payload=sample_payload, uid="recipient-user-456")
+
+    assert exc_info.value.status_code == 404
+    assert "deleted or not found" in exc_info.value.detail
+    mock_redis.undo_accept_task_share.assert_not_called()
+    mock_wake.assert_not_called()
 
 
-def test_accept_shared_action_items_deleted_tasks_returns_404_not_402():
-    """Verify that when tasks were deleted by the sender (not found),
-    the endpoint returns 404 instead of a misleading 402 Payment Required."""
-    share_data = {
-        "uid": "sender_123",
-        "display_name": "Sender",
-        "task_ids": ["deleted_task_1", "deleted_task_2"],
-    }
-    with patch("routers.action_items.redis_db.get_task_share", return_value=share_data), \
-         patch("routers.action_items.action_items_db.get_action_item", return_value=None):
-        with pytest.raises(HTTPException) as exc_info:
-            accept_shared_action_items(
-                AcceptSharedTasksRequest(token="valid_token"),
-                uid="recipient_456",
-            )
-        # MUST be 404, not 402!
-        assert exc_info.value.status_code == 404
-        assert "Shared tasks were deleted or not found" in exc_info.value.detail
+@patch("routers.action_items._wake_task_changes")
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_all_locked_returns_402(
+    mock_redis, mock_db, mock_wake, sample_payload
+):
+    mock_redis.verify_task_share_token.return_value = True
+    mock_db.get_action_items_by_ids.return_value = [
+        {"id": "task-1", "is_locked": True},
+        {"id": "task-2", "is_locked": True},
+    ]
+
+    with pytest.raises(HTTPException) as exc_info:
+        accept_shared_action_items(payload=sample_payload, uid="recipient-user-456")
+
+    assert exc_info.value.status_code == 402
+    assert "locked" in exc_info.value.detail
+    mock_redis.undo_accept_task_share.assert_not_called()
+    mock_wake.assert_not_called()
 
 
-def test_accept_shared_action_items_locked_tasks_returns_402():
-    """Verify that when tasks exist but are locked behind a paid plan,
-    the endpoint returns 402 Payment Required."""
-    share_data = {
-        "uid": "sender_123",
-        "display_name": "Sender",
-        "task_ids": ["locked_task_1"],
-    }
-    locked_item = {
-        "id": "locked_task_1",
-        "description": "Locked task",
-        "is_locked": True,
-    }
-    with patch("routers.action_items.redis_db.get_task_share", return_value=share_data), \
-         patch("routers.action_items.action_items_db.get_action_item", return_value=locked_item):
-        with pytest.raises(HTTPException) as exc_info:
-            accept_shared_action_items(
-                AcceptSharedTasksRequest(token="valid_token"),
-                uid="recipient_456",
-            )
-        assert exc_info.value.status_code == 402
-        assert "All shared tasks are locked. A paid plan is required." in exc_info.value.detail
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_self_accept_forbidden(
+    mock_redis, mock_db, sample_payload
+):
+    with pytest.raises(HTTPException) as exc_info:
+        accept_shared_action_items(payload=sample_payload, uid="sender-user-123")
+
+    assert exc_info.value.status_code == 400
+    assert "cannot accept tasks you shared yourself" in exc_info.value.detail
 
 
-def test_accept_shared_action_items_already_accepted_returns_409():
-    share_data = {
-        "uid": "sender_123",
-        "display_name": "Sender",
-        "task_ids": ["task_1"],
-    }
-    valid_item = {
-        "id": "task_1",
-        "description": "Prepare slides",
-        "is_locked": False,
-    }
-    with patch("routers.action_items.redis_db.get_task_share", return_value=share_data), \
-         patch("routers.action_items.action_items_db.get_action_item", return_value=valid_item), \
-         patch("routers.action_items.redis_db.try_accept_task_share", return_value=False):
-        with pytest.raises(HTTPException) as exc_info:
-            accept_shared_action_items(
-                AcceptSharedTasksRequest(token="valid_token"),
-                uid="recipient_456",
-            )
-        assert exc_info.value.status_code == 409
-        assert "You have already accepted this share" in exc_info.value.detail
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_invalid_or_used_token_conflict(
+    mock_redis, mock_db, sample_payload
+):
+    mock_redis.verify_task_share_token.return_value = False
+
+    with pytest.raises(HTTPException) as exc_info:
+        accept_shared_action_items(payload=sample_payload, uid="recipient-user-456")
+
+    assert exc_info.value.status_code == 409
 
 
-def test_accept_shared_action_items_success_and_wake():
-    share_data = {
-        "uid": "sender_123",
-        "display_name": "Sender Alice",
-        "task_ids": ["task_1"],
-    }
-    valid_item = {
-        "id": "task_1",
-        "description": "Buy groceries",
-        "is_locked": False,
-        "due_at": None,
-    }
-    with patch("routers.action_items.redis_db.get_task_share", return_value=share_data), \
-         patch("routers.action_items.action_items_db.get_action_item", return_value=valid_item), \
-         patch("routers.action_items.redis_db.try_accept_task_share", return_value=True), \
-         patch("routers.action_items.action_items_db.create_action_item", return_value="new_task_999"), \
-         patch("routers.action_items.upsert_action_item_vector") as mock_vector, \
-         patch("routers.action_items._wake_task_changes") as mock_wake:
+@patch("routers.action_items._wake_task_changes")
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_success_creates_and_wakes(
+    mock_redis, mock_db, mock_wake, sample_payload
+):
+    mock_redis.verify_task_share_token.return_value = True
+    mock_db.get_action_items_by_ids.return_value = [
+        {"id": "task-1", "description": "Buy milk", "is_locked": False},
+        {"id": "task-2", "description": "Review PR", "is_locked": False},
+    ]
+    mock_db.create_action_item.side_effect = [
+        {"id": "new-1", "description": "Buy milk"},
+        {"id": "new-2", "description": "Review PR"},
+    ]
 
-        response = accept_shared_action_items(
-            AcceptSharedTasksRequest(token="valid_token"),
-            uid="recipient_456",
-        )
+    result = accept_shared_action_items(payload=sample_payload, uid="recipient-user-456")
 
-        assert response["created"] == ["new_task_999"]
-        assert response["count"] == 1
-        mock_vector.assert_called_once_with("recipient_456", "new_task_999", "Buy groceries")
-        mock_wake.assert_called_once()
-        assert mock_wake.call_args[0][0] == "recipient_456"
-        assert mock_wake.call_args[0][1] == ["new_task_999"]
+    assert result["status"] == "accepted"
+    assert result["accepted_count"] == 2
+    assert len(result["created_items"]) == 2
+    mock_redis.undo_accept_task_share.assert_not_called()
+    mock_wake.assert_called_once()
+
+
+@patch("routers.action_items._wake_task_changes")
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_creation_failure_rolls_back_token(
+    mock_redis, mock_db, mock_wake, sample_payload
+):
+    mock_redis.verify_task_share_token.return_value = True
+    mock_db.get_action_items_by_ids.return_value = [
+        {"id": "task-1", "description": "Do homework", "is_locked": False}
+    ]
+    mock_db.create_action_item.side_effect = RuntimeError("Database down")
+
+    with pytest.raises(RuntimeError):
+        accept_shared_action_items(payload=sample_payload, uid="recipient-user-456")
+
+    mock_redis.undo_accept_task_share.assert_called_once_with(
+        sample_payload.token, sample_payload.task_ids
+    )
+    mock_wake.assert_not_called()
