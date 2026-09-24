@@ -40,6 +40,18 @@ struct ConversationActionItemsSection: View {
         }
         .glassCard(cornerRadius: PageGlass.rowRadius)
       }
+      // `conversation_detail_prompt prompt=add_task index=N` presses item N's task control.
+      .onReceive(
+        NotificationCenter.default.publisher(for: .desktopAutomationConversationPromptRequested)
+      ) { notification in
+        guard notification.userInfo?["conversationId"] as? String == conversation.id,
+          notification.userInfo?["prompt"] as? String == "add_task",
+          let index = notification.userInfo?["index"] as? Int, activeItems.indices.contains(index)
+        else { return }
+        let item = activeItems[index]
+        let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
+        if let linkedTaskID { onOpenLinkedTask?(linkedTaskID) } else { addActionItemToTasks(item) }
+      }
     }
   }
 

@@ -137,6 +137,10 @@ extension Notification.Name {
   /// (`conversation_detail_recording`), the same calls its chips and confirmation make.
   static let desktopAutomationConversationRecordingRequested = Notification.Name(
     "desktopAutomationConversationRecordingRequested")
+  /// Raises one of the open conversation page's own prompts (rename, delete) or presses an action
+  /// item's task control, for `conversation_detail_prompt`.
+  static let desktopAutomationConversationPromptRequested = Notification.Name(
+    "desktopAutomationConversationPromptRequested")
 }
 
 // MARK: - Separation
@@ -359,7 +363,9 @@ struct CaptureRecordingsPanelHost: ViewModifier {
   let onOpen: (CaptureGroupRecording) -> Void
   let onSeparate: (CaptureGroupRecording) -> Void
 
-  @State private var pendingSeparation: CaptureGroupRecording?
+  /// The recording awaiting "Separate" confirmation. Owned by the page so automation can raise the
+  /// same confirmation a row's Separate… raises.
+  @Binding var pendingSeparation: CaptureGroupRecording?
 
   func body(content: Content) -> some View {
     // Captured here: the dialog clears the binding before it runs the confirm action.

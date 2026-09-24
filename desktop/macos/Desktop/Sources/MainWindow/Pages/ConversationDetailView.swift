@@ -99,6 +99,7 @@ struct ConversationDetailView: View {
     await AppState.current?.separateConversationFromCaptureGroup(id) ?? false
   }
   @State private var showRecordings = false
+  @State private var pendingSeparation: CaptureGroupRecording?
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
@@ -212,7 +213,7 @@ struct ConversationDetailView: View {
     .modifier(
       CaptureRecordingsPanelHost(
         isOpen: $showRecordings, recordings: captureRecordings, phase: separation.phase,
-        onOpen: openRecording, onSeparate: separateRecording)
+        onOpen: openRecording, onSeparate: separateRecording, pendingSeparation: $pendingSeparation)
     )
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
@@ -275,6 +276,7 @@ struct ConversationDetailView: View {
         serverClockConversation = nil
         separation.reset()
         showRecordings = false
+        pendingSeparation = nil
       }
     }
     .onDisappear {
@@ -379,7 +381,24 @@ struct ConversationDetailView: View {
       guard
         let recording = captureRecordings.first(where: { $0.id == notification.userInfo?["recordingId"] as? String })
       else { return }
-      if action == "separate" { separateRecording(recording) } else { openRecording(recording) }
+      switch action {
+      case "separate": separateRecording(recording)
+      // Raises the confirmation a row's Separate… raises, so the dialog itself can be checked.
+      case "request_separate": pendingSeparation = recording
+      default: openRecording(recording)
+      }
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationConversationPromptRequested)
+    ) { notification in
+      guard notification.userInfo?["conversationId"] as? String == displayConversation.id else { return }
+      switch notification.userInfo?["prompt"] as? String {
+      case "rename":
+        editedTitle = displayConversation.title
+        showEditDialog = true
+      case "delete": showDeleteConfirmation = true
+      default: break
+      }
     }
     .dismissableSheet(isPresented: $showAppSelector) {
       AppSelectorSheet(
