@@ -36255,11 +36255,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AppRejectRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AppRejectRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {

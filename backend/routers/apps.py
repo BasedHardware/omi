@@ -2362,7 +2362,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
-def reject_app(app_id: str, uid: str, data: AppRejectRequest = Body(...), secret_key: str = Header(...)):
+def reject_app(app_id: str, uid: str, data: Optional[AppRejectRequest] = Body(None), secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
@@ -2370,10 +2370,11 @@ def reject_app(app_id: str, uid: str, data: AppRejectRequest = Body(...), secret
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
 
+    reason_text = f" Reason: {data.reason}." if data and data.reason else ""
     send_notification(
         uid,
         'App Rejected 😔',
-        f'Your app {app["name"]} has been rejected. Reason: {data.reason}. Please make the necessary changes and resubmit for approval.',
+        f'Your app {app["name"]} has been rejected.{reason_text} Please make the necessary changes and resubmit for approval.',
         {'app_id': app_id, 'type': 'app_rejected', 'navigate_to': f'/apps/{app_id}'}
     )
     return {'status': 'ok'}
