@@ -124,7 +124,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                 )
               else
                 OmiIconButton.filled(
-                  icon: const Icon(Icons.add),
+                  icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
                   label: l10n.add,
                   fillColor: OmiColors.surface2,
                   diameter: kOmiMinTapTarget,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -27,28 +29,28 @@ class _HomeScreenSettingsPageState extends State<HomeScreenSettingsPage> {
           OmiSettingsGroup(
             children: [
               OmiSettingsRow.toggle(
-                leading: const Icon(Icons.track_changes),
+                leading: const FaIcon(FontAwesomeIcons.bullseye),
                 title: l10n.goalTracker,
                 subtitle: l10n.trackYourGoalsOnHomepage,
                 value: _prefs.showGoalTrackerEnabled,
                 onChanged: (v) => setState(() => _prefs.showGoalTrackerEnabled = v),
               ),
               OmiSettingsRow.toggle(
-                leading: const Icon(Icons.show_chart),
+                leading: const FaIcon(FontAwesomeIcons.chartLine),
                 title: l10n.dailyScore,
                 subtitle: l10n.showDailyScoreOnHomepage,
                 value: _prefs.showDailyScoreEnabled,
                 onChanged: (v) => setState(() => _prefs.showDailyScoreEnabled = v),
               ),
               OmiSettingsRow.toggle(
-                leading: const Icon(Icons.checklist),
+                leading: const FaIcon(FontAwesomeIcons.listCheck),
                 title: l10n.tasks,
                 subtitle: l10n.showTasksOnHomepage,
                 value: _prefs.showTasksEnabled,
                 onChanged: (v) => setState(() => _prefs.showTasksEnabled = v),
               ),
               OmiSettingsRow.toggle(
-                leading: const Icon(Icons.phone_outlined),
+                leading: const FaIcon(FontAwesomeIcons.phone),
                 title: l10n.showPhoneCallButtonTitle,
                 subtitle: l10n.showPhoneCallButtonDesc,
                 value: _prefs.showPhoneCallButton,

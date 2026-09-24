@@ -148,7 +148,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 Expanded(
                   child: OmiButton.secondary(
                     label: l10n.shareLogs,
-                    icon: Icons.ios_share,
+                    leading: const FaIcon(FontAwesomeIcons.fileArrowUp),
                     size: OmiButtonSize.compact,
                     onPressed: _shareLogs,
                   ),
@@ -156,6 +156,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 const SizedBox(width: OmiSpacing.sm),
                 OmiButton.destructive(
                   label: l10n.clear,
+                  leading: const FaIcon(FontAwesomeIcons.trash),
                   size: OmiButtonSize.compact,
                   onPressed: () async {
                     final message = l10n.debugLogCleared;
