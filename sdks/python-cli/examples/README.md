@@ -35,6 +35,7 @@
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
+* [`goals_markdown.md`](goals_markdown.md) ([`goals_to_markdown.py`](goals_to_markdown.py)) — export goals to structured Markdown notes and progress dashboards for Obsidian & Notion.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
