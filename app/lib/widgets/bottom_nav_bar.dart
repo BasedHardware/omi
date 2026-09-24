@@ -8,12 +8,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Height of the gradient that fades page content out above the tab row. It is
-/// paint only: nothing in it is tappable.
 /// The tab bar's two-bubbles glyph (FontAwesome `comments`, regular weight). Ask Omi uses the same
 /// glyph everywhere it appears, so the button and the tab read as one family.
 const FaIconData kAskOmiGlyph = FontAwesomeIcons.comments;
 
+/// Height of the gradient that fades page content out above the tab row. It is
+/// paint only: nothing in it is tappable.
 const double kBottomNavFadeHeight = 20;
 
 /// Height of the tab row, which sits directly on top of the system inset the

@@ -37,17 +37,26 @@ class OmiLoadingState extends StatelessWidget {
 /// Title is Title Case ("No Tasks Yet", "No Matching Memories"); [message] says what to do next.
 /// [action] is usually a compact secondary [OmiButton] ("Clear Search"), or one compact primary
 /// when the action is how the page gets its first row ("New Memory").
+///
+/// The glyph is either a Material [icon] or any [glyph] widget — for example
+/// `FaIcon(FontAwesomeIcons.key)` when the screen's other controls use FontAwesome. Exactly one of
+/// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary].
 class OmiEmptyState extends StatelessWidget {
-  const OmiEmptyState({super.key, required this.icon, required this.title, this.message, this.action});
+  const OmiEmptyState({super.key, this.icon, this.glyph, required this.title, this.message, this.action})
+      : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
 
-  final IconData icon;
+  final IconData? icon;
+
+  /// A glyph that is not a Material [IconData], sized and coloured through [IconTheme].
+  final Widget? glyph;
+
   final String title;
   final String? message;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return _StateLayout(icon: icon, title: title, message: message, action: action);
+    return _StateLayout(glyph: glyph ?? Icon(icon), title: title, message: message, action: action);
   }
 }
 
@@ -69,7 +78,7 @@ class OmiErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _StateLayout(
-      icon: Icons.error_outline,
+      glyph: const Icon(Icons.error_outline),
       title: title,
       message: message,
       action: onRetry == null
@@ -84,9 +93,9 @@ class OmiErrorState extends StatelessWidget {
 }
 
 class _StateLayout extends StatelessWidget {
-  const _StateLayout({required this.icon, this.title, this.message, this.action});
+  const _StateLayout({required this.glyph, this.title, this.message, this.action});
 
-  final IconData icon;
+  final Widget glyph;
   final String? title;
   final String? message;
   final Widget? action;
@@ -99,7 +108,12 @@ class _StateLayout extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(child: Icon(icon, size: 40, color: OmiColors.textTertiary)),
+            ExcludeSemantics(
+              child: IconTheme.merge(
+                data: const IconThemeData(size: 40, color: OmiColors.textTertiary),
+                child: glyph,
+              ),
+            ),
             if (title != null) ...[
               const SizedBox(height: OmiSpacing.md),
               Semantics(
