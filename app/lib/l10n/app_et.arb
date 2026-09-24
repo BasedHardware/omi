@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Ripats",
     "conversationDeveloperTools": "Arendaja tööriistad vestlustes",
     "conversationDeveloperToolsDescription": "Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa",
-    "participantsSummary": "{name} + {count, plural, =1{1 teine} few{{count} teist} many{{count} teist} other{{count} teist}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 teine} few{{count} teist} many{{count} teist} other{{count} teist}}",
+    "recordingAndTranscription": "Salvestamine ja transkriptsioon",
+    "notificationsAndDisplay": "Teavitused ja kuva",
+    "helpAndAbout": "Abi ja teave"
 }

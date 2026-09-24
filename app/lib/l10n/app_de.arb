@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Anhänger",
     "conversationDeveloperTools": "Entwicklertools in Gesprächen",
     "conversationDeveloperToolsDescription": "„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen",
-    "participantsSummary": "{name} + {count, plural, =1{1 weitere Person} few{{count} weitere} many{{count} weitere} other{{count} weitere}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 weitere Person} few{{count} weitere} many{{count} weitere} other{{count} weitere}}",
+    "recordingAndTranscription": "Aufnahme & Transkription",
+    "notificationsAndDisplay": "Benachrichtigungen & Anzeige",
+    "helpAndAbout": "Hilfe & Info"
 }

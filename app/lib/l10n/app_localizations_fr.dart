@@ -11175,4 +11175,13 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Enregistrement et transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Notifications et affichage';
+
+  @override
+  String get helpAndAbout => 'Aide et à propos';
 }

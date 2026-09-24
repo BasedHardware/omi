@@ -10902,4 +10902,13 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => '녹음 및 음성 변환';
+
+  @override
+  String get notificationsAndDisplay => '알림 및 표시';
+
+  @override
+  String get helpAndAbout => '도움말 및 정보';
 }

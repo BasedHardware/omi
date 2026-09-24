@@ -11110,4 +11110,13 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Запіс і транскрыпцыя';
+
+  @override
+  String get notificationsAndDisplay => 'Паведамленні і адлюстраванне';
+
+  @override
+  String get helpAndAbout => 'Дапамога і пра праграму';
 }

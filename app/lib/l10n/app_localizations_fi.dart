@@ -11083,4 +11083,13 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Tallennus ja litterointi';
+
+  @override
+  String get notificationsAndDisplay => 'Ilmoitukset ja näyttö';
+
+  @override
+  String get helpAndAbout => 'Ohje ja tietoja';
 }

@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Hänge",
     "conversationDeveloperTools": "Utvecklarverktyg i samtal",
     "conversationDeveloperToolsDescription": "Visa Kopiera samtals-ID och Testa prompt i samtalets meny",
-    "participantsSummary": "{name} + {count, plural, =1{1 annan} few{{count} andra} many{{count} andra} other{{count} andra}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 annan} few{{count} andra} many{{count} andra} other{{count} andra}}",
+    "recordingAndTranscription": "Inspelning och transkription",
+    "notificationsAndDisplay": "Aviseringar och visning",
+    "helpAndAbout": "Hjälp och om"
 }

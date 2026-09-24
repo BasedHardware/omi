@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "Privjesak",
     "conversationDeveloperTools": "Alati za programere u razgovorima",
     "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora",
-    "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}",
+    "recordingAndTranscription": "Snimanje i prepis",
+    "notificationsAndDisplay": "Obaveštenja i prikaz",
+    "helpAndAbout": "Pomoć i o aplikaciji"
 }

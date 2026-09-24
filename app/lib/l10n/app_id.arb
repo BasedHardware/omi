@@ -3535,5 +3535,8 @@
     "captureSourcePendant": "Liontin",
     "conversationDeveloperTools": "Alat pengembang di percakapan",
     "conversationDeveloperToolsDescription": "Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan",
-    "participantsSummary": "{name} + {count, plural, =1{1 lainnya} few{{count} lainnya} many{{count} lainnya} other{{count} lainnya}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 lainnya} few{{count} lainnya} many{{count} lainnya} other{{count} lainnya}}",
+    "recordingAndTranscription": "Perekaman & Transkripsi",
+    "notificationsAndDisplay": "Notifikasi & Tampilan",
+    "helpAndAbout": "Bantuan & Tentang"
 }

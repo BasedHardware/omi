@@ -11123,4 +11123,13 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Felvétel és átírás';
+
+  @override
+  String get notificationsAndDisplay => 'Értesítések és megjelenítés';
+
+  @override
+  String get helpAndAbout => 'Súgó és névjegy';
 }

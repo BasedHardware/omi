@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "பதக்கம்",
     "conversationDeveloperTools": "உரையாடல்களில் டெவலப்பர் கருவிகள்",
     "conversationDeveloperToolsDescription": "உரையாடலின் மெனுவில் உரையாடல் ஐடியை நகலெடு மற்றும் ப்ராம்ப்டைச் சோதி காட்டு",
-    "participantsSummary": "{name} + {count, plural, =1{1 மற்றவர்} few{{count} மற்றவர்கள்} many{{count} மற்றவர்கள்} other{{count} மற்றவர்கள்}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 மற்றவர்} few{{count} மற்றவர்கள்} many{{count} மற்றவர்கள்} other{{count} மற்றவர்கள்}}",
+    "recordingAndTranscription": "பதிவு மற்றும் எழுத்துப்படியாக்கம்",
+    "notificationsAndDisplay": "அறிவிப்புகள் மற்றும் காட்சி",
+    "helpAndAbout": "உதவி மற்றும் பற்றி"
 }

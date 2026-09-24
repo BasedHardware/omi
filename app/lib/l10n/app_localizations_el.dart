@@ -11156,4 +11156,13 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Εγγραφή & απομαγνητοφώνηση';
+
+  @override
+  String get notificationsAndDisplay => 'Ειδοποιήσεις & εμφάνιση';
+
+  @override
+  String get helpAndAbout => 'Βοήθεια & σχετικά';
 }

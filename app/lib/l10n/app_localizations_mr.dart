@@ -11089,4 +11089,13 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'रेकॉर्डिंग आणि प्रतिलेखन';
+
+  @override
+  String get notificationsAndDisplay => 'सूचना आणि प्रदर्शन';
+
+  @override
+  String get helpAndAbout => 'मदत आणि माहिती';
 }

@@ -10879,4 +10879,13 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => '录音与转录';
+
+  @override
+  String get notificationsAndDisplay => '通知与显示';
+
+  @override
+  String get helpAndAbout => '帮助与关于';
 }

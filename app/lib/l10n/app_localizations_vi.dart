@@ -11074,4 +11074,13 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Ghi âm & Phiên âm';
+
+  @override
+  String get notificationsAndDisplay => 'Thông báo & Hiển thị';
+
+  @override
+  String get helpAndAbout => 'Trợ giúp & Giới thiệu';
 }

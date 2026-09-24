@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "آویز",
     "conversationDeveloperTools": "ابزارهای توسعه‌دهنده در گفتگوها",
     "conversationDeveloperToolsDescription": "نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو",
-    "participantsSummary": "{name} + {count, plural, =1{1 نفر دیگر} few{{count} نفر دیگر} many{{count} نفر دیگر} other{{count} نفر دیگر}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 نفر دیگر} few{{count} نفر دیگر} many{{count} نفر دیگر} other{{count} نفر دیگر}}",
+    "recordingAndTranscription": "ضبط و رونویسی",
+    "notificationsAndDisplay": "اطلاع‌رسانی‌ها و نمایش",
+    "helpAndAbout": "راهنما و درباره"
 }

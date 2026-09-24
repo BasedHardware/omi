@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Kulons",
     "conversationDeveloperTools": "Izstrādātāja rīki sarunās",
     "conversationDeveloperToolsDescription": "Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”",
-    "participantsSummary": "{name} + {count, plural, =1{vēl 1} few{vēl {count}} many{vēl {count}} other{vēl {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{vēl 1} few{vēl {count}} many{vēl {count}} other{vēl {count}}}",
+    "recordingAndTranscription": "Ierakstīšana un transkripcija",
+    "notificationsAndDisplay": "Paziņojumi un attēlojums",
+    "helpAndAbout": "Palīdzība un par lietotni"
 }

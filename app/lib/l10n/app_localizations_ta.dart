@@ -11155,4 +11155,13 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'பதிவு மற்றும் எழுத்துப்படியாக்கம்';
+
+  @override
+  String get notificationsAndDisplay => 'அறிவிப்புகள் மற்றும் காட்சி';
+
+  @override
+  String get helpAndAbout => 'உதவி மற்றும் பற்றி';
 }

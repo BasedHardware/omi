@@ -11131,4 +11131,13 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Înregistrare și transcriere';
+
+  @override
+  String get notificationsAndDisplay => 'Notificări și afișare';
+
+  @override
+  String get helpAndAbout => 'Ajutor și despre';
 }

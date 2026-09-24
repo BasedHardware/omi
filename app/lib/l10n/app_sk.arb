@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Prívesok",
     "conversationDeveloperTools": "Vývojárske nástroje v konverzáciách",
     "conversationDeveloperToolsDescription": "Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie",
-    "participantsSummary": "{name} + {count, plural, =1{1 ďalší} few{{count} ďalší} many{{count} ďalších} other{{count} ďalších}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ďalší} few{{count} ďalší} many{{count} ďalších} other{{count} ďalších}}",
+    "recordingAndTranscription": "Nahrávanie a prepis",
+    "notificationsAndDisplay": "Upozornenia a zobrazenie",
+    "helpAndAbout": "Pomoc a o aplikácii"
 }

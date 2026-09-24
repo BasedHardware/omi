@@ -11079,4 +11079,13 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Opptak og transkripsjon';
+
+  @override
+  String get notificationsAndDisplay => 'Varsler og visning';
+
+  @override
+  String get helpAndAbout => 'Hjelp og om';
 }

@@ -20192,6 +20192,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + {count, plural, =1{1 other} few{{count} others} many{{count} others} other{{count} others}}'**
   String participantsSummary(String name, int count);
+
+  /// Settings group: transcription, language, voice and capture settings
+  ///
+  /// In en, this message translates to:
+  /// **'Recording & Transcription'**
+  String get recordingAndTranscription;
+
+  /// Settings group: notifications, home screen and conversation display
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications & Display'**
+  String get notificationsAndDisplay;
+
+  /// Settings group: feedback, help center, what's new and the app version
+  ///
+  /// In en, this message translates to:
+  /// **'Help & About'**
+  String get helpAndAbout;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

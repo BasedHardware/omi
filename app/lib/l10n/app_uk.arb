@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Інструменти розробника в розмовах",
     "conversationDeveloperToolsDescription": "Показувати «Копіювати ID розмови» і «Перевірити промпт» у меню розмови",
-    "participantsSummary": "{name} + {count, plural, =1{ще 1} few{ще {count}} many{ще {count}} other{ще {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{ще 1} few{ще {count}} many{ще {count}} other{ще {count}}}",
+    "recordingAndTranscription": "Запис і транскрипція",
+    "notificationsAndDisplay": "Сповіщення і відображення",
+    "helpAndAbout": "Допомога і про програму"
 }

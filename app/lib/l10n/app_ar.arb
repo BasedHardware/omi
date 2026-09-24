@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "القلادة",
     "conversationDeveloperTools": "أدوات المطوّر في المحادثات",
     "conversationDeveloperToolsDescription": "إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة",
-    "participantsSummary": "{name} + {count, plural, =1{1 آخر} few{{count} آخرين} many{{count} آخرين} other{{count} آخرين}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 آخر} few{{count} آخرين} many{{count} آخرين} other{{count} آخرين}}",
+    "recordingAndTranscription": "التسجيل والنسخ",
+    "notificationsAndDisplay": "الإشعارات والعرض",
+    "helpAndAbout": "المساعدة وحول التطبيق"
 }

@@ -11094,4 +11094,13 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Gravação e transcrição';
+
+  @override
+  String get notificationsAndDisplay => 'Notificações e exibição';
+
+  @override
+  String get helpAndAbout => 'Ajuda e sobre';
 }

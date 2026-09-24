@@ -11172,4 +11172,13 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Aufnahme & Transkription';
+
+  @override
+  String get notificationsAndDisplay => 'Benachrichtigungen & Anzeige';
+
+  @override
+  String get helpAndAbout => 'Hilfe & Info';
 }

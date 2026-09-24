@@ -11177,4 +11177,13 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Pagre-record at Transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Mga Notipikasyon at Display';
+
+  @override
+  String get helpAndAbout => 'Tulong at Tungkol';
 }

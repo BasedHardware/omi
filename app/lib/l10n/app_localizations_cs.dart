@@ -11077,4 +11077,13 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Nahrávání a přepis';
+
+  @override
+  String get notificationsAndDisplay => 'Oznámení a zobrazení';
+
+  @override
+  String get helpAndAbout => 'Nápověda a o aplikaci';
 }

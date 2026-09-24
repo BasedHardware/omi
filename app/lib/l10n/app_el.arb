@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Μενταγιόν",
     "conversationDeveloperTools": "Εργαλεία προγραμματιστή στις συνομιλίες",
     "conversationDeveloperToolsDescription": "Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας",
-    "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} few{ακόμη {count}} many{ακόμη {count}} other{ακόμη {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} few{ακόμη {count}} many{ακόμη {count}} other{ακόμη {count}}}",
+    "recordingAndTranscription": "Εγγραφή & απομαγνητοφώνηση",
+    "notificationsAndDisplay": "Ειδοποιήσεις & εμφάνιση",
+    "helpAndAbout": "Βοήθεια & σχετικά"
 }

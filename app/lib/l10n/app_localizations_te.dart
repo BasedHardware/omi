@@ -11128,4 +11128,13 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'రికార్డింగ్ & ట్రాన్‌స్క్రిప్షన్';
+
+  @override
+  String get notificationsAndDisplay => 'నోటిఫికేషన్‌లు & ప్రదర్శన';
+
+  @override
+  String get helpAndAbout => 'సహాయం & గురించి';
 }

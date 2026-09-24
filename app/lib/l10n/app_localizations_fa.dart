@@ -11077,4 +11077,13 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'ضبط و رونویسی';
+
+  @override
+  String get notificationsAndDisplay => 'اطلاع‌رسانی‌ها و نمایش';
+
+  @override
+  String get helpAndAbout => 'راهنما و درباره';
 }

@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Pakabukas",
     "conversationDeveloperTools": "Kūrėjo įrankiai pokalbiuose",
     "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“",
-    "participantsSummary": "{name} + {count, plural, =1{dar 1} few{dar {count}} many{dar {count}} other{dar {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{dar 1} few{dar {count}} many{dar {count}} other{dar {count}}}",
+    "recordingAndTranscription": "Įrašymas ir transkripcija",
+    "notificationsAndDisplay": "Pranešimai ir rodinys",
+    "helpAndAbout": "Pagalba ir apie"
 }

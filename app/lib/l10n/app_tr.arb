@@ -3535,5 +3535,8 @@
     "captureSourcePendant": "Kolye",
     "conversationDeveloperTools": "Konuşmalarda geliştirici araçları",
     "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster",
-    "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} few{{count} kişi daha} many{{count} kişi daha} other{{count} kişi daha}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} few{{count} kişi daha} many{{count} kişi daha} other{{count} kişi daha}}",
+    "recordingAndTranscription": "Kayıt ve Transkripsiyon",
+    "notificationsAndDisplay": "Bildirimler ve Görünüm",
+    "helpAndAbout": "Yardım ve Hakkında"
 }

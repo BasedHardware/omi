@@ -11069,4 +11069,13 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Recording & Transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Notifications & Display';
+
+  @override
+  String get helpAndAbout => 'Help & About';
 }

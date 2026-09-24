@@ -11089,4 +11089,13 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Perekaman & Transkripsi';
+
+  @override
+  String get notificationsAndDisplay => 'Notifikasi & Tampilan';
+
+  @override
+  String get helpAndAbout => 'Bantuan & Tentang';
 }

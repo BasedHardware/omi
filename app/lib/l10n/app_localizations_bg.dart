@@ -11122,4 +11122,13 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Запис и транскрипция';
+
+  @override
+  String get notificationsAndDisplay => 'Известия и показване';
+
+  @override
+  String get helpAndAbout => 'Помощ и информация';
 }

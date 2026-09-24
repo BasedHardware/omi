@@ -11066,4 +11066,13 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Optagelse og transskription';
+
+  @override
+  String get notificationsAndDisplay => 'Notifikationer og visning';
+
+  @override
+  String get helpAndAbout => 'Hjælp og om';
 }

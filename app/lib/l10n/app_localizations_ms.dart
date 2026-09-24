@@ -11108,4 +11108,13 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Rakaman & Transkripsi';
+
+  @override
+  String get notificationsAndDisplay => 'Pemberitahuan & Paparan';
+
+  @override
+  String get helpAndAbout => 'Bantuan & Perihal';
 }
