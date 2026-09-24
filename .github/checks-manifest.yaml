@@ -890,6 +890,11 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
+  - id: restcountries-app-tests
+    command: ["python3", "plugins/omi-restcountries-app/test_main.py"]
+    triggers: ["plugins/omi-restcountries-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "REST Countries plugin must provide comprehensive country profiles, capitals, border resolutions, and tie handling with hermetic unit tests"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

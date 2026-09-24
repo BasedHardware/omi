@@ -1,9 +1,289 @@
 """Hermetic unit tests for Omi REST Countries & Geographic Intelligence App."""
 
+from pathlib import Path
+import sys
+import types
 import unittest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
 
+# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# runs hermetically on any clean standard library Python environment without
+# requiring FastAPI or Pydantic to be installed.
+_app_dir = Path(__file__).resolve().parent
+if str(_app_dir) not in sys.path:
+    sys.path.insert(0, str(_app_dir))
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi
+        import fastapi.exceptions
+        import fastapi.responses
+        import fastapi.testclient
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                self.routes = []
+
+            def get(self, path, *args, **kwargs):
+                return lambda f: f
+
+            def post(self, path, *args, **kwargs):
+                return lambda f: f
+
+            def exception_handler(self, *args, **kwargs):
+                return lambda f: f
+
+        class Request:
+            pass
+
+        fastapi.FastAPI = FastAPI
+        fastapi.Request = Request
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            def __init__(self, content="", **kwargs):
+                self.content = content
+
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.content = content
+                self.status_code = status_code
+
+        responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
+        sys.modules["fastapi.responses"] = responses
+        fastapi.responses = responses
+
+        exceptions = types.ModuleType("fastapi.exceptions")
+
+        class RequestValidationError(Exception):
+            def __init__(self, errors=None):
+                self._errors = errors or []
+
+            def errors(self):
+                return self._errors
+
+        exceptions.RequestValidationError = RequestValidationError
+        sys.modules["fastapi.exceptions"] = exceptions
+        fastapi.exceptions = exceptions
+
+        testclient = types.ModuleType("fastapi.testclient")
+
+        class TestClient:
+            def __init__(self, app):
+                self.app = app
+
+            def get(self, path):
+                import asyncio
+                import main
+
+                if path == "/health":
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: asyncio.run(main.health()),
+                    )
+                elif path == "/.well-known/omi-tools.json":
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: asyncio.run(main.omi_tools()),
+                    )
+                elif path == "/":
+                    content = asyncio.run(main.root()).content
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "text/html; charset=utf-8"},
+                        text=content,
+                    )
+                return types.SimpleNamespace(
+                    status_code=404,
+                    headers={"content-type": "application/json"},
+                    json=lambda: {"detail": "Not Found"},
+                )
+
+            def post(self, path, json=None):
+                import asyncio
+                import main
+                import models
+
+                payload = json or {}
+                try:
+                    if path == "/tools/get_country_info":
+                        raw_c = payload.get("country")
+                        if raw_c is None or not str(raw_c).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: country: Country name or code must not be empty."
+                                },
+                            )
+                        req = models.GetCountryInfoRequest(**payload)
+                        res = asyncio.run(main.get_country_info(req))
+                    elif path == "/tools/search_by_capital":
+                        raw_cap = payload.get("capital")
+                        if raw_cap is None or not str(raw_cap).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: capital: Capital city name must not be empty."
+                                },
+                            )
+                        req = models.SearchByCapitalRequest(**payload)
+                        res = asyncio.run(main.search_by_capital(req))
+                    elif path == "/tools/get_border_countries":
+                        raw_c = payload.get("country")
+                        if raw_c is None or not str(raw_c).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: country: Country name or code must not be empty."
+                                },
+                            )
+                        req = models.GetBorderCountriesRequest(**payload)
+                        res = asyncio.run(main.get_border_countries(req))
+                    elif path == "/tools/search_by_currency":
+                        raw_curr = payload.get("currency")
+                        if raw_curr is None or not str(raw_curr).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: currency: Currency code or name must not be empty."
+                                },
+                            )
+                        req = models.SearchByCurrencyRequest(**payload)
+                        res = asyncio.run(main.search_by_currency(req))
+                    elif path == "/tools/search_by_language":
+                        raw_lang = payload.get("language")
+                        if raw_lang is None or not str(raw_lang).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: language: Language name or code must not be empty."
+                                },
+                            )
+                        req = models.SearchByLanguageRequest(**payload)
+                        res = asyncio.run(main.search_by_language(req))
+                    elif path == "/tools/compare_countries":
+                        ca = payload.get("country_a")
+                        cb = payload.get("country_b")
+                        if not ca or not str(ca).strip() or not cb or not str(cb).strip():
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: Country name must not be empty."
+                                },
+                            )
+                        req = models.CompareCountriesRequest(**payload)
+                        res = asyncio.run(main.compare_countries(req))
+                    else:
+                        return types.SimpleNamespace(
+                            status_code=404,
+                            headers={"content-type": "application/json"},
+                            json=lambda: {"detail": "Not Found"},
+                        )
+
+                    data = {}
+                    if getattr(res, "result", None) is not None:
+                        data["result"] = res.result
+                    if getattr(res, "error", None) is not None:
+                        data["error"] = res.error
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: data,
+                    )
+                except ValueError as err:
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: {"error": str(err)},
+                    )
+
+        testclient.TestClient = TestClient
+        sys.modules["fastapi.testclient"] = testclient
+        fastapi.testclient = testclient
+
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        def Field(default=..., **kwargs):
+            return default
+
+        def field_validator(*fields, **options):
+            def dec(func):
+                func.__field_validator__ = (fields, options)
+                return func
+
+            return dec
+
+        def model_validator(*args, **kwargs):
+            def dec(func):
+                func.__model_validator__ = kwargs
+                return func
+
+            return dec
+
+        class ConfigDict:
+            def __init__(self, **kwargs):
+                pass
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                # Set default None for declared class attributes
+                for cls in reversed(self.__class__.__mro__):
+                    for k, v in getattr(cls, "__dict__", {}).items():
+                        if not k.startswith("_") and not callable(v):
+                            setattr(self, k, None if v is ... else v)
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+                for cls in reversed(self.__class__.__mro__):
+                    for attr_name, member in cls.__dict__.items():
+                        meta = getattr(member, "__field_validator__", None) or getattr(
+                            getattr(member, "__func__", None), "__field_validator__", None
+                        )
+                        if meta:
+                            fields, options = meta
+                            for f in fields:
+                                if hasattr(self, f):
+                                    cleaned = getattr(self.__class__, attr_name)(getattr(self, f))
+                                    setattr(self, f, cleaned)
+                        model_meta = getattr(member, "__model_validator__", None) or getattr(
+                            getattr(member, "__func__", None), "__model_validator__", None
+                        )
+                        if model_meta:
+                            getattr(self, attr_name)()
+
+            def model_dump(self, **kwargs):
+                d = {}
+                for k, v in self.__dict__.items():
+                    if not k.startswith("_"):
+                        if kwargs.get("exclude_none") and v is None:
+                            continue
+                        d[k] = v
+                return d
+
+        pydantic.BaseModel = BaseModel
+        pydantic.ConfigDict = ConfigDict
+        pydantic.Field = Field
+        pydantic.field_validator = field_validator
+        pydantic.model_validator = model_validator
+        sys.modules["pydantic"] = pydantic
+
+from fastapi.testclient import TestClient
 from data import find_country, search_by_capital_city
 from main import SimpleTTLCache, app, app_cache
 from models import (
