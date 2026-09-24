@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+void copyToClipboard(String text, String successMessage) {
+  Clipboard.setData(ClipboardData(text: text));
+}
 
 /// Legacy style constants. Superseded by the tokens in `lib/ui/omi_tokens.dart`: use `OmiColors`,
 /// `OmiType`, `OmiRadius` and `OmiSpacing` in new code, and migrate a file off `AppStyles` when you
