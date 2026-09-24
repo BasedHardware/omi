@@ -6,7 +6,6 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 
 import 'harness.dart';
@@ -107,27 +106,6 @@ void main() {
   });
 
   group('legacy adapters', () {
-    testWidgets('getDialog shows Cancel and marks destructive', (tester) async {
-      await tester.pumpWidget(feedbackHarness((context) {
-        showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            c,
-            () => Navigator.pop(c),
-            () => Navigator.pop(c),
-            'Delete person?',
-            'Their samples go too.',
-            okButtonText: 'Delete',
-            destructive: true,
-          ),
-        );
-      }, platform: TargetPlatform.iOS));
-      await tapTrigger(tester);
-      final actions = tester.widgetList<CupertinoDialogAction>(find.byType(CupertinoDialogAction)).toList();
-      expect(actions.map((a) => (a.child as Text).data), ['Cancel', 'Delete']);
-      expect(actions.last.isDestructiveAction, isTrue);
-    });
-
     testWidgets('ConfirmationDialog shows Cancel without cancelText, and Cancel closes even with a no-op onCancel',
         (tester) async {
       await tester.pumpWidget(feedbackHarness((context) {

@@ -9,7 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -45,7 +45,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
                     onTap: () async {
                       PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
                       bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                      await routeToPage(context, const SpeechProfilePage());
+                      await openVoiceProfile(context);
                       final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                       if (hasSpeakerProfile != newHasSpeakerProfile) {
                         if (!context.mounted) return;

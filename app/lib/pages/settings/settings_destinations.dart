@@ -32,7 +32,6 @@ import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -110,12 +109,11 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
 
 /// The one Voice Profile entry point (chat-apps-settings #25): the guided voice setup when there is
 /// no voice profile yet, otherwise the Voice Profile page (listen, re-record).
+/// The one voice-profile flow: the guided introduction (#14514), where sentence starters become
+/// the voice sample, memories and a goal. Every entry point opens it, with or without an existing
+/// voice profile; the older question-based redo page is no longer reachable (see the PR notes).
 Future<void> openVoiceProfile(BuildContext context) async {
   PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
-  if (SharedPreferencesUtil().hasSpeakerProfile) {
-    await routeToPage(context, const SpeechProfilePage());
-    return;
-  }
   await routeToPage(
     context,
     Builder(

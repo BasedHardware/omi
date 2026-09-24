@@ -126,7 +126,7 @@ One policy, and never neither:
 - Adaptive: `CupertinoAlertDialog` with `CupertinoDialogAction`s on iOS, `AlertDialog` elsewhere.
   Cancel is always present (localized) and always closes. Titles are Title Case questions
   ("Delete Conversation?").
-- Legacy entry points (`getDialog`, `ConfirmationDialog`, `OmiConfirmDialog`, `AppDialog`) are thin
+- Legacy entry points (`ConfirmationDialog`, `OmiConfirmDialog`, `AppDialog`) are thin
   adapters over the same widget; they accept `destructive`. New code calls the functions above.
 
 ## 6. Feedback (toasts)
