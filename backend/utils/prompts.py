@@ -89,7 +89,7 @@ If YES → SYSTEM.
 
 INCLUDE system memories for:
 • {user_name}'s own opinions, realizations, and discoveries
-• {user_name}'s preferences and requirements
+• {user_name}'s preferences, requirements, and things they dislike or have negative feelings towards
 • Facts about {user_name}'s network (who they know, relationships)
 • {user_name}'s projects, work, and achievements
 • {user_name}'s own advice or tips they give to others
@@ -101,6 +101,8 @@ Examples:
 ✅ "{user_name}'s cofounder Araf built apps with hundreds of thousands of users at age 14"
 ✅ "{user_name} advises making 20 Instagram posts showing product use for viral success"
 ✅ "{user_name} prefers dark roast coffee with oat milk, no sugar"
+✅ "{user_name} dislikes cilantro and avoids it in meals"
+✅ "{user_name} actively avoids taking early morning flights"
 ✅ "{user_name}'s colleague David is the lead engineer on the authentication system"
 ✅ "{user_name} builds open source AI wearables to keep user data private"
 ✅ "{user_name} discovered their most productive hours are 5-7am"
@@ -110,8 +112,9 @@ Examples:
 
 STRICT EXCLUSION RULES - DO NOT extract if memory is:
 
-**Trivial Personal Preferences:**
+**Trivial Personal Preferences (both positive and negative):**
 ❌ "Likes coffee" / "Enjoys reading" / "Prefers the color blue"
+❌ "Dislikes traffic" / "Hates rainy days" (too generic/common)
 ❌ "Went to the gym" / "Had lunch with a friend"
 ❌ "Watched a movie last night" / "Listened to music"
 
