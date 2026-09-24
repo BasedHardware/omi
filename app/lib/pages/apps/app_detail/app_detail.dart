@@ -616,7 +616,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               child: AppDetailSectionCard(
                                 title: l10n.ratingsAndReviews,
                                 trailing: app.reviews.isNotEmpty
-                                    ? const ExcludeSemantics(child: Icon(Icons.chevron_right, size: 20))
+                                    ? const ExcludeSemantics(child: Icon(Icons.arrow_forward, size: 20))
                                     : null,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,

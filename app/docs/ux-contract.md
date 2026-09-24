@@ -248,7 +248,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 |---|---|---|
 | first load | `OmiLoadingState` (or a skeleton that previews the layout, with a timeout) | one `OmiSpinner` |
 | load failed | `OmiErrorState(message:, onRetry:)` | the cause in words and **Try Again** |
-| nothing here / nothing matches | `OmiEmptyState(icon:, title:, message:, action:)` | Title Case title, one action when it is how the page gets its first row |
+| nothing here / nothing matches | `OmiEmptyState(icon:, title:, message:, action:)` (`glyph: FaIcon(…)` instead of `icon:` where the screen's glyphs are FontAwesome) | Title Case title, one action when it is how the page gets its first row |
 
 - Pull-to-refresh refreshes what the page shows. A failed load always offers Try Again.
 

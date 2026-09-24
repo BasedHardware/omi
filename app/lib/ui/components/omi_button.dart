@@ -18,6 +18,10 @@ enum OmiButtonVariant {
 
   /// Low-emphasis text action ("Skip", "Learn More", a dialog's Cancel): no fill.
   tertiary,
+
+  /// A labelled action inside a row of [OmiIconButton.filled] circles (a page header): the same
+  /// surface-1 fill and primary-text label and glyph, so the row reads as one calm set.
+  toolbar,
 }
 
 /// Button heights. Both keep a touch target of at least 44pt.
@@ -64,6 +68,7 @@ class OmiButton extends StatefulWidget {
     this.variant = OmiButtonVariant.primary,
     this.size = OmiButtonSize.regular,
     this.icon,
+    this.leading,
     this.isLoading = false,
     this.expand = false,
     this.colors,
@@ -78,6 +83,7 @@ class OmiButton extends StatefulWidget {
     required this.onPressed,
     this.size = OmiButtonSize.regular,
     this.icon,
+    this.leading,
     this.isLoading = false,
     this.expand = false,
   })  : variant = OmiButtonVariant.secondary,
@@ -92,6 +98,7 @@ class OmiButton extends StatefulWidget {
     required this.onPressed,
     this.size = OmiButtonSize.regular,
     this.icon,
+    this.leading,
     this.isLoading = false,
     this.expand = false,
   })  : variant = OmiButtonVariant.destructive,
@@ -106,9 +113,26 @@ class OmiButton extends StatefulWidget {
     required this.onPressed,
     this.size = OmiButtonSize.regular,
     this.icon,
+    this.leading,
     this.isLoading = false,
     this.expand = false,
   })  : variant = OmiButtonVariant.tertiary,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null;
+
+  /// See [OmiButtonVariant.toolbar].
+  const OmiButton.toolbar({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.size = OmiButtonSize.regular,
+    this.icon,
+    this.leading,
+    this.isLoading = false,
+    this.expand = false,
+  })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
         height = null,
@@ -122,8 +146,13 @@ class OmiButton extends StatefulWidget {
   final OmiButtonVariant variant;
   final OmiButtonSize size;
 
-  /// Optional leading icon.
+  /// Optional leading icon from [Icons].
   final IconData? icon;
+
+  /// Optional leading icon widget, for glyphs that are not a Material [IconData] — for example
+  /// `FaIcon(FontAwesomeIcons.comments)` so a button can use the same glyph as the tab bar. It is
+  /// sized and coloured like [icon] through [IconTheme]. Takes precedence over [icon].
+  final Widget? leading;
 
   /// Shows the spinner and ignores taps, independent of [onPressed]'s future.
   final bool isLoading;
@@ -195,6 +224,7 @@ class _OmiButtonState extends State<OmiButton> {
       OmiButtonVariant.secondary => (background: OmiColors.surface2, foreground: OmiColors.textPrimary),
       OmiButtonVariant.destructive => (background: OmiColors.dangerSurface, foreground: OmiColors.danger),
       OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textPrimary),
+      OmiButtonVariant.toolbar => (background: OmiColors.surface1, foreground: OmiColors.textPrimary),
     };
   }
 
@@ -210,11 +240,15 @@ class _OmiButtonState extends State<OmiButton> {
     );
 
     Widget label = Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
-    if (widget.icon != null) {
+    if (widget.leading != null || widget.icon != null) {
+      final iconSize = compact ? 16.0 : 18.0;
       label = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(widget.icon, size: compact ? 16 : 18, color: colors.foreground),
+          IconTheme(
+            data: IconThemeData(size: iconSize, color: colors.foreground),
+            child: widget.leading ?? Icon(widget.icon),
+          ),
           const SizedBox(width: OmiSpacing.xs),
           Flexible(child: label),
         ],

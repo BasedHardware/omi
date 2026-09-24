@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
@@ -62,7 +63,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                       footer: l10n.storeAudioCloudDescription,
                       children: [
                         OmiSettingsRow.toggle(
-                          leading: const Icon(Icons.cloud_outlined),
+                          leading: const FaIcon(FontAwesomeIcons.cloud),
                           title: l10n.enableCloudStorage,
                           value: userProvider.privateCloudSyncEnabled,
                           onChanged: _isSaving ? null : _togglePrivateCloudSync,

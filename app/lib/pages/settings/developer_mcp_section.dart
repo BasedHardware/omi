@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -54,7 +55,7 @@ class DeveloperMcpSection extends StatelessWidget {
               const SizedBox(width: OmiSpacing.xs),
               OmiButton.secondary(
                 label: l10n.createKey,
-                icon: Icons.add,
+                leading: const FaIcon(FontAwesomeIcons.plus),
                 size: OmiButtonSize.compact,
                 onPressed: () => showDialog(context: context, builder: (_) => const CreateMcpApiKeyDialog()),
               ),
@@ -66,7 +67,7 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const Icon(Icons.desktop_windows_outlined),
+              leading: const FaIcon(FontAwesomeIcons.desktop),
               title: l10n.claudeDesktop,
               subtitle: l10n.addToClaudeDesktopConfig,
             ),
@@ -80,7 +81,7 @@ class DeveloperMcpSection extends StatelessWidget {
                   const SizedBox(height: OmiSpacing.sm),
                   OmiButton.secondary(
                     label: l10n.copyConfig,
-                    icon: Icons.copy,
+                    leading: const FaIcon(FontAwesomeIcons.copy),
                     expand: true,
                     onPressed: () => OmiClipboard.copy(context, hostedMcpConfigJson(mcpUrl)),
                   ),
@@ -93,7 +94,7 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const Icon(Icons.dns_outlined),
+              leading: const FaIcon(FontAwesomeIcons.server),
               title: l10n.mcpServer,
               subtitle: l10n.connectAiAssistantsToYourData,
             ),
@@ -167,7 +168,8 @@ class _McpKeysList extends StatelessWidget {
           );
         }
         if (provider.keys.isEmpty) {
-          return OmiEmptyState(icon: Icons.key_outlined, title: l10n.noApiKeysYet, message: l10n.createKeyToGetStarted);
+          return OmiEmptyState(
+              glyph: const FaIcon(FontAwesomeIcons.key), title: l10n.noApiKeysYet, message: l10n.createKeyToGetStarted);
         }
         return OmiSettingsGroup(children: [for (final key in provider.keys) McpApiKeyListItem(apiKey: key)]);
       },
@@ -238,7 +240,7 @@ class _CopyableValue extends StatelessWidget {
             children: [
               Expanded(child: Text(value, style: OmiType.footnote.copyWith(fontFamily: _mono))),
               const SizedBox(width: OmiSpacing.xs),
-              const Icon(Icons.copy, size: 16, color: OmiColors.textTertiary),
+              const FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
             ],
           ),
         ),

@@ -202,7 +202,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             // Reviews List
             filteredReviews.isEmpty
                 ? OmiEmptyState(
-                    icon: Icons.star_border,
+                    glyph: const FaIcon(FontAwesomeIcons.star),
                     title: context.l10n.noReviewsFound,
                   )
                 : ListView.separated(
@@ -356,7 +356,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               child: OmiButton.tertiary(
                 label: review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
                 size: OmiButtonSize.compact,
-                icon: review.response.isNotEmpty ? Icons.edit_outlined : Icons.reply,
+                leading: FaIcon(review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply),
                 onPressed: () => _showReplyDialog(review),
               ),
             ),

@@ -61,6 +61,7 @@ class OmiPermissionRow extends StatelessWidget {
     required this.status,
     required this.onAllow,
     this.icon,
+    this.leading,
     this.onOpenSettings,
     this.serviceOffMessage,
   });
@@ -75,6 +76,10 @@ class OmiPermissionRow extends StatelessWidget {
   final FutureOr<void> Function() onAllow;
 
   final IconData? icon;
+
+  /// A leading glyph that is not a Material [IconData] — for example `FaIcon(FontAwesomeIcons.solidBell)`
+  /// so the row matches the Settings permission list. Sized and coloured like [icon]; wins over it.
+  final Widget? leading;
 
   /// Defaults to `openAppSettings()`.
   final FutureOr<void> Function()? onOpenSettings;
@@ -138,8 +143,13 @@ class OmiPermissionRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (icon != null) ...[
-            ExcludeSemantics(child: Icon(icon, color: OmiColors.textSecondary, size: 22)),
+          if (leading != null || icon != null) ...[
+            ExcludeSemantics(
+              child: IconTheme.merge(
+                data: const IconThemeData(color: OmiColors.textSecondary, size: 22),
+                child: SizedBox(width: 24, child: Center(child: leading ?? Icon(icon))),
+              ),
+            ),
             const SizedBox(width: OmiSpacing.sm),
           ],
           Expanded(

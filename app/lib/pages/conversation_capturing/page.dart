@@ -2,6 +2,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/speaker_label.dart';
 
@@ -226,7 +227,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     OmiButton(
                       key: const Key('process_now_button'),
                       label: context.l10n.processNow,
-                      icon: Icons.stop_rounded,
+                      leading: const FaIcon(FontAwesomeIcons.stop),
                       onPressed: () => _stopConversation(provider),
                     ),
                     const SizedBox(width: OmiSpacing.sm),
