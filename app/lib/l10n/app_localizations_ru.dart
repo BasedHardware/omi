@@ -11116,4 +11116,13 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Запись и расшифровка';
+
+  @override
+  String get notificationsAndDisplay => 'Уведомления и отображение';
+
+  @override
+  String get helpAndAbout => 'Помощь и о программе';
 }

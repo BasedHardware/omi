@@ -11143,4 +11143,13 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Enregistrament i transcripció';
+
+  @override
+  String get notificationsAndDisplay => 'Notificacions i visualització';
+
+  @override
+  String get helpAndAbout => 'Ajuda i informació';
 }

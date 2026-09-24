@@ -11082,4 +11082,13 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'রেকর্ডিং ও ট্রান্সক্রিপশন';
+
+  @override
+  String get notificationsAndDisplay => 'বিজ্ঞপ্তি ও প্রদর্শন';
+
+  @override
+  String get helpAndAbout => 'সাহায্য ও সম্পর্কে';
 }

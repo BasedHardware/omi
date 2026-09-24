@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Mặt dây chuyền",
     "conversationDeveloperTools": "Công cụ nhà phát triển trong cuộc trò chuyện",
     "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện",
-    "participantsSummary": "{name} + {count, plural, =1{1 người khác} few{{count} người khác} many{{count} người khác} other{{count} người khác}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 người khác} few{{count} người khác} many{{count} người khác} other{{count} người khác}}",
+    "recordingAndTranscription": "Ghi âm & Phiên âm",
+    "notificationsAndDisplay": "Thông báo & Hiển thị",
+    "helpAndAbout": "Trợ giúp & Giới thiệu"
 }

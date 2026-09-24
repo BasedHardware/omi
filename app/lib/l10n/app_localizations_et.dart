@@ -11077,4 +11077,13 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Salvestamine ja transkriptsioon';
+
+  @override
+  String get notificationsAndDisplay => 'Teavitused ja kuva';
+
+  @override
+  String get helpAndAbout => 'Abi ja teave';
 }

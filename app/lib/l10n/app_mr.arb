@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "पेंडंट",
     "conversationDeveloperTools": "संभाषणांमधील डेव्हलपर साधने",
     "conversationDeveloperToolsDescription": "संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा",
-    "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}",
+    "recordingAndTranscription": "रेकॉर्डिंग आणि प्रतिलेखन",
+    "notificationsAndDisplay": "सूचना आणि प्रदर्शन",
+    "helpAndAbout": "मदत आणि माहिती"
 }

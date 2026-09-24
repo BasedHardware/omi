@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "پینڈنٹ",
     "conversationDeveloperTools": "گفتگو میں ڈویلپر ٹولز",
     "conversationDeveloperToolsDescription": "گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں",
-    "participantsSummary": "{name} + {count, plural, =1{1 دیگر} few{{count} دیگر} many{{count} دیگر} other{{count} دیگر}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 دیگر} few{{count} دیگر} many{{count} دیگر} other{{count} دیگر}}",
+    "recordingAndTranscription": "ریکارڈنگ اور ٹرانسکرپشن",
+    "notificationsAndDisplay": "اطلاعات اور ڈسپلے",
+    "helpAndAbout": "مدد اور تعارف"
 }

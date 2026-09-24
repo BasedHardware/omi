@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "ಪೆಂಡೆಂಟ್",
     "conversationDeveloperTools": "ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು",
     "conversationDeveloperToolsDescription": "ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ",
-    "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}",
+    "recordingAndTranscription": "ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಪ್ರತಿಲಿಪಿ",
+    "notificationsAndDisplay": "ಅಧಿಸೂಚನೆಗಳು ಮತ್ತು ಪ್ರದರ್ಶನ",
+    "helpAndAbout": "ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ"
 }

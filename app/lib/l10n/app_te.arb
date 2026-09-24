@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "పెండెంట్",
     "conversationDeveloperTools": "సంభాషణల్లో డెవలపర్ సాధనాలు",
     "conversationDeveloperToolsDescription": "సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు",
-    "participantsSummary": "{name} + {count, plural, =1{1 ఇతరులు} few{{count} ఇతరులు} many{{count} ఇతరులు} other{{count} ఇతరులు}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ఇతరులు} few{{count} ఇతరులు} many{{count} ఇతరులు} other{{count} ఇతరులు}}",
+    "recordingAndTranscription": "రికార్డింగ్ & ట్రాన్‌స్క్రిప్షన్",
+    "notificationsAndDisplay": "నోటిఫికేషన్‌లు & ప్రదర్శన",
+    "helpAndAbout": "సహాయం & గురించి"
 }

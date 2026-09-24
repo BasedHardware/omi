@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Висулка",
     "conversationDeveloperTools": "Инструменти за разработчици в разговорите",
     "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора",
-    "participantsSummary": "{name} + {count, plural, =1{1 друг} few{{count} други} many{{count} други} other{{count} други}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 друг} few{{count} други} many{{count} други} other{{count} други}}",
+    "recordingAndTranscription": "Запис и транскрипция",
+    "notificationsAndDisplay": "Известия и показване",
+    "helpAndAbout": "Помощ и информация"
 }

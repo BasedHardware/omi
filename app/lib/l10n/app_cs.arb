@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Přívěsek",
     "conversationDeveloperTools": "Vývojářské nástroje v konverzacích",
     "conversationDeveloperToolsDescription": "Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace",
-    "participantsSummary": "{name} + {count, plural, =1{1 další} few{{count} další} many{{count} dalších} other{{count} dalších}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 další} few{{count} další} many{{count} dalších} other{{count} dalších}}",
+    "recordingAndTranscription": "Nahrávání a přepis",
+    "notificationsAndDisplay": "Oznámení a zobrazení",
+    "helpAndAbout": "Nápověda a o aplikaci"
 }

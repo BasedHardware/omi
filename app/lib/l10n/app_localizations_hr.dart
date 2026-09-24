@@ -11117,4 +11117,13 @@ class AppLocalizationsHr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Snimanje i transkripcija';
+
+  @override
+  String get notificationsAndDisplay => 'Obavijesti i prikaz';
+
+  @override
+  String get helpAndAbout => 'Pomoć i o aplikaciji';
 }

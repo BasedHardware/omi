@@ -11107,4 +11107,13 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Ierakstīšana un transkripcija';
+
+  @override
+  String get notificationsAndDisplay => 'Paziņojumi un attēlojums';
+
+  @override
+  String get helpAndAbout => 'Palīdzība un par lietotni';
 }

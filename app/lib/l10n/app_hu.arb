@@ -3596,5 +3596,8 @@
     "captureSourcePendant": "Medál",
     "conversationDeveloperTools": "Fejlesztői eszközök a beszélgetésekben",
     "conversationDeveloperToolsDescription": "A beszélgetés menüjében jelenjen meg a Beszélgetésazonosító másolása és a Prompt tesztelése",
-    "participantsSummary": "{name} + {count, plural, =1{1 másik} few{{count} másik} many{{count} másik} other{{count} másik}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 másik} few{{count} másik} many{{count} másik} other{{count} másik}}",
+    "recordingAndTranscription": "Felvétel és átírás",
+    "notificationsAndDisplay": "Értesítések és megjelenítés",
+    "helpAndAbout": "Súgó és névjegy"
 }

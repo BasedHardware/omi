@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "পেন্ডেন্ট",
     "conversationDeveloperTools": "কথোপকথনে ডেভেলপার টুল",
     "conversationDeveloperToolsDescription": "কথোপকথনের মেনুতে কথোপকথন আইডি কপি ও প্রম্পট পরীক্ষা দেখান",
-    "participantsSummary": "{name} + {count, plural, =1{আরও ১ জন} few{আরও {count} জন} many{আরও {count} জন} other{আরও {count} জন}}"
+    "participantsSummary": "{name} + {count, plural, =1{আরও ১ জন} few{আরও {count} জন} many{আরও {count} জন} other{আরও {count} জন}}",
+    "recordingAndTranscription": "রেকর্ডিং ও ট্রান্সক্রিপশন",
+    "notificationsAndDisplay": "বিজ্ঞপ্তি ও প্রদর্শন",
+    "helpAndAbout": "সাহায্য ও সম্পর্কে"
 }

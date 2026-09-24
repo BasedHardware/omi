@@ -11095,4 +11095,13 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Снимање и препис';
+
+  @override
+  String get notificationsAndDisplay => 'Обавештења и приказ';
+
+  @override
+  String get helpAndAbout => 'Помоћ и о апликацији';
 }

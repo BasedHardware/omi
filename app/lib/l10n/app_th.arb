@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "จี้",
     "conversationDeveloperTools": "เครื่องมือนักพัฒนาในบทสนทนา",
     "conversationDeveloperToolsDescription": "แสดง คัดลอก ID บทสนทนา และ ทดสอบพรอมต์ ในเมนูของบทสนทนา",
-    "participantsSummary": "{name} + {count, plural, =1{1คน} few{{count}คน} many{{count}คน} other{{count}คน}}"
+    "participantsSummary": "{name} + {count, plural, =1{1คน} few{{count}คน} many{{count}คน} other{{count}คน}}",
+    "recordingAndTranscription": "การบันทึกและการถอดเสียง",
+    "notificationsAndDisplay": "การแจ้งเตือนและการแสดงผล",
+    "helpAndAbout": "ความช่วยเหลือและเกี่ยวกับ"
 }

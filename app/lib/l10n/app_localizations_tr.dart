@@ -11092,4 +11092,13 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Kayıt ve Transkripsiyon';
+
+  @override
+  String get notificationsAndDisplay => 'Bildirimler ve Görünüm';
+
+  @override
+  String get helpAndAbout => 'Yardım ve Hakkında';
 }

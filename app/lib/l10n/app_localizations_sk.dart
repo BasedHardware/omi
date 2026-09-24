@@ -11071,4 +11071,13 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Nahrávanie a prepis';
+
+  @override
+  String get notificationsAndDisplay => 'Upozornenia a zobrazenie';
+
+  @override
+  String get helpAndAbout => 'Pomoc a o aplikácii';
 }

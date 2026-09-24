@@ -11060,4 +11060,13 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'रिकॉर्डिंग और प्रतिलेखन';
+
+  @override
+  String get notificationsAndDisplay => 'सूचनाएं और डिस्प्ले';
+
+  @override
+  String get helpAndAbout => 'सहायता और जानकारी';
 }

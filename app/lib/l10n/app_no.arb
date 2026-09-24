@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Anheng",
     "conversationDeveloperTools": "Utviklerverktøy i samtaler",
     "conversationDeveloperToolsDescription": "Vis Kopier samtale-ID og Test ledetekst i samtalens meny",
-    "participantsSummary": "{name} + {count, plural, =1{1 annen} few{{count} andre} many{{count} andre} other{{count} andre}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 annen} few{{count} andre} many{{count} andre} other{{count} andre}}",
+    "recordingAndTranscription": "Opptak og transkripsjon",
+    "notificationsAndDisplay": "Varsler og visning",
+    "helpAndAbout": "Hjelp og om"
 }

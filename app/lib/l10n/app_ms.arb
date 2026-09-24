@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Loket",
     "conversationDeveloperTools": "Alat pembangun dalam perbualan",
     "conversationDeveloperToolsDescription": "Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan",
-    "participantsSummary": "{name} + {count, plural, =1{1 lagi} few{{count} lagi} many{{count} lagi} other{{count} lagi}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 lagi} few{{count} lagi} many{{count} lagi} other{{count} lagi}}",
+    "recordingAndTranscription": "Rakaman & Transkripsi",
+    "notificationsAndDisplay": "Pemberitahuan & Paparan",
+    "helpAndAbout": "Bantuan & Perihal"
 }

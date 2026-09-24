@@ -10898,4 +10898,13 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => '録音と文字起こし';
+
+  @override
+  String get notificationsAndDisplay => '通知と表示';
+
+  @override
+  String get helpAndAbout => 'ヘルプとアプリについて';
 }

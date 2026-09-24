@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "펜던트",
     "conversationDeveloperTools": "대화의 개발자 도구",
     "conversationDeveloperToolsDescription": "대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시",
-    "participantsSummary": "{name} + {count, plural, =1{1명} few{{count}명} many{{count}명} other{{count}명}}"
+    "participantsSummary": "{name} + {count, plural, =1{1명} few{{count}명} many{{count}명} other{{count}명}}",
+    "recordingAndTranscription": "녹음 및 음성 변환",
+    "notificationsAndDisplay": "알림 및 표시",
+    "helpAndAbout": "도움말 및 정보"
 }

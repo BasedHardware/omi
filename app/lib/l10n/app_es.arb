@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Colgante",
     "conversationDeveloperTools": "Herramientas de desarrollador en conversaciones",
     "conversationDeveloperToolsDescription": "Mostrar Copiar ID de conversación y Probar indicación en el menú de la conversación",
-    "participantsSummary": "{name} + {count, plural, =1{1 otro} few{{count} otros} many{{count} otros} other{{count} otros}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 otro} few{{count} otros} many{{count} otros} other{{count} otros}}",
+    "recordingAndTranscription": "Grabación y transcripción",
+    "notificationsAndDisplay": "Notificaciones y visualización",
+    "helpAndAbout": "Ayuda e información"
 }

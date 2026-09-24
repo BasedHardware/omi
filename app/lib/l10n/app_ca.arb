@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Penjoll",
     "conversationDeveloperTools": "Eines de desenvolupador a les converses",
     "conversationDeveloperToolsDescription": "Mostra Copia l'ID de la conversa i Prova la indicació al menú de la conversa",
-    "participantsSummary": "{name} + {count, plural, =1{1 altre} few{{count} altres} many{{count} altres} other{{count} altres}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 altre} few{{count} altres} many{{count} altres} other{{count} altres}}",
+    "recordingAndTranscription": "Enregistrament i transcripció",
+    "notificationsAndDisplay": "Notificacions i visualització",
+    "helpAndAbout": "Ajuda i informació"
 }

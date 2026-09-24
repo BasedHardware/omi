@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "ペンダント",
     "conversationDeveloperTools": "会話の開発者ツール",
     "conversationDeveloperToolsDescription": "会話のメニューに「会話IDをコピー」と「プロンプトをテスト」を表示",
-    "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}"
+    "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}",
+    "recordingAndTranscription": "録音と文字起こし",
+    "notificationsAndDisplay": "通知と表示",
+    "helpAndAbout": "ヘルプとアプリについて"
 }

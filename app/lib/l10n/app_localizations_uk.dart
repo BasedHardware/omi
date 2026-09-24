@@ -11101,4 +11101,13 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Запис і транскрипція';
+
+  @override
+  String get notificationsAndDisplay => 'Сповіщення і відображення';
+
+  @override
+  String get helpAndAbout => 'Допомога і про програму';
 }

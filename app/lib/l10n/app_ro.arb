@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Pandantiv",
     "conversationDeveloperTools": "Instrumente pentru dezvoltatori în conversații",
     "conversationDeveloperToolsDescription": "Afișează Copiază ID-ul conversației și Testează promptul în meniul conversației",
-    "participantsSummary": "{name} + {count, plural, =1{1 altul} few{{count} alții} many{{count} alții} other{{count} alții}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 altul} few{{count} alții} many{{count} alții} other{{count} alții}}",
+    "recordingAndTranscription": "Înregistrare și transcriere",
+    "notificationsAndDisplay": "Notificări și afișare",
+    "helpAndAbout": "Ajutor și despre"
 }

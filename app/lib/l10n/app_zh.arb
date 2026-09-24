@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "吊坠",
     "conversationDeveloperTools": "对话中的开发者工具",
     "conversationDeveloperToolsDescription": "在对话菜单中显示“复制对话 ID”和“测试提示词”",
-    "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}"
+    "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}",
+    "recordingAndTranscription": "录音与转录",
+    "notificationsAndDisplay": "通知与显示",
+    "helpAndAbout": "帮助与关于"
 }

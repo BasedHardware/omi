@@ -11012,4 +11012,13 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'التسجيل والنسخ';
+
+  @override
+  String get notificationsAndDisplay => 'الإشعارات والعرض';
+
+  @override
+  String get helpAndAbout => 'المساعدة وحول التطبيق';
 }

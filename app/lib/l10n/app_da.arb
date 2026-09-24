@@ -3542,5 +3542,8 @@
     "captureSourcePendant": "Vedhæng",
     "conversationDeveloperTools": "Udviklerværktøjer i samtaler",
     "conversationDeveloperToolsDescription": "Vis Kopiér samtale-id og Test prompt i samtalens menu",
-    "participantsSummary": "{name} + {count, plural, =1{1 anden} few{{count} andre} many{{count} andre} other{{count} andre}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 anden} few{{count} andre} many{{count} andre} other{{count} andre}}",
+    "recordingAndTranscription": "Optagelse og transskription",
+    "notificationsAndDisplay": "Notifikationer og visning",
+    "helpAndAbout": "Hjælp og om"
 }

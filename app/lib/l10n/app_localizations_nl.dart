@@ -11114,4 +11114,13 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Opname en transcriptie';
+
+  @override
+  String get notificationsAndDisplay => 'Meldingen en weergave';
+
+  @override
+  String get helpAndAbout => 'Help en over';
 }

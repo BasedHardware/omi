@@ -28,6 +28,7 @@ import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/permissions_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
@@ -45,6 +46,21 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   switch (destination) {
     case SettingsDestination.profile:
       await routeToPage(context, const ProfilePage());
+    case SettingsDestination.deviceGroup:
+      PlatformManager.instance.analytics.settingsPageOpened(pageName: 'device');
+      await routeToPage(context, const DeviceGroupPage());
+    case SettingsDestination.recordingGroup:
+      PlatformManager.instance.analytics.settingsPageOpened(pageName: 'recording_and_transcription');
+      await routeToPage(context, const RecordingGroupPage());
+    case SettingsDestination.notificationsGroup:
+      PlatformManager.instance.analytics.settingsPageOpened(pageName: 'notifications_and_display');
+      await routeToPage(context, const NotificationsDisplayGroupPage());
+    case SettingsDestination.privacyGroup:
+      PlatformManager.instance.analytics.settingsPageOpened(pageName: 'privacy_and_data');
+      await routeToPage(context, const PrivacyDataGroupPage());
+    case SettingsDestination.helpGroup:
+      PlatformManager.instance.analytics.settingsPageOpened(pageName: 'help_and_about');
+      await routeToPage(context, const HelpAboutGroupPage());
     case SettingsDestination.notifications:
       await routeToPage(context, const NotificationsSettingsPage());
     case SettingsDestination.planAndUsage:

@@ -13124,5 +13124,17 @@
                 "type": "int"
             }
         }
+    },
+    "recordingAndTranscription": "Recording & Transcription",
+    "@recordingAndTranscription": {
+        "description": "Settings group: transcription, language, voice and capture settings"
+    },
+    "notificationsAndDisplay": "Notifications & Display",
+    "@notificationsAndDisplay": {
+        "description": "Settings group: notifications, home screen and conversation display"
+    },
+    "helpAndAbout": "Help & About",
+    "@helpAndAbout": {
+        "description": "Settings group: feedback, help center, what's new and the app version"
     }
 }

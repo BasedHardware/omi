@@ -11090,4 +11090,13 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'ریکارڈنگ اور ٹرانسکرپشن';
+
+  @override
+  String get notificationsAndDisplay => 'اطلاعات اور ڈسپلے';
+
+  @override
+  String get helpAndAbout => 'مدد اور تعارف';
 }

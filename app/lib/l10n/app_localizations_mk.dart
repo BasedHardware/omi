@@ -11140,4 +11140,13 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Снимање и транскрипција';
+
+  @override
+  String get notificationsAndDisplay => 'Известувања и приказ';
+
+  @override
+  String get helpAndAbout => 'Помош и за апликацијата';
 }

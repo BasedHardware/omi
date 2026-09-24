@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "पेंडेंट",
     "conversationDeveloperTools": "बातचीत में डेवलपर टूल",
     "conversationDeveloperToolsDescription": "बातचीत के मेनू में बातचीत आईडी कॉपी करें और प्रॉम्प्ट टेस्ट करें दिखाएँ",
-    "participantsSummary": "{name} + {count, plural, =1{1 अन्य} few{{count} अन्य} many{{count} अन्य} other{{count} अन्य}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 अन्य} few{{count} अन्य} many{{count} अन्य} other{{count} अन्य}}",
+    "recordingAndTranscription": "रिकॉर्डिंग और प्रतिलेखन",
+    "notificationsAndDisplay": "सूचनाएं और डिस्प्ले",
+    "helpAndAbout": "सहायता और जानकारी"
 }

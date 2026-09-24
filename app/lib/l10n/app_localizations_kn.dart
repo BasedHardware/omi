@@ -11114,4 +11114,13 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಪ್ರತಿಲಿಪಿ';
+
+  @override
+  String get notificationsAndDisplay => 'ಅಧಿಸೂಚನೆಗಳು ಮತ್ತು ಪ್ರದರ್ಶನ';
+
+  @override
+  String get helpAndAbout => 'ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ';
 }

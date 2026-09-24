@@ -11099,4 +11099,13 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Įrašymas ir transkripcija';
+
+  @override
+  String get notificationsAndDisplay => 'Pranešimai ir rodinys';
+
+  @override
+  String get helpAndAbout => 'Pagalba ir apie';
 }

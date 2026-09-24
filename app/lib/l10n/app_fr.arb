@@ -3535,5 +3535,8 @@
     "captureSourcePendant": "Pendentif",
     "conversationDeveloperTools": "Outils de développement dans les conversations",
     "conversationDeveloperToolsDescription": "Afficher Copier l'ID de la conversation et Tester le prompt dans le menu d'une conversation",
-    "participantsSummary": "{name} + {count, plural, =1{1 autre} few{{count} autres} many{{count} autres} other{{count} autres}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 autre} few{{count} autres} many{{count} autres} other{{count} autres}}",
+    "recordingAndTranscription": "Enregistrement et transcription",
+    "notificationsAndDisplay": "Notifications et affichage",
+    "helpAndAbout": "Aide et à propos"
 }

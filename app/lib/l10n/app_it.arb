@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Ciondolo",
     "conversationDeveloperTools": "Strumenti per sviluppatori nelle conversazioni",
     "conversationDeveloperToolsDescription": "Mostra Copia ID conversazione e Prova prompt nel menu della conversazione",
-    "participantsSummary": "{name} + {count, plural, =1{1 altro} few{{count} altri} many{{count} altri} other{{count} altri}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 altro} few{{count} altri} many{{count} altri} other{{count} altri}}",
+    "recordingAndTranscription": "Registrazione e trascrizione",
+    "notificationsAndDisplay": "Notifiche e visualizzazione",
+    "helpAndAbout": "Aiuto e informazioni"
 }

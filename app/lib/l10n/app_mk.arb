@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "Приврзок",
     "conversationDeveloperTools": "Алатки за програмери во разговорите",
     "conversationDeveloperToolsDescription": "Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот",
-    "participantsSummary": "{name} + {count, plural, =1{уште 1} few{уште {count}} many{уште {count}} other{уште {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{уште 1} few{уште {count}} many{уште {count}} other{уште {count}}}",
+    "recordingAndTranscription": "Снимање и транскрипција",
+    "notificationsAndDisplay": "Известувања и приказ",
+    "helpAndAbout": "Помош и за апликацијата"
 }

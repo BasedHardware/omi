@@ -3500,5 +3500,8 @@
     "captureSourcePendant": "Riipus",
     "conversationDeveloperTools": "Kehittäjätyökalut keskusteluissa",
     "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa",
-    "participantsSummary": "{name} + {count, plural, =1{1 muu} few{{count} muuta} many{{count} muuta} other{{count} muuta}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 muu} few{{count} muuta} many{{count} muuta} other{{count} muuta}}",
+    "recordingAndTranscription": "Tallennus ja litterointi",
+    "notificationsAndDisplay": "Ilmoitukset ja näyttö",
+    "helpAndAbout": "Ohje ja tietoja"
 }

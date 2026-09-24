@@ -10990,4 +10990,13 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'הקלטה ותמלול';
+
+  @override
+  String get notificationsAndDisplay => 'התראות ותצוגה';
+
+  @override
+  String get helpAndAbout => 'עזרה ואודות';
 }

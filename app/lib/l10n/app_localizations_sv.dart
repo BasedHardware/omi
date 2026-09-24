@@ -11089,4 +11089,13 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Inspelning och transkription';
+
+  @override
+  String get notificationsAndDisplay => 'Aviseringar och visning';
+
+  @override
+  String get helpAndAbout => 'Hjälp och om';
 }

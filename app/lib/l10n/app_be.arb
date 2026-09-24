@@ -11072,5 +11072,8 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Інструменты распрацоўшчыка ў размовах",
     "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы",
-    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}",
+    "recordingAndTranscription": "Запіс і транскрыпцыя",
+    "notificationsAndDisplay": "Паведамленні і адлюстраванне",
+    "helpAndAbout": "Дапамога і пра праграму"
 }

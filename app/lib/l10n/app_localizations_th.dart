@@ -11015,4 +11015,13 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'การบันทึกและการถอดเสียง';
+
+  @override
+  String get notificationsAndDisplay => 'การแจ้งเตือนและการแสดงผล';
+
+  @override
+  String get helpAndAbout => 'ความช่วยเหลือและเกี่ยวกับ';
 }
