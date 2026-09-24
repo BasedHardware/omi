@@ -1330,6 +1330,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "/update-list, /update-timezone, /refresh-lists and /logout returned f\"{e}\" straight to the chat tool caller on any unhandled exception instead of the type(e).__name__-only convention this file already uses elsewhere; the suite proves a raw exception message never reaches the response"
+  - id: users-migration-timezone-error-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_users_migration_timezone_error_sanitization.py"]
+    triggers: ["backend/routers/users.py", "backend/tests/unit/test_users_migration_timezone_error_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Users migration and timezone boundary endpoints must never reflect raw exception text, stack traces, or internal error details into client-facing HTTPException responses"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]

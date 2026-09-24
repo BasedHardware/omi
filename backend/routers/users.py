@@ -924,19 +924,22 @@ def handle_migration_requests(
                 conversations_db.migrate_conversations_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
+                logger.error(f"Failed to migrate conversation {request.id}: {type(e).__name__}")
+                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}")
         elif request.type == 'memory':
             try:
                 memories_db.migrate_memories_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}: {e}")
+                logger.error(f"Failed to migrate memory {request.id}: {type(e).__name__}")
+                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}")
         elif request.type == 'chat':
             try:
                 chat_db.migrate_chats_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")
+                logger.error(f"Failed to migrate chat message {request.id}: {type(e).__name__}")
+                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}")
         else:
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
@@ -1666,7 +1669,8 @@ def test_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(f'Timezone calculation error for user {uid}: {type(e).__name__}')
+            raise HTTPException(status_code=500, detail='Failed to calculate user timezone boundaries')
     else:
         now_utc = datetime.now(pytz.utc)
         if target_date:
@@ -1876,7 +1880,8 @@ def create_user_daily_summary(
         try:
             today = datetime.now(pytz.timezone(time_zone_name)).date()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(f'Timezone calculation error for user {uid}: {type(e).__name__}')
+            raise HTTPException(status_code=500, detail='Failed to calculate user timezone boundaries')
     else:
         today = datetime.now(pytz.utc).date()
     if target_date > today:
@@ -2006,7 +2011,8 @@ def regenerate_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(f'Timezone calculation error for user {uid}: {type(e).__name__}')
+            raise HTTPException(status_code=500, detail='Failed to calculate user timezone boundaries')
     else:
         start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
         end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
