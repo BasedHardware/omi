@@ -25,7 +25,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/fade_in_words_text.dart';
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/ui.dart';
 
 class SpeechProfilePage extends StatefulWidget {
   final bool onbording;
@@ -375,22 +375,38 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       }
     }
 
+    // Leaving while the sample is being recorded discards it, so back and swipe ask first
+    // (onboarding-home #26). Navigator.pop from the dialog still leaves.
+    final recordingInProgress = context.select<SpeechProfileProvider, bool>(
+      (p) => p.startedRecording && !p.profileCompleted && !p.uploadingProfile,
+    );
     return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          if (context.read<SpeechProfileProvider>().isInitialised) {
-            final speechProvider = context.read<SpeechProfileProvider>();
-            final captureProvider = context.read<CaptureProvider>();
-            final device = speechProvider.deviceProvider?.capabilityNormalizedDevice;
+      canPop: !recordingInProgress,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          final navigator = Navigator.of(context);
+          final discard = await showOmiConfirm(
+            context,
+            title: context.l10n.discardRecordingTitle,
+            message: context.l10n.discardRecordingMessage,
+            confirmLabel: context.l10n.discard,
+            cancelLabel: context.l10n.keepRecording,
+            destructive: true,
+          );
+          if (discard && mounted) navigator.pop();
+          return;
+        }
+        if (context.read<SpeechProfileProvider>().isInitialised) {
+          final speechProvider = context.read<SpeechProfileProvider>();
+          final captureProvider = context.read<CaptureProvider>();
+          final device = speechProvider.deviceProvider?.capabilityNormalizedDevice;
 
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              await speechProvider.close();
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await speechProvider.close();
 
-              captureProvider.clearTranscripts();
-              captureProvider.streamDeviceRecording(device: device);
-            });
-          }
+            captureProvider.clearTranscripts();
+            captureProvider.streamDeviceRecording(device: device);
+          });
         }
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
@@ -403,7 +419,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
               if (info == 'SKIP_UNAVAILABLE') {
-                AppSnackbar.showSnackbarError(context.l10n.reconnecting);
+                // A state report, not a failure: info style.
+                OmiFeedback.info(context, context.l10n.reconnecting);
               }
             },
             showError: (error) {
@@ -485,21 +502,14 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                 title: const Text('', style: TextStyle(color: Colors.white, fontSize: 20)),
                 actions: [
                   !widget.onbording
-                      ? IconButton(
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
-                                () => Navigator.pop(context),
-                                context.l10n.howToTakeGoodSample,
-                                context.l10n.goodSampleInstructions,
-                                singleButton: true,
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.question_mark, size: 20),
+                      ? OmiIconButton(
+                          icon: const Icon(Icons.help_outline, size: 22),
+                          label: context.l10n.howToTakeGoodSample,
+                          onPressed: () => showOmiAlert(
+                            context,
+                            title: context.l10n.howToTakeGoodSample,
+                            message: context.l10n.goodSampleInstructions,
+                          ),
                         )
                       : TextButton(
                           onPressed: () {
@@ -513,9 +523,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                 ],
                 centerTitle: true,
                 elevation: 0,
-                leading: widget.onbording
-                    ? const SizedBox()
-                    : IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
+                leading: widget.onbording ? const SizedBox() : const OmiBackButton(),
               ),
               body: Stack(
                 children: [
