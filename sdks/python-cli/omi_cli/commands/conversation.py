@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
@@ -228,7 +229,7 @@ def update_conversation(
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
-    ctx.renderer.success(f"Updated conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Updated conversation [bold]{escape(conversation_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -245,4 +246,4 @@ def delete_conversation(
         result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Deleted conversation [bold]{escape(conversation_id)}[/bold].")

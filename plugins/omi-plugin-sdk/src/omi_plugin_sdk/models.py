@@ -286,9 +286,12 @@ class TranscriptSegment(BaseModel):
 
         segments.extend(joined_similar_segments)
 
+        # Normalize punctuation spacing. Collapsing a double space to a single
+        # space (never to nothing) keeps the word boundary this method itself
+        # creates when it joins " " + a segment whose text is already padded.
         for i, segment in enumerate(segments):
             segments[i].text = (
-                segments[i].text.strip().replace("  ", "").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+                segments[i].text.strip().replace("  ", " ").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
             )
         return segments
 

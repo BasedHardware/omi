@@ -77,6 +77,7 @@ import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 import 'widgets/battery_info_widget.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 
@@ -387,6 +388,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    ListenClientState.instance.onLifecycle(state);
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
