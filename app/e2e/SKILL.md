@@ -169,20 +169,24 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
     │   └── Reviews, capabilities, install/enable, Chat button → Chat
     └── Top-bar "+" on this slot → Add App / Add MCP Server
 
-Settings sheet (settings_drawer.dart) — search + close header, then Account and seven groups.
-Every top-level row has a ValueKey (`settings_account`, `settings_group_<group>`); each page has a
+Settings sheet (settings_drawer.dart) — search + close header, then five visual groups: Account ·
+Plan & Usage, Referral Program · Device … Data & Privacy · Help & About, Feedback · Developer Settings.
+Every top-level row has a ValueKey (`settings_account`, `settings_group_<group>`, or
+`settings_row_<SettingsDestination>` for the direct rows Plan, Referral and Feedback); each page has a
 Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings_row_<SettingsDestination>`
 (plus `settings_row_voiceResponseMode`, `settings_row_transcribeLater`, `settings_row_backgroundMode`,
 `settings_row_name`, `settings_row_email`, `settings_row_userId`, `settings_row_version`).
 ├── Account [settings_account] — shows the name, email as subtitle → Account page (profile.dart, ProfilePage)
 │   ├── Name → Change name dialog; Email (read-only)
-│   ├── Plan & Usage (usage_page.dart) — "Pro" value when paid
-│   ├── Referral Program (referral_page.dart) — NEW; User ID (tap copies)
+│   ├── User ID (tap copies)
 │   └── Sign Out → Confirmation dialog; Delete Account (delete_account.dart)
+├── Plan & Usage [settings_row_planAndUsage] (usage_page.dart) — "Pro" value when paid
+├── Referral Program [settings_row_referral] (referral_page.dart) — NEW tag
 ├── Device [settings_group_device] → settings_groups.dart
 │   ├── Device Settings (device_settings.dart) (only when a device is connected)
 │   ├── Offline Sync (sync_page.dart / auto_sync_page.dart)
-│   └── Phone Calls (phone_call_settings_page.dart)
+│   ├── Phone Calls (phone_call_settings_page.dart)
+│   └── Permissions (permissions_page.dart) — microphone, Bluetooth, notifications
 ├── Recording & Transcription [settings_group_recording] → settings_groups.dart
 │   ├── Transcription (transcription_settings_page.dart) — provider value; Language; Custom Vocabulary
 │   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart); Identifying Others (people.dart)
@@ -192,12 +196,13 @@ Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings
 │   └── Notifications (notifications_settings_page.dart); Home Screen; Conversation Display
 ├── Integrations [settings_group_integrations] (integrations_page.dart) — BETA; also opens from conversation detail
 ├── Data & Privacy [settings_group_privacy] → settings_groups.dart
-│   ├── Data Protection (data_privacy_page.dart); Memories (memories/page.dart); Permissions (permissions_page.dart)
+│   ├── Data Protection (data_privacy_page.dart); Memories (memories/page.dart)
 │   └── Export All Data (spinner while running); Import Data (import_history_page.dart)
 ├── Help & About [settings_group_help] → settings_groups.dart
-│   ├── Feedback/Bug → feedback.omi.me; Help Center → help.omi.me (Intercom platforms only)
+│   ├── Help Center → help.omi.me (Intercom platforms only)
 │   ├── What's New → Changelog sheet
 │   └── Version + copy button (iOS/Android)
+├── Feedback / Report a bug [settings_row_feedback] → feedback.omi.me (Intercom platforms only)
 └── Developer Settings [settings_group_developer] (developer.dart)
 (Settings search finds every row above and opens the page that holds it.)
 
@@ -248,8 +253,8 @@ Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #1
 **Settings gear:**
 - Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
 - iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Account,
-  Device, Recording & Transcription, Notifications & Display, Integrations, Data & Privacy, Help & About,
-  Developer Settings)
+  Plan & Usage, Referral Program, Device, Recording & Transcription, Notifications & Display,
+  Integrations, Data & Privacy, Help & About, Feedback, Developer Settings)
 
 **Settings rows:**
 - `gesture` widgets with `bounds.width > 300`

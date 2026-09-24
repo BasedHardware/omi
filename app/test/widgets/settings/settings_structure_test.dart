@@ -14,9 +14,10 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-/// The smaller Settings top level (2026-09-24): Account plus seven groups. Nothing became
-/// unreachable: every row that was on the sheet is now at most one tap below it, and every row
-/// that was on Profile is still one tap below it (on Account or a group page instead of Profile).
+/// The smaller Settings top level (2026-09-24): Account, Plan & Usage, Referral Program, the
+/// five settings groups, Help & About, Feedback and Developer Settings. Nothing became unreachable:
+/// every row that was on the sheet is now at most one tap below it, and every row that was on
+/// Profile is still one tap below it (on Account or a group page instead of Profile).
 ///
 /// This test pumps the real sheet, taps each top-level row that opens a page of rows, and records
 /// which rows each page draws. Depth = taps from the open sheet to see the row.
@@ -97,29 +98,35 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account plus seven groups, in order, and every group row is keyed', (tester) async {
+  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed', (tester) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
       'settings_account',
+      'settings_row_planAndUsage',
+      'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
       'settings_group_notifications',
       'settings_group_integrations',
       'settings_group_privacy',
       'settings_group_help',
+      'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
     ]);
     // Account shows who is signed in.
     expect(rows.first.title, 'Ada');
     expect(rows.first.subtitle, 'ada@example.com');
     expect(rows.skip(1).map((r) => r.title).toList(), [
+      en.planAndUsage,
+      en.referralProgram,
       en.device,
       en.recordingAndTranscription,
       en.notificationsAndDisplay,
       en.integrations,
       en.dataAndPrivacy,
       en.helpAndAbout,
+      en.feedbackBug,
       en.developerSettings,
     ]);
     // The search field and close button stay in the header.
@@ -162,10 +169,12 @@ void main() {
       SettingsDestination.profile: 'settings_account',
       SettingsDestination.integrations: 'settings_group_integrations',
       SettingsDestination.developer: 'settings_group_developer',
+      SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
+      SettingsDestination.referral: 'settings_row_referral',
+      SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)
     };
     const movedOffSheet = [
       SettingsDestination.notifications,
-      SettingsDestination.planAndUsage,
       SettingsDestination.device, // only while connected; the stub is connected
       SettingsDestination.transcription,
       SettingsDestination.conversationDisplay,
@@ -177,10 +186,8 @@ void main() {
       SettingsDestination.exportData,
       SettingsDestination.importData,
       SettingsDestination.permissions,
-      SettingsDestination.feedback, // where Intercom is supported (the host test is)
       SettingsDestination.helpCenter,
       SettingsDestination.whatsNew,
-      SettingsDestination.referral,
       SettingsDestination.signOut,
     ];
     for (final entry in wasOnSheet.entries) {
@@ -247,13 +254,11 @@ void main() {
     expect(pageTitles['settings_page_account'], [
       en.name,
       en.email,
-      en.planAndUsage,
-      en.referralProgram,
       en.userId,
       en.signOut,
       en.deleteAccountTitle,
     ]);
-    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls]);
+    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
       en.language,
@@ -268,11 +273,10 @@ void main() {
     expect(pageTitles['settings_page_privacy'], [
       en.dataProtection,
       en.memories,
-      en.permissions,
       en.exportAllData,
       en.importData,
     ]);
-    expect(pageTitles['settings_page_help'], [en.feedbackBug, en.helpCenter, en.whatsNew]);
+    expect(pageTitles['settings_page_help'], [en.helpCenter, en.whatsNew]);
   });
 
   testWidgets('search still finds a moved row and opens the page that holds it', (tester) async {
