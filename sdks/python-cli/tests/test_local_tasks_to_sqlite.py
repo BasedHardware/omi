@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Tests for local tasks to SQLite database converter.
+
+Pins table schema, index creation, normalization, deduplication/upsert,
+stdin piping, and overwrite protection.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import sqlite3
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+# Load local_tasks_to_sqlite example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "local_tasks_to_sqlite.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent / "local_tasks_to_sqlite.py"
+
+spec = importlib.util.spec_from_file_location("local_tasks_to_sqlite", script_path)
+if spec is None or spec.loader is None:
+    raise RuntimeError(f"Could not load module spec from {script_path}")
+t2s = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(t2s)
+
+import_tasks_to_db = t2s.import_tasks_to_db
+main = t2s.main
+normalize_task_record = t2s.normalize_task_record
+parse_tasks_data = t2s.parse_tasks_data
+
+
+class TestLocalTasksToSqlite(unittest.TestCase):
+    def test_parse_tasks_data_formats(self):
+        self.assertEqual(len(parse_tasks_data([{"id": "t1"}])), 1)
+        self.assertEqual(len(parse_tasks_data({"tasks": [{"id": "t2"}]})), 1)
+        self.assertEqual(len(parse_tasks_data({"result": [{"id": "t3"}]})), 1)
+
+    def test_normalize_task_record(self):
+        item = {
+            "id": "t_01",
+            "title": "Review Bug #123",
+            "description": "Fix typo",
+            "completed": True,
+            "created_at": "2026-09-24T10:00:00Z",
+            "due_at": "2026-09-25T12:00:00Z",
+            "category": "bugs",
+        }
+        rec = normalize_task_record(item, 0)
+        self.assertEqual(rec[0], "t_01")
+        self.assertEqual(rec[1], "Review Bug #123")
+        self.assertEqual(rec[2], "Fix typo")
+        self.assertEqual(rec[3], 1)
+        self.assertEqual(rec[4], "2026-09-24T10:00:00Z")
+        self.assertEqual(rec[6], "2026-09-25T12:00:00Z")
+        self.assertEqual(rec[7], "bugs")
+
+    def test_import_tasks_to_db_and_query(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "tasks.db"
+            sample_tasks = [
+                {"id": "t1", "title": "Buy groceries", "completed": False, "category": "errands"},
+                {"id": "t2", "title": "Deploy PR", "completed": True, "category": "work"},
+            ]
+            total, completed = import_tasks_to_db(db_path, sample_tasks)
+            self.assertEqual(total, 2)
+            self.assertEqual(completed, 1)
+
+            # Query database directly to verify schema and indexes
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute("SELECT id, title, completed, category FROM local_tasks ORDER BY id")
+            rows = cur.fetchall()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0], ("t1", "Buy groceries", 0, "errands"))
+            self.assertEqual(rows[1], ("t2", "Deploy PR", 1, "work"))
+            conn.close()
+
+    def test_import_tasks_idempotent_upsert(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "tasks.db"
+            initial = [{"id": "t1", "title": "Draft spec", "completed": False}]
+            import_tasks_to_db(db_path, initial)
+
+            # Second import with updated completion status
+            updated = [{"id": "t1", "title": "Draft spec", "completed": True}]
+            total, completed = import_tasks_to_db(db_path, updated)
+            self.assertEqual(total, 1)
+            self.assertEqual(completed, 1)
+
+    def test_cli_end_to_end_file_to_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            in_file = tmppath / "tasks.json"
+            out_db = tmppath / "out.db"
+
+            in_file.write_text(json.dumps([{"id": "c1", "title": "CLI task"}]), encoding="utf-8")
+            code = main([str(in_file), "-o", str(out_db)])
+            self.assertEqual(code, 0)
+            self.assertTrue(out_db.exists())
+
+    def test_cli_overwrite_guard(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            in_file = tmppath / "input.json"
+            out_db = tmppath / "existing.db"
+
+            in_file.write_text(json.dumps([{"id": "t1", "title": "First"}]), encoding="utf-8")
+            main([str(in_file), "-o", str(out_db)])
+
+            # Re-running with --force recreates database cleanly
+            in_file2 = tmppath / "input2.json"
+            in_file2.write_text(json.dumps([{"id": "t2", "title": "Second"}]), encoding="utf-8")
+            code_ok = main([str(in_file2), "-o", str(out_db), "--force"])
+            self.assertEqual(code_ok, 0)
+
+            conn = sqlite3.connect(out_db)
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM local_tasks")
+            ids = [r[0] for r in cur.fetchall()]
+            self.assertEqual(ids, ["t2"])
+            conn.close()
+
+    def test_cli_stdin(self):
+        sample = json.dumps([{"id": "stdin_t", "title": "Piped task"}])
+        old_stdin = sys.stdin
+        try:
+            sys.stdin = io.StringIO(sample)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                db_path = Path(tmpdir) / "stdin.db"
+                code = main(["-", "-o", str(db_path)])
+                self.assertEqual(code, 0)
+                self.assertTrue(db_path.exists())
+        finally:
+            sys.stdin = old_stdin
+
+
+if __name__ == "__main__":
+    unittest.main()
