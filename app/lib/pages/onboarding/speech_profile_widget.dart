@@ -77,6 +77,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   void _checkMicrophone() {
     if (flow.error == _lastError) return;
     _lastError = flow.error;
+    _refreshMicrophoneStatus();
+  }
+
+  /// Re-reads the microphone permission while the step shows the microphone error (on entering that
+  /// error, and on return from Settings).
+  void _refreshMicrophoneStatus() {
     if (flow.error != 'microphone') return;
     unawaited(() async {
       OmiPermissionStatus status;
@@ -105,6 +111,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) unawaited(flow.pause());
+    if (state == AppLifecycleState.resumed) _refreshMicrophoneStatus();
   }
 
   @override

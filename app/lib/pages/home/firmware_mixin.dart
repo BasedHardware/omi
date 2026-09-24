@@ -169,9 +169,20 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     );
 
     await killMcuUpdateManager();
-    final updateManager = await managerFactory!.getUpdateManager(btDevice.id);
-    _mcuUpdateManager = updateManager;
-    final images = await processZipFile(bytes);
+    final mcumgr.FirmwareUpdateManager updateManager;
+    final List<mcumgr.Image> images;
+    try {
+      updateManager = await managerFactory!.getUpdateManager(btDevice.id);
+      _mcuUpdateManager = updateManager;
+      // A corrupt download (e.g. a captive-portal page saved as the zip) throws here; it must end in
+      // the failed state, not an installing spinner with back blocked.
+      images = await processZipFile(bytes);
+    } catch (e) {
+      _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
+      Logger.debug('update preparation failed: $e');
+      _fail(FirmwareUpdateFailure.install);
+      return;
+    }
 
     final updateStream = updateManager.setup();
 

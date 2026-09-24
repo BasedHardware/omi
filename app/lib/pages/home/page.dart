@@ -1107,6 +1107,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void dispose() {
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
+    // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.
+    for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
+      PromptQueue.instance.remove(id);
+    }
     OmiFeedback.bottomClearance = null;
     _announcementTimer?.cancel();
     _announcementTimer = null;
