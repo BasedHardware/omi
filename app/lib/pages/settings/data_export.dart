@@ -11,7 +11,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// "Export All Data": writes the account's data to a JSON file and opens the share sheet.
 ///
-/// Lives in top-level Settings under Data & Privacy (D4); the delete-account flow points people
+/// Lives in Settings > Data & Privacy (D4); the delete-account flow points people
 /// here. [exportInProgress] is true while an export runs, so every row that starts one can show a
 /// spinner and ignore repeat taps.
 class DataExport {
