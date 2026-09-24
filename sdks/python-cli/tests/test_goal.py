@@ -207,3 +207,59 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (["--horizon-at", "2026-12-31T23:59:59Z"], {"horizon_at": "2026-12-31T23:59:59+00:00"}),
+        (["--horizon-at", "2026-12-31T23:59:59+02:00"], {"horizon_at": "2026-12-31T23:59:59+02:00"}),
+        (["--clear-horizon"], {"horizon_at": None}),
+        (["--clear-horizon", "--current", "5"], {"horizon_at": None, "current_value": 5.0}),
+    ],
+)
+def test_goal_update_horizon_patch(authed_profile, respx_mock, cli_runner, options, expected) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1", **expected})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", *options])
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == expected
+    assert json.loads(result.stdout) == {"id": "g1", **expected}
+
+
+def test_goal_update_rejects_set_and_clear_horizon(authed_profile, respx_mock, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["omi", "--json", "goal", "update", "g1", "--horizon-at", "2026-12-31T23:59:59Z", "--clear-horizon"],
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert "--horizon-at" in error["detail"]
+    assert "--clear-horizon" in error["detail"]
+    assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("value", ["2026-12-31T23:59:59", "2026-12-31"])
+def test_goal_update_rejects_naive_horizon(authed_profile, respx_mock, monkeypatch, capsys, value) -> None:
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", "--horizon-at", value])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert "timezone" in error["detail"].lower()
+    assert not respx_mock.calls
+
+
+def test_goal_update_rejects_invalid_horizon(authed_profile, respx_mock, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", "--horizon-at", "not-a-datetime"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+    output = capsys.readouterr()
+    assert "Invalid value for '--horizon-at'" in output.err
+    assert not respx_mock.calls
