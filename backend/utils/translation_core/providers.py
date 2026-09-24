@@ -143,6 +143,9 @@ class NllbTranslationProvider:
         except (ValueError, TypeError) as error:
             raise TranslationProviderError(self.provider, 'invalid_response', 'NLLB response is malformed') from error
 
+        return self._parse_response(body)
+
+    def _parse_response(self, body: object) -> list[ProviderTranslation]:
         if not isinstance(body, dict):
             raise TranslationProviderError(self.provider, 'invalid_response', 'NLLB response has no translations')
         payload_body = cast(dict[object, object], body)
@@ -215,22 +218,15 @@ class TranslationProviderChain:
                     failure = error
                     self._metrics.error(provider_name.value, _metric_error(error.reason))
                 else:
-                    self._metrics.batch(provider_name.value, target_language, len(contents))
-                    self._metrics.success(
-                        provider_name.value,
+                    self._record_success(
+                        provider_name,
                         target_language,
                         method,
-                        sum(len(content) for content in contents),
-                        len(contents),
+                        contents,
                         time.monotonic() - started_at,
+                        first_failure,
+                        first_failed_provider,
                     )
-                    if first_failure is not None and first_failed_provider is not None:
-                        self._record_fallback(
-                            first_failed_provider,
-                            provider_name,
-                            first_failure.reason,
-                            'recovered',
-                        )
                     return ProviderBatch(provider=provider_name, translations=tuple(translations))
 
             if first_failure is None:
@@ -248,6 +244,33 @@ class TranslationProviderChain:
         raise TranslationProviderError(
             TranslationProvider.nllb, 'config_incomplete', 'No translation provider configured'
         )
+
+    def _record_success(
+        self,
+        provider_name: TranslationProvider,
+        target_language: str,
+        method: str,
+        contents: list[str],
+        duration: float,
+        first_failure: TranslationProviderError | None,
+        first_failed_provider: TranslationProvider | None,
+    ) -> None:
+        self._metrics.batch(provider_name.value, target_language, len(contents))
+        self._metrics.success(
+            provider_name.value,
+            target_language,
+            method,
+            sum(len(content) for content in contents),
+            len(contents),
+            duration,
+        )
+        if first_failure is not None and first_failed_provider is not None:
+            self._record_fallback(
+                first_failed_provider,
+                provider_name,
+                first_failure.reason,
+                'recovered',
+            )
 
     def _record_fallback(
         self,
