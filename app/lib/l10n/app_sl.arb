@@ -662,6 +662,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Dvojni dotik",
+    "singleTap": "Enojni dotik",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -754,6 +755,9 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Dejanje dvojnega dotika",
+    "tripleTap": "Trojni dotik",
+    "tripleTapAction": "Dejanje trojnega dotika",
+    "singleTapAction": "Dejanje enojnega dotika",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

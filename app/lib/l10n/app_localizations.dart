@@ -1179,6 +1179,12 @@ abstract class AppLocalizations {
   /// **'Double Tap'**
   String get doubleTap;
 
+  /// Single tap row title
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap'**
+  String get singleTap;
+
   /// LED brightness setting
   ///
   /// In en, this message translates to:
@@ -1316,6 +1322,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Double Tap Action'**
   String get doubleTapAction;
+
+  /// No description provided for @tripleTap.
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// No description provided for @tripleTapAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
+
+  /// Single tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap Action'**
+  String get singleTapAction;
 
   /// End and process action
   ///

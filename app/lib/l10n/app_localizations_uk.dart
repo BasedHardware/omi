@@ -523,6 +523,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get doubleTap => 'Подвійне натискання';
 
   @override
+  String get singleTap => 'Одинарне натискання';
+
+  @override
   String get ledBrightness => 'Яскравість світлодіода';
 
   @override
@@ -594,6 +597,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Дія подвійного натискання';
+
+  @override
+  String get tripleTap => 'Потрійне натискання';
+
+  @override
+  String get tripleTapAction => 'Дія потрійного натискання';
+
+  @override
+  String get singleTapAction => 'Дія одинарного натискання';
 
   @override
   String get endAndProcess => 'Завершити та обробити розмову';

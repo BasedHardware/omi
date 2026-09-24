@@ -524,6 +524,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTap => 'இரட்டை தட்டு';
 
   @override
+  String get singleTap => 'ஒற்றை தட்டு';
+
+  @override
   String get ledBrightness => 'LED பிரகாசம்';
 
   @override
@@ -595,6 +598,15 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'இரட்டை தட்டு நடவடிக்கை';
+
+  @override
+  String get tripleTap => 'மூன்று முறை தட்டு';
+
+  @override
+  String get tripleTapAction => 'மூன்று முறை தட்டு நடவடிக்கை';
+
+  @override
+  String get singleTapAction => 'ஒற்றை தட்டு நடவடிக்கை';
 
   @override
   String get endAndProcess => 'முடிக்கவும் & உரையாடல் செயல்படுத்தவும்';

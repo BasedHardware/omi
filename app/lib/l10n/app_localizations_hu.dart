@@ -524,6 +524,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get doubleTap => 'Dupla érintés';
 
   @override
+  String get singleTap => 'Egyszeres érintés';
+
+  @override
   String get ledBrightness => 'LED fényerő';
 
   @override
@@ -595,6 +598,15 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dupla érintés művelet';
+
+  @override
+  String get tripleTap => 'Tripla érintés';
+
+  @override
+  String get tripleTapAction => 'Tripla érintés művelet';
+
+  @override
+  String get singleTapAction => 'Egyszeres érintés művelet';
 
   @override
   String get endAndProcess => 'Beszélgetés befejezése és feldolgozása';

@@ -523,6 +523,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get doubleTap => 'Topeltpuudutus';
 
   @override
+  String get singleTap => 'Ühekordne puudutus';
+
+  @override
   String get ledBrightness => 'LED heledus';
 
   @override
@@ -593,6 +596,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Topeltpuudutuse tegevus';
+
+  @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
+
+  @override
+  String get singleTapAction => 'Ühekordse puudutuse tegevus';
 
   @override
   String get endAndProcess => 'Lõpeta ja töötle vestlus';

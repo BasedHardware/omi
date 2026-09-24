@@ -522,6 +522,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get doubleTap => 'Doble toque';
 
   @override
+  String get singleTap => 'Toque simple';
+
+  @override
   String get ledBrightness => 'Brillo LED';
 
   @override
@@ -592,6 +595,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Acción de doble toque';
+
+  @override
+  String get tripleTap => 'Triple toque';
+
+  @override
+  String get tripleTapAction => 'Acción de triple toque';
+
+  @override
+  String get singleTapAction => 'Acción de toque simple';
 
   @override
   String get endAndProcess => 'Terminar y procesar';

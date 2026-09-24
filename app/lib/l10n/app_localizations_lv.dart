@@ -523,6 +523,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get doubleTap => 'Dubultklikšķis';
 
   @override
+  String get singleTap => 'Viens klikšķis';
+
+  @override
   String get ledBrightness => 'LED spilgtums';
 
   @override
@@ -593,6 +596,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dubultklikšķa darbība';
+
+  @override
+  String get tripleTap => 'Trīskāršs klikšķis';
+
+  @override
+  String get tripleTapAction => 'Trīskārša klikšķa darbība';
+
+  @override
+  String get singleTapAction => 'Viena klikšķa darbība';
 
   @override
   String get endAndProcess => 'Beigt un apstrādāt sarunu';

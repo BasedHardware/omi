@@ -79,6 +79,21 @@ void main() {
     expect(find.text('Pause/Resume Recording'), findsNothing);
   });
 
+  testWidgets('a stored Off stays selectable when the device cannot report tap support', (tester) async {
+    SharedPreferences.setMockInitialValues({'doubleTapAction': 3});
+    await SharedPreferencesUtil.init();
+    final provider = _StubDeviceProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+
+    await tester.tap(find.text('Off').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check), findsOneWidget);
+  });
+
   testWidgets('Find triggers one guarded request for a connected Omi', (tester) async {
     final findCompleter = Completer<bool>();
     final provider = _StubDeviceProvider(

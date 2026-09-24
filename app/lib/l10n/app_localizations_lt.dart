@@ -523,6 +523,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get doubleTap => 'Dvigubas bakstelėjimas';
 
   @override
+  String get singleTap => 'Vienas bakstelėjimas';
+
+  @override
   String get ledBrightness => 'LED ryškumas';
 
   @override
@@ -593,6 +596,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dvigubo bakstelėjimo veiksmas';
+
+  @override
+  String get tripleTap => 'Trigubas bakstelėjimas';
+
+  @override
+  String get tripleTapAction => 'Trigubo bakstelėjimo veiksmas';
+
+  @override
+  String get singleTapAction => 'Vieno bakstelėjimo veiksmas';
 
   @override
   String get endAndProcess => 'Baigti ir apdoroti pokalbį';

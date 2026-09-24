@@ -662,6 +662,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Двайны дотык",
+    "singleTap": "Адзінарны дотык",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -754,6 +755,9 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Дзеянне двойнага дотыку",
+    "tripleTap": "Трайны дотык",
+    "tripleTapAction": "Дзеянне трайнага дотыку",
+    "singleTapAction": "Дзеянне адзінарнага дотыку",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
