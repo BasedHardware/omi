@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -34,7 +35,7 @@ import 'package:omi/utils/waveform_utils.dart';
 /// `completed` (never fire-and-forget).
 /// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
 /// react (fair-use message, generic error, or navigate away) instead of guessing.
-enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
+enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy, networkDisconnected }
 
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
@@ -96,8 +97,13 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
     });
     _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
-      if (connected) _maybeAutoUpload();
+      if (connected) _onNetworkRestored();
     });
+  }
+
+  void _onNetworkRestored() {
+    _autoFailures.clear();
+    _maybeAutoUpload();
   }
 
   Map<String, String> _ownedJobs() => Map.fromEntries(_jobs.entries.where((entry) => _ownedNames.contains(entry.key)));
@@ -271,7 +277,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       outcome = LocalUploadOutcome.backendBusy;
     } catch (e) {
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
-      outcome = LocalUploadOutcome.failed;
+      outcome = isTransientNetworkError(e) ? LocalUploadOutcome.networkDisconnected : LocalUploadOutcome.failed;
     } finally {
       _isUploading = false;
       _uploadingName = null;
@@ -290,7 +296,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
       if (!auto) PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
       return;
     }
-    // Rate-limited / backend-busy: transient push-back, not a per-file fault.
+    // Rate-limited / backend-busy / disconnected: transient push-back, not a per-file fault.
+    if (outcome == LocalUploadOutcome.networkDisconnected) {
+      // Network dropped mid-upload: failsafe preserves file on disk without consuming failure cap (#4822).
+      return;
+    }
     if (outcome != LocalUploadOutcome.failed) return;
 
     if (!auto) {
@@ -324,6 +334,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
           useCustomStt: SharedPreferencesUtil().useCustomStt,
           autoSyncOfflineRecordings: SharedPreferencesUtil().autoSyncOfflineRecordings,
           isUploading: _isUploading,
+          hasNetwork: ConnectivityService().isConnected,
         )) {
           return;
         }
@@ -338,14 +349,27 @@ class LocalRecordingsProvider extends ChangeNotifier {
         final rec = getById(next);
         if (rec == null) continue; // deleted between scan and now
         final outcome = await _uploadFile(rec, auto: true);
-        // Backend pushed back (fair-use / busy): stop this pass, retry on the
-        // next trigger rather than hammering.
-        if (outcome == LocalUploadOutcome.fairUseLimited || outcome == LocalUploadOutcome.backendBusy) break;
+        // Backend pushed back (fair-use / busy) or network dropped: stop this pass,
+        // retry on the next trigger rather than hammering.
+        if (outcome == LocalUploadOutcome.fairUseLimited ||
+            outcome == LocalUploadOutcome.backendBusy ||
+            outcome == LocalUploadOutcome.networkDisconnected) {
+          break;
+        }
       }
     } finally {
       _isAutoUploading = false;
     }
   }
+
+  @visibleForTesting
+  Map<String, int> get autoFailuresForTesting => _autoFailures;
+
+  @visibleForTesting
+  void onNetworkRestoredForTesting() => _onNetworkRestored();
+
+  @visibleForTesting
+  Future<void> maybeAutoUploadForTesting() => _maybeAutoUpload();
 
   // ───────────────────────── reconcile ─────────────────────────
 

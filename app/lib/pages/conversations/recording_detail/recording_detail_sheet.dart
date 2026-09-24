@@ -364,6 +364,8 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
         AppSnackbar.showSnackbarError(context.l10n.fairUseBudgetExhausted, duration: const Duration(seconds: 4));
       case LocalUploadOutcome.backendBusy:
         AppSnackbar.showSnackbarError(context.l10n.msgUploadFileFailed, duration: const Duration(seconds: 4));
+      case LocalUploadOutcome.networkDisconnected:
+        AppSnackbar.showSnackbarError(context.l10n.noInternetConnection, duration: const Duration(seconds: 4));
       case LocalUploadOutcome.failed:
         AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
       case LocalUploadOutcome.busy:

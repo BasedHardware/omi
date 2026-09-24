@@ -36,12 +36,20 @@ const int autoPhoneUploadMaxFailures = 3;
 /// now. Mirrors the gates in `SyncProvider._autoUploadPendingPhoneFiles`:
 /// custom-STT users sync manually (with confirmation), the auto-sync opt-out is
 /// respected, and a second upload never starts while one is already in flight.
+/// Also gates on [hasNetwork] so uploads only start when network connectivity exists (#4822).
 bool canAutoUploadPhoneRecordings({
   required bool useCustomStt,
   required bool autoSyncOfflineRecordings,
   required bool isUploading,
+  bool hasNetwork = true,
 }) =>
-    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+    !useCustomStt && autoSyncOfflineRecordings && !isUploading && hasNetwork;
+
+/// Clears transient per-file failure counts upon network restoration, restoring
+/// auto-upload eligibility for offline recordings preserved on disk (#4822).
+void resetAutoPhoneUploadFailures(Map<String, int> failureCounts) {
+  failureCounts.clear();
+}
 
 /// The next offline-fallback recording to auto-upload from [fileNames], or null
 /// when none is eligible. Only auto-marker files qualify (explicit Transcribe
