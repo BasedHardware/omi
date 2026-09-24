@@ -29,7 +29,13 @@ import '../journeys/support/hermetic_boot.dart';
 /// into. `registry.dart` is the suite for current main; `compat/<name>/registry.dart` holds the
 /// equivalent pages for older revisions, under the same ids where an equivalent exists.
 class AuditSuite {
-  const AuditSuite({required this.name, required this.scenarios, required this.providers, required this.theme});
+  const AuditSuite({
+    required this.name,
+    required this.scenarios,
+    required this.providers,
+    required this.theme,
+    this.hostBackground,
+  });
 
   final String name;
   final List<AuditScenario> scenarios;
@@ -39,6 +45,10 @@ class AuditSuite {
 
   /// The app's theme at this family of revisions.
   final ThemeData Function() theme;
+
+  /// The background behind a pumped page, as the app's own host (home, onboarding) painted it at
+  /// these revisions; null uses the theme's scaffold colour.
+  final Color? hostBackground;
 }
 
 /// One registered screen state. [id] names its PNGs (`<id>.png`, or `<id>-<step>.png` for a
@@ -152,7 +162,7 @@ class AuditRun {
           supportedLocales: const [Locale('en')],
           // The app's own theme at this revision; Android font metrics (Roboto).
           theme: _suite.theme(),
-          home: scaffold ? Scaffold(body: page) : page,
+          home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
         ),
       ),
     ));

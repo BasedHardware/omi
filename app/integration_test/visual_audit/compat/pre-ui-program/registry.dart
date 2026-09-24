@@ -49,6 +49,9 @@ final auditSuite = AuditSuite(
   name: 'pre-ui-program',
   providers: defaultAuditProviders,
   theme: preUiProgramTheme,
+  // The theme left the scaffold at Material's default grey; HomePage painted its tabs on
+  // colorScheme.primary (black), which is what a user saw behind these pages.
+  hostBackground: Colors.black,
   scenarios: [
     ...settingsScenarios,
     ...settingsPagesScenarios,

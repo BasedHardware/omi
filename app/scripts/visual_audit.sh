@@ -108,7 +108,7 @@ checkout() {
   else
     sha="$(git -C "$repo_root" rev-parse --verify "$rev^{commit}")"
     local wt="$worktree_root/$stamp-$side"
-    git -C "$repo_root" worktree add --detach "$wt" "$sha" >/dev/null
+    git -C "$repo_root" worktree add --quiet --detach "$wt" "$sha" >/dev/null
     worktrees+=("$wt")
     app="$wt/app"
     rm -rf "$app/integration_test/visual_audit"
