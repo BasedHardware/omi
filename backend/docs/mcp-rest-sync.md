@@ -44,8 +44,9 @@ With `updated_since`, the endpoint switches to an incremental feed ordered
 - Every item carries its persisted `updated_at` watermark.
 - `completed`, `due_start_date`, `due_end_date`, and non-zero `offset` are
   rejected with HTTP 400 (they cannot be combined truthfully).
-- Requires the `action_items (updated_at ASC, __name__ ASC)` composite
-  index; the DESC twin is registered for newest-first revision scans.
+- Firestore's automatic single-field indexes serve the same-direction
+  `(updated_at ASC, __name__ ASC)` keyset (and its DESC twin); declaring
+  either as a composite is rejected by the index registry.
 - Items whose documents lack `updated_at` are outside the feed (the field
   is the ordering key); they predate the sync surface.
 

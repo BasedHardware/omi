@@ -334,23 +334,24 @@ class TestActionItemsUpdatedSinceTool:
 
 
 class TestActionItemIndexManifest:
-    """Registry requirements and the generated manifest must agree."""
+    """Incremental sync walks (updated_at, __name__) in both directions.
+    Firestore auto-serves same-direction field+__name__ orderings, so the
+    registry and generated manifest must NOT declare those composites —
+    test_firestore_index_config rejects them as redundant."""
 
-    def test_registry_declares_both_updated_at_indexes(self):
+    def test_registry_declares_no_same_direction_updated_at_composite(self):
         registry = _import_real_module("database.firestore_index_registry")
-        requirements = {r.identifier: r for r in registry.INDEX_ONLY_REQUIREMENTS}
-        for name, direction in [
-            ("action_items_updated_asc_name_asc", "ASCENDING"),
-            ("action_items_updated_desc_name_desc", "DESCENDING"),
-        ]:
-            requirement = requirements[name]
-            assert requirement.collection_group == "action_items"
+        for requirement in registry.INDEX_ONLY_REQUIREMENTS:
+            if requirement.collection_group != "action_items":
+                continue
             fields = [(f.field_path, f.order) for f in requirement.fields]
-            assert fields[0] == ("updated_at", direction)
-            # Every new composite index must end on __name__ for a stable tie-break.
-            assert fields[-1] == ("__name__", direction)
+            non_name = [f for f in fields if f[0] != "__name__"]
+            name = [f for f in fields if f[0] == "__name__"]
+            if len(non_name) != 1 or len(name) != 1 or non_name[0][0] != "updated_at":
+                continue
+            assert non_name[0][1] != name[0][1], requirement.identifier
 
-    def test_generated_manifest_contains_both_indexes(self):
+    def test_generated_manifest_declares_no_same_direction_updated_at_composite(self):
         import json
         import os.path
 
@@ -364,8 +365,8 @@ class TestActionItemIndexManifest:
             for i in manifest["indexes"]
             if i.get("collectionGroup") == "action_items"
         }
-        assert (("updated_at", "ASCENDING"), ("__name__", "ASCENDING")) in shapes
-        assert (("updated_at", "DESCENDING"), ("__name__", "DESCENDING")) in shapes
+        assert (("updated_at", "ASCENDING"), ("__name__", "ASCENDING")) not in shapes
+        assert (("updated_at", "DESCENDING"), ("__name__", "DESCENDING")) not in shapes
 
 
 # --- REST contract tests ----------------------------------------------------
