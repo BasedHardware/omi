@@ -51,14 +51,20 @@ def _load(module_name, rel_path):
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
+
+
 def _tool_decorator(fn=None, **kwargs):
     if fn is not None and callable(fn):
         fn.func = fn
         return fn
+
     def dec(func):
         func.func = func
         return func
+
     return dec
+
+
 _lc_tools.tool = _tool_decorator
 
 _lc_runnables = _mod("langchain_core.runnables")
@@ -139,9 +145,9 @@ class TestConversationToolsSanitization(unittest.TestCase):
 
     def test_get_conversations_formatting_exception_sanitized(self):
         config = {"configurable": {"user_id": "test_user"}}
-        with patch.object(ct.conversations_db, "get_conversations", return_value=[{"id": "conv1"}]), \
-             patch.object(ct, "deserialize_conversation", return_value=MagicMock()), \
-             patch.object(ct, "conversations_to_string", side_effect=RuntimeError("internal secret connection leak")):
+        with patch.object(ct.conversations_db, "get_conversations", return_value=[{"id": "conv1"}]), patch.object(
+            ct, "deserialize_conversation", return_value=MagicMock()
+        ), patch.object(ct, "conversations_to_string", side_effect=RuntimeError("internal secret connection leak")):
             result = ct.get_conversations_tool.func(config=config)
             self.assertEqual("Found 1 conversations but encountered an error formatting them.", result)
             self.assertNotIn("internal secret connection leak", result)
