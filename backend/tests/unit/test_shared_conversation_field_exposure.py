@@ -39,7 +39,6 @@ LEAKING_FIELDS = frozenset(
         'folder_id',
         'call_id',
         'calendar_event',
-        'processing_memory_id',
         'processing_conversation_id',
         'meeting_treatment_eligible',
         'meeting_treatment_reason',

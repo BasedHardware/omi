@@ -1168,7 +1168,6 @@ export interface Conversation {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
-  processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
@@ -1352,7 +1351,6 @@ export interface ConversationSearchItem {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
-  processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;

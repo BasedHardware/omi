@@ -378,9 +378,6 @@ class Conversation(BaseModel):
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
-    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
-    processing_memory_id: Optional[str] = None
-
     processing_conversation_id: Optional[str] = None
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
@@ -424,7 +421,6 @@ class Conversation(BaseModel):
         super().__init__(**data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
-        self.processing_memory_id = self.processing_conversation_id
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source

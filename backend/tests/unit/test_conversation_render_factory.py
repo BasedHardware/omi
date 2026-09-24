@@ -103,8 +103,6 @@ class TestFactory:
         # __init__ syncs plugins_results from apps_results
         assert len(conv.plugins_results) == 1
         assert conv.plugins_results[0].plugin_id == "app1"
-        # __init__ syncs processing_memory_id from processing_conversation_id
-        assert conv.processing_memory_id == "proc-123"
 
     def test_deserialize_conversations_batch(self):
         items = [

@@ -410,23 +410,6 @@ class TestConversationInitSideEffects:
         assert conv.plugins_results[0].plugin_id == "app1"
         assert conv.plugins_results[0].content == "result1"
 
-    def test_processing_conversation_id_synced_to_processing_memory_id(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import ConversationSource
-        from models.structured import Structured
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="side-effect-2",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(title="Test"),
-            processing_conversation_id="proc-123",
-        )
-        assert conv.processing_memory_id == "proc-123"
-
 
 class TestGetPersonIds:
     """get_person_ids with duplicates and None values."""
@@ -730,7 +713,7 @@ class TestPhase4RuntimeBehavior:
         mock_db_module = MagicMock()
         mock_llm_clients = MagicMock()
         saved_modules = {}
-        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients']:
+        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients', 'database.llm_usage', 'database.trends']:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = mock_db_module if 'database' in mod_name else mock_llm_clients
 
@@ -781,6 +764,8 @@ class TestPhase4RuntimeBehavior:
         firebase_admin_stub.firestore = firebase_firestore_stub
         sys.modules['firebase_admin'] = firebase_admin_stub
         sys.modules['firebase_admin.firestore'] = firebase_firestore_stub
+        sys.modules['database.llm_usage'] = MagicMock()
+        sys.modules['database.trends'] = MagicMock()
 
         try:
             sys.modules.pop('database.trends', None)

@@ -769,7 +769,6 @@ class GeneratedConversation {
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
-  final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
@@ -817,7 +816,6 @@ class GeneratedConversation {
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
-    this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
@@ -867,7 +865,6 @@ class GeneratedConversation {
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
-      processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
@@ -918,7 +915,6 @@ class GeneratedConversation {
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
-      'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
@@ -1158,7 +1154,6 @@ class GeneratedConversationSearchItem {
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
-  final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
@@ -1207,7 +1202,6 @@ class GeneratedConversationSearchItem {
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
-    this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
@@ -1258,7 +1252,6 @@ class GeneratedConversationSearchItem {
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
-      processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
@@ -1310,7 +1303,6 @@ class GeneratedConversationSearchItem {
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
-      'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
