@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import Markdown from 'markdown-to-jsx';
 
 import {
   assignSectionIds,
@@ -295,40 +292,38 @@ describe('share note page wiring', () => {
   });
 
   it('styles the root list element when markdown-to-jsx renders sn-md on it', () => {
-    assert.match(cssSource, /ul\.sn-md\s*\{[^}]*list-style-type:\s*disc/);
-    assert.match(cssSource, /ol\.sn-md\s*\{[^}]*list-style-type:\s*decimal/);
-    assert.match(cssSource, /ol\.sn-md\s*\{[^}]*padding-left/);
-    assert.match(cssSource, /ol\.sn-md ul\s*\{[^}]*list-style-type:\s*circle/);
+    const rootListRules = [
+      [/\bul\.sn-md\s*[,{][^}]*list-style-type:\s*disc/, 'ul.sn-md disc'],
+      [/\bol\.sn-md\s*[,{][^}]*list-style-type:\s*decimal/, 'ol.sn-md decimal'],
+      [/\bul\.sn-md\s*[,{][^}]*padding-left/, 'ul.sn-md indentation'],
+      [/\bol\.sn-md\s*[,{][^}]*padding-left/, 'ol.sn-md indentation'],
+      [/\bul\.sn-md ul\s*[,{][^}]*list-style-type:\s*circle/, 'ul.sn-md ul circle'],
+      [/\bol\.sn-md ul\s*[,{][^}]*list-style-type:\s*circle/, 'ol.sn-md ul circle'],
+      [/\bul\.sn-md ul ul\s*[,{][^}]*list-style-type:\s*square/, 'ul.sn-md ul ul square'],
+      [/\bol\.sn-md ul ul\s*[,{][^}]*list-style-type:\s*square/, 'ol.sn-md ul ul square'],
+    ];
+    for (const [pattern, label] of rootListRules) {
+      assert.match(
+        cssSource,
+        pattern,
+        `share-note.css must style the root list element: ${label}`,
+      );
+    }
   });
 
-  it('puts sn-md on the root list element for list-led section bodies', () => {
-    const bulletHtml = renderToStaticMarkup(
-      createElement(
-        Markdown,
-        { className: 'sn-md', options: { forceBlock: true } },
-        '- one\n- two',
-      ),
+  it('passes className="sn-md" to every section markdown renderer', () => {
+    const markdownTags = summarySource.match(/<Markdown[^>]*>/g) ?? [];
+    assert.ok(
+      markdownTags.length >= 3,
+      'expected the summary tab to render markdown sections',
     );
-    assert.match(bulletHtml, /^<ul class="sn-md">/);
-
-    const orderedHtml = renderToStaticMarkup(
-      createElement(
-        Markdown,
-        { className: 'sn-md', options: { forceBlock: true } },
-        '1. one\n2. two',
-      ),
-    );
-    assert.match(orderedHtml, /^<ol[^>]*class="sn-md">/);
-
-    const paragraphHtml = renderToStaticMarkup(
-      createElement(
-        Markdown,
-        { className: 'sn-md', options: { forceBlock: true } },
-        'Intro.\n\n- bullet',
-      ),
-    );
-    assert.match(paragraphHtml, /^<div class="sn-md">/);
-    assert.match(paragraphHtml, /<ul>/);
+    for (const tag of markdownTags) {
+      assert.match(
+        tag,
+        /className="sn-md"/,
+        `markdown renderer missing sn-md scope: ${tag}`,
+      );
+    }
   });
 
   it('uses h2 for all structural share headings', () => {
