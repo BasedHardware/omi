@@ -14,7 +14,7 @@
   (Portuguese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
-* [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
+* [`conversations_ics.md`](conversations_ics.md) ([`conversations_to_ics.py`](conversations_to_ics.py)) — put conversation history on a
   calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_ics.md`](action_items_ics.md) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.

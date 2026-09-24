@@ -18,7 +18,7 @@ Check that the command succeeded before converting the file. This is one page,
 not a complete-account backup; to retrieve another page, increase `--offset` by
 200 and use a different filename.
 
-Save the following as `conversations_to_ics.py`:
+Save the following as `conversations_to_ics.py` (or run the bundled [`conversations_to_ics.py`](conversations_to_ics.py) directly):
 
 ```python
 import json
