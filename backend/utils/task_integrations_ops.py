@@ -218,6 +218,686 @@ async def _due_date_in_user_zone(uid: str, due_date: datetime) -> datetime:
     return due_date.astimezone(ZoneInfo(tz_name))
 
 
+async def _create_todoist_task(
+    uid: str,
+    access_token: str,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    body = {'content': title, 'priority': 2}
+    if description:
+        body['description'] = description
+    if due_date:
+        body['due_string'] = due_date.strftime('%Y-%m-%d')
+
+    response = await client.post(
+        'https://api.todoist.com/api/v1/tasks',
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        json=body,
+    )
+
+    if response.status_code in [200, 201]:
+        task_data = response.json()
+        return {"success": True, "external_task_id": str(task_data.get('id'))}
+    else:
+        if response.status_code == 401:
+            await run_blocking(
+                db_executor,
+                users_db.set_task_integration,
+                uid,
+                'todoist',
+                {'connected': False},
+            )
+        return {
+            "success": False,
+            "error": f"Todoist API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_asana_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    workspace_gid = integration.get('workspace_gid')
+    project_gid = integration.get('project_gid')
+    user_gid = integration.get('user_gid')
+
+    if not workspace_gid:
+        return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
+
+    task_data = {'name': title, 'workspace': workspace_gid}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due_on'] = due_date.strftime('%Y-%m-%d')
+    if user_gid:
+        task_data['assignee'] = user_gid
+    if project_gid:
+        task_data['projects'] = [project_gid]
+
+    async def _asana_post(c, token):
+        return await c.post(
+            'https://app.asana.com/api/1.0/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'data': task_data},
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'asana', integration, _asana_post, client=client
+    )
+    if retry_err:
+        return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
+    else:
+        return {
+            "success": False,
+            "error": f"Asana API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_google_tasks_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('default_list_id')
+    if not list_id:
+        return {"success": False, "error": "No task list configured", "error_code": "no_list"}
+
+    task_data = {'title': title}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
+
+    async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
+        return await c.post(
+            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json=task_data,
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'google_tasks', integration, _google_tasks_post, client=client
+    )
+    if retry_err:
+        return {
+            "success": False,
+            "error": "Google Tasks token refresh failed",
+            "error_code": "token_refresh_failed",
+        }
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"Google Tasks API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_clickup_task(
+    uid: str,
+    access_token: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('list_id')
+    if not list_id:
+        return {"success": False, "error": "No list configured", "error_code": "no_list"}
+
+    task_data: dict[str, Any] = {'name': title}
+    if description:
+        task_data['description'] = description
+    if due_date:
+        task_data['due_date'] = int(due_date.timestamp() * 1000)
+
+    response = await client.post(
+        f'https://api.clickup.com/api/v2/list/{list_id}/task',
+        headers={'Authorization': access_token, 'Content-Type': 'application/json'},
+        json=task_data,
+    )
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"ClickUp API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_todoist_task(
+    uid: str,
+    access_token: str,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    body = {'content': title, 'priority': 2}
+    if description:
+        body['description'] = description
+    if due_date:
+        body['due_string'] = due_date.strftime('%Y-%m-%d')
+
+    response = await client.post(
+        'https://api.todoist.com/api/v1/tasks',
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        json=body,
+    )
+
+    if response.status_code in [200, 201]:
+        task_data = response.json()
+        return {"success": True, "external_task_id": str(task_data.get('id'))}
+    else:
+        if response.status_code == 401:
+            await run_blocking(
+                db_executor,
+                users_db.set_task_integration,
+                uid,
+                'todoist',
+                {'connected': False},
+            )
+        return {
+            "success": False,
+            "error": f"Todoist API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_asana_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    workspace_gid = integration.get('workspace_gid')
+    project_gid = integration.get('project_gid')
+    user_gid = integration.get('user_gid')
+
+    if not workspace_gid:
+        return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
+
+    task_data = {'name': title, 'workspace': workspace_gid}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due_on'] = due_date.strftime('%Y-%m-%d')
+    if user_gid:
+        task_data['assignee'] = user_gid
+    if project_gid:
+        task_data['projects'] = [project_gid]
+
+    async def _asana_post(c, token):
+        return await c.post(
+            'https://app.asana.com/api/1.0/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'data': task_data},
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'asana', integration, _asana_post, client=client
+    )
+    if retry_err:
+        return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
+    else:
+        return {
+            "success": False,
+            "error": f"Asana API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_google_tasks_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('default_list_id')
+    if not list_id:
+        return {"success": False, "error": "No task list configured", "error_code": "no_list"}
+
+    task_data = {'title': title}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
+
+    async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
+        return await c.post(
+            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json=task_data,
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'google_tasks', integration, _google_tasks_post, client=client
+    )
+    if retry_err:
+        return {
+            "success": False,
+            "error": "Google Tasks token refresh failed",
+            "error_code": "token_refresh_failed",
+        }
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"Google Tasks API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_clickup_task(
+    uid: str,
+    access_token: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('list_id')
+    if not list_id:
+        return {"success": False, "error": "No list configured", "error_code": "no_list"}
+
+    task_data: dict[str, Any] = {'name': title}
+    if description:
+        task_data['description'] = description
+    if due_date:
+        task_data['due_date'] = int(due_date.timestamp() * 1000)
+
+    response = await client.post(
+        f'https://api.clickup.com/api/v2/list/{list_id}/task',
+        headers={'Authorization': access_token, 'Content-Type': 'application/json'},
+        json=task_data,
+    )
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"ClickUp API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_todoist_task(
+    uid: str,
+    access_token: str,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    body = {'content': title, 'priority': 2}
+    if description:
+        body['description'] = description
+    if due_date:
+        body['due_string'] = due_date.strftime('%Y-%m-%d')
+
+    response = await client.post(
+        'https://api.todoist.com/api/v1/tasks',
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        json=body,
+    )
+
+    if response.status_code in [200, 201]:
+        task_data = response.json()
+        return {"success": True, "external_task_id": str(task_data.get('id'))}
+    else:
+        if response.status_code == 401:
+            await run_blocking(
+                db_executor,
+                users_db.set_task_integration,
+                uid,
+                'todoist',
+                {'connected': False},
+            )
+        return {
+            "success": False,
+            "error": f"Todoist API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_asana_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    workspace_gid = integration.get('workspace_gid')
+    project_gid = integration.get('project_gid')
+    user_gid = integration.get('user_gid')
+
+    if not workspace_gid:
+        return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
+
+    task_data = {'name': title, 'workspace': workspace_gid}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due_on'] = due_date.strftime('%Y-%m-%d')
+    if user_gid:
+        task_data['assignee'] = user_gid
+    if project_gid:
+        task_data['projects'] = [project_gid]
+
+    async def _asana_post(c, token):
+        return await c.post(
+            'https://app.asana.com/api/1.0/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'data': task_data},
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'asana', integration, _asana_post, client=client
+    )
+    if retry_err:
+        return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
+    else:
+        return {
+            "success": False,
+            "error": f"Asana API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_google_tasks_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('default_list_id')
+    if not list_id:
+        return {"success": False, "error": "No task list configured", "error_code": "no_list"}
+
+    task_data = {'title': title}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
+
+    async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
+        return await c.post(
+            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json=task_data,
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'google_tasks', integration, _google_tasks_post, client=client
+    )
+    if retry_err:
+        return {
+            "success": False,
+            "error": "Google Tasks token refresh failed",
+            "error_code": "token_refresh_failed",
+        }
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"Google Tasks API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_clickup_task(
+    uid: str,
+    access_token: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('list_id')
+    if not list_id:
+        return {"success": False, "error": "No list configured", "error_code": "no_list"}
+
+    task_data: dict[str, Any] = {'name': title}
+    if description:
+        task_data['description'] = description
+    if due_date:
+        task_data['due_date'] = int(due_date.timestamp() * 1000)
+
+    response = await client.post(
+        f'https://api.clickup.com/api/v2/list/{list_id}/task',
+        headers={'Authorization': access_token, 'Content-Type': 'application/json'},
+        json=task_data,
+    )
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"ClickUp API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_todoist_task(
+    uid: str,
+    access_token: str,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    body = {'content': title, 'priority': 2}
+    if description:
+        body['description'] = description
+    if due_date:
+        body['due_string'] = due_date.strftime('%Y-%m-%d')
+
+    response = await client.post(
+        'https://api.todoist.com/api/v1/tasks',
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        json=body,
+    )
+
+    if response.status_code in [200, 201]:
+        task_data = response.json()
+        return {"success": True, "external_task_id": str(task_data.get('id'))}
+    else:
+        if response.status_code == 401:
+            await run_blocking(
+                db_executor,
+                users_db.set_task_integration,
+                uid,
+                'todoist',
+                {'connected': False},
+            )
+        return {
+            "success": False,
+            "error": f"Todoist API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_asana_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    workspace_gid = integration.get('workspace_gid')
+    project_gid = integration.get('project_gid')
+    user_gid = integration.get('user_gid')
+
+    if not workspace_gid:
+        return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
+
+    task_data = {'name': title, 'workspace': workspace_gid}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due_on'] = due_date.strftime('%Y-%m-%d')
+    if user_gid:
+        task_data['assignee'] = user_gid
+    if project_gid:
+        task_data['projects'] = [project_gid]
+
+    async def _asana_post(c, token):
+        return await c.post(
+            'https://app.asana.com/api/1.0/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json={'data': task_data},
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'asana', integration, _asana_post, client=client
+    )
+    if retry_err:
+        return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
+    else:
+        return {
+            "success": False,
+            "error": f"Asana API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_google_tasks_task(
+    uid: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('default_list_id')
+    if not list_id:
+        return {"success": False, "error": "No task list configured", "error_code": "no_list"}
+
+    task_data = {'title': title}
+    if description:
+        task_data['notes'] = description
+    if due_date:
+        task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
+
+    async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
+        return await c.post(
+            f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            json=task_data,
+        )
+
+    response, integration, retry_err = await perform_request_with_token_retry(
+        uid, 'google_tasks', integration, _google_tasks_post, client=client
+    )
+    if retry_err:
+        return {
+            "success": False,
+            "error": "Google Tasks token refresh failed",
+            "error_code": "token_refresh_failed",
+        }
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"Google Tasks API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
+async def _create_clickup_task(
+    uid: str,
+    access_token: str,
+    integration: dict,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[datetime],
+    client: httpx.AsyncClient,
+) -> dict:
+    list_id = integration.get('list_id')
+    if not list_id:
+        return {"success": False, "error": "No list configured", "error_code": "no_list"}
+
+    task_data: dict[str, Any] = {'name': title}
+    if description:
+        task_data['description'] = description
+    if due_date:
+        task_data['due_date'] = int(due_date.timestamp() * 1000)
+
+    response = await client.post(
+        f'https://api.clickup.com/api/v2/list/{list_id}/task',
+        headers={'Authorization': access_token, 'Content-Type': 'application/json'},
+        json=task_data,
+    )
+
+    if response.status_code in [200, 201]:
+        result = response.json()
+        return {"success": True, "external_task_id": result.get('id')}
+    else:
+        return {
+            "success": False,
+            "error": f"ClickUp API error: {response.status_code}",
+            "error_code": "api_error",
+        }
+
+
 async def create_task_internal(
     uid: str,
     app_key: str,
@@ -257,142 +937,13 @@ async def create_task_internal(
             due_date = await _due_date_in_user_zone(uid, due_date)
 
         if app_key == 'todoist':
-            body = {'content': title, 'priority': 2}
-            if description:
-                body['description'] = description
-            if due_date:
-                body['due_string'] = due_date.strftime('%Y-%m-%d')
-
-            response = await client.post(
-                'https://api.todoist.com/api/v1/tasks',
-                headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
-                json=body,
-            )
-
-            if response.status_code in [200, 201]:
-                task_data = response.json()
-                return {"success": True, "external_task_id": str(task_data.get('id'))}
-            else:
-                if response.status_code == 401:
-                    await run_blocking(
-                        db_executor,
-                        users_db.set_task_integration,
-                        uid,
-                        'todoist',
-                        {'connected': False},
-                    )
-                return {
-                    "success": False,
-                    "error": f"Todoist API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
-
+            return await _create_todoist_task(uid, access_token, title, description, due_date, client)
         elif app_key == 'asana':
-            workspace_gid = integration.get('workspace_gid')
-            project_gid = integration.get('project_gid')
-            user_gid = integration.get('user_gid')
-
-            if not workspace_gid:
-                return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
-
-            task_data = {'name': title, 'workspace': workspace_gid}
-            if description:
-                task_data['notes'] = description
-            if due_date:
-                task_data['due_on'] = due_date.strftime('%Y-%m-%d')
-            if user_gid:
-                task_data['assignee'] = user_gid
-            if project_gid:
-                task_data['projects'] = [project_gid]
-
-            async def _asana_post(c, token):
-                return await c.post(
-                    'https://app.asana.com/api/1.0/tasks',
-                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-                    json={'data': task_data},
-                )
-
-            response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _asana_post, client=client
-            )
-            if retry_err:
-                return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
-
-            if response.status_code in [200, 201]:
-                result = response.json()
-                return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
-            else:
-                return {
-                    "success": False,
-                    "error": f"Asana API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
-
+            return await _create_asana_task(uid, integration, title, description, due_date, client)
         elif app_key == 'google_tasks':
-            list_id = integration.get('default_list_id')
-            if not list_id:
-                return {"success": False, "error": "No task list configured", "error_code": "no_list"}
-
-            task_data = {'title': title}
-            if description:
-                task_data['notes'] = description
-            if due_date:
-                task_data['due'] = due_date.strftime('%Y-%m-%dT00:00:00.000Z')
-
-            async def _google_tasks_post(c: httpx.AsyncClient, token: str) -> httpx.Response:
-                return await c.post(
-                    f'https://tasks.googleapis.com/tasks/v1/lists/{list_id}/tasks',
-                    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-                    json=task_data,
-                )
-
-            response, integration, retry_err = await perform_request_with_token_retry(
-                uid, app_key, integration, _google_tasks_post, client=client
-            )
-            if retry_err:
-                return {
-                    "success": False,
-                    "error": "Google Tasks token refresh failed",
-                    "error_code": "token_refresh_failed",
-                }
-
-            if response.status_code in [200, 201]:
-                result = response.json()
-                return {"success": True, "external_task_id": result.get('id')}
-            else:
-                return {
-                    "success": False,
-                    "error": f"Google Tasks API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
-
+            return await _create_google_tasks_task(uid, integration, title, description, due_date, client)
         elif app_key == 'clickup':
-            list_id = integration.get('list_id')
-            if not list_id:
-                return {"success": False, "error": "No list configured", "error_code": "no_list"}
-
-            task_data: dict[str, Any] = {'name': title}
-            if description:
-                task_data['description'] = description
-            if due_date:
-                task_data['due_date'] = int(due_date.timestamp() * 1000)
-
-            response = await client.post(
-                f'https://api.clickup.com/api/v2/list/{list_id}/task',
-                headers={'Authorization': access_token, 'Content-Type': 'application/json'},
-                json=task_data,
-            )
-
-            if response.status_code in [200, 201]:
-                result = response.json()
-                return {"success": True, "external_task_id": result.get('id')}
-            else:
-                return {
-                    "success": False,
-                    "error": f"ClickUp API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
-
+            return await _create_clickup_task(uid, access_token, integration, title, description, due_date, client)
         else:
             return {"success": False, "error": f"Unsupported integration: {app_key}", "error_code": "unsupported"}
 
