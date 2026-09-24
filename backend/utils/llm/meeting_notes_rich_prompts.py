@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 _LEGACY_NOTE_BODY_OPENING = (
     "- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one\n"
@@ -39,9 +42,14 @@ SIDE NOTES AND BACKGROUND
 
 def rich_static_instructions(format_instructions: str, legacy_static: Callable[[str], str]) -> str:
     base = legacy_static(format_instructions)
-    assert _LEGACY_NOTE_BODY_OPENING in base, 'legacy NOTE BODY opening bullet missing'
-    assert _LEGACY_SELECT_THREADS in base, 'legacy select/omit bullet missing'
-    assert base.count(format_instructions) == 1, 'format instructions must appear exactly once'
+    # Rewrites anchor on exact legacy wording. If that wording drifts, keep producing a
+    # note (the rich rules still append) and log loudly; a unit test pins the anchors.
+    for anchor, label in ((_LEGACY_NOTE_BODY_OPENING, 'note body'), (_LEGACY_SELECT_THREADS, 'select threads')):
+        if anchor not in base:
+            logger.error('rich meeting notes: legacy %s anchor missing; keeping legacy wording', label)
+    if base.count(format_instructions) != 1:
+        logger.error('rich meeting notes: format instructions anchor count %d', base.count(format_instructions))
+        return f'{base}\n\n{_RICH_MEETING_RULES}'
     text = base.replace(_LEGACY_NOTE_BODY_OPENING, _RICH_NOTE_BODY_OPENING)
     text = text.replace(_LEGACY_SELECT_THREADS, _RICH_SELECT_THREADS)
     return text.replace(format_instructions, f'{_RICH_MEETING_RULES}\n\n{format_instructions}')
@@ -90,7 +98,8 @@ def rich_volatile_instructions(
         wake_word_rules=wake_word_rules,
     )
     legacy_density = _legacy_density_bullet(density)
-    assert legacy_density in text, 'legacy density bullet missing'
+    if legacy_density not in text:
+        logger.error('rich meeting notes: legacy density anchor missing; keeping legacy density wording')
     text = text.replace(legacy_density, _rich_density_bullet(density))
     if meeting_context and meeting_context.strip():
         text = f'{text}\n\n{meeting_context.strip()}'

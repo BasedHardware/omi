@@ -246,6 +246,10 @@ class TestNormalizeMeetingParticipants:
             'Omi Agent',
             'O. Omi Agent',
             'Acme Notetaker',
+            'Boardy Boardman',
+            'boardy',
+            'Fireflies Bot',
+            "David's Omi Agent",
         ],
     )
     def test_ai_agent_name_catalog(self, name):
@@ -280,7 +284,9 @@ class TestNormalizeMeetingParticipants:
         )
         assert roster.entries[0].kind == 'ai_agent'
 
-    @pytest.mark.parametrize('name', ['Jamie', 'Granola Smith', 'Gong User', 'Copilot Fan'])
+    @pytest.mark.parametrize(
+        'name', ['Jamie', 'Granola Smith', 'Gong User', 'Copilot Fan', 'Ottery Lane', 'Fathoma Reyes', 'Agent Smith']
+    )
     def test_human_names_are_not_misclassified_as_agents(self, name):
         roster = normalize_meeting_participants(
             _context([MeetingParticipant(name=name)]),
@@ -1072,3 +1078,16 @@ class TestRichFailOpen:
         assert roster.entries == ()
         assert '- Participants:' not in captured['prefix'].context
         assert 'PARTICIPANTS' not in captured['prefix'].context
+
+
+def test_rich_prompt_anchors_still_match_legacy_wording():
+    """The rich rewrite anchors on exact legacy text and only logs on drift; pin it here."""
+    from utils.llm import meeting_notes_rich_prompts as rich
+    from utils.llm.conversation_processing import _conversation_notes_static_instructions
+
+    base = _conversation_notes_static_instructions('FORMAT')
+    assert rich._LEGACY_NOTE_BODY_OPENING in base
+    assert rich._LEGACY_SELECT_THREADS in base
+    text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
+    assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
+    assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text

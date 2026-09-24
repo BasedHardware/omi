@@ -63,6 +63,12 @@ _AI_AGENT_NAMES = frozenset(
         'o. omi agent',
     }
 )
+# Agent products that surface with a persona surname or a prefix on real
+# rosters ("Boardy Boardman", "O. Omi Agent"). The first token is distinctive
+# enough for these brands; phrases match on word boundaries anywhere in the
+# name. Plain first names are deliberately absent (see note above).
+_AI_AGENT_FIRST_TOKENS = frozenset({'boardy', 'fireflies', 'otter.ai', 'read.ai', 'tl;dv'})
+_AI_AGENT_PHRASES = ('omi agent', 'zoom ai companion', 'fred from fireflies', 'notetaker')
 _AI_DOMAINS = frozenset(
     {
         'otter.ai',
@@ -281,6 +287,11 @@ def _looks_ai_agent(name: Optional[str], email: Optional[str], person: Optional[
         return True
     hay = (name or '').strip().casefold()
     if hay in _AI_AGENT_NAMES or hay.endswith(' notetaker'):
+        return True
+    tokens = hay.split()
+    if tokens and tokens[0] in _AI_AGENT_FIRST_TOKENS:
+        return True
+    if any(re.search(rf'(?<![\w]){re.escape(phrase)}(?![\w])', hay) for phrase in _AI_AGENT_PHRASES):
         return True
     if person is not None:
         kind = str(person.get('kind') or person.get('type') or '').casefold()
