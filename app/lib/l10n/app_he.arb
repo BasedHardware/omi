@@ -10875,5 +10875,12 @@
     "otaInstallFailed": "ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.",
     "otaUpdatedMessage": "{deviceName} עודכן ויופעל מחדש מעצמו.",
     "showPassword": "הצגת הסיסמה",
-    "hidePassword": "הסתרת הסיסמה"
+    "hidePassword": "הסתרת הסיסמה",
+    "appNotFoundOrRemoved": "האפליקציה הזו כבר לא זמינה",
+    "startupFailedTitle": "לא ניתן היה להפעיל את Omi",
+    "startupFailedMessage": "משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.",
+    "startupFailedConfigMessage": "לגרסת ה-Omi הזו יש בעיית תצורה. זו לא בעיה במכשיר שלך. פנה לתמיכה וצרף את הפרטים שלמטה.",
+    "discardRecordingTitle": "לבטל את ההקלטה?",
+    "discardRecordingMessage": "דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.",
+    "keepRecording": "המשך הקלטה"
 }

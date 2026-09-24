@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Instalarea a eșuat. Dispozitivul are în continuare firmware-ul actual.",
     "otaUpdatedMessage": "{deviceName} a fost actualizat și va reporni singur.",
     "showPassword": "Afișează parola",
-    "hidePassword": "Ascunde parola"
+    "hidePassword": "Ascunde parola",
+    "appNotFoundOrRemoved": "Această aplicație nu mai este disponibilă",
+    "startupFailedTitle": "Omi nu a putut porni",
+    "startupFailedMessage": "Ceva nu a mers bine în timp ce Omi pornea. Verifică-ți conexiunea, apoi încearcă din nou.",
+    "startupFailedConfigMessage": "Această versiune de Omi are o problemă de configurare. Nu este o problemă cu dispozitivul tău. Contactează asistența și include detaliile de mai jos.",
+    "discardRecordingTitle": "Renunți la înregistrare?",
+    "discardRecordingMessage": "Mostra ta vocală nu a fost încă salvată. Dacă pleci acum, aceasta va fi eliminată.",
+    "keepRecording": "Continuă înregistrarea"
 }

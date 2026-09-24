@@ -10326,4 +10326,27 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get hidePassword => 'ಪಾಸ್‌ವರ್ಡ್ ಮರೆಮಾಡಿ';
+
+  @override
+  String get appNotFoundOrRemoved => 'ಈ ಆ್ಯಪ್ ಇನ್ನು ಮುಂದೆ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get startupFailedTitle => 'Omi ಪ್ರಾರಂಭಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi ಪ್ರಾರಂಭವಾಗುತ್ತಿರುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi ನ ಈ ಬಿಲ್ಡ್‌ನಲ್ಲಿ ಕಾನ್ಫಿಗರೇಶನ್ ಸಮಸ್ಯೆ ಇದೆ. ಇದು ನಿಮ್ಮ ಸಾಧನದ ಸಮಸ್ಯೆಯಲ್ಲ. ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ ಮತ್ತು ಕೆಳಗಿನ ವಿವರಗಳನ್ನು ಸೇರಿಸಿ.';
+
+  @override
+  String get discardRecordingTitle => 'ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ತ್ಯಜಿಸುವುದೇ?';
+
+  @override
+  String get discardRecordingMessage => 'ನಿಮ್ಮ ಧ್ವನಿ ಮಾದರಿ ಇನ್ನೂ ಉಳಿಸಲಾಗಿಲ್ಲ. ನೀವು ಈಗ ಬಿಟ್ಟರೆ, ಅದನ್ನು ತ್ಯಜಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get keepRecording => 'ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ';
 }

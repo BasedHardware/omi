@@ -10329,4 +10329,27 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get hidePassword => 'Sakrij lozinku';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ova aplikacija više nije dostupna';
+
+  @override
+  String get startupFailedTitle => 'Omi se nije uspio pokrenuti';
+
+  @override
+  String get startupFailedMessage =>
+      'Nešto je pošlo po zlu tijekom pokretanja Omija. Provjerite vezu, a zatim pokušajte ponovno.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Ova verzija Omija ima problem s konfiguracijom. Nije riječ o problemu s vašim uređajem. Kontaktirajte podršku i priložite detalje u nastavku.';
+
+  @override
+  String get discardRecordingTitle => 'Odbaciti snimanje?';
+
+  @override
+  String get discardRecordingMessage => 'Vaš uzorak glasa još nije spremljen. Ako sada izađete, bit će odbačen.';
+
+  @override
+  String get keepRecording => 'Nastavi snimanje';
 }

@@ -10120,4 +10120,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get hidePassword => '비밀번호 숨기기';
+
+  @override
+  String get appNotFoundOrRemoved => '이 앱은 더 이상 사용할 수 없습니다';
+
+  @override
+  String get startupFailedTitle => 'Omi를 시작할 수 없습니다';
+
+  @override
+  String get startupFailedMessage => 'Omi를 시작하는 동안 문제가 발생했습니다. 연결 상태를 확인한 후 다시 시도하세요.';
+
+  @override
+  String get startupFailedConfigMessage => '이 Omi 빌드에 구성 문제가 있습니다. 기기 문제가 아닙니다. 아래 세부 정보를 포함하여 지원팀에 문의하세요.';
+
+  @override
+  String get discardRecordingTitle => '녹음을 삭제할까요?';
+
+  @override
+  String get discardRecordingMessage => '음성 샘플이 아직 저장되지 않았습니다. 지금 나가면 삭제됩니다.';
+
+  @override
+  String get keepRecording => '계속 녹음';
 }

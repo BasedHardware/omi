@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Installimine ebaõnnestus. Seadmel on endiselt praegune püsivara.",
     "otaUpdatedMessage": "{deviceName} on värskendatud ja taaskäivitub ise.",
     "showPassword": "Näita parooli",
-    "hidePassword": "Peida parool"
+    "hidePassword": "Peida parool",
+    "appNotFoundOrRemoved": "See rakendus ei ole enam saadaval",
+    "startupFailedTitle": "Omi käivitamine ebaõnnestus",
+    "startupFailedMessage": "Omi käivitamisel läks midagi valesti. Kontrolli oma ühendust ja proovi seejärel uuesti.",
+    "startupFailedConfigMessage": "Selles Omi versioonis on seadistusprobleem. See ei ole sinu seadme viga. Võta ühendust toega ja lisa allolevad üksikasjad.",
+    "discardRecordingTitle": "Kas loobuda salvestusest?",
+    "discardRecordingMessage": "Sinu häälenäidist pole veel salvestatud. Kui lahkud nüüd, see kustutatakse.",
+    "keepRecording": "Jätka salvestamist"
 }

@@ -10875,5 +10875,12 @@
     "otaInstallFailed": "Nabigo ang pag-install. Nasa kasalukuyang firmware pa rin ang device mo.",
     "otaUpdatedMessage": "Na-update na ang {deviceName} at kusa itong magre-restart.",
     "showPassword": "Ipakita ang password",
-    "hidePassword": "Itago ang password"
+    "hidePassword": "Itago ang password",
+    "appNotFoundOrRemoved": "Hindi na available ang app na ito",
+    "startupFailedTitle": "Hindi ma-start ang Omi",
+    "startupFailedMessage": "May naganap na problema habang nagsi-start ang Omi. Suriin ang iyong koneksyon, pagkatapos ay subukan muli.",
+    "startupFailedConfigMessage": "May problema sa configuration ang build na ito ng Omi. Hindi ito problema sa iyong device. Makipag-ugnayan sa suporta at isama ang mga detalye sa ibaba.",
+    "discardRecordingTitle": "Itapon ang Recording?",
+    "discardRecordingMessage": "Hindi pa na-save ang iyong voice sample. Kung aalis ka ngayon, ito ay itatapon.",
+    "keepRecording": "Ipagpatuloy ang Pag-record"
 }

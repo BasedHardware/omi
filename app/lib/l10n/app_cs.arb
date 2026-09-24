@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Instalace se nezdařila. Zařízení má stále současný firmware.",
     "otaUpdatedMessage": "{deviceName} je aktualizováno a samo se restartuje.",
     "showPassword": "Zobrazit heslo",
-    "hidePassword": "Skrýt heslo"
+    "hidePassword": "Skrýt heslo",
+    "appNotFoundOrRemoved": "Tato aplikace již není k dispozici",
+    "startupFailedTitle": "Omi se nepodařilo spustit",
+    "startupFailedMessage": "Při spouštění Omi se něco pokazilo. Zkontrolujte připojení a zkuste to znovu.",
+    "startupFailedConfigMessage": "Tato verze Omi má problém s konfigurací. Nejedná se o problém s vaším zařízením. Kontaktujte podporu a uveďte podrobnosti níže.",
+    "discardRecordingTitle": "Zahodit nahrávání?",
+    "discardRecordingMessage": "Váš hlasový vzorek ještě není uložen. Pokud nyní odejdete, bude zahozen.",
+    "keepRecording": "Pokračovat v nahrávání"
 }

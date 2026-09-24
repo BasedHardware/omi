@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "La instal·lació ha fallat. El dispositiu continua amb el firmware actual.",
     "otaUpdatedMessage": "{deviceName} s'ha actualitzat i es reiniciarà sol.",
     "showPassword": "Mostra la contrasenya",
-    "hidePassword": "Amaga la contrasenya"
+    "hidePassword": "Amaga la contrasenya",
+    "appNotFoundOrRemoved": "Aquesta aplicació ja no està disponible",
+    "startupFailedTitle": "L'Omi no s'ha pogut iniciar",
+    "startupFailedMessage": "S'ha produït un error mentre l'Omi s'iniciava. Comprova la teva connexió i torna-ho a provar.",
+    "startupFailedConfigMessage": "Aquesta versió de l'Omi té un problema de configuració. No és un problema del teu dispositiu. Contacta amb el suport i inclou els detalls següents.",
+    "discardRecordingTitle": "Vols descartar l'enregistrament?",
+    "discardRecordingMessage": "La teva mostra de veu encara no s'ha desat. Si surts ara, es descartarà.",
+    "keepRecording": "Continua enregistrant"
 }

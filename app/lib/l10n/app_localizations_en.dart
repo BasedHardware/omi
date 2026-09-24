@@ -10282,4 +10282,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get hidePassword => 'Hide password';
+
+  @override
+  String get appNotFoundOrRemoved => 'This app is no longer available';
+
+  @override
+  String get startupFailedTitle => 'Omi couldn’t start';
+
+  @override
+  String get startupFailedMessage =>
+      'Something went wrong while Omi was starting. Check your connection, then try again.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.';
+
+  @override
+  String get discardRecordingTitle => 'Discard Recording?';
+
+  @override
+  String get discardRecordingMessage => 'Your voice sample isn’t saved yet. If you leave now, it will be discarded.';
+
+  @override
+  String get keepRecording => 'Keep Recording';
 }

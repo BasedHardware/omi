@@ -10286,4 +10286,27 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get hidePassword => 'Ẩn mật khẩu';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ứng dụng này không còn khả dụng';
+
+  @override
+  String get startupFailedTitle => 'Omi không thể khởi động';
+
+  @override
+  String get startupFailedMessage =>
+      'Đã xảy ra sự cố khi Omi đang khởi động. Hãy kiểm tra kết nối của bạn, sau đó thử lại.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Bản dựng Omi này gặp sự cố cấu hình. Đây không phải là sự cố với thiết bị của bạn. Hãy liên hệ hỗ trợ và đính kèm thông tin chi tiết bên dưới.';
+
+  @override
+  String get discardRecordingTitle => 'Hủy bỏ bản ghi âm?';
+
+  @override
+  String get discardRecordingMessage => 'Mẫu giọng nói của bạn chưa được lưu. Nếu bạn rời đi bây giờ, nó sẽ bị hủy.';
+
+  @override
+  String get keepRecording => 'Tiếp tục ghi âm';
 }

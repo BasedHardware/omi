@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Pemasangan gagal. Peranti anda masih menggunakan perisian tegar semasa.",
     "otaUpdatedMessage": "{deviceName} telah dikemas kini dan akan dimulakan semula sendiri.",
     "showPassword": "Tunjukkan kata laluan",
-    "hidePassword": "Sembunyikan kata laluan"
+    "hidePassword": "Sembunyikan kata laluan",
+    "appNotFoundOrRemoved": "Aplikasi ini tidak lagi tersedia",
+    "startupFailedTitle": "Omi tidak dapat dimulakan",
+    "startupFailedMessage": "Sesuatu tidak kena semasa Omi bermula. Semak sambungan anda, kemudian cuba lagi.",
+    "startupFailedConfigMessage": "Binaan Omi ini mempunyai masalah konfigurasi. Ini bukan masalah dengan peranti anda. Hubungi sokongan dan sertakan butiran di bawah.",
+    "discardRecordingTitle": "Buang Rakaman?",
+    "discardRecordingMessage": "Sampel suara anda belum disimpan. Jika anda keluar sekarang, ia akan dibuang.",
+    "keepRecording": "Teruskan Merakam"
 }

@@ -10340,4 +10340,28 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get hidePassword => 'Ascunde parola';
+
+  @override
+  String get appNotFoundOrRemoved => 'Această aplicație nu mai este disponibilă';
+
+  @override
+  String get startupFailedTitle => 'Omi nu a putut porni';
+
+  @override
+  String get startupFailedMessage =>
+      'Ceva nu a mers bine în timp ce Omi pornea. Verifică-ți conexiunea, apoi încearcă din nou.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Această versiune de Omi are o problemă de configurare. Nu este o problemă cu dispozitivul tău. Contactează asistența și include detaliile de mai jos.';
+
+  @override
+  String get discardRecordingTitle => 'Renunți la înregistrare?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Mostra ta vocală nu a fost încă salvată. Dacă pleci acum, aceasta va fi eliminată.';
+
+  @override
+  String get keepRecording => 'Continuă înregistrarea';
 }

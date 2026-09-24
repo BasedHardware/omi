@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "安装失败。你的设备仍使用当前固件。",
     "otaUpdatedMessage": "{deviceName} 已更新，将自动重新启动。",
     "showPassword": "显示密码",
-    "hidePassword": "隐藏密码"
+    "hidePassword": "隐藏密码",
+    "appNotFoundOrRemoved": "此应用已不可用",
+    "startupFailedTitle": "Omi 无法启动",
+    "startupFailedMessage": "Omi 启动时出了点问题。请检查您的网络连接，然后重试。",
+    "startupFailedConfigMessage": "此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。",
+    "discardRecordingTitle": "放弃录音？",
+    "discardRecordingMessage": "您的语音样本尚未保存。如果现在离开，它将被丢弃。",
+    "keepRecording": "继续录音"
 }

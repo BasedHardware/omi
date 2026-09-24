@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "فشل التثبيت. لا يزال جهازك يعمل بالبرنامج الثابت الحالي.",
     "otaUpdatedMessage": "تم تحديث {deviceName} وسيُعاد تشغيله تلقائيًا.",
     "showPassword": "إظهار كلمة المرور",
-    "hidePassword": "إخفاء كلمة المرور"
+    "hidePassword": "إخفاء كلمة المرور",
+    "appNotFoundOrRemoved": "هذا التطبيق لم يعد متاحًا",
+    "startupFailedTitle": "تعذر تشغيل Omi",
+    "startupFailedMessage": "حدث خطأ ما أثناء تشغيل Omi. تحقق من اتصالك، ثم حاول مرة أخرى.",
+    "startupFailedConfigMessage": "تحتوي هذه النسخة من Omi على مشكلة في الإعدادات. إنها ليست مشكلة في جهازك. تواصل مع الدعم وأرفق التفاصيل أدناه.",
+    "discardRecordingTitle": "تجاهل التسجيل؟",
+    "discardRecordingMessage": "لم يتم حفظ عينة صوتك بعد. إذا غادرت الآن، سيتم تجاهلها.",
+    "keepRecording": "متابعة التسجيل"
 }

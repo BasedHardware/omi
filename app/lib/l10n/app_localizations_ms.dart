@@ -10321,4 +10321,26 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get hidePassword => 'Sembunyikan kata laluan';
+
+  @override
+  String get appNotFoundOrRemoved => 'Aplikasi ini tidak lagi tersedia';
+
+  @override
+  String get startupFailedTitle => 'Omi tidak dapat dimulakan';
+
+  @override
+  String get startupFailedMessage => 'Sesuatu tidak kena semasa Omi bermula. Semak sambungan anda, kemudian cuba lagi.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Binaan Omi ini mempunyai masalah konfigurasi. Ini bukan masalah dengan peranti anda. Hubungi sokongan dan sertakan butiran di bawah.';
+
+  @override
+  String get discardRecordingTitle => 'Buang Rakaman?';
+
+  @override
+  String get discardRecordingMessage => 'Sampel suara anda belum disimpan. Jika anda keluar sekarang, ia akan dibuang.';
+
+  @override
+  String get keepRecording => 'Teruskan Merakam';
 }

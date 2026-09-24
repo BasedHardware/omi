@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Installatie mislukt. Je apparaat draait nog op de huidige firmware.",
     "otaUpdatedMessage": "{deviceName} is bijgewerkt en start vanzelf opnieuw op.",
     "showPassword": "Wachtwoord tonen",
-    "hidePassword": "Wachtwoord verbergen"
+    "hidePassword": "Wachtwoord verbergen",
+    "appNotFoundOrRemoved": "Deze app is niet meer beschikbaar",
+    "startupFailedTitle": "Omi kon niet starten",
+    "startupFailedMessage": "Er is iets misgegaan tijdens het opstarten van Omi. Controleer je verbinding en probeer het opnieuw.",
+    "startupFailedConfigMessage": "Deze build van Omi heeft een configuratieprobleem. Het ligt niet aan je apparaat. Neem contact op met support en voeg de onderstaande details toe.",
+    "discardRecordingTitle": "Opname verwerpen?",
+    "discardRecordingMessage": "Je spraakmonster is nog niet opgeslagen. Als je nu weggaat, wordt het verwijderd.",
+    "keepRecording": "Verder opnemen"
 }

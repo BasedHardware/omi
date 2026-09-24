@@ -3338,5 +3338,12 @@
     "otaInstallFailed": "Yükleme başarısız. Cihazınız hâlâ mevcut yazılımda.",
     "otaUpdatedMessage": "{deviceName} güncellendi ve kendiliğinden yeniden başlayacak.",
     "showPassword": "Şifreyi göster",
-    "hidePassword": "Şifreyi gizle"
+    "hidePassword": "Şifreyi gizle",
+    "appNotFoundOrRemoved": "Bu uygulama artık kullanılamıyor",
+    "startupFailedTitle": "Omi başlatılamadı",
+    "startupFailedMessage": "Omi başlatılırken bir sorun oluştu. Bağlantınızı kontrol edin, ardından tekrar deneyin.",
+    "startupFailedConfigMessage": "Omi'nin bu sürümünde bir yapılandırma sorunu var. Bu, cihazınızla ilgili bir sorun değil. Destekle iletişime geçin ve aşağıdaki ayrıntıları ekleyin.",
+    "discardRecordingTitle": "Kayıt silinsin mi?",
+    "discardRecordingMessage": "Ses örneğiniz henüz kaydedilmedi. Şimdi çıkarsanız silinecektir.",
+    "keepRecording": "Kayda Devam Et"
 }

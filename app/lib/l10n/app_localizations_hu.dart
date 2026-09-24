@@ -10334,4 +10334,27 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get hidePassword => 'Jelszó elrejtése';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ez az alkalmazás már nem érhető el';
+
+  @override
+  String get startupFailedTitle => 'Az Omi nem tudott elindulni';
+
+  @override
+  String get startupFailedMessage =>
+      'Hiba történt az Omi indítása közben. Ellenőrizd a kapcsolatot, majd próbáld újra.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Az Omi ezen verziójában konfigurációs probléma van. Ez nem az eszközöd hibája. Vedd fel a kapcsolatot az ügyfélszolgálattal, és add meg az alábbi részleteket.';
+
+  @override
+  String get discardRecordingTitle => 'Elveti a felvételt?';
+
+  @override
+  String get discardRecordingMessage => 'A hangmintád még nincs elmentve. Ha most kilépsz, törlődik.';
+
+  @override
+  String get keepRecording => 'Felvétel folytatása';
 }

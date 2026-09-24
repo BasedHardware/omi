@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'package:omi/ui/feedback/omi_dialogs.dart';
+import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MyUpgrader extends Upgrader {
@@ -33,7 +34,22 @@ class MyUpgradeAlertState extends UpgradeAlertState {
     required UpgraderMessages messages,
   }) {
     // "Not Now" postpones (onUserLater); it never silences this version forever (onUserIgnored).
-    showDialog(
+    // Queued with the other startup prompts: one at a time, never over a recording or a call. A
+    // required update (upgrader "blocked") goes first.
+    PromptQueue.instance.enqueue(
+      'upgrade-alert',
+      widget.upgrader.blocked() ? PromptPriority.critical : PromptPriority.normal,
+      show: (promptContext) => _show(promptContext, key: key, message: message, barrierDismissible: barrierDismissible),
+    );
+  }
+
+  Future<void> _show(
+    BuildContext context, {
+    Key? key,
+    required String message,
+    required bool barrierDismissible,
+  }) {
+    return showDialog<void>(
       context: context,
       barrierDismissible: barrierDismissible,
       builder: (BuildContext context) => OmiAlertDialog(

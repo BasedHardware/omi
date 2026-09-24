@@ -10365,4 +10365,28 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get hidePassword => 'கடவுச்சொல்லை மறை';
+
+  @override
+  String get appNotFoundOrRemoved => 'இந்த ஆப் இனி கிடைக்கவில்லை';
+
+  @override
+  String get startupFailedTitle => 'Omi தொடங்க முடியவில்லை';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi தொடங்கும் போது ஏதோ தவறு ஏற்பட்டது. உங்கள் இணைப்பை சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi இன் இந்த பதிப்பில் கட்டமைப்புச் சிக்கல் உள்ளது. இது உங்கள் சாதனத்தின் சிக்கல் அல்ல. ஆதரவைத் தொடர்பு கொண்டு கீழே உள்ள விவரங்களைச் சேர்க்கவும்.';
+
+  @override
+  String get discardRecordingTitle => 'பதிவை நிராகரிக்கவா?';
+
+  @override
+  String get discardRecordingMessage =>
+      'உங்கள் குரல் மாதிரி இன்னும் சேமிக்கப்படவில்லை. இப்போது வெளியேறினால், அது நிராகரிக்கப்படும்.';
+
+  @override
+  String get keepRecording => 'பதிவைத் தொடரவும்';
 }

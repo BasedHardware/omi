@@ -10291,4 +10291,27 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get hidePassword => 'پنهان کردن رمز عبور';
+
+  @override
+  String get appNotFoundOrRemoved => 'این برنامه دیگر در دسترس نیست';
+
+  @override
+  String get startupFailedTitle => 'Omi راه‌اندازی نشد';
+
+  @override
+  String get startupFailedMessage =>
+      'هنگام راه‌اندازی Omi مشکلی پیش آمد. اتصال خود را بررسی کنید، سپس دوباره تلاش کنید.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'این نسخه از Omi مشکل پیکربندی دارد. این مشکل دستگاه شما نیست. با پشتیبانی تماس بگیرید و جزئیات زیر را ضمیمه کنید.';
+
+  @override
+  String get discardRecordingTitle => 'ضبط دور انداخته شود؟';
+
+  @override
+  String get discardRecordingMessage => 'نمونه صدای شما هنوز ذخیره نشده است. اگر اکنون خارج شوید، دور انداخته می‌شود.';
+
+  @override
+  String get keepRecording => 'ادامه ضبط';
 }

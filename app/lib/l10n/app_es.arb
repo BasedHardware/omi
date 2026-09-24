@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Falló la instalación. Tu dispositivo sigue con el firmware actual.",
     "otaUpdatedMessage": "{deviceName} está actualizado y se reiniciará solo.",
     "showPassword": "Mostrar contraseña",
-    "hidePassword": "Ocultar contraseña"
+    "hidePassword": "Ocultar contraseña",
+    "appNotFoundOrRemoved": "Esta aplicación ya no está disponible",
+    "startupFailedTitle": "Omi no pudo iniciarse",
+    "startupFailedMessage": "Ocurrió un error mientras Omi se iniciaba. Comprueba tu conexión y vuelve a intentarlo.",
+    "startupFailedConfigMessage": "Esta versión de Omi tiene un problema de configuración. No es un problema de tu dispositivo. Ponte en contacto con soporte e incluye los detalles a continuación.",
+    "discardRecordingTitle": "¿Descartar grabación?",
+    "discardRecordingMessage": "Tu muestra de voz aún no se ha guardado. Si sales ahora, se descartará.",
+    "keepRecording": "Seguir grabando"
 }

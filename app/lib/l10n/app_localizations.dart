@@ -18992,6 +18992,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Hide password'**
   String get hidePassword;
+
+  /// Toast when a link opens an app that was removed from the store
+  ///
+  /// In en, this message translates to:
+  /// **'This app is no longer available'**
+  String get appNotFoundOrRemoved;
+
+  /// Title of the screen shown when the app fails to launch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi couldn’t start'**
+  String get startupFailedTitle;
+
+  /// Launch failure screen, runtime failure
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while Omi was starting. Check your connection, then try again.'**
+  String get startupFailedMessage;
+
+  /// Launch failure screen, rejected build configuration
+  ///
+  /// In en, this message translates to:
+  /// **'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.'**
+  String get startupFailedConfigMessage;
+
+  /// Dialog title when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Discard Recording?'**
+  String get discardRecordingTitle;
+
+  /// Dialog message when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice sample isn’t saved yet. If you leave now, it will be discarded.'**
+  String get discardRecordingMessage;
+
+  /// Button that dismisses the discard-recording dialog and continues
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Recording'**
+  String get keepRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

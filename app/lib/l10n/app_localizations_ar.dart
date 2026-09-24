@@ -10227,4 +10227,26 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get hidePassword => 'إخفاء كلمة المرور';
+
+  @override
+  String get appNotFoundOrRemoved => 'هذا التطبيق لم يعد متاحًا';
+
+  @override
+  String get startupFailedTitle => 'تعذر تشغيل Omi';
+
+  @override
+  String get startupFailedMessage => 'حدث خطأ ما أثناء تشغيل Omi. تحقق من اتصالك، ثم حاول مرة أخرى.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'تحتوي هذه النسخة من Omi على مشكلة في الإعدادات. إنها ليست مشكلة في جهازك. تواصل مع الدعم وأرفق التفاصيل أدناه.';
+
+  @override
+  String get discardRecordingTitle => 'تجاهل التسجيل؟';
+
+  @override
+  String get discardRecordingMessage => 'لم يتم حفظ عينة صوتك بعد. إذا غادرت الآن، سيتم تجاهلها.';
+
+  @override
+  String get keepRecording => 'متابعة التسجيل';
 }

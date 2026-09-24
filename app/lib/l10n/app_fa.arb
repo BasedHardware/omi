@@ -10875,5 +10875,12 @@
     "otaInstallFailed": "نصب ناموفق بود. دستگاه شما همچنان میان‌افزار فعلی را دارد.",
     "otaUpdatedMessage": "{deviceName} به‌روز شد و خودکار راه‌اندازی مجدد می‌شود.",
     "showPassword": "نمایش رمز عبور",
-    "hidePassword": "پنهان کردن رمز عبور"
+    "hidePassword": "پنهان کردن رمز عبور",
+    "appNotFoundOrRemoved": "این برنامه دیگر در دسترس نیست",
+    "startupFailedTitle": "Omi راه‌اندازی نشد",
+    "startupFailedMessage": "هنگام راه‌اندازی Omi مشکلی پیش آمد. اتصال خود را بررسی کنید، سپس دوباره تلاش کنید.",
+    "startupFailedConfigMessage": "این نسخه از Omi مشکل پیکربندی دارد. این مشکل دستگاه شما نیست. با پشتیبانی تماس بگیرید و جزئیات زیر را ضمیمه کنید.",
+    "discardRecordingTitle": "ضبط دور انداخته شود؟",
+    "discardRecordingMessage": "نمونه صدای شما هنوز ذخیره نشده است. اگر اکنون خارج شوید، دور انداخته می‌شود.",
+    "keepRecording": "ادامه ضبط"
 }

@@ -27,7 +27,8 @@ abstract final class HomeNavigation {
   static void register(HomeRouteOpener opener) => _opener = opener;
 
   static void unregister(HomeRouteOpener opener) {
-    if (identical(_opener, opener)) _opener = null;
+    // `==`, not identical: two tear-offs of the same method are equal but not identical.
+    if (_opener == opener) _opener = null;
   }
 
   /// Leaves the current flow and shows Home: pops to the existing Home when there is one, otherwise
@@ -39,6 +40,20 @@ abstract final class HomeNavigation {
       return;
     }
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const HomePageWrapper()), (_) => false);
+  }
+
+  /// Resolves once the route holding [context] is the top route again — the sheet or page pushed
+  /// over it has closed (checked every [pollInterval]). Resolves at once when [context] has no route
+  /// or is unmounted.
+  static Future<void> untilRouteIsCurrent(
+    BuildContext context, {
+    Duration pollInterval = const Duration(milliseconds: 200),
+  }) async {
+    final route = ModalRoute.of(context);
+    if (route == null) return;
+    while (context.mounted && route.isActive && !route.isCurrent) {
+      await Future<void>.delayed(pollInterval);
+    }
   }
 
   /// Opens [route] inside the existing Home: everything above Home is popped, then Home pushes the

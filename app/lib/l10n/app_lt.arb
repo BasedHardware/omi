@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Įdiegti nepavyko. Įrenginyje vis dar yra dabartinė programinė aparatinė įranga.",
     "otaUpdatedMessage": "{deviceName} atnaujintas ir pats pasileis iš naujo.",
     "showPassword": "Rodyti slaptažodį",
-    "hidePassword": "Slėpti slaptažodį"
+    "hidePassword": "Slėpti slaptažodį",
+    "appNotFoundOrRemoved": "Ši programėlė nebėra pasiekiama",
+    "startupFailedTitle": "Nepavyko paleisti Omi",
+    "startupFailedMessage": "Kažkas nutiko ne taip, kai Omi buvo paleidžiama. Patikrink ryšį ir bandyk dar kartą.",
+    "startupFailedConfigMessage": "Šioje Omi versijoje yra konfigūracijos problema. Tai nėra jūsų įrenginio problema. Susisiek su pagalba ir pridėk toliau pateiktą informaciją.",
+    "discardRecordingTitle": "Atmesti įrašą?",
+    "discardRecordingMessage": "Tavo balso pavyzdys dar neišsaugotas. Jei dabar išeisi, jis bus atmestas.",
+    "keepRecording": "Tęsti įrašymą"
 }

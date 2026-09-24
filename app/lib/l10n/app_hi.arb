@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "इंस्टॉल विफल रहा। आपका डिवाइस अभी भी मौजूदा फ़र्मवेयर पर है।",
     "otaUpdatedMessage": "{deviceName} अपडेट हो गया है और अपने आप फिर से शुरू होगा।",
     "showPassword": "पासवर्ड दिखाएँ",
-    "hidePassword": "पासवर्ड छिपाएँ"
+    "hidePassword": "पासवर्ड छिपाएँ",
+    "appNotFoundOrRemoved": "यह ऐप अब उपलब्ध नहीं है",
+    "startupFailedTitle": "Omi शुरू नहीं हो सका",
+    "startupFailedMessage": "Omi शुरू होते समय कुछ गड़बड़ी हुई। अपना कनेक्शन जांचें, फिर दोबारा प्रयास करें।",
+    "startupFailedConfigMessage": "Omi के इस बिल्ड में एक कॉन्फ़िगरेशन समस्या है। यह आपके डिवाइस की समस्या नहीं है। सहायता से संपर्क करें और नीचे दिए गए विवरण शामिल करें।",
+    "discardRecordingTitle": "रिकॉर्डिंग रद्द करें?",
+    "discardRecordingMessage": "आपका वॉइस सैंपल अभी सेव नहीं हुआ है। अगर आप अभी बाहर जाते हैं, तो यह हट जाएगा।",
+    "keepRecording": "रिकॉर्डिंग जारी रखें"
 }

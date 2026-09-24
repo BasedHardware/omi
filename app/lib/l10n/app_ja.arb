@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "インストールに失敗しました。デバイスは現在のファームウェアのままです。",
     "otaUpdatedMessage": "{deviceName} は更新され、自動的に再起動します。",
     "showPassword": "パスワードを表示",
-    "hidePassword": "パスワードを隠す"
+    "hidePassword": "パスワードを隠す",
+    "appNotFoundOrRemoved": "このアプリは利用できなくなりました",
+    "startupFailedTitle": "Omiを起動できませんでした",
+    "startupFailedMessage": "Omiの起動中に問題が発生しました。接続を確認してから、もう一度お試しください。",
+    "startupFailedConfigMessage": "このOmiのビルドには設定の問題があります。お使いのデバイスの問題ではありません。サポートに問い合わせ、以下の詳細を添えてください。",
+    "discardRecordingTitle": "録音を破棄しますか？",
+    "discardRecordingMessage": "音声サンプルはまだ保存されていません。今すぐ離れると破棄されます。",
+    "keepRecording": "録音を続ける"
 }

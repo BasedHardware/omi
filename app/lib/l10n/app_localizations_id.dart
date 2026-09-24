@@ -10303,4 +10303,27 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get hidePassword => 'Sembunyikan kata sandi';
+
+  @override
+  String get appNotFoundOrRemoved => 'Aplikasi ini tidak lagi tersedia';
+
+  @override
+  String get startupFailedTitle => 'Omi tidak dapat memulai';
+
+  @override
+  String get startupFailedMessage => 'Terjadi kesalahan saat Omi memulai. Periksa koneksi Anda, lalu coba lagi.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Build Omi ini memiliki masalah konfigurasi. Ini bukan masalah pada perangkat Anda. Hubungi dukungan dan sertakan detail di bawah ini.';
+
+  @override
+  String get discardRecordingTitle => 'Buang Rekaman?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Sampel suara Anda belum tersimpan. Jika Anda keluar sekarang, itu akan dibuang.';
+
+  @override
+  String get keepRecording => 'Lanjutkan Merekam';
 }

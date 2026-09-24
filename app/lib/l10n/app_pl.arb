@@ -3338,5 +3338,12 @@
     "otaInstallFailed": "Instalacja nie powiodła się. Urządzenie nadal ma obecne oprogramowanie.",
     "otaUpdatedMessage": "{deviceName} zostało zaktualizowane i samo uruchomi się ponownie.",
     "showPassword": "Pokaż hasło",
-    "hidePassword": "Ukryj hasło"
+    "hidePassword": "Ukryj hasło",
+    "appNotFoundOrRemoved": "Ta aplikacja nie jest już dostępna",
+    "startupFailedTitle": "Nie udało się uruchomić Omi",
+    "startupFailedMessage": "Coś poszło nie tak podczas uruchamiania Omi. Sprawdź połączenie, a następnie spróbuj ponownie.",
+    "startupFailedConfigMessage": "Ta wersja Omi ma problem z konfiguracją. To nie jest problem z Twoim urządzeniem. Skontaktuj się z pomocą techniczną i podaj poniższe szczegóły.",
+    "discardRecordingTitle": "Odrzucić nagranie?",
+    "discardRecordingMessage": "Twoja próbka głosu nie została jeszcze zapisana. Jeśli wyjdziesz teraz, zostanie odrzucona.",
+    "keepRecording": "Kontynuuj nagrywanie"
 }

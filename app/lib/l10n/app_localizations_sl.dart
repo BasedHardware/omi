@@ -10325,4 +10325,26 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get hidePassword => 'Skrij geslo';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ta aplikacija ni več na voljo';
+
+  @override
+  String get startupFailedTitle => 'Omi se ni uspel zagnati';
+
+  @override
+  String get startupFailedMessage => 'Med zagonom Omi je prišlo do napake. Preverite povezavo in nato poskusite znova.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Ta različica Omi ima težavo s konfiguracijo. Ne gre za težavo z vašo napravo. Obrnite se na podporo in priložite spodnje podrobnosti.';
+
+  @override
+  String get discardRecordingTitle => 'Želite zavreči snemanje?';
+
+  @override
+  String get discardRecordingMessage => 'Vaš glasovni vzorec še ni shranjen. Če zdaj zapustite, bo zavržen.';
+
+  @override
+  String get keepRecording => 'Nadaljuj s snemanjem';
 }

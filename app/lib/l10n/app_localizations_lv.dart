@@ -10319,4 +10319,27 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get hidePassword => 'Slēpt paroli';
+
+  @override
+  String get appNotFoundOrRemoved => 'Šī lietotne vairs nav pieejama';
+
+  @override
+  String get startupFailedTitle => 'Omi neizdevās startēt';
+
+  @override
+  String get startupFailedMessage =>
+      'Kaut kas nogāja greizi, kamēr Omi startēja. Pārbaudi savienojumu un mēģini vēlreiz.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Šai Omi versijai ir konfigurācijas problēma. Tā nav tavas ierīces problēma. Sazinies ar atbalstu un pievieno tālāk norādīto informāciju.';
+
+  @override
+  String get discardRecordingTitle => 'Atmest ierakstu?';
+
+  @override
+  String get discardRecordingMessage => 'Tavs balss paraugs vēl nav saglabāts. Ja tagad pametīsi, tas tiks dzēsts.';
+
+  @override
+  String get keepRecording => 'Turpināt ierakstīšanu';
 }

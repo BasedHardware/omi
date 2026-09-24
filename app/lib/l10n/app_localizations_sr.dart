@@ -10307,4 +10307,27 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get hidePassword => 'Сакриј лозинку';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ова апликација више није доступна';
+
+  @override
+  String get startupFailedTitle => 'Omi није успео да се покрене';
+
+  @override
+  String get startupFailedMessage =>
+      'Нешто је пошло по злу током покретања Omi-ја. Проверите везу, а затим покушајте поново.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Ова верзија Omi-ја има проблем са конфигурацијом. Није у питању проблем са вашим уређајем. Контактирајте подршку и приложите детаље испод.';
+
+  @override
+  String get discardRecordingTitle => 'Одбацити снимање?';
+
+  @override
+  String get discardRecordingMessage => 'Ваш узорак гласа још није сачуван. Ако сада изађете, биће одбачен.';
+
+  @override
+  String get keepRecording => 'Настави снимање';
 }

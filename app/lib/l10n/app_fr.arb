@@ -3338,5 +3338,12 @@
     "otaInstallFailed": "L'installation a échoué. Votre appareil utilise toujours le firmware actuel.",
     "otaUpdatedMessage": "{deviceName} est à jour et va redémarrer tout seul.",
     "showPassword": "Afficher le mot de passe",
-    "hidePassword": "Masquer le mot de passe"
+    "hidePassword": "Masquer le mot de passe",
+    "appNotFoundOrRemoved": "Cette application n'est plus disponible",
+    "startupFailedTitle": "Omi n'a pas pu démarrer",
+    "startupFailedMessage": "Une erreur s'est produite pendant le démarrage d'Omi. Vérifiez votre connexion, puis réessayez.",
+    "startupFailedConfigMessage": "Cette version d'Omi présente un problème de configuration. Ce n'est pas un problème lié à votre appareil. Contactez l'assistance et indiquez les détails ci-dessous.",
+    "discardRecordingTitle": "Ignorer l'enregistrement ?",
+    "discardRecordingMessage": "Votre échantillon vocal n'est pas encore enregistré. Si vous quittez maintenant, il sera supprimé.",
+    "keepRecording": "Continuer l'enregistrement"
 }

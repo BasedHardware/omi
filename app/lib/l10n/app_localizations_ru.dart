@@ -10328,4 +10328,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get hidePassword => 'Скрыть пароль';
+
+  @override
+  String get appNotFoundOrRemoved => 'Это приложение больше недоступно';
+
+  @override
+  String get startupFailedTitle => 'Omi не удалось запуститься';
+
+  @override
+  String get startupFailedMessage => 'Что-то пошло не так при запуске Omi. Проверьте подключение и попробуйте снова.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'В этой сборке Omi есть проблема с конфигурацией. Дело не в вашем устройстве. Свяжитесь с поддержкой и укажите приведённые ниже данные.';
+
+  @override
+  String get discardRecordingTitle => 'Отменить запись?';
+
+  @override
+  String get discardRecordingMessage => 'Ваш образец голоса ещё не сохранён. Если вы выйдете сейчас, он будет удалён.';
+
+  @override
+  String get keepRecording => 'Продолжить запись';
 }

@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Cài đặt thất bại. Thiết bị vẫn dùng firmware hiện tại.",
     "otaUpdatedMessage": "{deviceName} đã được cập nhật và sẽ tự khởi động lại.",
     "showPassword": "Hiện mật khẩu",
-    "hidePassword": "Ẩn mật khẩu"
+    "hidePassword": "Ẩn mật khẩu",
+    "appNotFoundOrRemoved": "Ứng dụng này không còn khả dụng",
+    "startupFailedTitle": "Omi không thể khởi động",
+    "startupFailedMessage": "Đã xảy ra sự cố khi Omi đang khởi động. Hãy kiểm tra kết nối của bạn, sau đó thử lại.",
+    "startupFailedConfigMessage": "Bản dựng Omi này gặp sự cố cấu hình. Đây không phải là sự cố với thiết bị của bạn. Hãy liên hệ hỗ trợ và đính kèm thông tin chi tiết bên dưới.",
+    "discardRecordingTitle": "Hủy bỏ bản ghi âm?",
+    "discardRecordingMessage": "Mẫu giọng nói của bạn chưa được lưu. Nếu bạn rời đi bây giờ, nó sẽ bị hủy.",
+    "keepRecording": "Tiếp tục ghi âm"
 }

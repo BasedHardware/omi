@@ -10312,4 +10312,27 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get hidePassword => 'Slėpti slaptažodį';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ši programėlė nebėra pasiekiama';
+
+  @override
+  String get startupFailedTitle => 'Nepavyko paleisti Omi';
+
+  @override
+  String get startupFailedMessage =>
+      'Kažkas nutiko ne taip, kai Omi buvo paleidžiama. Patikrink ryšį ir bandyk dar kartą.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Šioje Omi versijoje yra konfigūracijos problema. Tai nėra jūsų įrenginio problema. Susisiek su pagalba ir pridėk toliau pateiktą informaciją.';
+
+  @override
+  String get discardRecordingTitle => 'Atmesti įrašą?';
+
+  @override
+  String get discardRecordingMessage => 'Tavo balso pavyzdys dar neišsaugotas. Jei dabar išeisi, jis bus atmestas.';
+
+  @override
+  String get keepRecording => 'Tęsti įrašymą';
 }

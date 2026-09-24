@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Asennus epäonnistui. Laitteessasi on yhä nykyinen laiteohjelmisto.",
     "otaUpdatedMessage": "{deviceName} on päivitetty ja käynnistyy uudelleen itsestään.",
     "showPassword": "Näytä salasana",
-    "hidePassword": "Piilota salasana"
+    "hidePassword": "Piilota salasana",
+    "appNotFoundOrRemoved": "Tämä sovellus ei ole enää saatavilla",
+    "startupFailedTitle": "Omi ei voinut käynnistyä",
+    "startupFailedMessage": "Jokin meni pieleen Omin käynnistyessä. Tarkista yhteytesi ja yritä sitten uudelleen.",
+    "startupFailedConfigMessage": "Tässä Omin versiossa on määritysongelma. Kyse ei ole laitteestasi. Ota yhteyttä tukeen ja liitä alla olevat tiedot mukaan.",
+    "discardRecordingTitle": "Hylätäänkö nauhoitus?",
+    "discardRecordingMessage": "Ääninäytettäsi ei ole vielä tallennettu. Jos poistut nyt, se hylätään.",
+    "keepRecording": "Jatka nauhoitusta"
 }

@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Installation fehlgeschlagen. Dein Gerät läuft weiter mit der aktuellen Firmware.",
     "otaUpdatedMessage": "{deviceName} ist aktualisiert und startet von selbst neu.",
     "showPassword": "Passwort anzeigen",
-    "hidePassword": "Passwort ausblenden"
+    "hidePassword": "Passwort ausblenden",
+    "appNotFoundOrRemoved": "Diese App ist nicht mehr verfügbar",
+    "startupFailedTitle": "Omi konnte nicht starten",
+    "startupFailedMessage": "Beim Starten von Omi ist ein Fehler aufgetreten. Überprüfe deine Verbindung und versuche es dann erneut.",
+    "startupFailedConfigMessage": "Diese Version von Omi hat ein Konfigurationsproblem. Es liegt nicht an deinem Gerät. Kontaktiere den Support und gib die Details unten an.",
+    "discardRecordingTitle": "Aufnahme verwerfen?",
+    "discardRecordingMessage": "Deine Sprachprobe ist noch nicht gespeichert. Wenn du jetzt gehst, wird sie verworfen.",
+    "keepRecording": "Weiter aufnehmen"
 }

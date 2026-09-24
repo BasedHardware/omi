@@ -3399,5 +3399,12 @@
     "otaInstallFailed": "A telepítés nem sikerült. Az eszköz továbbra is a jelenlegi firmware-t használja.",
     "otaUpdatedMessage": "A(z) {deviceName} frissült, és magától újraindul.",
     "showPassword": "Jelszó megjelenítése",
-    "hidePassword": "Jelszó elrejtése"
+    "hidePassword": "Jelszó elrejtése",
+    "appNotFoundOrRemoved": "Ez az alkalmazás már nem érhető el",
+    "startupFailedTitle": "Az Omi nem tudott elindulni",
+    "startupFailedMessage": "Hiba történt az Omi indítása közben. Ellenőrizd a kapcsolatot, majd próbáld újra.",
+    "startupFailedConfigMessage": "Az Omi ezen verziójában konfigurációs probléma van. Ez nem az eszközöd hibája. Vedd fel a kapcsolatot az ügyfélszolgálattal, és add meg az alábbi részleteket.",
+    "discardRecordingTitle": "Elveti a felvételt?",
+    "discardRecordingMessage": "A hangmintád még nincs elmentve. Ha most kilépsz, törlődik.",
+    "keepRecording": "Felvétel folytatása"
 }

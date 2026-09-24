@@ -10321,4 +10321,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get hidePassword => 'Wachtwoord verbergen';
+
+  @override
+  String get appNotFoundOrRemoved => 'Deze app is niet meer beschikbaar';
+
+  @override
+  String get startupFailedTitle => 'Omi kon niet starten';
+
+  @override
+  String get startupFailedMessage =>
+      'Er is iets misgegaan tijdens het opstarten van Omi. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Deze build van Omi heeft een configuratieprobleem. Het ligt niet aan je apparaat. Neem contact op met support en voeg de onderstaande details toe.';
+
+  @override
+  String get discardRecordingTitle => 'Opname verwerpen?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Je spraakmonster is nog niet opgeslagen. Als je nu weggaat, wordt het verwijderd.';
+
+  @override
+  String get keepRecording => 'Verder opnemen';
 }

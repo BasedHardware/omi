@@ -10296,4 +10296,27 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get hidePassword => 'Piilota salasana';
+
+  @override
+  String get appNotFoundOrRemoved => 'Tämä sovellus ei ole enää saatavilla';
+
+  @override
+  String get startupFailedTitle => 'Omi ei voinut käynnistyä';
+
+  @override
+  String get startupFailedMessage =>
+      'Jokin meni pieleen Omin käynnistyessä. Tarkista yhteytesi ja yritä sitten uudelleen.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Tässä Omin versiossa on määritysongelma. Kyse ei ole laitteestasi. Ota yhteyttä tukeen ja liitä alla olevat tiedot mukaan.';
+
+  @override
+  String get discardRecordingTitle => 'Hylätäänkö nauhoitus?';
+
+  @override
+  String get discardRecordingMessage => 'Ääninäytettäsi ei ole vielä tallennettu. Jos poistut nyt, se hylätään.';
+
+  @override
+  String get keepRecording => 'Jatka nauhoitusta';
 }

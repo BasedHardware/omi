@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Instalēšana neizdevās. Ierīcē joprojām ir pašreizējā programmaparatūra.",
     "otaUpdatedMessage": "{deviceName} ir atjaunināta un pati restartēsies.",
     "showPassword": "Rādīt paroli",
-    "hidePassword": "Slēpt paroli"
+    "hidePassword": "Slēpt paroli",
+    "appNotFoundOrRemoved": "Šī lietotne vairs nav pieejama",
+    "startupFailedTitle": "Omi neizdevās startēt",
+    "startupFailedMessage": "Kaut kas nogāja greizi, kamēr Omi startēja. Pārbaudi savienojumu un mēģini vēlreiz.",
+    "startupFailedConfigMessage": "Šai Omi versijai ir konfigurācijas problēma. Tā nav tavas ierīces problēma. Sazinies ar atbalstu un pievieno tālāk norādīto informāciju.",
+    "discardRecordingTitle": "Atmest ierakstu?",
+    "discardRecordingMessage": "Tavs balss paraugs vēl nav saglabāts. Ja tagad pametīsi, tas tiks dzēsts.",
+    "keepRecording": "Turpināt ierakstīšanu"
 }

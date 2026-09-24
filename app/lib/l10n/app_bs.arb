@@ -10875,5 +10875,12 @@
     "otaInstallFailed": "Instalacija nije uspjela. Uređaj je i dalje na trenutnom firmveru.",
     "otaUpdatedMessage": "{deviceName} je ažuriran i sam će se ponovo pokrenuti.",
     "showPassword": "Prikaži lozinku",
-    "hidePassword": "Sakrij lozinku"
+    "hidePassword": "Sakrij lozinku",
+    "appNotFoundOrRemoved": "Ova aplikacija više nije dostupna",
+    "startupFailedTitle": "Omi se nije uspio pokrenuti",
+    "startupFailedMessage": "Nešto je pošlo po zlu tokom pokretanja Omija. Provjerite vezu, a zatim pokušajte ponovo.",
+    "startupFailedConfigMessage": "Ova verzija Omija ima problem s konfiguracijom. Nije riječ o problemu s vašim uređajem. Kontaktirajte podršku i uključite detalje ispod.",
+    "discardRecordingTitle": "Odbaciti snimanje?",
+    "discardRecordingMessage": "Vaš uzorak glasa još nije sačuvan. Ako sada izađete, bit će odbačen.",
+    "keepRecording": "Nastavi snimanje"
 }

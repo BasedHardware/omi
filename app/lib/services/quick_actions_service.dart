@@ -13,6 +13,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 const _kAddTask = 'add_task';
 const _kAskOmi = 'ask_omi';
@@ -89,11 +90,12 @@ class QuickActionsService {
       case _kAddTask:
         _navigateToTasksAndOpenSheet(navigator, context);
         break;
+      // D1: chat is a normal pushed page everywhere.
       case _kAskOmi:
-        navigator.push(MaterialPageRoute(builder: (_) => const ChatPage(isPivotBottom: false)));
+        routeToPage(context, const ChatPage(isPivotBottom: false));
         break;
       case _kVoiceMode:
-        navigator.push(MaterialPageRoute(builder: (_) => const ChatPage(isPivotBottom: false, autoStartVoice: true)));
+        routeToPage(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
         _toggleMute(context, mute: true);
@@ -103,15 +105,17 @@ class QuickActionsService {
         break;
       case _kConnectDevice:
         Provider.of<DeviceProvider>(context, listen: false).initiateConnection('QuickActions');
-        navigator.push(MaterialPageRoute(builder: (_) => const DeviceSettings()));
+        routeToPage(context, const DeviceSettings());
         break;
       case _kDeviceSettings:
-        navigator.push(MaterialPageRoute(builder: (_) => const DeviceSettings()));
+        routeToPage(context, const DeviceSettings());
         break;
     }
   }
 
   void _navigateToTasksAndOpenSheet(NavigatorState navigator, BuildContext context) {
+    // The Tasks tab lives in the Home underneath; show it before opening the sheet over it.
+    navigator.popUntil((route) => route.isFirst);
     Provider.of<HomeProvider>(context, listen: false).setIndex(2);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

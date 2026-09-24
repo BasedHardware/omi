@@ -10303,4 +10303,27 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get hidePassword => 'پاس ورڈ چھپائیں';
+
+  @override
+  String get appNotFoundOrRemoved => 'یہ ایپ اب دستیاب نہیں ہے';
+
+  @override
+  String get startupFailedTitle => 'Omi شروع نہ ہو سکا';
+
+  @override
+  String get startupFailedMessage => 'Omi شروع ہوتے وقت کچھ غلط ہو گیا۔ اپنا کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi کے اس بلڈ میں کنفیگریشن کا مسئلہ ہے۔ یہ آپ کے ڈیوائس کا مسئلہ نہیں ہے۔ سپورٹ سے رابطہ کریں اور نیچے دی گئی تفصیلات شامل کریں۔';
+
+  @override
+  String get discardRecordingTitle => 'ریکارڈنگ رد کریں؟';
+
+  @override
+  String get discardRecordingMessage =>
+      'آپ کا وائس سیمپل ابھی محفوظ نہیں ہوا۔ اگر آپ ابھی چلے گئے، تو یہ رد کر دیا جائے گا۔';
+
+  @override
+  String get keepRecording => 'ریکارڈنگ جاری رکھیں';
 }

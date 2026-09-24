@@ -3345,5 +3345,12 @@
     "otaInstallFailed": "Installationen mislykkedes. Din enhed kører stadig den nuværende firmware.",
     "otaUpdatedMessage": "{deviceName} er opdateret og genstarter af sig selv.",
     "showPassword": "Vis adgangskode",
-    "hidePassword": "Skjul adgangskode"
+    "hidePassword": "Skjul adgangskode",
+    "appNotFoundOrRemoved": "Denne app er ikke længere tilgængelig",
+    "startupFailedTitle": "Omi kunne ikke starte",
+    "startupFailedMessage": "Noget gik galt, mens Omi startede. Tjek din forbindelse, og prøv derefter igen.",
+    "startupFailedConfigMessage": "Denne udgave af Omi har et konfigurationsproblem. Det er ikke et problem med din enhed. Kontakt support, og medtag oplysningerne nedenfor.",
+    "discardRecordingTitle": "Kassér optagelsen?",
+    "discardRecordingMessage": "Din stemmeprøve er ikke gemt endnu. Hvis du forlader nu, bliver den kasseret.",
+    "keepRecording": "Fortsæt optagelse"
 }

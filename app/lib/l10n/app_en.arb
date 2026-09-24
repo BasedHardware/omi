@@ -12168,5 +12168,33 @@
     "hidePassword": "Hide password",
     "@hidePassword": {
         "description": "Tooltip on the password visibility toggle"
+    },
+    "appNotFoundOrRemoved": "This app is no longer available",
+    "@appNotFoundOrRemoved": {
+        "description": "Toast when a link opens an app that was removed from the store"
+    },
+    "startupFailedTitle": "Omi couldn’t start",
+    "@startupFailedTitle": {
+        "description": "Title of the screen shown when the app fails to launch"
+    },
+    "startupFailedMessage": "Something went wrong while Omi was starting. Check your connection, then try again.",
+    "@startupFailedMessage": {
+        "description": "Launch failure screen, runtime failure"
+    },
+    "startupFailedConfigMessage": "This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.",
+    "@startupFailedConfigMessage": {
+        "description": "Launch failure screen, rejected build configuration"
+    },
+    "discardRecordingTitle": "Discard Recording?",
+    "@discardRecordingTitle": {
+        "description": "Dialog title when leaving the voice-sample recording mid-recording"
+    },
+    "discardRecordingMessage": "Your voice sample isn’t saved yet. If you leave now, it will be discarded.",
+    "@discardRecordingMessage": {
+        "description": "Dialog message when leaving the voice-sample recording mid-recording"
+    },
+    "keepRecording": "Keep Recording",
+    "@keepRecording": {
+        "description": "Button that dismisses the discard-recording dialog and continues"
     }
 }

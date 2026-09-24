@@ -3338,5 +3338,12 @@
     "otaInstallFailed": "Instalasi gagal. Perangkat Anda masih memakai firmware saat ini.",
     "otaUpdatedMessage": "{deviceName} sudah diperbarui dan akan memulai ulang sendiri.",
     "showPassword": "Tampilkan kata sandi",
-    "hidePassword": "Sembunyikan kata sandi"
+    "hidePassword": "Sembunyikan kata sandi",
+    "appNotFoundOrRemoved": "Aplikasi ini tidak lagi tersedia",
+    "startupFailedTitle": "Omi tidak dapat memulai",
+    "startupFailedMessage": "Terjadi kesalahan saat Omi memulai. Periksa koneksi Anda, lalu coba lagi.",
+    "startupFailedConfigMessage": "Build Omi ini memiliki masalah konfigurasi. Ini bukan masalah pada perangkat Anda. Hubungi dukungan dan sertakan detail di bawah ini.",
+    "discardRecordingTitle": "Buang Rekaman?",
+    "discardRecordingMessage": "Sampel suara Anda belum tersimpan. Jika Anda keluar sekarang, itu akan dibuang.",
+    "keepRecording": "Lanjutkan Merekam"
 }

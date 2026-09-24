@@ -10296,4 +10296,27 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get hidePassword => 'পাসওয়ার্ড লুকান';
+
+  @override
+  String get appNotFoundOrRemoved => 'এই অ্যাপটি আর উপলব্ধ নেই';
+
+  @override
+  String get startupFailedTitle => 'Omi চালু হতে পারেনি';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi চালু হওয়ার সময় কিছু ভুল হয়েছে। আপনার সংযোগ পরীক্ষা করুন, তারপর আবার চেষ্টা করুন।';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi-এর এই বিল্ডে একটি কনফিগারেশন সমস্যা রয়েছে। এটি আপনার ডিভাইসের সমস্যা নয়। সাপোর্টে যোগাযোগ করুন এবং নিচের বিবরণ অন্তর্ভুক্ত করুন।';
+
+  @override
+  String get discardRecordingTitle => 'রেকর্ডিং বাতিল করবেন?';
+
+  @override
+  String get discardRecordingMessage => 'আপনার ভয়েস স্যাম্পল এখনও সেভ হয়নি। এখন চলে গেলে এটি বাতিল হয়ে যাবে।';
+
+  @override
+  String get keepRecording => 'রেকর্ডিং চালিয়ে যান';
 }

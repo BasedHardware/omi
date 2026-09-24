@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Installasjonen mislyktes. Enheten bruker fortsatt nåværende fastvare.",
     "otaUpdatedMessage": "{deviceName} er oppdatert og starter på nytt av seg selv.",
     "showPassword": "Vis passord",
-    "hidePassword": "Skjul passord"
+    "hidePassword": "Skjul passord",
+    "appNotFoundOrRemoved": "Denne appen er ikke lenger tilgjengelig",
+    "startupFailedTitle": "Omi kunne ikke starte",
+    "startupFailedMessage": "Noe gikk galt mens Omi startet. Sjekk tilkoblingen din, og prøv deretter igjen.",
+    "startupFailedConfigMessage": "Denne versjonen av Omi har et konfigurasjonsproblem. Det er ikke et problem med enheten din. Kontakt kundestøtte og inkluder detaljene nedenfor.",
+    "discardRecordingTitle": "Forkaste opptaket?",
+    "discardRecordingMessage": "Stemmeprøven din er ikke lagret ennå. Hvis du forlater nå, blir den forkastet.",
+    "keepRecording": "Fortsett opptak"
 }

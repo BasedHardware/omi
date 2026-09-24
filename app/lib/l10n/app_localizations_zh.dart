@@ -10097,4 +10097,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get hidePassword => '隐藏密码';
+
+  @override
+  String get appNotFoundOrRemoved => '此应用已不可用';
+
+  @override
+  String get startupFailedTitle => 'Omi 无法启动';
+
+  @override
+  String get startupFailedMessage => 'Omi 启动时出了点问题。请检查您的网络连接，然后重试。';
+
+  @override
+  String get startupFailedConfigMessage => '此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。';
+
+  @override
+  String get discardRecordingTitle => '放弃录音？';
+
+  @override
+  String get discardRecordingMessage => '您的语音样本尚未保存。如果现在离开，它将被丢弃。';
+
+  @override
+  String get keepRecording => '继续录音';
 }

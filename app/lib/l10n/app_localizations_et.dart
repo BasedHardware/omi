@@ -10289,4 +10289,27 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get hidePassword => 'Peida parool';
+
+  @override
+  String get appNotFoundOrRemoved => 'See rakendus ei ole enam saadaval';
+
+  @override
+  String get startupFailedTitle => 'Omi käivitamine ebaõnnestus';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi käivitamisel läks midagi valesti. Kontrolli oma ühendust ja proovi seejärel uuesti.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Selles Omi versioonis on seadistusprobleem. See ei ole sinu seadme viga. Võta ühendust toega ja lisa allolevad üksikasjad.';
+
+  @override
+  String get discardRecordingTitle => 'Kas loobuda salvestusest?';
+
+  @override
+  String get discardRecordingMessage => 'Sinu häälenäidist pole veel salvestatud. Kui lahkud nüüd, see kustutatakse.';
+
+  @override
+  String get keepRecording => 'Jätka salvestamist';
 }

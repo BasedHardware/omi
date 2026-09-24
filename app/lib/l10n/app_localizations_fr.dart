@@ -10383,4 +10383,28 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get hidePassword => 'Masquer le mot de passe';
+
+  @override
+  String get appNotFoundOrRemoved => 'Cette application n\'est plus disponible';
+
+  @override
+  String get startupFailedTitle => 'Omi n\'a pas pu démarrer';
+
+  @override
+  String get startupFailedMessage =>
+      'Une erreur s\'est produite pendant le démarrage d\'Omi. Vérifiez votre connexion, puis réessayez.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Cette version d\'Omi présente un problème de configuration. Ce n\'est pas un problème lié à votre appareil. Contactez l\'assistance et indiquez les détails ci-dessous.';
+
+  @override
+  String get discardRecordingTitle => 'Ignorer l\'enregistrement ?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Votre échantillon vocal n\'est pas encore enregistré. Si vous quittez maintenant, il sera supprimé.';
+
+  @override
+  String get keepRecording => 'Continuer l\'enregistrement';
 }

@@ -10305,4 +10305,27 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get hidePassword => 'Şifreyi gizle';
+
+  @override
+  String get appNotFoundOrRemoved => 'Bu uygulama artık kullanılamıyor';
+
+  @override
+  String get startupFailedTitle => 'Omi başlatılamadı';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi başlatılırken bir sorun oluştu. Bağlantınızı kontrol edin, ardından tekrar deneyin.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi\'nin bu sürümünde bir yapılandırma sorunu var. Bu, cihazınızla ilgili bir sorun değil. Destekle iletişime geçin ve aşağıdaki ayrıntıları ekleyin.';
+
+  @override
+  String get discardRecordingTitle => 'Kayıt silinsin mi?';
+
+  @override
+  String get discardRecordingMessage => 'Ses örneğiniz henüz kaydedilmedi. Şimdi çıkarsanız silinecektir.';
+
+  @override
+  String get keepRecording => 'Kayda Devam Et';
 }

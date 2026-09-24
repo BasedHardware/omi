@@ -10301,4 +10301,28 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get hidePassword => 'पासवर्ड लपवा';
+
+  @override
+  String get appNotFoundOrRemoved => 'हे अ‍ॅप आता उपलब्ध नाही';
+
+  @override
+  String get startupFailedTitle => 'Omi सुरू होऊ शकला नाही';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi सुरू होत असताना काहीतरी चूक झाली. तुमचे कनेक्शन तपासा, नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi च्या या बिल्डमध्ये कॉन्फिगरेशन समस्या आहे. ही तुमच्या डिव्हाइसची समस्या नाही. सपोर्टशी संपर्क साधा आणि खालील तपशील समाविष्ट करा.';
+
+  @override
+  String get discardRecordingTitle => 'रेकॉर्डिंग टाकून द्यायची?';
+
+  @override
+  String get discardRecordingMessage =>
+      'तुमचा व्हॉइस सॅम्पल अजून सेव्ह झालेला नाही. आता बाहेर पडल्यास तो टाकून दिला जाईल.';
+
+  @override
+  String get keepRecording => 'रेकॉर्डिंग सुरू ठेवा';
 }

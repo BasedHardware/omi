@@ -10875,5 +10875,12 @@
     "otaInstallFailed": "انسٹال ناکام رہا۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے۔",
     "otaUpdatedMessage": "{deviceName} اپ ڈیٹ ہو گیا ہے اور خود ہی دوبارہ شروع ہو جائے گا۔",
     "showPassword": "پاس ورڈ دکھائیں",
-    "hidePassword": "پاس ورڈ چھپائیں"
+    "hidePassword": "پاس ورڈ چھپائیں",
+    "appNotFoundOrRemoved": "یہ ایپ اب دستیاب نہیں ہے",
+    "startupFailedTitle": "Omi شروع نہ ہو سکا",
+    "startupFailedMessage": "Omi شروع ہوتے وقت کچھ غلط ہو گیا۔ اپنا کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "startupFailedConfigMessage": "Omi کے اس بلڈ میں کنفیگریشن کا مسئلہ ہے۔ یہ آپ کے ڈیوائس کا مسئلہ نہیں ہے۔ سپورٹ سے رابطہ کریں اور نیچے دی گئی تفصیلات شامل کریں۔",
+    "discardRecordingTitle": "ریکارڈنگ رد کریں؟",
+    "discardRecordingMessage": "آپ کا وائس سیمپل ابھی محفوظ نہیں ہوا۔ اگر آپ ابھی چلے گئے، تو یہ رد کر دیا جائے گا۔",
+    "keepRecording": "ریکارڈنگ جاری رکھیں"
 }

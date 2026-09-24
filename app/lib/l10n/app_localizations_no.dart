@@ -10291,4 +10291,27 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get hidePassword => 'Skjul passord';
+
+  @override
+  String get appNotFoundOrRemoved => 'Denne appen er ikke lenger tilgjengelig';
+
+  @override
+  String get startupFailedTitle => 'Omi kunne ikke starte';
+
+  @override
+  String get startupFailedMessage => 'Noe gikk galt mens Omi startet. Sjekk tilkoblingen din, og prøv deretter igjen.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Denne versjonen av Omi har et konfigurasjonsproblem. Det er ikke et problem med enheten din. Kontakt kundestøtte og inkluder detaljene nedenfor.';
+
+  @override
+  String get discardRecordingTitle => 'Forkaste opptaket?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Stemmeprøven din er ikke lagret ennå. Hvis du forlater nå, blir den forkastet.';
+
+  @override
+  String get keepRecording => 'Fortsett opptak';
 }

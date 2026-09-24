@@ -3303,5 +3303,12 @@
     "otaInstallFailed": "Installazione non riuscita. Il dispositivo usa ancora il firmware attuale.",
     "otaUpdatedMessage": "{deviceName} è aggiornato e si riavvierà da solo.",
     "showPassword": "Mostra password",
-    "hidePassword": "Nascondi password"
+    "hidePassword": "Nascondi password",
+    "appNotFoundOrRemoved": "Questa app non è più disponibile",
+    "startupFailedTitle": "Omi non è riuscita ad avviarsi",
+    "startupFailedMessage": "Si è verificato un problema durante l'avvio di Omi. Controlla la tua connessione, poi riprova.",
+    "startupFailedConfigMessage": "Questa build di Omi presenta un problema di configurazione. Non è un problema del tuo dispositivo. Contatta l'assistenza e includi i dettagli qui sotto.",
+    "discardRecordingTitle": "Scartare la registrazione?",
+    "discardRecordingMessage": "Il tuo campione vocale non è ancora stato salvato. Se esci ora, verrà scartato.",
+    "keepRecording": "Continua a registrare"
 }
