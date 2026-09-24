@@ -23,6 +23,7 @@
   report of conversations: one section per day, printable, no scripts.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
+* [`action_items_csv.md`](action_items_csv.md) — convert an action-item JSON export to CSV for spreadsheets.
   JSON export to CSV for spreadsheets.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
