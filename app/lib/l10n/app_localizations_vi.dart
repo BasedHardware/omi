@@ -135,7 +135,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createPersonHint => 'Tạo một người mới và huấn luyện Omi để nhận biết giọng nói của họ!';
 
   @override
-  String get speechProfile => 'Hồ sơ Giọng nói';
+  String get speechProfile => 'Hồ sơ giọng nói';
 
   @override
   String sampleNumber(int number) {
@@ -3817,7 +3817,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get signOutQuestion => 'Đăng xuất?';
 
   @override
-  String get signOutConfirmation => 'Bạn có chắc chắn muốn đăng xuất?';
+  String get signOutConfirmation =>
+      'Bạn sẽ cần đăng nhập lại để xem các cuộc trò chuyện. Thiết bị đã ghép nối và tùy chọn ứng dụng vẫn được giữ trên điện thoại này.';
 
   @override
   String get customVocabularyHeader => 'TỪ VỰNG TÙY CHỈNH';
@@ -8948,10 +8949,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get planUpdate => 'Cập nhật gói';
 
   @override
-  String get planDeprecationMessage =>
-      'Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá \$49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.';
-
-  @override
   String get upgradeYourPlan => 'Nâng cấp gói của bạn';
 
   @override
@@ -10158,4 +10155,198 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Các thay đổi chưa lưu của bạn sẽ bị mất.';
+
+  @override
+  String get couldNotLoadCheckout => 'Không thể tải trang thanh toán. Hãy kiểm tra kết nối và thử lại.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Đã đạt giới hạn cuộc gọi miễn phí hằng tháng. Giới hạn sẽ đặt lại vào tháng sau.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Không thể tải lịch sử nhập';
+
+  @override
+  String get phoneCallButton => 'Gọi';
+
+  @override
+  String get searchContacts => 'Tìm danh bạ';
+
+  @override
+  String get phoneContactsAccessTitle => 'Cho phép truy cập danh bạ';
+
+  @override
+  String get phoneSelectCountryTitle => 'Chọn quốc gia';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Chưa có số đã xác minh';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Xác minh số của bạn để gọi qua Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Không thể xóa số này';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Quên thiết bị?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi sẽ ngừng kết nối với thiết bị này. Để dùng lại, bạn sẽ phải ghép nối lại.';
+
+  @override
+  String get deviceForgottenMessage => 'Đã quên thiết bị';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Hủy ghép nối thiết bị?';
+
+  @override
+  String get rollBack => 'Khôi phục';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Chẩn đoán thiết bị Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Thất bại';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'kết nối lại sau $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}ng';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration trước';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Theo ngôn ngữ chính của bạn';
+
+  @override
+  String get creatorPayouts => 'Thanh toán cho nhà sáng tạo';
+
+  @override
+  String get sttLanguageOverride => 'Ghi đè';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Dùng ngôn ngữ chính';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Nhà cung cấp này không hỗ trợ $language, nên dùng $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM phát hiện: $ram GB. Tối thiểu khuyến nghị: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Mẫu máy phát hiện: $model (cũ hơn iPhone XS). Nhận dạng trên thiết bị có thể chậm hơn.';
+  }
+
+  @override
+  String get copyLogs => 'Sao chép nhật ký';
+
+  @override
+  String get openProviderDocs => 'Mở tài liệu';
+
+  @override
+  String get getApiKey => 'Lấy khóa API';
+
+  @override
+  String get showApiKey => 'Hiện khóa API';
+
+  @override
+  String get hideApiKey => 'Ẩn khóa API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Xóa $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count từ',
+      one: '1 từ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Còn $remaining/$limit cuộc gọi miễn phí trong tháng này';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Còn $remaining/$limit cuộc gọi miễn phí trong tháng này · tối đa $minutes phút mỗi cuộc';
+  }
+
+  @override
+  String get appCreators => 'Nhà sáng tạo ứng dụng';
+
+  @override
+  String get homeScreen => 'Màn hình chính';
+
+  @override
+  String get phoneCalls => 'Cuộc gọi điện thoại';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Lọc giọng nói phía máy chủ để giảm chi phí chuyển giọng nói thành văn bản';
+
+  @override
+  String get flashCustomFirmware => 'Cài firmware tùy chỉnh';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Cài các bản firmware tùy chỉnh';
+
+  @override
+  String get selectFirmwareZip => 'Chọn tệp ZIP firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Firmware tùy chỉnh có thể làm hỏng thiết bị. Hãy chắc chắn đây là bản firmware Omi hợp lệ và không ngắt kết nối trong khi cập nhật.';
+
+  @override
+  String get firmwareFlashed => 'Đã cài firmware';
+
+  @override
+  String get deviceWillRestart => 'Thiết bị sẽ khởi động lại.';
+
+  @override
+  String get exportFailedTryAgain => 'Xuất dữ liệu thất bại. Vui lòng thử lại.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Thiết bị: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Giữ gói đăng ký';
+
+  @override
+  String get couldNotLoadPage => 'Không thể tải trang này. Hãy kiểm tra kết nối và thử lại.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Bước $current/$total';
+  }
 }

@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "تقریری پروفائل",
+    "speechProfile": "وائس پروفائل",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "کیا آپ واقعی سائن آؤٹ کرنا چاہتے ہیں؟",
+    "signOutConfirmation": "اپنی گفتگو دیکھنے کے لیے آپ کو دوبارہ سائن ان کرنا ہوگا۔ جوڑی گئی ڈیوائس اور ایپ کی ترجیحات اسی فون پر رہیں گی۔",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز $49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "اپنا پلان اپ گریڈ کریں",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "رد کریں",
     "keepEditing": "ترمیم جاری رکھیں",
     "discardChangesTitle": "تبدیلیاں رد کریں؟",
-    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔"
+    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔",
+    "couldNotLoadCheckout": "چیک آؤٹ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "phoneFreeCallLimitReached": "ماہانہ مفت کال کی حد پوری ہو گئی۔ یہ اگلے مہینے ری سیٹ ہو گی۔",
+    "couldNotLoadImportHistory": "امپورٹ کی تاریخ لوڈ نہیں ہو سکی",
+    "phoneCallButton": "کال کریں",
+    "searchContacts": "رابطے تلاش کریں",
+    "phoneContactsAccessTitle": "رابطوں تک رسائی کی اجازت دیں",
+    "phoneSelectCountryTitle": "ملک منتخب کریں",
+    "phoneNoVerifiedNumbersTitle": "کوئی تصدیق شدہ نمبر نہیں",
+    "phoneNoVerifiedNumbersMessage": "Omi کے ذریعے کال کرنے کے لیے اپنا نمبر تصدیق کریں۔",
+    "phoneDeleteNumberFailed": "یہ نمبر حذف نہیں ہو سکا",
+    "forgetDeviceConfirmTitle": "ڈیوائس بھول جائیں؟",
+    "forgetDeviceConfirmMessage": "Omi اس ڈیوائس سے جڑنا بند کر دے گا۔ اسے دوبارہ استعمال کرنے کے لیے آپ کو اسے دوبارہ پیئر کرنا ہوگا۔",
+    "deviceForgottenMessage": "ڈیوائس بھلا دی گئی",
+    "unpairDeviceConfirmTitle": "ڈیوائس کو ان پیئر کریں؟",
+    "rollBack": "واپس لائیں",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi ڈیوائس کی تشخیص",
+    "diagnosticsFailBadge": "ناکام",
+    "diagnosticsReconnectedIn": "{duration} میں دوبارہ منسلک",
+    "timeCompactDays": "{count}د",
+    "durationAgo": "{duration} پہلے",
+    "sttLanguageFollowsPrimary": "آپ کی بنیادی زبان کی پیروی کرتا ہے",
+    "creatorPayouts": "تخلیق کاروں کی ادائیگیاں",
+    "sttLanguageOverride": "تبدیل کریں",
+    "sttUsePrimaryLanguage": "بنیادی زبان استعمال کریں",
+    "sttPrimaryLanguageUnsupported": "یہ فراہم کنندہ {language} کو سپورٹ نہیں کرتا، اس لیے {fallback} استعمال کرتا ہے۔",
+    "deviceRamBelowMinimum": "شناخت شدہ RAM: {ram} GB۔ تجویز کردہ کم از کم: 4 GB۔",
+    "olderIphoneModelDetected": "شناخت شدہ ماڈل: {model} (iPhone XS سے پرانا)۔ ڈیوائس پر شناخت سست ہو سکتی ہے۔",
+    "copyLogs": "لاگز کاپی کریں",
+    "openProviderDocs": "دستاویزات کھولیں",
+    "getApiKey": "API کلید حاصل کریں",
+    "showApiKey": "API کلید دکھائیں",
+    "hideApiKey": "API کلید چھپائیں",
+    "removeVocabularyWord": "{word} ہٹائیں",
+    "vocabularyWordCount": "{count, plural, =1{1 لفظ} other{{count} الفاظ}}",
+    "phoneFreeCallsRemaining": "اس مہینے {remaining} مفت کالز باقی ہیں ({limit} میں سے)",
+    "phoneFreeCallsRemainingWithMax": "اس مہینے {remaining} مفت کالز باقی ہیں ({limit} میں سے) · ہر ایک {minutes} منٹ تک",
+    "appCreators": "ایپ تخلیق کار",
+    "homeScreen": "ہوم اسکرین",
+    "phoneCalls": "فون کالز",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "اسپیچ ٹو ٹیکسٹ کے اخراجات کم کرنے کے لیے سرور پر آواز کا فلٹر",
+    "flashCustomFirmware": "حسب ضرورت فرم ویئر فلیش کریں",
+    "flashCustomFirmwareDescription": "حسب ضرورت فرم ویئر بلڈز فلیش کریں",
+    "selectFirmwareZip": "فرم ویئر ZIP فائل منتخب کریں",
+    "customFirmwareWarning": "حسب ضرورت فرم ویئر آپ کی ڈیوائس کو ناکارہ بنا سکتا ہے۔ یقینی بنائیں کہ یہ Omi کا درست فرم ویئر بلڈ ہے، اور اپ ڈیٹ کے دوران کنکشن منقطع نہ کریں۔",
+    "firmwareFlashed": "فرم ویئر فلیش ہو گیا",
+    "deviceWillRestart": "آپ کی ڈیوائس دوبارہ شروع ہوگی۔",
+    "exportFailedTryAgain": "ایکسپورٹ ناکام ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "firmwareFlashTarget": "ڈیوائس: {deviceName}",
+    "keepSubscription": "سبسکرپشن برقرار رکھیں",
+    "couldNotLoadPage": "یہ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "leaveFlowStepOf": "مرحلہ {current} از {total}"
 }

@@ -171,7 +171,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Speech Profile",
+    "speechProfile": "Voice Profile",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4336,7 +4336,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Are you sure you want to sign out?",
+    "signOutConfirmation": "You'll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10626,10 +10626,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "Your Unlimited plan is being retired. Switch to the Operator plan — same great features at $49/mo. Your current plan will continue to work in the meantime.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "Upgrade Your Plan",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -11982,5 +11978,198 @@
     "discardChangesMessage": "Your unsaved changes will be lost.",
     "@discardChangesMessage": {
         "description": "Message of the dialog shown when leaving an editor with unsaved changes"
+    },
+    "couldNotLoadCheckout": "Couldn't load the checkout page. Check your connection and try again.",
+    "phoneFreeCallLimitReached": "Monthly free call limit reached. It resets next month.",
+    "couldNotLoadImportHistory": "Couldn't load import history",
+    "phoneCallButton": "Call",
+    "searchContacts": "Search contacts",
+    "phoneContactsAccessTitle": "Allow Contacts Access",
+    "phoneSelectCountryTitle": "Select Country",
+    "phoneNoVerifiedNumbersTitle": "No Verified Numbers",
+    "phoneNoVerifiedNumbersMessage": "Verify your number to make calls through Omi.",
+    "phoneDeleteNumberFailed": "Couldn't delete this number",
+    "forgetDeviceConfirmTitle": "Forget Device?",
+    "@forgetDeviceConfirmTitle": {
+        "description": "Title of the confirmation before forgetting a paired device"
+    },
+    "forgetDeviceConfirmMessage": "Omi will stop connecting to this device. To use it again, you'll have to pair it again.",
+    "@forgetDeviceConfirmMessage": {
+        "description": "Consequence of forgetting a paired device"
+    },
+    "deviceForgottenMessage": "Device forgotten",
+    "@deviceForgottenMessage": {
+        "description": "Toast after the device was forgotten"
+    },
+    "unpairDeviceConfirmTitle": "Unpair Device?",
+    "@unpairDeviceConfirmTitle": {
+        "description": "Title of the confirmation before unpairing a Limitless device"
+    },
+    "rollBack": "Roll Back",
+    "@rollBack": {
+        "description": "Confirm button: roll the firmware back to the stable version"
+    },
+    "dataRateKbps": "{rate} kbps",
+    "@dataRateKbps": {
+        "description": "A data rate in kilobits per second",
+        "placeholders": {
+            "rate": {
+                "type": "String"
+            }
+        }
+    },
+    "diagnosticsExportTitle": "Omi Device Diagnostics",
+    "@diagnosticsExportTitle": {
+        "description": "Title and subject of the shared device diagnostics file"
+    },
+    "diagnosticsFailBadge": "Failed",
+    "@diagnosticsFailBadge": {
+        "description": "Badge on a device diagnostics event where the device failed to connect"
+    },
+    "diagnosticsReconnectedIn": "reconnected in {duration}",
+    "@diagnosticsReconnectedIn": {
+        "description": "Detail fragment in a disconnect event row: how long reconnecting took (joined with ' · ')",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "timeCompactDays": "{count}d",
+    "@timeCompactDays": {
+        "description": "Compact duration in days (chart axis)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "durationAgo": "{duration} ago",
+    "@durationAgo": {
+        "description": "A compact duration in the past, e.g. '2h 5m ago'",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "sttLanguageFollowsPrimary": "Follows your primary language",
+    "@sttLanguageFollowsPrimary": {
+        "description": "Subtitle of the Custom STT language row when it uses the app's primary language"
+    },
+    "creatorPayouts": "Creator Payouts",
+    "sttLanguageOverride": "Override",
+    "@sttLanguageOverride": {
+        "description": "Button: choose a Custom STT language different from the primary language"
+    },
+    "sttUsePrimaryLanguage": "Use Primary Language",
+    "@sttUsePrimaryLanguage": {
+        "description": "Button: drop the Custom STT language override"
+    },
+    "sttPrimaryLanguageUnsupported": "{language} isn't supported by this provider, so it uses {fallback}.",
+    "@sttPrimaryLanguageUnsupported": {
+        "placeholders": {
+            "language": {
+                "type": "String"
+            },
+            "fallback": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceRamBelowMinimum": "Detected RAM: {ram} GB. Minimum recommended: 4 GB.",
+    "@deviceRamBelowMinimum": {
+        "placeholders": {
+            "ram": {
+                "type": "String"
+            }
+        }
+    },
+    "olderIphoneModelDetected": "Detected model: {model} (older than iPhone XS). On-device recognition may be slower.",
+    "@olderIphoneModelDetected": {
+        "placeholders": {
+            "model": {
+                "type": "String"
+            }
+        }
+    },
+    "copyLogs": "Copy Logs",
+    "openProviderDocs": "Open Documentation",
+    "getApiKey": "Get API Key",
+    "showApiKey": "Show API Key",
+    "hideApiKey": "Hide API Key",
+    "removeVocabularyWord": "Remove {word}",
+    "@removeVocabularyWord": {
+        "placeholders": {
+            "word": {
+                "type": "String"
+            }
+        }
+    },
+    "vocabularyWordCount": "{count, plural, =1{1 word} other{{count} words}}",
+    "@vocabularyWordCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "phoneFreeCallsRemaining": "{remaining} of {limit} free calls remaining this month",
+    "@phoneFreeCallsRemaining": {
+        "placeholders": {
+            "remaining": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            }
+        }
+    },
+    "phoneFreeCallsRemainingWithMax": "{remaining} of {limit} free calls remaining this month · up to {minutes} min each",
+    "@phoneFreeCallsRemainingWithMax": {
+        "placeholders": {
+            "remaining": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            },
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "appCreators": "App Creators",
+    "homeScreen": "Home Screen",
+    "phoneCalls": "Phone Calls",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Server-side voice gating to reduce speech-to-text costs",
+    "flashCustomFirmware": "Flash Custom Firmware",
+    "flashCustomFirmwareDescription": "Flash custom firmware builds",
+    "selectFirmwareZip": "Select firmware ZIP file",
+    "customFirmwareWarning": "Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.",
+    "firmwareFlashed": "Firmware flashed",
+    "deviceWillRestart": "Your device will restart.",
+    "exportFailedTryAgain": "Export failed. Please try again.",
+    "firmwareFlashTarget": "Device: {deviceName}",
+    "@firmwareFlashTarget": {
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "keepSubscription": "Keep Subscription",
+    "couldNotLoadPage": "Couldn't load this page. Check your connection and try again.",
+    "leaveFlowStepOf": "Step {current} of {total}",
+    "@leaveFlowStepOf": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
     }
 }

@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "বক্তৃতা প্রোফাইল",
+    "speechProfile": "ভয়েস প্রোফাইল",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "আপনি কি সাইন আউট করতে চান?",
+    "signOutConfirmation": "কথোপকথন দেখতে আবার সাইন ইন করতে হবে। আপনার পেয়ার করা ডিভাইস ও অ্যাপের পছন্দসমূহ এই ফোনে থেকে যাবে।",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "আপনার Unlimited প্ল্যান বন্ধ হচ্ছে। Operator প্ল্যানে স্যুইচ করুন — একই দুর্দান্ত ফিচার $49/মাসে। আপনার বর্তমান প্ল্যান এর মধ্যে কাজ করতে থাকবে।",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "আপনার প্ল্যান আপগ্রেড করুন",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "বাতিল করুন",
     "keepEditing": "সম্পাদনা চালিয়ে যান",
     "discardChangesTitle": "পরিবর্তনগুলি বাতিল করবেন?",
-    "discardChangesMessage": "আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।"
+    "discardChangesMessage": "আপনার অসংরক্ষিত পরিবর্তনগুলি হারিয়ে যাবে।",
+    "couldNotLoadCheckout": "চেকআউট পৃষ্ঠা লোড করা যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+    "phoneFreeCallLimitReached": "মাসিক বিনামূল্যের কলের সীমা পূর্ণ হয়েছে। এটি পরের মাসে রিসেট হবে।",
+    "couldNotLoadImportHistory": "ইমপোর্টের ইতিহাস লোড করা যায়নি",
+    "phoneCallButton": "কল করুন",
+    "searchContacts": "পরিচিতি খুঁজুন",
+    "phoneContactsAccessTitle": "পরিচিতিতে অ্যাক্সেস দিন",
+    "phoneSelectCountryTitle": "দেশ নির্বাচন করুন",
+    "phoneNoVerifiedNumbersTitle": "কোনো যাচাইকৃত নম্বর নেই",
+    "phoneNoVerifiedNumbersMessage": "Omi-এর মাধ্যমে কল করতে আপনার নম্বর যাচাই করুন।",
+    "phoneDeleteNumberFailed": "এই নম্বরটি মুছে ফেলা যায়নি",
+    "forgetDeviceConfirmTitle": "ডিভাইস ভুলে যাবেন?",
+    "forgetDeviceConfirmMessage": "Omi এই ডিভাইসের সাথে আর সংযোগ করবে না। আবার ব্যবহার করতে, আপনাকে এটি আবার পেয়ার করতে হবে।",
+    "deviceForgottenMessage": "ডিভাইস ভুলে যাওয়া হয়েছে",
+    "unpairDeviceConfirmTitle": "ডিভাইস আনপেয়ার করবেন?",
+    "rollBack": "রোল ব্যাক",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi ডিভাইস ডায়াগনস্টিক্স",
+    "diagnosticsFailBadge": "ব্যর্থ",
+    "diagnosticsReconnectedIn": "{duration}-এ পুনরায় সংযুক্ত",
+    "timeCompactDays": "{count}দি",
+    "durationAgo": "{duration} আগে",
+    "sttLanguageFollowsPrimary": "আপনার প্রাথমিক ভাষা অনুসরণ করে",
+    "creatorPayouts": "নির্মাতা পেআউট",
+    "sttLanguageOverride": "ওভাররাইড",
+    "sttUsePrimaryLanguage": "প্রাথমিক ভাষা ব্যবহার করুন",
+    "sttPrimaryLanguageUnsupported": "এই প্রদানকারী {language} সমর্থন করে না, তাই {fallback} ব্যবহার করে।",
+    "deviceRamBelowMinimum": "শনাক্ত RAM: {ram} GB। প্রস্তাবিত সর্বনিম্ন: 4 GB।",
+    "olderIphoneModelDetected": "শনাক্ত মডেল: {model} (iPhone XS-এর চেয়ে পুরনো)। ডিভাইসে শনাক্তকরণ ধীর হতে পারে।",
+    "copyLogs": "লগ কপি করুন",
+    "openProviderDocs": "ডকুমেন্টেশন খুলুন",
+    "getApiKey": "API কী নিন",
+    "showApiKey": "API কী দেখান",
+    "hideApiKey": "API কী লুকান",
+    "removeVocabularyWord": "{word} সরান",
+    "vocabularyWordCount": "{count, plural, =1{1টি শব্দ} other{{count}টি শব্দ}}",
+    "phoneFreeCallsRemaining": "এই মাসে {remaining}টি বিনামূল্যের কল বাকি ({limit}টির মধ্যে)",
+    "phoneFreeCallsRemainingWithMax": "এই মাসে {remaining}টি বিনামূল্যের কল বাকি ({limit}টির মধ্যে) · প্রতিটি সর্বোচ্চ {minutes} মিনিট",
+    "appCreators": "অ্যাপ নির্মাতা",
+    "homeScreen": "হোম স্ক্রিন",
+    "phoneCalls": "ফোন কল",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "স্পিচ-টু-টেক্সটের খরচ কমাতে সার্ভারে ভয়েস ফিল্টার",
+    "flashCustomFirmware": "কাস্টম ফার্মওয়্যার ফ্ল্যাশ করুন",
+    "flashCustomFirmwareDescription": "কাস্টম ফার্মওয়্যার বিল্ড ফ্ল্যাশ করুন",
+    "selectFirmwareZip": "ফার্মওয়্যার ZIP ফাইল বেছে নিন",
+    "customFirmwareWarning": "কাস্টম ফার্মওয়্যার আপনার ডিভাইস অচল করে দিতে পারে। নিশ্চিত করুন এটি একটি বৈধ Omi ফার্মওয়্যার বিল্ড, এবং আপডেটের সময় সংযোগ বিচ্ছিন্ন করবেন না।",
+    "firmwareFlashed": "ফার্মওয়্যার ফ্ল্যাশ হয়েছে",
+    "deviceWillRestart": "আপনার ডিভাইস রিস্টার্ট হবে।",
+    "exportFailedTryAgain": "এক্সপোর্ট ব্যর্থ হয়েছে। আবার চেষ্টা করুন।",
+    "firmwareFlashTarget": "ডিভাইস: {deviceName}",
+    "keepSubscription": "সাবস্ক্রিপশন রাখুন",
+    "couldNotLoadPage": "এই পৃষ্ঠাটি লোড করা যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+    "leaveFlowStepOf": "ধাপ {current}/{total}"
 }

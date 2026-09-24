@@ -135,7 +135,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createPersonHint => 'Maak een nieuwe persoon aan en train Omi om hun stem te herkennen!';
 
   @override
-  String get speechProfile => 'Spraakprofiel';
+  String get speechProfile => 'Stemprofiel';
 
   @override
   String sampleNumber(int number) {
@@ -3823,7 +3823,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get signOutQuestion => 'Uitloggen?';
 
   @override
-  String get signOutConfirmation => 'Weet je zeker dat je wilt uitloggen?';
+  String get signOutConfirmation =>
+      'Je moet opnieuw inloggen om je gesprekken te zien. Je gekoppelde apparaat en app-voorkeuren blijven op deze telefoon.';
 
   @override
   String get customVocabularyHeader => 'AANGEPASTE WOORDENSCHAT';
@@ -8973,10 +8974,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get planUpdate => 'Abonnement bijwerken';
 
   @override
-  String get planDeprecationMessage =>
-      'Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor \$49/maand. Uw huidige abonnement blijft in de tussentijd werken.';
-
-  @override
   String get upgradeYourPlan => 'Upgrade je abonnement';
 
   @override
@@ -10190,4 +10187,200 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Je niet-opgeslagen wijzigingen gaan verloren.';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'De betaalpagina kon niet worden geladen. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Maandelijkse limiet voor gratis gesprekken bereikt. Deze wordt volgende maand gereset.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Importgeschiedenis kon niet worden geladen';
+
+  @override
+  String get phoneCallButton => 'Bellen';
+
+  @override
+  String get searchContacts => 'Contacten zoeken';
+
+  @override
+  String get phoneContactsAccessTitle => 'Toegang tot contacten toestaan';
+
+  @override
+  String get phoneSelectCountryTitle => 'Land kiezen';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Geen geverifieerde nummers';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verifieer je nummer om via Omi te bellen.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Dit nummer kon niet worden verwijderd';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Apparaat vergeten?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi maakt geen verbinding meer met dit apparaat. Om het opnieuw te gebruiken, moet je het opnieuw koppelen.';
+
+  @override
+  String get deviceForgottenMessage => 'Apparaat vergeten';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Apparaat ontkoppelen?';
+
+  @override
+  String get rollBack => 'Terugzetten';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi-apparaatdiagnostiek';
+
+  @override
+  String get diagnosticsFailBadge => 'Mislukt';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'opnieuw verbonden na $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration geleden';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Volgt je primaire taal';
+
+  @override
+  String get creatorPayouts => 'Uitbetalingen voor makers';
+
+  @override
+  String get sttLanguageOverride => 'Overschrijven';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Primaire taal gebruiken';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Deze provider ondersteunt $language niet en gebruikt daarom $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Gedetecteerd RAM: $ram GB. Aanbevolen minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Gedetecteerd model: $model (ouder dan iPhone XS). Herkenning op het apparaat kan trager zijn.';
+  }
+
+  @override
+  String get copyLogs => 'Logs kopiëren';
+
+  @override
+  String get openProviderDocs => 'Documentatie openen';
+
+  @override
+  String get getApiKey => 'API-sleutel ophalen';
+
+  @override
+  String get showApiKey => 'API-sleutel tonen';
+
+  @override
+  String get hideApiKey => 'API-sleutel verbergen';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word verwijderen';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count woorden',
+      one: '1 woord',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Nog $remaining van $limit gratis gesprekken deze maand';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Nog $remaining van $limit gratis gesprekken deze maand · tot $minutes min per gesprek';
+  }
+
+  @override
+  String get appCreators => 'App-makers';
+
+  @override
+  String get homeScreen => 'Startscherm';
+
+  @override
+  String get phoneCalls => 'Telefoongesprekken';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Stemfilter op de server om de kosten van spraak-naar-tekst te verlagen';
+
+  @override
+  String get flashCustomFirmware => 'Aangepaste firmware flashen';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Aangepaste firmwarebuilds flashen';
+
+  @override
+  String get selectFirmwareZip => 'Selecteer het firmware-ZIP-bestand';
+
+  @override
+  String get customFirmwareWarning =>
+      'Aangepaste firmware kan je apparaat onbruikbaar maken. Controleer of dit een geldige Omi-firmwarebuild is en verbreek de verbinding niet tijdens de update.';
+
+  @override
+  String get firmwareFlashed => 'Firmware geflasht';
+
+  @override
+  String get deviceWillRestart => 'Je apparaat wordt opnieuw opgestart.';
+
+  @override
+  String get exportFailedTryAgain => 'Exporteren mislukt. Probeer het opnieuw.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Apparaat: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Abonnement behouden';
+
+  @override
+  String get couldNotLoadPage =>
+      'Deze pagina kon niet worden geladen. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Stap $current van $total';
+  }
 }

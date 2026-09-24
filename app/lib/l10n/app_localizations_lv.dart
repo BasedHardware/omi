@@ -135,7 +135,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get createPersonHint => 'Izveidojiet jaunu personu un apmāciet Omi atpazīt arī viņu runu!';
 
   @override
-  String get speechProfile => 'Runas Profils';
+  String get speechProfile => 'Balss profils';
 
   @override
   String sampleNumber(int number) {
@@ -3817,7 +3817,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get signOutQuestion => 'Izrakstīties?';
 
   @override
-  String get signOutConfirmation => 'Vai tiešām vēlaties izrakstīties?';
+  String get signOutConfirmation =>
+      'Lai redzētu sarunas, būs jāpierakstās vēlreiz. Savienotā ierīce un lietotnes iestatījumi paliek šajā tālrunī.';
 
   @override
   String get customVocabularyHeader => 'PIELĀGOTS VĀRDNĪCA';
@@ -8966,10 +8967,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get planUpdate => 'Plāna atjauninājums';
 
   @override
-  String get planDeprecationMessage =>
-      'Jūsu Unlimited plāns tiek pārtraukts. Pārejiet uz Operator plānu — tās pašas lieliskās funkcijas par \$49/mēnesī. Jūsu pašreizējais plāns turpinās darboties pa to laiku.';
-
-  @override
   String get upgradeYourPlan => 'Uzlabojiet savu plānu';
 
   @override
@@ -10187,4 +10184,198 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Nesaglabātās izmaiņas tiks zaudētas.';
+
+  @override
+  String get couldNotLoadCheckout => 'Neizdevās ielādēt maksājuma lapu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Sasniegts mēneša bezmaksas zvanu limits. Tas tiks atiestatīts nākamajā mēnesī.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Neizdevās ielādēt importēšanas vēsturi';
+
+  @override
+  String get phoneCallButton => 'Zvanīt';
+
+  @override
+  String get searchContacts => 'Meklēt kontaktpersonas';
+
+  @override
+  String get phoneContactsAccessTitle => 'Atļaut piekļuvi kontaktpersonām';
+
+  @override
+  String get phoneSelectCountryTitle => 'Izvēlieties valsti';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Nav verificētu numuru';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verificējiet savu numuru, lai zvanītu, izmantojot Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Neizdevās dzēst šo numuru';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Aizmirst ierīci?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi pārstās savienoties ar šo ierīci. Lai to izmantotu vēlreiz, tā būs jāsavieno pārī no jauna.';
+
+  @override
+  String get deviceForgottenMessage => 'Ierīce aizmirsta';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Atsaistīt ierīci?';
+
+  @override
+  String get rollBack => 'Atjaunot';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi ierīces diagnostika';
+
+  @override
+  String get diagnosticsFailBadge => 'Neizdevās';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'atkārtoti savienots $duration laikā';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'pirms $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Seko jūsu primārajai valodai';
+
+  @override
+  String get creatorPayouts => 'Izmaksas veidotājiem';
+
+  @override
+  String get sttLanguageOverride => 'Mainīt';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Izmantot primāro valodu';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Šis pakalpojumu sniedzējs neatbalsta $language, tāpēc izmanto $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Konstatētā RAM: $ram GB. Ieteicamais minimums: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Konstatētais modelis: $model (vecāks par iPhone XS). Atpazīšana ierīcē var būt lēnāka.';
+  }
+
+  @override
+  String get copyLogs => 'Kopēt žurnālus';
+
+  @override
+  String get openProviderDocs => 'Atvērt dokumentāciju';
+
+  @override
+  String get getApiKey => 'Iegūt API atslēgu';
+
+  @override
+  String get showApiKey => 'Rādīt API atslēgu';
+
+  @override
+  String get hideApiKey => 'Slēpt API atslēgu';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Noņemt $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vārdi',
+      one: '1 vārds',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Šomēnes atlikuši $remaining no $limit bezmaksas zvaniem';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Šomēnes atlikuši $remaining no $limit bezmaksas zvaniem · katrs līdz $minutes min';
+  }
+
+  @override
+  String get appCreators => 'Lietotņu veidotāji';
+
+  @override
+  String get homeScreen => 'Sākuma ekrāns';
+
+  @override
+  String get phoneCalls => 'Tālruņa zvani';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Servera balss filtrs runas atpazīšanas izmaksu samazināšanai';
+
+  @override
+  String get flashCustomFirmware => 'Instalēt pielāgotu programmaparatūru';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Instalējiet pielāgotas programmaparatūras versijas';
+
+  @override
+  String get selectFirmwareZip => 'Izvēlieties programmaparatūras ZIP failu';
+
+  @override
+  String get customFirmwareWarning =>
+      'Pielāgota programmaparatūra var sabojāt ierīci. Pārliecinieties, ka tā ir derīga Omi programmaparatūras versija, un neatvienojiet ierīci atjaunināšanas laikā.';
+
+  @override
+  String get firmwareFlashed => 'Programmaparatūra instalēta';
+
+  @override
+  String get deviceWillRestart => 'Ierīce tiks restartēta.';
+
+  @override
+  String get exportFailedTryAgain => 'Eksportēšana neizdevās. Mēģiniet vēlreiz.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Ierīce: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Paturēt abonementu';
+
+  @override
+  String get couldNotLoadPage => 'Neizdevās ielādēt lapu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '$current. solis no $total';
+  }
 }

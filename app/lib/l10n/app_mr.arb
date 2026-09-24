@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "वाण प्रोफाइल",
+    "speechProfile": "व्हॉइस प्रोफाइल",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "आप साइन आउट करण्याचे सुनिश्चित आहात?",
+    "signOutConfirmation": "संभाषणे पाहण्यासाठी पुन्हा साइन इन करावे लागेल. पेअर केलेले डिव्हाइस आणि ॲपच्या पसंती या फोनवर राहतील.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये $49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "तुमचा प्लॅन अपग्रेड करा",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "टाकून द्या",
     "keepEditing": "संपादन सुरू ठेवा",
     "discardChangesTitle": "बदल टाकून द्यायचे?",
-    "discardChangesMessage": "तुमचे जतन न केलेले बदल गमावले जातील."
+    "discardChangesMessage": "तुमचे जतन न केलेले बदल गमावले जातील.",
+    "couldNotLoadCheckout": "चेकआउट पृष्ठ लोड होऊ शकले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "phoneFreeCallLimitReached": "मासिक मोफत कॉल मर्यादा गाठली. ती पुढच्या महिन्यात रीसेट होईल.",
+    "couldNotLoadImportHistory": "आयात इतिहास लोड करता आला नाही",
+    "phoneCallButton": "कॉल करा",
+    "searchContacts": "संपर्क शोधा",
+    "phoneContactsAccessTitle": "संपर्कांना प्रवेश द्या",
+    "phoneSelectCountryTitle": "देश निवडा",
+    "phoneNoVerifiedNumbersTitle": "सत्यापित क्रमांक नाहीत",
+    "phoneNoVerifiedNumbersMessage": "Omi द्वारे कॉल करण्यासाठी तुमचा क्रमांक सत्यापित करा.",
+    "phoneDeleteNumberFailed": "हा क्रमांक हटवता आला नाही",
+    "forgetDeviceConfirmTitle": "डिव्हाइस विसरायचे?",
+    "forgetDeviceConfirmMessage": "Omi या डिव्हाइसशी कनेक्ट होणे थांबवेल. ते पुन्हा वापरण्यासाठी, तुम्हाला ते पुन्हा पेअर करावे लागेल.",
+    "deviceForgottenMessage": "डिव्हाइस विसरले",
+    "unpairDeviceConfirmTitle": "डिव्हाइस अनपेअर करायचे?",
+    "rollBack": "रोल बॅक करा",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi डिव्हाइस निदान",
+    "diagnosticsFailBadge": "अयशस्वी",
+    "diagnosticsReconnectedIn": "{duration} मध्ये पुन्हा जोडले",
+    "timeCompactDays": "{count}दि",
+    "durationAgo": "{duration} पूर्वी",
+    "sttLanguageFollowsPrimary": "तुमच्या प्राथमिक भाषेनुसार",
+    "creatorPayouts": "निर्मात्यांचे पेआउट",
+    "sttLanguageOverride": "बदला",
+    "sttUsePrimaryLanguage": "प्राथमिक भाषा वापरा",
+    "sttPrimaryLanguageUnsupported": "हा प्रदाता {language} ला समर्थन देत नाही, म्हणून {fallback} वापरतो.",
+    "deviceRamBelowMinimum": "आढळलेली RAM: {ram} GB. शिफारस केलेले किमान: 4 GB.",
+    "olderIphoneModelDetected": "आढळलेले मॉडेल: {model} (iPhone XS पेक्षा जुने). डिव्हाइसवरील ओळख मंद असू शकते.",
+    "copyLogs": "लॉग कॉपी करा",
+    "openProviderDocs": "दस्तऐवज उघडा",
+    "getApiKey": "API की मिळवा",
+    "showApiKey": "API की दाखवा",
+    "hideApiKey": "API की लपवा",
+    "removeVocabularyWord": "{word} काढा",
+    "vocabularyWordCount": "{count, plural, =1{1 शब्द} other{{count} शब्द}}",
+    "phoneFreeCallsRemaining": "या महिन्यात {remaining} मोफत कॉल शिल्लक ({limit} पैकी)",
+    "phoneFreeCallsRemainingWithMax": "या महिन्यात {remaining} मोफत कॉल शिल्लक ({limit} पैकी) · प्रत्येकी {minutes} मिनिटांपर्यंत",
+    "appCreators": "ॲप निर्माते",
+    "homeScreen": "होम स्क्रीन",
+    "phoneCalls": "फोन कॉल",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "स्पीच-टू-टेक्स्ट खर्च कमी करण्यासाठी सर्व्हरवर आवाज फिल्टर",
+    "flashCustomFirmware": "कस्टम फर्मवेअर फ्लॅश करा",
+    "flashCustomFirmwareDescription": "कस्टम फर्मवेअर बिल्ड फ्लॅश करा",
+    "selectFirmwareZip": "फर्मवेअर ZIP फाइल निवडा",
+    "customFirmwareWarning": "कस्टम फर्मवेअरमुळे तुमचे डिव्हाइस बंद पडू शकते. हे वैध Omi फर्मवेअर बिल्ड असल्याची खात्री करा आणि अपडेट सुरू असताना कनेक्शन तोडू नका.",
+    "firmwareFlashed": "फर्मवेअर फ्लॅश झाले",
+    "deviceWillRestart": "तुमचे डिव्हाइस रीस्टार्ट होईल.",
+    "exportFailedTryAgain": "एक्सपोर्ट अयशस्वी झाले. कृपया पुन्हा प्रयत्न करा.",
+    "firmwareFlashTarget": "डिव्हाइस: {deviceName}",
+    "keepSubscription": "सदस्यता ठेवा",
+    "couldNotLoadPage": "हे पृष्ठ लोड करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "leaveFlowStepOf": "पायरी {current} / {total}"
 }

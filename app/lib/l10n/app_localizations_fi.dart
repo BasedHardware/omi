@@ -135,7 +135,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get createPersonHint => 'Luo uusi henkilö ja opeta Omi tunnistamaan hänen puheensa!';
 
   @override
-  String get speechProfile => 'Puheprofiili';
+  String get speechProfile => 'Ääniprofiili';
 
   @override
   String sampleNumber(int number) {
@@ -3811,7 +3811,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get signOutQuestion => 'Kirjaudu ulos?';
 
   @override
-  String get signOutConfirmation => 'Haluatko varmasti kirjautua ulos?';
+  String get signOutConfirmation =>
+      'Sinun on kirjauduttava uudelleen nähdäksesi keskustelusi. Pariliitetty laite ja sovelluksen asetukset säilyvät tässä puhelimessa.';
 
   @override
   String get customVocabularyHeader => 'MUKAUTETTU SANASTO';
@@ -8948,10 +8949,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get planUpdate => 'Tilauksen päivitys';
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan \$49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.';
-
-  @override
   String get upgradeYourPlan => 'Päivitä tilauksesi';
 
   @override
@@ -10165,4 +10162,197 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Tallentamattomat muutokset menetetään.';
+
+  @override
+  String get couldNotLoadCheckout => 'Maksusivua ei voitu ladata. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Ilmaisten puheluiden kuukausiraja on täynnä. Se nollautuu ensi kuussa.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Tuontihistoriaa ei voitu ladata';
+
+  @override
+  String get phoneCallButton => 'Soita';
+
+  @override
+  String get searchContacts => 'Hae yhteystietoja';
+
+  @override
+  String get phoneContactsAccessTitle => 'Salli yhteystietojen käyttö';
+
+  @override
+  String get phoneSelectCountryTitle => 'Valitse maa';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Ei vahvistettuja numeroita';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Vahvista numerosi soittaaksesi Omin kautta.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Numeron poistaminen epäonnistui';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Unohdetaanko laite?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi lopettaa yhteyden muodostamisen tähän laitteeseen. Jotta voit käyttää sitä uudelleen, sinun on muodostettava pari uudelleen.';
+
+  @override
+  String get deviceForgottenMessage => 'Laite unohdettu';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Poistetaanko laitteen pariliitos?';
+
+  @override
+  String get rollBack => 'Palauta';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi-laitediagnostiikka';
+
+  @override
+  String get diagnosticsFailBadge => 'Epäonnistui';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'yhdistetty uudelleen $duration kuluttua';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}pv';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration sitten';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Seuraa ensisijaista kieltäsi';
+
+  @override
+  String get creatorPayouts => 'Tekijöiden maksut';
+
+  @override
+  String get sttLanguageOverride => 'Ohita';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Käytä ensisijaista kieltä';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Tämä palveluntarjoaja ei tue kieltä $language, joten se käyttää kieltä $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Havaittu RAM: $ram Gt. Suositeltu vähimmäismäärä: 4 Gt.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Havaittu malli: $model (vanhempi kuin iPhone XS). Laitteella tapahtuva tunnistus voi olla hitaampaa.';
+  }
+
+  @override
+  String get copyLogs => 'Kopioi lokit';
+
+  @override
+  String get openProviderDocs => 'Avaa dokumentaatio';
+
+  @override
+  String get getApiKey => 'Hanki API-avain';
+
+  @override
+  String get showApiKey => 'Näytä API-avain';
+
+  @override
+  String get hideApiKey => 'Piilota API-avain';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Poista $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sanaa',
+      one: '1 sana',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining/$limit ilmaista puhelua jäljellä tässä kuussa';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining/$limit ilmaista puhelua jäljellä tässä kuussa · enintään $minutes min kukin';
+  }
+
+  @override
+  String get appCreators => 'Sovellusten tekijät';
+
+  @override
+  String get homeScreen => 'Aloitusnäyttö';
+
+  @override
+  String get phoneCalls => 'Puhelut';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Palvelinpuolen äänisuodatin puheentunnistuksen kulujen vähentämiseksi';
+
+  @override
+  String get flashCustomFirmware => 'Asenna mukautettu laiteohjelmisto';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Asenna mukautettuja laiteohjelmistoversioita';
+
+  @override
+  String get selectFirmwareZip => 'Valitse laiteohjelmiston ZIP-tiedosto';
+
+  @override
+  String get customFirmwareWarning =>
+      'Mukautettu laiteohjelmisto voi rikkoa laitteesi. Varmista, että kyseessä on kelvollinen Omi-laiteohjelmistoversio, äläkä katkaise yhteyttä päivityksen aikana.';
+
+  @override
+  String get firmwareFlashed => 'Laiteohjelmisto asennettu';
+
+  @override
+  String get deviceWillRestart => 'Laite käynnistyy uudelleen.';
+
+  @override
+  String get exportFailedTryAgain => 'Vienti epäonnistui. Yritä uudelleen.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Laite: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Pidä tilaus';
+
+  @override
+  String get couldNotLoadPage => 'Sivua ei voitu ladata. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Vaihe $current/$total';
+  }
 }

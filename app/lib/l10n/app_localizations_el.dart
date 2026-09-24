@@ -136,7 +136,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get createPersonHint => 'Δημιουργήστε ένα νέο άτομο και εκπαιδεύστε το Omi να αναγνωρίζει και την ομιλία του!';
 
   @override
-  String get speechProfile => 'Προφίλ Ομιλίας';
+  String get speechProfile => 'Προφίλ φωνής';
 
   @override
   String sampleNumber(int number) {
@@ -3839,7 +3839,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get signOutQuestion => 'Αποσύνδεση;';
 
   @override
-  String get signOutConfirmation => 'Είστε βέβαιοι ότι θέλετε να αποσυνδεθείτε;';
+  String get signOutConfirmation =>
+      'Θα πρέπει να συνδεθείτε ξανά για να δείτε τις συνομιλίες σας. Η συζευγμένη συσκευή και οι προτιμήσεις της εφαρμογής παραμένουν σε αυτό το τηλέφωνο.';
 
   @override
   String get customVocabularyHeader => 'ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΛΕΞΙΛΟΓΙΟ';
@@ -9011,10 +9012,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get planUpdate => 'Ενημέρωση πλάνου';
 
   @override
-  String get planDeprecationMessage =>
-      'Το πλάνο Unlimited σας καταργείται. Μεταβείτε στο πλάνο Operator — ίδιες εξαιρετικές λειτουργίες στα \$49/μήνα. Το τρέχον πλάνο σας θα συνεχίσει να λειτουργεί στο μεταξύ.';
-
-  @override
   String get upgradeYourPlan => 'Αναβαθμίστε το πλάνο σας';
 
   @override
@@ -10233,4 +10230,198 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Οι μη αποθηκευμένες αλλαγές σας θα χαθούν.';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Δεν ήταν δυνατή η φόρτωση της σελίδας πληρωμής. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Συμπληρώθηκε το μηνιαίο όριο δωρεάν κλήσεων. Επαναφέρεται τον επόμενο μήνα.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Δεν ήταν δυνατή η φόρτωση του ιστορικού εισαγωγής';
+
+  @override
+  String get phoneCallButton => 'Κλήση';
+
+  @override
+  String get searchContacts => 'Αναζήτηση επαφών';
+
+  @override
+  String get phoneContactsAccessTitle => 'Να επιτρέπεται η πρόσβαση στις επαφές';
+
+  @override
+  String get phoneSelectCountryTitle => 'Επιλογή χώρας';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Δεν υπάρχουν επαληθευμένοι αριθμοί';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Επαληθεύστε τον αριθμό σας για να κάνετε κλήσεις μέσω Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Δεν ήταν δυνατή η διαγραφή του αριθμού';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Διαγραφή συσκευής;';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Το Omi θα σταματήσει να συνδέεται με αυτή τη συσκευή. Για να τη χρησιμοποιήσετε ξανά, θα πρέπει να την αντιστοιχίσετε ξανά.';
+
+  @override
+  String get deviceForgottenMessage => 'Η συσκευή διαγράφηκε';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Κατάργηση αντιστοίχισης συσκευής;';
+
+  @override
+  String get rollBack => 'Επαναφορά';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Διαγνωστικά συσκευής Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Απέτυχε';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'επανασυνδέθηκε σε $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countη';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'πριν από $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Ακολουθεί την κύρια γλώσσα σας';
+
+  @override
+  String get creatorPayouts => 'Πληρωμές δημιουργών';
+
+  @override
+  String get sttLanguageOverride => 'Παράκαμψη';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Χρήση κύριας γλώσσας';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Αυτός ο πάροχος δεν υποστηρίζει $language, οπότε χρησιμοποιεί $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Ανιχνεύθηκε RAM: $ram GB. Ελάχιστη συνιστώμενη: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Ανιχνεύθηκε μοντέλο: $model (παλαιότερο από iPhone XS). Η αναγνώριση στη συσκευή μπορεί να είναι πιο αργή.';
+  }
+
+  @override
+  String get copyLogs => 'Αντιγραφή αρχείων καταγραφής';
+
+  @override
+  String get openProviderDocs => 'Άνοιγμα τεκμηρίωσης';
+
+  @override
+  String get getApiKey => 'Λήψη κλειδιού API';
+
+  @override
+  String get showApiKey => 'Εμφάνιση κλειδιού API';
+
+  @override
+  String get hideApiKey => 'Απόκρυψη κλειδιού API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Αφαίρεση $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count λέξεις',
+      one: '1 λέξη',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Απομένουν $remaining από $limit δωρεάν κλήσεις αυτόν τον μήνα';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Απομένουν $remaining από $limit δωρεάν κλήσεις αυτόν τον μήνα · έως $minutes λεπτά η καθεμία';
+  }
+
+  @override
+  String get appCreators => 'Δημιουργοί εφαρμογών';
+
+  @override
+  String get homeScreen => 'Αρχική οθόνη';
+
+  @override
+  String get phoneCalls => 'Τηλεφωνικές κλήσεις';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Φιλτράρισμα φωνής στον διακομιστή για μείωση του κόστους μεταγραφής';
+
+  @override
+  String get flashCustomFirmware => 'Εγκατάσταση προσαρμοσμένου υλικολογισμικού';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Εγκαταστήστε προσαρμοσμένες εκδόσεις υλικολογισμικού';
+
+  @override
+  String get selectFirmwareZip => 'Επιλέξτε αρχείο ZIP υλικολογισμικού';
+
+  @override
+  String get customFirmwareWarning =>
+      'Το προσαρμοσμένο υλικολογισμικό μπορεί να καταστρέψει τη συσκευή σας. Βεβαιωθείτε ότι είναι έγκυρη έκδοση υλικολογισμικού Omi και μην αποσυνδέετε κατά την ενημέρωση.';
+
+  @override
+  String get firmwareFlashed => 'Το υλικολογισμικό εγκαταστάθηκε';
+
+  @override
+  String get deviceWillRestart => 'Η συσκευή θα επανεκκινηθεί.';
+
+  @override
+  String get exportFailedTryAgain => 'Η εξαγωγή απέτυχε. Δοκιμάστε ξανά.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Συσκευή: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Διατήρηση συνδρομής';
+
+  @override
+  String get couldNotLoadPage => 'Δεν ήταν δυνατή η φόρτωση της σελίδας. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Βήμα $current από $total';
+  }
 }

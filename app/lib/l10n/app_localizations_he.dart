@@ -135,7 +135,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get createPersonHint => 'צור אדם חדש והדרך את Omi להכיר את קולם!';
 
   @override
-  String get speechProfile => 'פרופיל דיבור';
+  String get speechProfile => 'פרופיל קולי';
 
   @override
   String sampleNumber(int number) {
@@ -3787,7 +3787,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get signOutQuestion => 'להתנתק?';
 
   @override
-  String get signOutConfirmation => 'האם אתה בטוח שברצונך להתנתק?';
+  String get signOutConfirmation =>
+      'תצטרך להתחבר שוב כדי לראות את השיחות שלך. המכשיר המשויך והעדפות האפליקציה נשארים בטלפון הזה.';
 
   @override
   String get customVocabularyHeader => 'אוצר מילים מותאם אישית';
@@ -8876,10 +8877,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get planUpdate => 'עדכון תוכנית';
 
   @override
-  String get planDeprecationMessage =>
-      'תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-\$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.';
-
-  @override
   String get upgradeYourPlan => 'שדרג את התוכנית שלך';
 
   @override
@@ -10081,4 +10078,196 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'השינויים שלא נשמרו יאבדו.';
+
+  @override
+  String get couldNotLoadCheckout => 'לא ניתן היה לטעון את דף התשלום. בדקו את החיבור ונסו שוב.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'הגעת למגבלת השיחות החינמיות החודשית. היא תתאפס בחודש הבא.';
+
+  @override
+  String get couldNotLoadImportHistory => 'לא ניתן לטעון את היסטוריית הייבוא';
+
+  @override
+  String get phoneCallButton => 'התקשר';
+
+  @override
+  String get searchContacts => 'חיפוש אנשי קשר';
+
+  @override
+  String get phoneContactsAccessTitle => 'אפשר גישה לאנשי קשר';
+
+  @override
+  String get phoneSelectCountryTitle => 'בחירת מדינה';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'אין מספרים מאומתים';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'אמת את המספר שלך כדי להתקשר דרך Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'לא ניתן למחוק את המספר';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'לשכוח את המכשיר?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi יפסיק להתחבר למכשיר הזה. כדי להשתמש בו שוב, יהיה עליך לצמד אותו מחדש.';
+
+  @override
+  String get deviceForgottenMessage => 'המכשיר נשכח';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'לבטל את צימוד המכשיר?';
+
+  @override
+  String get rollBack => 'שחזור לגרסה קודמת';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate קילוביט/ש׳';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'אבחון התקן Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'נכשל';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'חובר מחדש תוך $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'לפני $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'עוקב אחר השפה הראשית שלך';
+
+  @override
+  String get creatorPayouts => 'תשלומים ליוצרים';
+
+  @override
+  String get sttLanguageOverride => 'עקיפה';
+
+  @override
+  String get sttUsePrimaryLanguage => 'שימוש בשפה הראשית';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'ספק זה אינו תומך ב-$language, ולכן משתמש ב-$fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'זיכרון RAM שזוהה: $ram GB. מינימום מומלץ: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'דגם שזוהה: $model (ישן מ-iPhone XS). הזיהוי במכשיר עשוי להיות איטי יותר.';
+  }
+
+  @override
+  String get copyLogs => 'העתקת יומנים';
+
+  @override
+  String get openProviderDocs => 'פתיחת התיעוד';
+
+  @override
+  String get getApiKey => 'קבלת מפתח API';
+
+  @override
+  String get showApiKey => 'הצגת מפתח API';
+
+  @override
+  String get hideApiKey => 'הסתרת מפתח API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'הסרת $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count מילים',
+      one: 'מילה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'נותרו $remaining מתוך $limit שיחות חינם החודש';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'נותרו $remaining מתוך $limit שיחות חינם החודש · עד $minutes דקות כל אחת';
+  }
+
+  @override
+  String get appCreators => 'יוצרי אפליקציות';
+
+  @override
+  String get homeScreen => 'מסך הבית';
+
+  @override
+  String get phoneCalls => 'שיחות טלפון';
+
+  @override
+  String get vadGate => 'שער VAD';
+
+  @override
+  String get vadGateDescription => 'סינון קול בצד השרת להפחתת עלויות תמלול';
+
+  @override
+  String get flashCustomFirmware => 'צריבת קושחה מותאמת';
+
+  @override
+  String get flashCustomFirmwareDescription => 'צריבת גרסאות קושחה מותאמות';
+
+  @override
+  String get selectFirmwareZip => 'בחר קובץ ZIP של קושחה';
+
+  @override
+  String get customFirmwareWarning =>
+      'צריבת קושחה מותאמת עלולה להשבית את המכשיר. ודא שזו גרסת קושחה תקינה של Omi ואל תנתק במהלך העדכון.';
+
+  @override
+  String get firmwareFlashed => 'הקושחה נצרבה';
+
+  @override
+  String get deviceWillRestart => 'המכשיר יופעל מחדש.';
+
+  @override
+  String get exportFailedTryAgain => 'הייצוא נכשל. נסה שוב.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'מכשיר: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'השארת המינוי';
+
+  @override
+  String get couldNotLoadPage => 'לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'שלב $current מתוך $total';
+  }
 }

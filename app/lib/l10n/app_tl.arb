@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Profil ng Boses",
+    "speechProfile": "Voice Profile",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Sigurado ka na ba na gusto mong mag-sign out?",
+    "signOutConfirmation": "Kailangan mong mag-sign in muli para makita ang iyong mga usapan. Mananatili sa teleponong ito ang naka-pair na device at mga kagustuhan sa app.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa $49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "I-upgrade ang Iyong Plano",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "Itapon",
     "keepEditing": "Ipagpatuloy ang Pag-edit",
     "discardChangesTitle": "Itapon ang mga Pagbabago?",
-    "discardChangesMessage": "Mawawala ang mga hindi mo na-save na pagbabago."
+    "discardChangesMessage": "Mawawala ang mga hindi mo na-save na pagbabago.",
+    "couldNotLoadCheckout": "Hindi ma-load ang checkout page. Suriin ang iyong koneksyon at subukang muli.",
+    "phoneFreeCallLimitReached": "Naabot na ang buwanang limitasyon ng libreng tawag. Magre-reset ito sa susunod na buwan.",
+    "couldNotLoadImportHistory": "Hindi ma-load ang kasaysayan ng pag-import",
+    "phoneCallButton": "Tumawag",
+    "searchContacts": "Maghanap ng contact",
+    "phoneContactsAccessTitle": "Payagan ang Access sa Contacts",
+    "phoneSelectCountryTitle": "Pumili ng Bansa",
+    "phoneNoVerifiedNumbersTitle": "Walang Na-verify na Numero",
+    "phoneNoVerifiedNumbersMessage": "I-verify ang iyong numero para tumawag gamit ang Omi.",
+    "phoneDeleteNumberFailed": "Hindi ma-delete ang numerong ito",
+    "forgetDeviceConfirmTitle": "Kalimutan ang Device?",
+    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.",
+    "deviceForgottenMessage": "Nakalimutan na ang device",
+    "unpairDeviceConfirmTitle": "I-unpair ang Device?",
+    "rollBack": "Ibalik",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi Device Diagnostics",
+    "diagnosticsFailBadge": "Nabigo",
+    "diagnosticsReconnectedIn": "muling nakakonekta sa loob ng {duration}",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "{duration} ang nakalipas",
+    "sttLanguageFollowsPrimary": "Sumusunod sa iyong pangunahing wika",
+    "creatorPayouts": "Mga Bayad sa Creator",
+    "sttLanguageOverride": "I-override",
+    "sttUsePrimaryLanguage": "Gamitin ang Pangunahing Wika",
+    "sttPrimaryLanguageUnsupported": "Hindi sinusuportahan ng provider na ito ang {language}, kaya {fallback} ang ginagamit.",
+    "deviceRamBelowMinimum": "Natukoy na RAM: {ram} GB. Inirerekomendang minimum: 4 GB.",
+    "olderIphoneModelDetected": "Natukoy na modelo: {model} (mas luma sa iPhone XS). Maaaring mas mabagal ang pagkilala sa device.",
+    "copyLogs": "Kopyahin ang mga Log",
+    "openProviderDocs": "Buksan ang Dokumentasyon",
+    "getApiKey": "Kumuha ng API Key",
+    "showApiKey": "Ipakita ang API Key",
+    "hideApiKey": "Itago ang API Key",
+    "removeVocabularyWord": "Alisin ang {word}",
+    "vocabularyWordCount": "{count, plural, =1{1 salita} other{{count} salita}}",
+    "phoneFreeCallsRemaining": "{remaining} sa {limit} libreng tawag ang natitira ngayong buwan",
+    "phoneFreeCallsRemainingWithMax": "{remaining} sa {limit} libreng tawag ang natitira ngayong buwan · hanggang {minutes} min bawat isa",
+    "appCreators": "Mga Gumagawa ng App",
+    "homeScreen": "Home Screen",
+    "phoneCalls": "Mga Tawag sa Telepono",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text",
+    "flashCustomFirmware": "I-flash ang Custom na Firmware",
+    "flashCustomFirmwareDescription": "Mag-flash ng custom na firmware build",
+    "selectFirmwareZip": "Piliin ang ZIP file ng firmware",
+    "customFirmwareWarning": "Maaaring masira ang iyong device dahil sa custom na firmware. Tiyaking valid na Omi firmware build ito, at huwag idiskonekta habang nag-a-update.",
+    "firmwareFlashed": "Na-flash na ang firmware",
+    "deviceWillRestart": "Magre-restart ang iyong device.",
+    "exportFailedTryAgain": "Nabigo ang pag-export. Pakisubukang muli.",
+    "firmwareFlashTarget": "Device: {deviceName}",
+    "keepSubscription": "Panatilihin ang Subscription",
+    "couldNotLoadPage": "Hindi ma-load ang pahinang ito. Suriin ang iyong koneksyon at subukang muli.",
+    "leaveFlowStepOf": "Hakbang {current} ng {total}"
 }

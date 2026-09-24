@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Profil govora",
+    "speechProfile": "Glasovni profil",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Jesi li siguran da se želiš odjaviti?",
+    "signOutConfirmation": "Morat ćete se ponovo prijaviti da vidite razgovore. Upareni uređaj i postavke aplikacije ostaju na ovom telefonu.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "Vaš Unlimited plan se ukida. Pređite na Operator plan — iste odlične funkcije za $49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "Nadogradite svoj plan",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "Odbaci",
     "keepEditing": "Nastavi uređivanje",
     "discardChangesTitle": "Odbaciti promjene?",
-    "discardChangesMessage": "Vaše nesačuvane promjene će biti izgubljene."
+    "discardChangesMessage": "Vaše nesačuvane promjene će biti izgubljene.",
+    "couldNotLoadCheckout": "Stranica za plaćanje se nije mogla učitati. Provjerite vezu i pokušajte ponovo.",
+    "phoneFreeCallLimitReached": "Dostignut je mjesečni limit besplatnih poziva. Resetuje se sljedećeg mjeseca.",
+    "couldNotLoadImportHistory": "Historija uvoza se nije mogla učitati",
+    "phoneCallButton": "Pozovi",
+    "searchContacts": "Pretraži kontakte",
+    "phoneContactsAccessTitle": "Dozvoli pristup kontaktima",
+    "phoneSelectCountryTitle": "Odaberi državu",
+    "phoneNoVerifiedNumbersTitle": "Nema potvrđenih brojeva",
+    "phoneNoVerifiedNumbersMessage": "Potvrdite svoj broj da biste zvali putem Omi.",
+    "phoneDeleteNumberFailed": "Nije moguće izbrisati ovaj broj",
+    "forgetDeviceConfirmTitle": "Zaboraviti uređaj?",
+    "forgetDeviceConfirmMessage": "Omi se više neće povezivati s ovim uređajem. Da biste ga ponovo koristili, morat ćete ga ponovo upariti.",
+    "deviceForgottenMessage": "Uređaj je zaboravljen",
+    "unpairDeviceConfirmTitle": "Poništiti uparivanje uređaja?",
+    "rollBack": "Vrati",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Dijagnostika Omi uređaja",
+    "diagnosticsFailBadge": "Neuspjelo",
+    "diagnosticsReconnectedIn": "ponovo povezano za {duration}",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "prije {duration}",
+    "sttLanguageFollowsPrimary": "Prati vaš primarni jezik",
+    "creatorPayouts": "Isplate kreatorima",
+    "sttLanguageOverride": "Promijeni",
+    "sttUsePrimaryLanguage": "Koristi primarni jezik",
+    "sttPrimaryLanguageUnsupported": "Ovaj pružalac ne podržava {language}, pa koristi {fallback}.",
+    "deviceRamBelowMinimum": "Otkriveni RAM: {ram} GB. Preporučeni minimum: 4 GB.",
+    "olderIphoneModelDetected": "Otkriveni model: {model} (stariji od iPhone XS). Prepoznavanje na uređaju može biti sporije.",
+    "copyLogs": "Kopiraj zapisnike",
+    "openProviderDocs": "Otvori dokumentaciju",
+    "getApiKey": "Nabavi API ključ",
+    "showApiKey": "Prikaži API ključ",
+    "hideApiKey": "Sakrij API ključ",
+    "removeVocabularyWord": "Ukloni {word}",
+    "vocabularyWordCount": "{count, plural, =1{1 riječ} other{{count} riječi}}",
+    "phoneFreeCallsRemaining": "Preostalo {remaining} od {limit} besplatnih poziva ovog mjeseca",
+    "phoneFreeCallsRemainingWithMax": "Preostalo {remaining} od {limit} besplatnih poziva ovog mjeseca · do {minutes} min svaki",
+    "appCreators": "Kreatori aplikacija",
+    "homeScreen": "Početni ekran",
+    "phoneCalls": "Telefonski pozivi",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Filtriranje glasa na serveru radi manjih troškova pretvaranja govora u tekst",
+    "flashCustomFirmware": "Instaliraj prilagođeni firmver",
+    "flashCustomFirmwareDescription": "Instalirajte prilagođene verzije firmvera",
+    "selectFirmwareZip": "Odaberite ZIP datoteku firmvera",
+    "customFirmwareWarning": "Prilagođeni firmver može trajno oštetiti uređaj. Provjerite je li ovo ispravna verzija Omi firmvera i ne prekidajte vezu tokom ažuriranja.",
+    "firmwareFlashed": "Firmver je instaliran",
+    "deviceWillRestart": "Uređaj će se ponovo pokrenuti.",
+    "exportFailedTryAgain": "Izvoz nije uspio. Pokušajte ponovo.",
+    "firmwareFlashTarget": "Uređaj: {deviceName}",
+    "keepSubscription": "Zadrži pretplatu",
+    "couldNotLoadPage": "Stranica se nije mogla učitati. Provjerite vezu i pokušajte ponovo.",
+    "leaveFlowStepOf": "Korak {current} od {total}"
 }

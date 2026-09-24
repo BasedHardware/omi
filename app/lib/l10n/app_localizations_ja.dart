@@ -3749,7 +3749,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signOutQuestion => 'サインアウトしますか？';
 
   @override
-  String get signOutConfirmation => 'サインアウトしてもよろしいですか？';
+  String get signOutConfirmation => '会話を表示するには再度サインインが必要です。ペアリング済みのデバイスとアプリの設定はこの電話に残ります。';
 
   @override
   String get customVocabularyHeader => 'カスタム語彙';
@@ -8805,10 +8805,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get planUpdate => 'プラン更新';
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
-
-  @override
   String get upgradeYourPlan => 'プランをアップグレード';
 
   @override
@@ -9991,4 +9987,195 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discardChangesMessage => '保存されていない変更は失われます。';
+
+  @override
+  String get couldNotLoadCheckout => '決済ページを読み込めませんでした。接続を確認して、もう一度お試しください。';
+
+  @override
+  String get phoneFreeCallLimitReached => '今月の無料通話の上限に達しました。来月リセットされます。';
+
+  @override
+  String get couldNotLoadImportHistory => 'インポート履歴を読み込めませんでした';
+
+  @override
+  String get phoneCallButton => '発信';
+
+  @override
+  String get searchContacts => '連絡先を検索';
+
+  @override
+  String get phoneContactsAccessTitle => '連絡先へのアクセスを許可';
+
+  @override
+  String get phoneSelectCountryTitle => '国を選択';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => '認証済みの番号はありません';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Omiで通話するには番号を認証してください。';
+
+  @override
+  String get phoneDeleteNumberFailed => 'この番号を削除できませんでした';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'デバイスの登録を解除しますか?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omiはこのデバイスに接続しなくなります。再び使用するには、もう一度ペアリングする必要があります。';
+
+  @override
+  String get deviceForgottenMessage => 'デバイスの登録を解除しました';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'デバイスのペアリングを解除しますか?';
+
+  @override
+  String get rollBack => 'ロールバック';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi デバイス診断';
+
+  @override
+  String get diagnosticsFailBadge => '失敗';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$durationで再接続';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$count日';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration前';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => '主要言語に従います';
+
+  @override
+  String get creatorPayouts => 'クリエイターへの支払い';
+
+  @override
+  String get sttLanguageOverride => '上書き';
+
+  @override
+  String get sttUsePrimaryLanguage => '主要言語を使用';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'このプロバイダーは$languageに対応していないため、$fallbackを使用します。';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return '検出されたRAM: $ram GB。推奨最小値: 4 GB。';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return '検出されたモデル: $model（iPhone XSより古い機種）。デバイス上の認識が遅くなる場合があります。';
+  }
+
+  @override
+  String get copyLogs => 'ログをコピー';
+
+  @override
+  String get openProviderDocs => 'ドキュメントを開く';
+
+  @override
+  String get getApiKey => 'APIキーを取得';
+
+  @override
+  String get showApiKey => 'APIキーを表示';
+
+  @override
+  String get hideApiKey => 'APIキーを隠す';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$wordを削除';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 語',
+      one: '1 語',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '今月の無料通話は残り$remaining回（$limit回中）';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '今月の無料通話は残り$remaining回（$limit回中） · 1回最大$minutes分';
+  }
+
+  @override
+  String get appCreators => 'アプリ作成者';
+
+  @override
+  String get homeScreen => 'ホーム画面';
+
+  @override
+  String get phoneCalls => '電話';
+
+  @override
+  String get vadGate => 'VADゲート';
+
+  @override
+  String get vadGateDescription => '音声認識のコストを抑えるためのサーバー側音声ゲート';
+
+  @override
+  String get flashCustomFirmware => 'カスタムファームウェアを書き込む';
+
+  @override
+  String get flashCustomFirmwareDescription => 'カスタムビルドのファームウェアを書き込みます';
+
+  @override
+  String get selectFirmwareZip => 'ファームウェアのZIPファイルを選択';
+
+  @override
+  String get customFirmwareWarning => 'カスタムファームウェアを書き込むとデバイスが使えなくなる可能性があります。有効なOmiファームウェアであることを確認し、更新中は接続を切らないでください。';
+
+  @override
+  String get firmwareFlashed => 'ファームウェアを書き込みました';
+
+  @override
+  String get deviceWillRestart => 'デバイスが再起動します。';
+
+  @override
+  String get exportFailedTryAgain => 'エクスポートに失敗しました。もう一度お試しください。';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'デバイス: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'サブスクリプションを継続';
+
+  @override
+  String get couldNotLoadPage => 'このページを読み込めませんでした。接続を確認して、もう一度お試しください。';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'ステップ $current/$total';
+  }
 }

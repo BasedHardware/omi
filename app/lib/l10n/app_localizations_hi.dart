@@ -135,7 +135,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createPersonHint => 'एक नया व्यक्ति बनाएं और Omi को उनकी आवाज़ पहचानने के लिए प्रशिक्षित करें!';
 
   @override
-  String get speechProfile => 'भाषण प्रोफ़ाइल';
+  String get speechProfile => 'वॉइस प्रोफ़ाइल';
 
   @override
   String sampleNumber(int number) {
@@ -3790,7 +3790,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get signOutQuestion => 'साइन आउट करें?';
 
   @override
-  String get signOutConfirmation => 'क्या आप वाकई साइन आउट करना चाहते हैं?';
+  String get signOutConfirmation =>
+      'अपनी बातचीत देखने के लिए आपको फिर से साइन इन करना होगा। आपका पेयर किया गया डिवाइस और ऐप की पसंद इस फ़ोन पर बनी रहेंगी।';
 
   @override
   String get customVocabularyHeader => 'कस्टम शब्दावली';
@@ -8929,10 +8930,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get planUpdate => 'प्लान अपडेट';
 
   @override
-  String get planDeprecationMessage =>
-      'आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ \$49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।';
-
-  @override
   String get upgradeYourPlan => 'अपना प्लान अपग्रेड करें';
 
   @override
@@ -10143,4 +10140,197 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'आपके बिना सहेजे गए बदलाव खो जाएंगे।';
+
+  @override
+  String get couldNotLoadCheckout => 'चेकआउट पेज लोड नहीं हो सका। अपना कनेक्शन जांचें और फिर से कोशिश करें।';
+
+  @override
+  String get phoneFreeCallLimitReached => 'मासिक मुफ़्त कॉल सीमा पूरी हो गई। यह अगले महीने रीसेट होगी।';
+
+  @override
+  String get couldNotLoadImportHistory => 'इम्पोर्ट इतिहास लोड नहीं हो सका';
+
+  @override
+  String get phoneCallButton => 'कॉल करें';
+
+  @override
+  String get searchContacts => 'संपर्क खोजें';
+
+  @override
+  String get phoneContactsAccessTitle => 'संपर्कों तक पहुँच की अनुमति दें';
+
+  @override
+  String get phoneSelectCountryTitle => 'देश चुनें';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'कोई सत्यापित नंबर नहीं';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Omi से कॉल करने के लिए अपना नंबर सत्यापित करें।';
+
+  @override
+  String get phoneDeleteNumberFailed => 'यह नंबर हटाया नहीं जा सका';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'डिवाइस भूलें?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi इस डिवाइस से कनेक्ट होना बंद कर देगा। इसे फिर से उपयोग करने के लिए, आपको इसे दोबारा पेयर करना होगा।';
+
+  @override
+  String get deviceForgottenMessage => 'डिवाइस भुला दिया गया';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'डिवाइस अनपेयर करें?';
+
+  @override
+  String get rollBack => 'रोल बैक करें';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi डिवाइस डायग्नोस्टिक्स';
+
+  @override
+  String get diagnosticsFailBadge => 'विफल';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration में फिर से जुड़ा';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countदि';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration पहले';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'आपकी प्राथमिक भाषा का पालन करता है';
+
+  @override
+  String get creatorPayouts => 'क्रिएटर भुगतान';
+
+  @override
+  String get sttLanguageOverride => 'बदलें';
+
+  @override
+  String get sttUsePrimaryLanguage => 'प्राथमिक भाषा का उपयोग करें';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'यह प्रदाता $language का समर्थन नहीं करता, इसलिए $fallback का उपयोग करता है।';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'पहचानी गई RAM: $ram GB. अनुशंसित न्यूनतम: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'पहचाना गया मॉडल: $model (iPhone XS से पुराना)। डिवाइस पर पहचान धीमी हो सकती है।';
+  }
+
+  @override
+  String get copyLogs => 'लॉग कॉपी करें';
+
+  @override
+  String get openProviderDocs => 'दस्तावेज़ खोलें';
+
+  @override
+  String get getApiKey => 'API कुंजी पाएं';
+
+  @override
+  String get showApiKey => 'API कुंजी दिखाएं';
+
+  @override
+  String get hideApiKey => 'API कुंजी छिपाएं';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word हटाएं';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count शब्द',
+      one: '1 शब्द',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'इस महीने $remaining मुफ़्त कॉल बाकी हैं ($limit में से)';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'इस महीने $remaining मुफ़्त कॉल बाकी हैं ($limit में से) · प्रत्येक अधिकतम $minutes मिनट';
+  }
+
+  @override
+  String get appCreators => 'ऐप क्रिएटर';
+
+  @override
+  String get homeScreen => 'होम स्क्रीन';
+
+  @override
+  String get phoneCalls => 'फ़ोन कॉल';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'स्पीच-टू-टेक्स्ट की लागत कम करने के लिए सर्वर पर आवाज़ फ़िल्टर';
+
+  @override
+  String get flashCustomFirmware => 'कस्टम फ़र्मवेयर फ़्लैश करें';
+
+  @override
+  String get flashCustomFirmwareDescription => 'कस्टम फ़र्मवेयर बिल्ड फ़्लैश करें';
+
+  @override
+  String get selectFirmwareZip => 'फ़र्मवेयर ZIP फ़ाइल चुनें';
+
+  @override
+  String get customFirmwareWarning =>
+      'कस्टम फ़र्मवेयर आपके डिवाइस को ख़राब कर सकता है। पक्का करें कि यह एक मान्य Omi फ़र्मवेयर बिल्ड है, और अपडेट के दौरान डिस्कनेक्ट न करें।';
+
+  @override
+  String get firmwareFlashed => 'फ़र्मवेयर फ़्लैश हो गया';
+
+  @override
+  String get deviceWillRestart => 'आपका डिवाइस रीस्टार्ट होगा।';
+
+  @override
+  String get exportFailedTryAgain => 'एक्सपोर्ट विफल रहा। कृपया फिर से कोशिश करें।';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'डिवाइस: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'सदस्यता रखें';
+
+  @override
+  String get couldNotLoadPage => 'यह पेज लोड नहीं हो सका। अपना कनेक्शन जांचें और फिर से कोशिश करें।';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'चरण $current / $total';
+  }
 }

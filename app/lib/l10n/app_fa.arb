@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "پروفایل صوتی",
+    "speechProfile": "نمایه صوتی",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "آیا مطمئنید که می‌خواهید خارج شوید؟",
+    "signOutConfirmation": "برای دیدن گفتگوهایتان باید دوباره وارد شوید. دستگاه جفت‌شده و تنظیمات برنامه روی این گوشی باقی می‌مانند.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با $49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "طرح خود را ارتقا دهید",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "دور انداختن",
     "keepEditing": "ادامه ویرایش",
     "discardChangesTitle": "تغییرات دور انداخته شود؟",
-    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت."
+    "discardChangesMessage": "تغییرات ذخیره‌نشده شما از بین خواهد رفت.",
+    "couldNotLoadCheckout": "صفحه پرداخت بارگیری نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.",
+    "phoneFreeCallLimitReached": "به سقف ماهانه تماس‌های رایگان رسیده‌اید. ماه بعد بازنشانی می‌شود.",
+    "couldNotLoadImportHistory": "بارگیری تاریخچه واردکردن ممکن نشد",
+    "phoneCallButton": "تماس",
+    "searchContacts": "جستجوی مخاطبین",
+    "phoneContactsAccessTitle": "اجازه دسترسی به مخاطبین",
+    "phoneSelectCountryTitle": "انتخاب کشور",
+    "phoneNoVerifiedNumbersTitle": "هیچ شماره تأییدشده‌ای وجود ندارد",
+    "phoneNoVerifiedNumbersMessage": "برای تماس از طریق Omi، شماره خود را تأیید کنید.",
+    "phoneDeleteNumberFailed": "حذف این شماره ممکن نشد",
+    "forgetDeviceConfirmTitle": "دستگاه فراموش شود؟",
+    "forgetDeviceConfirmMessage": "Omi دیگر به این دستگاه وصل نمی‌شود. برای استفادهٔ دوباره، باید آن را دوباره جفت کنید.",
+    "deviceForgottenMessage": "دستگاه فراموش شد",
+    "unpairDeviceConfirmTitle": "جفت‌سازی دستگاه لغو شود؟",
+    "rollBack": "بازگرداندن",
+    "dataRateKbps": "{rate} کیلوبیت/ثانیه",
+    "diagnosticsExportTitle": "تشخیص دستگاه Omi",
+    "diagnosticsFailBadge": "ناموفق",
+    "diagnosticsReconnectedIn": "اتصال مجدد در {duration}",
+    "timeCompactDays": "{count}ر",
+    "durationAgo": "{duration} پیش",
+    "sttLanguageFollowsPrimary": "از زبان اصلی شما پیروی می‌کند",
+    "creatorPayouts": "پرداخت‌های سازندگان",
+    "sttLanguageOverride": "تغییر",
+    "sttUsePrimaryLanguage": "استفاده از زبان اصلی",
+    "sttPrimaryLanguageUnsupported": "این ارائه‌دهنده از {language} پشتیبانی نمی‌کند، بنابراین از {fallback} استفاده می‌کند.",
+    "deviceRamBelowMinimum": "RAM شناسایی‌شده: {ram} گیگابایت. حداقل توصیه‌شده: ۴ گیگابایت.",
+    "olderIphoneModelDetected": "مدل شناسایی‌شده: {model} (قدیمی‌تر از iPhone XS). تشخیص روی دستگاه ممکن است کندتر باشد.",
+    "copyLogs": "کپی گزارش‌ها",
+    "openProviderDocs": "باز کردن مستندات",
+    "getApiKey": "دریافت کلید API",
+    "showApiKey": "نمایش کلید API",
+    "hideApiKey": "پنهان کردن کلید API",
+    "removeVocabularyWord": "حذف {word}",
+    "vocabularyWordCount": "{count, plural, =1{۱ واژه} other{{count} واژه}}",
+    "phoneFreeCallsRemaining": "{remaining} از {limit} تماس رایگان این ماه باقی مانده است",
+    "phoneFreeCallsRemainingWithMax": "{remaining} از {limit} تماس رایگان این ماه باقی مانده است · هر کدام تا {minutes} دقیقه",
+    "appCreators": "سازندگان برنامه",
+    "homeScreen": "صفحه اصلی",
+    "phoneCalls": "تماس‌های تلفنی",
+    "vadGate": "دروازه VAD",
+    "vadGateDescription": "فیلتر صدا در سرور برای کاهش هزینه تبدیل گفتار به متن",
+    "flashCustomFirmware": "نصب فریم‌ور سفارشی",
+    "flashCustomFirmwareDescription": "نسخه‌های سفارشی فریم‌ور را نصب کنید",
+    "selectFirmwareZip": "فایل ZIP فریم‌ور را انتخاب کنید",
+    "customFirmwareWarning": "نصب فریم‌ور سفارشی ممکن است دستگاه شما را از کار بیندازد. مطمئن شوید این یک نسخه معتبر فریم‌ور Omi است و در حین به‌روزرسانی اتصال را قطع نکنید.",
+    "firmwareFlashed": "فریم‌ور نصب شد",
+    "deviceWillRestart": "دستگاه شما دوباره راه‌اندازی می‌شود.",
+    "exportFailedTryAgain": "برون‌بری ناموفق بود. دوباره تلاش کنید.",
+    "firmwareFlashTarget": "دستگاه: {deviceName}",
+    "keepSubscription": "حفظ اشتراک",
+    "couldNotLoadPage": "این صفحه بارگیری نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.",
+    "leaveFlowStepOf": "مرحله {current} از {total}"
 }

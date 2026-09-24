@@ -135,7 +135,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createPersonHint => 'Создайте нового человека и обучите Omi распознавать его голос тоже!';
 
   @override
-  String get speechProfile => 'Речевой Профиль';
+  String get speechProfile => 'Голосовой профиль';
 
   @override
   String sampleNumber(int number) {
@@ -3820,7 +3820,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get signOutQuestion => 'Выйти?';
 
   @override
-  String get signOutConfirmation => 'Вы уверены, что хотите выйти?';
+  String get signOutConfirmation =>
+      'Чтобы увидеть разговоры, нужно будет войти снова. Сопряжённое устройство и настройки приложения останутся на этом телефоне.';
 
   @override
   String get customVocabularyHeader => 'ПОЛЬЗОВАТЕЛЬСКИЙ СЛОВАРЬ';
@@ -8976,10 +8977,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get planUpdate => 'Обновление плана';
 
   @override
-  String get planDeprecationMessage =>
-      'Ваш план Unlimited прекращается. Перейдите на план Operator — те же отличные функции за \$49/мес. Ваш текущий план продолжит работать тем временем.';
-
-  @override
   String get upgradeYourPlan => 'Улучшите свой план';
 
   @override
@@ -10200,4 +10197,199 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Несохранённые изменения будут потеряны.';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Не удалось загрузить страницу оплаты. Проверьте подключение и попробуйте ещё раз.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Месячный лимит бесплатных звонков исчерпан. Он обновится в следующем месяце.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Не удалось загрузить историю импорта';
+
+  @override
+  String get phoneCallButton => 'Позвонить';
+
+  @override
+  String get searchContacts => 'Поиск контактов';
+
+  @override
+  String get phoneContactsAccessTitle => 'Разрешить доступ к контактам';
+
+  @override
+  String get phoneSelectCountryTitle => 'Выберите страну';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Нет подтверждённых номеров';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Подтвердите номер, чтобы звонить через Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Не удалось удалить этот номер';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Забыть устройство?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi перестанет подключаться к этому устройству. Чтобы снова им пользоваться, его нужно будет заново связать.';
+
+  @override
+  String get deviceForgottenMessage => 'Устройство забыто';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Отвязать устройство?';
+
+  @override
+  String get rollBack => 'Откатить';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate кбит/с';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Диагностика устройства Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Сбой';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'переподключено за $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countд';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration назад';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Использует ваш основной язык';
+
+  @override
+  String get creatorPayouts => 'Выплаты авторам';
+
+  @override
+  String get sttLanguageOverride => 'Изменить';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Использовать основной язык';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Этот провайдер не поддерживает $language, поэтому используется $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Обнаружено ОЗУ: $ram ГБ. Рекомендуемый минимум: 4 ГБ.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Обнаружена модель: $model (старше iPhone XS). Распознавание на устройстве может быть медленнее.';
+  }
+
+  @override
+  String get copyLogs => 'Скопировать журналы';
+
+  @override
+  String get openProviderDocs => 'Открыть документацию';
+
+  @override
+  String get getApiKey => 'Получить ключ API';
+
+  @override
+  String get showApiKey => 'Показать ключ API';
+
+  @override
+  String get hideApiKey => 'Скрыть ключ API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Удалить $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count слов',
+      one: '1 слово',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Осталось $remaining из $limit бесплатных звонков в этом месяце';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Осталось $remaining из $limit бесплатных звонков в этом месяце · до $minutes мин каждый';
+  }
+
+  @override
+  String get appCreators => 'Авторам приложений';
+
+  @override
+  String get homeScreen => 'Главный экран';
+
+  @override
+  String get phoneCalls => 'Телефонные звонки';
+
+  @override
+  String get vadGate => 'VAD-фильтр';
+
+  @override
+  String get vadGateDescription => 'Фильтрация голоса на сервере для снижения затрат на распознавание речи';
+
+  @override
+  String get flashCustomFirmware => 'Прошить свою прошивку';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Прошивка собственных сборок';
+
+  @override
+  String get selectFirmwareZip => 'Выберите ZIP-файл прошивки';
+
+  @override
+  String get customFirmwareWarning =>
+      'Сторонняя прошивка может вывести устройство из строя. Убедитесь, что это корректная сборка прошивки Omi, и не отключайте устройство во время обновления.';
+
+  @override
+  String get firmwareFlashed => 'Прошивка установлена';
+
+  @override
+  String get deviceWillRestart => 'Устройство перезагрузится.';
+
+  @override
+  String get exportFailedTryAgain => 'Не удалось экспортировать. Попробуйте ещё раз.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Устройство: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Сохранить подписку';
+
+  @override
+  String get couldNotLoadPage => 'Не удалось загрузить страницу. Проверьте подключение и повторите попытку.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Шаг $current из $total';
+  }
 }

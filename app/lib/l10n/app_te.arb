@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "ఉపన్యాస ప్రొఫైల్",
+    "speechProfile": "వాయిస్ ప్రొఫైల్",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "సైన్ అవుట్ చేయాలనుకుంటున్నారని మీరు నిశ్చితమైనారా?",
+    "signOutConfirmation": "మీ సంభాషణలను చూడటానికి మళ్లీ సైన్ ఇన్ చేయాలి. జత చేసిన పరికరం మరియు యాప్ ప్రాధాన్యతలు ఈ ఫోన్‌లోనే ఉంటాయి.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు $49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "మీ ప్లాన్‌ను అప్‌గ్రేడ్ చేయండి",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10838,5 +10834,58 @@
     "discard": "విస్మరించు",
     "keepEditing": "సవరణ కొనసాగించు",
     "discardChangesTitle": "మార్పులను విస్మరించాలా?",
-    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు."
+    "discardChangesMessage": "మీరు సేవ్ చేయని మార్పులు కోల్పోతారు.",
+    "couldNotLoadCheckout": "చెక్అవుట్ పేజీని లోడ్ చేయలేకపోయాము. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "phoneFreeCallLimitReached": "నెలవారీ ఉచిత కాల్ పరిమితి చేరుకుంది. వచ్చే నెల రీసెట్ అవుతుంది.",
+    "couldNotLoadImportHistory": "దిగుమతి చరిత్రను లోడ్ చేయలేకపోయాం",
+    "phoneCallButton": "కాల్ చేయండి",
+    "searchContacts": "పరిచయాలను శోధించండి",
+    "phoneContactsAccessTitle": "పరిచయాలకు ప్రాప్యతను అనుమతించండి",
+    "phoneSelectCountryTitle": "దేశాన్ని ఎంచుకోండి",
+    "phoneNoVerifiedNumbersTitle": "ధృవీకరించిన నంబర్లు లేవు",
+    "phoneNoVerifiedNumbersMessage": "Omi ద్వారా కాల్ చేయడానికి మీ నంబర్‌ను ధృవీకరించండి.",
+    "phoneDeleteNumberFailed": "ఈ నంబర్‌ను తొలగించలేకపోయాము",
+    "forgetDeviceConfirmTitle": "పరికరాన్ని మర్చిపోవాలా?",
+    "forgetDeviceConfirmMessage": "Omi ఈ పరికరానికి కనెక్ట్ అవ్వడం ఆపివేస్తుంది. మళ్లీ ఉపయోగించడానికి, మీరు దాన్ని మళ్లీ పెయిర్ చేయాలి.",
+    "deviceForgottenMessage": "పరికరం మర్చిపోబడింది",
+    "unpairDeviceConfirmTitle": "పరికరాన్ని అన్‌పెయిర్ చేయాలా?",
+    "rollBack": "రోల్ బ్యాక్",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi పరికరం రోగనిర్ధారణ",
+    "diagnosticsFailBadge": "విఫలమైంది",
+    "diagnosticsReconnectedIn": "{duration}లో మళ్లీ కనెక్ట్ అయింది",
+    "timeCompactDays": "{count}రో",
+    "durationAgo": "{duration} క్రితం",
+    "sttLanguageFollowsPrimary": "మీ ప్రధాన భాషను అనుసరిస్తుంది",
+    "creatorPayouts": "సృష్టికర్తల చెల్లింపులు",
+    "sttLanguageOverride": "మార్చు",
+    "sttUsePrimaryLanguage": "ప్రధాన భాషను ఉపయోగించు",
+    "sttPrimaryLanguageUnsupported": "ఈ ప్రొవైడర్ {language}కు మద్దతు ఇవ్వదు, కాబట్టి {fallback}ను ఉపయోగిస్తుంది.",
+    "deviceRamBelowMinimum": "గుర్తించిన RAM: {ram} GB. సిఫార్సు చేసిన కనిష్ఠం: 4 GB.",
+    "olderIphoneModelDetected": "గుర్తించిన మోడల్: {model} (iPhone XS కంటే పాతది). పరికరంలో గుర్తింపు నెమ్మదిగా ఉండవచ్చు.",
+    "copyLogs": "లాగ్‌లను కాపీ చేయి",
+    "openProviderDocs": "డాక్యుమెంటేషన్ తెరువు",
+    "getApiKey": "API కీ పొందండి",
+    "showApiKey": "API కీని చూపు",
+    "hideApiKey": "API కీని దాచు",
+    "removeVocabularyWord": "{word}ని తీసివేయి",
+    "vocabularyWordCount": "{count, plural, =1{1 పదం} other{{count} పదాలు}}",
+    "phoneFreeCallsRemaining": "ఈ నెలలో {remaining} ఉచిత కాల్‌లు మిగిలి ఉన్నాయి ({limit} లో)",
+    "phoneFreeCallsRemainingWithMax": "ఈ నెలలో {remaining} ఉచిత కాల్‌లు మిగిలి ఉన్నాయి ({limit} లో) · ఒక్కోటి {minutes} నిమిషాల వరకు",
+    "appCreators": "యాప్ సృష్టికర్తలు",
+    "homeScreen": "హోమ్ స్క్రీన్",
+    "phoneCalls": "ఫోన్ కాల్స్",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "స్పీచ్-టు-టెక్స్ట్ ఖర్చు తగ్గించడానికి సర్వర్‌లో వాయిస్ ఫిల్టర్",
+    "flashCustomFirmware": "కస్టమ్ ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి",
+    "flashCustomFirmwareDescription": "కస్టమ్ ఫర్మ్‌వేర్ బిల్డ్‌లను ఫ్లాష్ చేయండి",
+    "selectFirmwareZip": "ఫర్మ్‌వేర్ ZIP ఫైల్‌ను ఎంచుకోండి",
+    "customFirmwareWarning": "కస్టమ్ ఫర్మ్‌వేర్ మీ పరికరాన్ని పనికిరాకుండా చేయవచ్చు. ఇది చెల్లుబాటు అయ్యే Omi ఫర్మ్‌వేర్ బిల్డ్ అని నిర్ధారించుకోండి, అప్‌డేట్ సమయంలో కనెక్షన్ తెంచవద్దు.",
+    "firmwareFlashed": "ఫర్మ్‌వేర్ ఫ్లాష్ అయింది",
+    "deviceWillRestart": "మీ పరికరం పునఃప్రారంభమవుతుంది.",
+    "exportFailedTryAgain": "ఎగుమతి విఫలమైంది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "firmwareFlashTarget": "పరికరం: {deviceName}",
+    "keepSubscription": "సబ్‌స్క్రిప్షన్ ఉంచండి",
+    "couldNotLoadPage": "ఈ పేజీని లోడ్ చేయలేకపోయాం. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "leaveFlowStepOf": "దశ {current} / {total}"
 }

@@ -135,7 +135,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get createPersonHint => 'Cipta orang baharu dan latih Omi untuk mengenali pertuturan mereka juga!';
 
   @override
-  String get speechProfile => 'Profil Pertuturan';
+  String get speechProfile => 'Profil Suara';
 
   @override
   String sampleNumber(int number) {
@@ -3824,7 +3824,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get signOutQuestion => 'Log keluar?';
 
   @override
-  String get signOutConfirmation => 'Adakah anda pasti mahu log keluar?';
+  String get signOutConfirmation =>
+      'Anda perlu log masuk semula untuk melihat perbualan. Peranti yang dipasangkan dan pilihan apl kekal pada telefon ini.';
 
   @override
   String get customVocabularyHeader => 'PERBENDAHARAAN KATA TERSUAI';
@@ -8972,10 +8973,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get planUpdate => 'Kemas Kini Pelan';
 
   @override
-  String get planDeprecationMessage =>
-      'Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada \$49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.';
-
-  @override
   String get upgradeYourPlan => 'Naik Taraf Pelan Anda';
 
   @override
@@ -10190,4 +10187,197 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Perubahan anda yang belum disimpan akan hilang.';
+
+  @override
+  String get couldNotLoadCheckout => 'Tidak dapat memuatkan halaman pembayaran. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Had panggilan percuma bulanan dicapai. Ia ditetapkan semula bulan depan.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Tidak dapat memuatkan sejarah import';
+
+  @override
+  String get phoneCallButton => 'Panggil';
+
+  @override
+  String get searchContacts => 'Cari kenalan';
+
+  @override
+  String get phoneContactsAccessTitle => 'Benarkan Akses Kenalan';
+
+  @override
+  String get phoneSelectCountryTitle => 'Pilih Negara';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Tiada Nombor Disahkan';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Sahkan nombor anda untuk membuat panggilan melalui Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Tidak dapat memadam nombor ini';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Lupakan Peranti?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi akan berhenti menyambung ke peranti ini. Untuk menggunakannya semula, anda perlu memadankannya semula.';
+
+  @override
+  String get deviceForgottenMessage => 'Peranti dilupakan';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Nyahpadan Peranti?';
+
+  @override
+  String get rollBack => 'Kembalikan';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostik Peranti Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Gagal';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'disambung semula dalam $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}h';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration lalu';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Mengikut bahasa utama anda';
+
+  @override
+  String get creatorPayouts => 'Pembayaran Pencipta';
+
+  @override
+  String get sttLanguageOverride => 'Ganti';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Guna Bahasa Utama';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Penyedia ini tidak menyokong $language, jadi ia menggunakan $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM dikesan: $ram GB. Minimum disyorkan: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Model dikesan: $model (lebih lama daripada iPhone XS). Pengecaman pada peranti mungkin lebih perlahan.';
+  }
+
+  @override
+  String get copyLogs => 'Salin Log';
+
+  @override
+  String get openProviderDocs => 'Buka Dokumentasi';
+
+  @override
+  String get getApiKey => 'Dapatkan Kunci API';
+
+  @override
+  String get showApiKey => 'Tunjukkan Kunci API';
+
+  @override
+  String get hideApiKey => 'Sembunyikan Kunci API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Alih keluar $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perkataan',
+      one: '1 perkataan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Baki $remaining daripada $limit panggilan percuma bulan ini';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Baki $remaining daripada $limit panggilan percuma bulan ini · sehingga $minutes min setiap satu';
+  }
+
+  @override
+  String get appCreators => 'Pencipta Apl';
+
+  @override
+  String get homeScreen => 'Skrin Utama';
+
+  @override
+  String get phoneCalls => 'Panggilan Telefon';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Penapisan suara di pelayan untuk mengurangkan kos pertuturan-ke-teks';
+
+  @override
+  String get flashCustomFirmware => 'Pasang Perisian Tegar Tersuai';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Pasang binaan perisian tegar tersuai';
+
+  @override
+  String get selectFirmwareZip => 'Pilih fail ZIP perisian tegar';
+
+  @override
+  String get customFirmwareWarning =>
+      'Perisian tegar tersuai boleh merosakkan peranti anda. Pastikan ini binaan perisian tegar Omi yang sah, dan jangan putuskan sambungan semasa kemas kini.';
+
+  @override
+  String get firmwareFlashed => 'Perisian tegar dipasang';
+
+  @override
+  String get deviceWillRestart => 'Peranti anda akan dimulakan semula.';
+
+  @override
+  String get exportFailedTryAgain => 'Eksport gagal. Sila cuba lagi.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Peranti: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Kekalkan Langganan';
+
+  @override
+  String get couldNotLoadPage => 'Tidak dapat memuatkan halaman ini. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Langkah $current daripada $total';
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/asana_service.dart';
@@ -163,117 +164,52 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       onRefresh: _initializeAsana,
       children: [
         if (_asanaService.currentUserGid != null)
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: OmiColors.successSurface,
-              borderRadius: OmiRadius.smAll,
-              border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    context.l10n.connectedAsUser(_asanaService.currentUserGid!),
-                    style: OmiType.footnote.copyWith(color: OmiColors.success),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          IntegrationConnectedBanner(context.l10n.connectedAsUser(_asanaService.currentUserGid!)),
         Text(
           context.l10n.defaultWorkspace,
           style: OmiType.title3,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: OmiSpacing.xs),
         Text(context.l10n.tasksCreatedInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-        const SizedBox(height: 16),
+        const SizedBox(height: OmiSpacing.md),
         ..._workspaces.map((workspace) {
           final workspaceGid = workspace['gid'] as String;
           final workspaceName = workspace['name'] as String;
           final isSelected = _selectedWorkspaceGid == workspaceGid;
-          return GestureDetector(
+          return IntegrationSelectionCard(
+            label: workspaceName,
+            isSelected: isSelected,
             onTap: () => _selectWorkspace(workspace),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.mdAll,
-                border: isSelected ? Border.all(color: OmiColors.accent, width: 2) : null,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(workspaceName, style: OmiType.callout),
-                  ),
-                  if (isSelected) const Icon(Icons.check_circle, color: OmiColors.accent, size: 24),
-                ],
-              ),
-            ),
           );
         }),
-        const SizedBox(height: 32),
+        const SizedBox(height: OmiSpacing.xxl),
         if (_selectedWorkspaceGid != null) ...[
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                context.l10n.defaultProjectOptional,
-                style: OmiType.title3,
-              ),
+              Expanded(child: Text(context.l10n.defaultProjectOptional, style: OmiType.title3)),
               if (_selectedProjectGid != null)
-                TextButton(
-                  onPressed: _clearProject,
-                  child: Text(context.l10n.clear, style: const TextStyle(color: OmiColors.danger)),
-                ),
+                OmiButton.tertiary(label: context.l10n.clear, onPressed: _clearProject, size: OmiButtonSize.compact),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.leaveUnselectedTasks, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-          const SizedBox(height: 16),
+          const SizedBox(height: OmiSpacing.md),
           if (_isLoadingProjects)
             const Center(
               child: Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: OmiSpinner()),
             )
           else if (_projects.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
-              child: Center(
-                child: Text(
-                  context.l10n.noProjectsInWorkspace,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                ),
-              ),
-            )
+            IntegrationSelectionEmpty(context.l10n.noProjectsInWorkspace)
           else
             ..._projects.map((project) {
               final projectGid = project['gid'] as String;
               final projectName = project['name'] as String;
               final isSelected = _selectedProjectGid == projectGid;
-              return GestureDetector(
+              return IntegrationSelectionCard(
+                label: projectName,
+                isSelected: isSelected,
                 onTap: () => _selectProject(project),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: OmiColors.surface1,
-                    borderRadius: OmiRadius.mdAll,
-                    border: isSelected ? Border.all(color: OmiColors.accent, width: 2) : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(projectName, style: OmiType.callout),
-                      ),
-                      if (isSelected) const Icon(Icons.check_circle, color: OmiColors.accent, size: 24),
-                    ],
-                  ),
-                ),
               );
             }),
         ],

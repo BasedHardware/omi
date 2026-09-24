@@ -136,7 +136,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get createPersonHint => 'Hozz létre egy új személyt, és tanítsd meg az Omi-t, hogy felismerje a beszédét is!';
 
   @override
-  String get speechProfile => 'Beszédprofil';
+  String get speechProfile => 'Hangprofil';
 
   @override
   String sampleNumber(int number) {
@@ -3831,7 +3831,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get signOutQuestion => 'Kijelentkezik?';
 
   @override
-  String get signOutConfirmation => 'Biztosan ki szeretnél jelentkezni?';
+  String get signOutConfirmation =>
+      'A beszélgetések megtekintéséhez újra be kell jelentkezned. A párosított eszköz és az alkalmazás beállításai ezen a telefonon maradnak.';
 
   @override
   String get customVocabularyHeader => 'EGYÉNI SZÓKINCS';
@@ -8983,10 +8984,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get planUpdate => 'Csomag frissítés';
 
   @override
-  String get planDeprecationMessage =>
-      'Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók \$49/hó áron. A jelenlegi csomagja addig is tovább működik.';
-
-  @override
   String get upgradeYourPlan => 'Frissítsd a csomagodat';
 
   @override
@@ -10202,4 +10199,198 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'A nem mentett módosítások elvesznek.';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Nem sikerült betölteni a fizetési oldalt. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Elérted a havi ingyenes hívások korlátját. A jövő hónapban visszaáll.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Nem sikerült betölteni az importálási előzményeket';
+
+  @override
+  String get phoneCallButton => 'Hívás';
+
+  @override
+  String get searchContacts => 'Névjegyek keresése';
+
+  @override
+  String get phoneContactsAccessTitle => 'Névjegyekhez való hozzáférés engedélyezése';
+
+  @override
+  String get phoneSelectCountryTitle => 'Ország kiválasztása';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Nincs ellenőrzött szám';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Ellenőrizd a számodat, hogy az Omin keresztül telefonálhass.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Nem sikerült törölni ezt a számot';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Elfelejted az eszközt?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Az Omi nem csatlakozik többé ehhez az eszközhöz. Az újbóli használathoz újra párosítanod kell.';
+
+  @override
+  String get deviceForgottenMessage => 'Eszköz elfelejtve';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Megszünteted az eszköz párosítását?';
+
+  @override
+  String get rollBack => 'Visszaállítás';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi eszközdiagnosztika';
+
+  @override
+  String get diagnosticsFailBadge => 'Sikertelen';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'újracsatlakozva $duration alatt';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}n';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration ezelőtt';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Az elsődleges nyelvedet követi';
+
+  @override
+  String get creatorPayouts => 'Alkotói kifizetések';
+
+  @override
+  String get sttLanguageOverride => 'Felülírás';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Elsődleges nyelv használata';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Ez a szolgáltató nem támogatja a(z) $language nyelvet, ezért ezt használja: $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Észlelt RAM: $ram GB. Ajánlott minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Észlelt modell: $model (régebbi, mint az iPhone XS). Az eszközön történő felismerés lassabb lehet.';
+  }
+
+  @override
+  String get copyLogs => 'Naplók másolása';
+
+  @override
+  String get openProviderDocs => 'Dokumentáció megnyitása';
+
+  @override
+  String get getApiKey => 'API-kulcs beszerzése';
+
+  @override
+  String get showApiKey => 'API-kulcs megjelenítése';
+
+  @override
+  String get hideApiKey => 'API-kulcs elrejtése';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word eltávolítása';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count szó',
+      one: '1 szó',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Ebben a hónapban $remaining ingyenes hívás maradt ($limit közül)';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Ebben a hónapban $remaining ingyenes hívás maradt ($limit közül) · egyenként legfeljebb $minutes perc';
+  }
+
+  @override
+  String get appCreators => 'Alkalmazáskészítők';
+
+  @override
+  String get homeScreen => 'Kezdőképernyő';
+
+  @override
+  String get phoneCalls => 'Telefonhívások';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Szerveroldali hangszűrés a beszédfelismerés költségeinek csökkentésére';
+
+  @override
+  String get flashCustomFirmware => 'Egyéni firmware telepítése';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Egyéni firmware-verziók telepítése';
+
+  @override
+  String get selectFirmwareZip => 'Firmware ZIP-fájl kiválasztása';
+
+  @override
+  String get customFirmwareWarning =>
+      'Az egyéni firmware használhatatlanná teheti az eszközt. Győződj meg róla, hogy érvényes Omi firmware-verzióról van szó, és ne bontsd a kapcsolatot frissítés közben.';
+
+  @override
+  String get firmwareFlashed => 'Firmware telepítve';
+
+  @override
+  String get deviceWillRestart => 'Az eszköz újraindul.';
+
+  @override
+  String get exportFailedTryAgain => 'Az exportálás nem sikerült. Próbáld újra.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Eszköz: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Előfizetés megtartása';
+
+  @override
+  String get couldNotLoadPage => 'Az oldal nem tölthető be. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '$current. lépés / $total';
+  }
 }

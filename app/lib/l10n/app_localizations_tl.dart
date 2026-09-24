@@ -135,7 +135,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createPersonHint => 'Lumikha ng bagong tao at turuan ang Omi na kilalanin ang kanilang pagsasalita!';
 
   @override
-  String get speechProfile => 'Profil ng Boses';
+  String get speechProfile => 'Voice Profile';
 
   @override
   String sampleNumber(int number) {
@@ -3843,7 +3843,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get signOutQuestion => 'Mag-sign Out?';
 
   @override
-  String get signOutConfirmation => 'Sigurado ka na ba na gusto mong mag-sign out?';
+  String get signOutConfirmation =>
+      'Kailangan mong mag-sign in muli para makita ang iyong mga usapan. Mananatili sa teleponong ito ang naka-pair na device at mga kagustuhan sa app.';
 
   @override
   String get customVocabularyHeader => 'CUSTOM VOCABULARY';
@@ -9031,10 +9032,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get planUpdate => 'Update ng Plano';
 
   @override
-  String get planDeprecationMessage =>
-      'Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa \$49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.';
-
-  @override
   String get upgradeYourPlan => 'I-upgrade ang Iyong Plano';
 
   @override
@@ -10254,4 +10251,198 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get couldNotLoadCheckout => 'Hindi ma-load ang checkout page. Suriin ang iyong koneksyon at subukang muli.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Naabot na ang buwanang limitasyon ng libreng tawag. Magre-reset ito sa susunod na buwan.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Hindi ma-load ang kasaysayan ng pag-import';
+
+  @override
+  String get phoneCallButton => 'Tumawag';
+
+  @override
+  String get searchContacts => 'Maghanap ng contact';
+
+  @override
+  String get phoneContactsAccessTitle => 'Payagan ang Access sa Contacts';
+
+  @override
+  String get phoneSelectCountryTitle => 'Pumili ng Bansa';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Walang Na-verify na Numero';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'I-verify ang iyong numero para tumawag gamit ang Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Hindi ma-delete ang numerong ito';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Kalimutan ang Device?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.';
+
+  @override
+  String get deviceForgottenMessage => 'Nakalimutan na ang device';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'I-unpair ang Device?';
+
+  @override
+  String get rollBack => 'Ibalik';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi Device Diagnostics';
+
+  @override
+  String get diagnosticsFailBadge => 'Nabigo';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'muling nakakonekta sa loob ng $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration ang nakalipas';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Sumusunod sa iyong pangunahing wika';
+
+  @override
+  String get creatorPayouts => 'Mga Bayad sa Creator';
+
+  @override
+  String get sttLanguageOverride => 'I-override';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Gamitin ang Pangunahing Wika';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Hindi sinusuportahan ng provider na ito ang $language, kaya $fallback ang ginagamit.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Natukoy na RAM: $ram GB. Inirerekomendang minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Natukoy na modelo: $model (mas luma sa iPhone XS). Maaaring mas mabagal ang pagkilala sa device.';
+  }
+
+  @override
+  String get copyLogs => 'Kopyahin ang mga Log';
+
+  @override
+  String get openProviderDocs => 'Buksan ang Dokumentasyon';
+
+  @override
+  String get getApiKey => 'Kumuha ng API Key';
+
+  @override
+  String get showApiKey => 'Ipakita ang API Key';
+
+  @override
+  String get hideApiKey => 'Itago ang API Key';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Alisin ang $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salita',
+      one: '1 salita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining sa $limit libreng tawag ang natitira ngayong buwan';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining sa $limit libreng tawag ang natitira ngayong buwan · hanggang $minutes min bawat isa';
+  }
+
+  @override
+  String get appCreators => 'Mga Gumagawa ng App';
+
+  @override
+  String get homeScreen => 'Home Screen';
+
+  @override
+  String get phoneCalls => 'Mga Tawag sa Telepono';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text';
+
+  @override
+  String get flashCustomFirmware => 'I-flash ang Custom na Firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Mag-flash ng custom na firmware build';
+
+  @override
+  String get selectFirmwareZip => 'Piliin ang ZIP file ng firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Maaaring masira ang iyong device dahil sa custom na firmware. Tiyaking valid na Omi firmware build ito, at huwag idiskonekta habang nag-a-update.';
+
+  @override
+  String get firmwareFlashed => 'Na-flash na ang firmware';
+
+  @override
+  String get deviceWillRestart => 'Magre-restart ang iyong device.';
+
+  @override
+  String get exportFailedTryAgain => 'Nabigo ang pag-export. Pakisubukang muli.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Device: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Panatilihin ang Subscription';
+
+  @override
+  String get couldNotLoadPage => 'Hindi ma-load ang pahinang ito. Suriin ang iyong koneksyon at subukang muli.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Hakbang $current ng $total';
+  }
 }

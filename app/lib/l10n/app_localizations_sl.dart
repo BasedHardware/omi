@@ -135,7 +135,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get createPersonHint => 'Ustvari novo osebo in nauči Omi, da prepozna tudi njihov glas!';
 
   @override
-  String get speechProfile => 'Profil govora';
+  String get speechProfile => 'Glasovni profil';
 
   @override
   String sampleNumber(int number) {
@@ -3818,7 +3818,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get signOutQuestion => 'Odjava?';
 
   @override
-  String get signOutConfirmation => 'Ste prepričani, da želite odjaviti?';
+  String get signOutConfirmation =>
+      'Za ogled pogovorov se boste morali znova prijaviti. Seznanjena naprava in nastavitve aplikacije ostanejo v tem telefonu.';
 
   @override
   String get customVocabularyHeader => 'VLASTNI BESEDNJAK';
@@ -8971,10 +8972,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get planUpdate => 'Posodobitev načrta';
 
   @override
-  String get planDeprecationMessage =>
-      'Vaš načrt Unlimited se ukinja. Preklopite na načrt Operator — enake odlične funkcije za \$49/mesec. Vaš trenutni načrt bo medtem še naprej deloval.';
-
-  @override
   String get upgradeYourPlan => 'Nadgradite svoj načrt';
 
   @override
@@ -10194,4 +10191,199 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get discardChangesMessage => 'Neshranjene spremembe bodo izgubljene.';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Strani za plačilo ni bilo mogoče naložiti. Preverite povezavo in poskusite znova.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Dosežena je mesečna omejitev brezplačnih klicev. Ponastavi se naslednji mesec.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Zgodovine uvoza ni bilo mogoče naložiti';
+
+  @override
+  String get phoneCallButton => 'Pokliči';
+
+  @override
+  String get searchContacts => 'Iskanje stikov';
+
+  @override
+  String get phoneContactsAccessTitle => 'Dovoli dostop do stikov';
+
+  @override
+  String get phoneSelectCountryTitle => 'Izberite državo';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Ni potrjenih številk';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Potrdite svojo številko za klicanje prek Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Številke ni bilo mogoče izbrisati';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Pozabim napravo?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi se ne bo več povezoval s to napravo. Če jo želite znova uporabljati, jo boste morali znova seznaniti.';
+
+  @override
+  String get deviceForgottenMessage => 'Naprava pozabljena';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Prekličem seznanitev naprave?';
+
+  @override
+  String get rollBack => 'Povrni';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostika naprave Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Neuspešno';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'ponovno povezano v $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'pred $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Sledi vašemu primarnemu jeziku';
+
+  @override
+  String get creatorPayouts => 'Izplačila ustvarjalcem';
+
+  @override
+  String get sttLanguageOverride => 'Spremeni';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Uporabi primarni jezik';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Ta ponudnik ne podpira jezika $language, zato uporablja $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Zaznan RAM: $ram GB. Priporočeni minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Zaznan model: $model (starejši od iPhone XS). Prepoznavanje v napravi je lahko počasnejše.';
+  }
+
+  @override
+  String get copyLogs => 'Kopiraj dnevnike';
+
+  @override
+  String get openProviderDocs => 'Odpri dokumentacijo';
+
+  @override
+  String get getApiKey => 'Pridobi ključ API';
+
+  @override
+  String get showApiKey => 'Pokaži ključ API';
+
+  @override
+  String get hideApiKey => 'Skrij ključ API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Odstrani $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count besed',
+      one: '1 beseda',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Ta mesec je ostalo $remaining od $limit brezplačnih klicev';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Ta mesec je ostalo $remaining od $limit brezplačnih klicev · do $minutes min vsak';
+  }
+
+  @override
+  String get appCreators => 'Ustvarjalci aplikacij';
+
+  @override
+  String get homeScreen => 'Domači zaslon';
+
+  @override
+  String get phoneCalls => 'Telefonski klici';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Filtriranje glasu na strežniku za nižje stroške pretvorbe govora v besedilo';
+
+  @override
+  String get flashCustomFirmware => 'Namesti prilagojeno vdelano programsko opremo';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Namestite prilagojene različice vdelane programske opreme';
+
+  @override
+  String get selectFirmwareZip => 'Izberite datoteko ZIP z vdelano programsko opremo';
+
+  @override
+  String get customFirmwareWarning =>
+      'Prilagojena vdelana programska oprema lahko trajno poškoduje napravo. Prepričajte se, da gre za veljavno različico za Omi, in med posodobitvijo ne prekinjajte povezave.';
+
+  @override
+  String get firmwareFlashed => 'Vdelana programska oprema nameščena';
+
+  @override
+  String get deviceWillRestart => 'Naprava se bo znova zagnala.';
+
+  @override
+  String get exportFailedTryAgain => 'Izvoz ni uspel. Poskusite znova.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Naprava: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Obdrži naročnino';
+
+  @override
+  String get couldNotLoadPage => 'Strani ni bilo mogoče naložiti. Preverite povezavo in poskusite znova.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Korak $current od $total';
+  }
 }
