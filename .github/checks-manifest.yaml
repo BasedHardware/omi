@@ -1310,6 +1310,11 @@ checks:
     triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the backend forwards geolocation as free-form JSON, so pydantic does not coerce the values inside it; a coordinate arriving as a list or object reached float(), which raises TypeError rather than the ValueError call_uber handles, so the documented 400 for a bad geolocation became an unhandled 500"
+  - id: uber-call-error-handling-tests
+    command: ["python3", "plugins/uber_call/test_error_handling.py"]
+    triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "uber_call ride endpoint must catch unexpected exceptions and return generic 500 without leaking sensitive paths or tracebacks, while rejecting boolean coordinates and handling non-dict geolocations"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
