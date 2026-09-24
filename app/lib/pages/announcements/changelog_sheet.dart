@@ -157,7 +157,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   child: Container(
                     width: 180,
                     height: 22,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: OmiColors.surface2,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -188,7 +188,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Container(
                     width: 24,
                     height: 24,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: OmiColors.surface2,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -198,7 +198,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Expanded(
                     child: Container(
                       height: 20,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),
@@ -214,7 +214,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   children: [
                     Container(
                       height: 14,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),
@@ -223,7 +223,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                     Container(
                       height: 14,
                       width: MediaQuery.of(context).size.width * 0.6,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: OmiColors.surface2,
                         borderRadius: OmiRadius.smAll,
                       ),

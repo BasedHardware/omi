@@ -44,9 +44,9 @@ class PromptTextField extends StatelessWidget {
             borderRadius: OmiRadius.mdAll,
             borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
           ),
-          errorBorder: OutlineInputBorder(
+          errorBorder: const OutlineInputBorder(
             borderRadius: OmiRadius.mdAll,
-            borderSide: const BorderSide(color: OmiColors.danger, width: 1),
+            borderSide: BorderSide(color: OmiColors.danger, width: 1),
           ),
           filled: false,
         ),

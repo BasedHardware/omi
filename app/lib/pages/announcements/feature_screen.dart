@@ -327,14 +327,14 @@ class _FeatureScreenState extends State<FeatureScreen> {
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           placeholder: (context, url) => Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: OmiColors.surface1,
               borderRadius: OmiRadius.xlAll,
             ),
             child: const Center(child: OmiSpinner(color: OmiColors.textSecondary)),
           ),
           errorWidget: (context, url, error) => Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: OmiColors.surface1,
               borderRadius: OmiRadius.xlAll,
             ),

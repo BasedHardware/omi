@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
@@ -83,7 +82,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                   Container(
                     width: 140,
                     height: 20,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: OmiColors.surface1,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -92,7 +91,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                   Container(
                     width: 40,
                     height: 20,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: OmiColors.surface1,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -122,7 +121,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: OmiColors.surface1,
                           borderRadius: OmiRadius.smAll,
                         ),
@@ -136,7 +135,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                             Container(
                               width: double.infinity,
                               height: 16,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 color: OmiColors.surface1,
                                 borderRadius: OmiRadius.smAll,
                               ),
@@ -145,7 +144,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                             Container(
                               width: 80,
                               height: 12,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 color: OmiColors.surface1,
                                 borderRadius: OmiRadius.smAll,
                               ),
@@ -157,7 +156,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 28,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: OmiColors.surface1,
                           borderRadius: OmiRadius.pillAll,
                         ),
@@ -211,7 +210,10 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
       itemBuilder: (context, index) {
         final group = _categoryGroups[index];
         final categoryMap = group['category'] as Map<String, dynamic>?;
-        final categoryTitle = categoryMap?['title'] as String? ?? context.l10n.categoryOther;
+        final categoryTitle = Category(
+          id: categoryMap?['id'] as String? ?? '',
+          title: categoryMap?['title'] as String? ?? context.l10n.categoryOther,
+        ).getLocalizedTitle(context);
         final apps = group['data'] as List<App>? ?? [];
 
         if (apps.isEmpty) return const SizedBox.shrink();
@@ -234,12 +236,12 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
           ? _buildShimmerView()
           : RefreshIndicator(
               onRefresh: () async {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 await _loadCapabilityApps();
               },
               // The arc is drawn on backgroundColor, so it must not also be white.
-              color: Colors.black,
-              backgroundColor: Colors.white,
+              color: OmiColors.onAccent,
+              backgroundColor: OmiColors.accent,
               child: _buildContent(),
             ),
     );

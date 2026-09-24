@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Supplemental evidence chrome for a chat answer.
 ///
@@ -69,7 +70,7 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
       label: reference.accessibilityLabel,
       button: canOpen,
       enabled: canOpen,
-      hint: canOpen ? 'Open evidence' : null,
+      hint: canOpen ? context.l10n.open : null,
       child: canOpen
           ? InkWell(
               onTap: onOpen,

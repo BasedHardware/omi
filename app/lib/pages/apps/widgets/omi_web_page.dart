@@ -41,20 +41,20 @@ class _OmiWebPageState extends State<OmiWebPage> {
         NavigationDelegate(
           onPageFinished: (_) async {
             final canGoBack = await _controller.canGoBack();
-            if (mounted)
-              setState(() {
-                _loading = false;
-                _canGoBack = canGoBack;
-              });
+            if (!mounted) return;
+            setState(() {
+              _loading = false;
+              _canGoBack = canGoBack;
+            });
           },
           onWebResourceError: (error) {
             // A failed image or script is the page's business; only a failed page is ours.
             if (error.isForMainFrame == false) return;
-            if (mounted)
-              setState(() {
-                _loading = false;
-                _failed = true;
-              });
+            if (!mounted) return;
+            setState(() {
+              _loading = false;
+              _failed = true;
+            });
           },
         ),
       )

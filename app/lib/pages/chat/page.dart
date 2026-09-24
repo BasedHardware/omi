@@ -762,12 +762,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _PlansSheetWrapper(),
-    );
+    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
   }
 
   sendInitialAppMessage(App? app) async {
