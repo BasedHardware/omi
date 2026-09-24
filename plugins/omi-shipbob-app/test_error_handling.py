@@ -43,6 +43,12 @@ def load_shipbob_app():
         exception_handler = get
         mount = lambda *args, **kwargs: None
 
+    class _Response:
+        def __init__(self, content="", status_code=200, **kwargs):
+            self.content = content
+            self.status_code = status_code
+            self.kwargs = kwargs
+
     class ChatToolResponse:
         def __init__(self, result=None, error=None, **kwargs):
             self.result = result
@@ -73,7 +79,7 @@ def load_shipbob_app():
         "fastapi.exceptions": make_module("fastapi.exceptions", RequestValidationError=Framework),
         "fastapi.responses": make_module(
             "fastapi.responses",
-            **{name: lambda *a, **k: object() for name in ("HTMLResponse", "JSONResponse", "RedirectResponse")},
+            **{name: lambda *a, **k: _Response(*a, **k) for name in ("HTMLResponse", "JSONResponse", "RedirectResponse")},
         ),
         "fastapi.staticfiles": make_module("fastapi.staticfiles", StaticFiles=lambda *a, **k: object()),
         "fastapi.templating": make_module("fastapi.templating", Jinja2Templates=FakeTemplates),
@@ -217,6 +223,20 @@ class TestShipbobErrorHandling(unittest.TestCase):
             self.assertIsNotNone(res.error)
             self.assertNotIn(SENTINEL_ERROR, res.error)
             self.assertEqual(res.error, "Failed to get fulfillment centers")
+
+
+    def test_validation_exception_handler_does_not_leak_raw_errors(self):
+        """validation_exception_handler masks Pydantic validation error lists."""
+        class FakeExc:
+            def errors(self):
+                return [{"loc": ("body", "quantity"), "msg": SENTINEL_ERROR, "type": "value_error"}]
+
+        resp = asyncio.run(self.app.validation_exception_handler(object(), FakeExc()))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content if isinstance(resp.content, dict) else resp.kwargs.get("content", {})
+        self.assertIn("error", content)
+        self.assertEqual(content["error"], "Invalid request payload")
+        self.assertNotIn(SENTINEL_ERROR, str(content))
 
 
 if __name__ == "__main__":

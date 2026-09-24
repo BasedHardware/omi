@@ -88,7 +88,8 @@ templates = Jinja2Templates(directory=templates_dir)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Gracefully envelope validation errors for chat tool endpoints."""
-    return JSONResponse(status_code=200, content={"error": f"Invalid request payload: {exc.errors()}"})
+    log(f"Invalid request payload: {exc.errors()}")
+    return JSONResponse(status_code=200, content={"error": "Invalid request payload"})
 
 
 # ============================================
