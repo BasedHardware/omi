@@ -34,15 +34,19 @@ class RequestValidationSyncFilesSanitizationTests(unittest.TestCase):
             for node in ast.walk(tree):
                 if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
                     func = node.exc.func
-                    if (isinstance(func, ast.Name) and func.id == "HTTPException") or \
-                       (isinstance(func, ast.Attribute) and func.attr == "HTTPException"):
+                    if (isinstance(func, ast.Name) and func.id == "HTTPException") or (
+                        isinstance(func, ast.Attribute) and func.attr == "HTTPException"
+                    ):
                         for kw in node.exc.keywords:
                             if kw.arg == "detail" and isinstance(kw.value, ast.JoinedStr):
                                 for part in kw.value.values:
                                     if isinstance(part, ast.FormattedValue):
                                         val = ast.unparse(part.value)
-                                        self.assertNotIn(val, {"e", "str(e)", "exc", "str(exc)"},
-                                                         f"Raw exception reflection found in {path.name}: {val}")
+                                        self.assertNotIn(
+                                            val,
+                                            {"e", "str(e)", "exc", "str(exc)"},
+                                            f"Raw exception reflection found in {path.name}: {val}",
+                                        )
 
 
 if __name__ == "__main__":
