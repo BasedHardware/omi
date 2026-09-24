@@ -76,4 +76,12 @@ void main() {
       SettingsDestination.deleteAccount,
     );
   });
+
+  test('"Profile" still finds the Account row (its old name) and Voice Profile', () {
+    const scope = SettingsSearchScope(deviceConnected: false, supportLinks: false, android: false);
+    final results = searchSettings(en, 'profile', scope);
+    expect(results.map((e) => e.destination),
+        containsAll([SettingsDestination.profile, SettingsDestination.voiceProfile]));
+    expect(results.firstWhere((e) => e.destination == SettingsDestination.profile).title(en), 'Account');
+  });
 }
