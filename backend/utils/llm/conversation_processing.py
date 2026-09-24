@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
@@ -29,7 +28,7 @@ from utils.conversations.wake_word import (
     WAKE_WORD_PROMPT_RULES,
     has_structural_wake_word_marker,
 )
-from utils.conversations.relevance_rules import KEEP_WORD_COUNT
+from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word_count
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
@@ -120,12 +119,7 @@ def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature:
 
 
 def _word_count(text: str) -> int:
-    if not text:
-        return 0
-    cjk_chars = sum(1 for c in text if unicodedata.east_asian_width(c) in ('W', 'F', 'H'))
-    if cjk_chars > len(text) * 0.3:
-        return cjk_chars // 2
-    return len(text.split())
+    return transcript_word_count(text)
 
 
 def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:

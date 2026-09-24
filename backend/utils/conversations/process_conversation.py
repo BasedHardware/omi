@@ -75,6 +75,9 @@ from utils.conversations.relevance import (
     decide_relevance,
     final_relevance,
 )
+from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
+from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip
+from config.jev_decisions import conversation_relevance_jev_enabled, memory_owner_jev_flip_enabled
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
@@ -101,7 +104,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral, record_memory_owner_jev
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -539,12 +542,22 @@ def _get_structured(
                     neighbor_position=neighbor.position if neighbor else None,
                 )
 
+        # Only described photos reach the model (ConversationPhoto.photos_as_string).
+        has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
+        # Jev replaces conv_discard only for transcript-only conversations, the
+        # population it was measured on; photos and wake-word invocations keep
+        # the existing model prompt (#14835).
+        jev_discard: Optional[Callable[[], Optional[float]]] = None
+        if conversation_relevance_jev_enabled() and not has_described_photos and not has_wake_word_marker:
+            jev_transcript = relevance_transcript(segments)
+            if jev_tier_applies(jev_transcript):
+                jev_discard = lambda: jev_discard_probability(jev_transcript)
+
         decision = decide_relevance(
             trigger=trigger,
             texts=[segment.text for segment in segments],
             speech_seconds=sum(max(0.0, segment.end - segment.start) for segment in segments) if segments else None,
-            # Only described photos reach the model (ConversationPhoto.photos_as_string).
-            has_photos=any((photo.description or '').strip() for photo in main_conv.photos or []),
+            has_photos=has_described_photos,
             user_kept=user_kept,
             # The release probe's terminal contract only completes through a
             # kept conversation (gate convention, utils/release_probe.py); its
@@ -557,6 +570,7 @@ def _get_structured(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
             neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
+            jev_discard_probability=jev_discard,
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -1369,10 +1383,13 @@ def _canonical_conversation_write_payload(
     subject_kind: str,
     sensitivity_labels: List[str],
     segments: List[Any],
+    owner_flip: Optional[OwnerFlip] = None,
 ) -> Dict[str, Any]:
     payload = memory.model_dump(mode="json")
     payload["sensitivity_labels"] = sensitivity_labels
     payload["subject_kind"] = subject_kind
+    if owner_flip is not None:
+        payload["attribution_override"] = owner_flip.as_record()
     raw_evidence = payload.get("evidence")
     if not isinstance(raw_evidence, list) or len(raw_evidence) != 1 or not isinstance(raw_evidence[0], dict):
         raise RuntimeError("canonical conversation capture requires exactly one source evidence item")
@@ -1390,6 +1407,40 @@ def _canonical_conversation_write_payload(
         }
     )
     return payload
+
+
+def _jev_owner_flip_for_candidate(
+    conversation: Conversation,
+    *,
+    candidate_content: str,
+    evidence_quotes: List[str],
+    user_name: Optional[str],
+    subject_entity_id: Optional[str],
+    subject_kind: str,
+) -> Optional[OwnerFlip]:
+    """Ask Jev whether a third-party candidate is the user's own fact (MEMORY_OWNER_JEV_FLIP_ENABLED)."""
+    quotes: List[Tuple[Optional[str], str]] = []
+    for quote in evidence_quotes:
+        try:
+            ref = _canonical_quote_ref(
+                quote=quote, source_id=conversation.id, segments=conversation.transcript_segments
+            )
+        except RuntimeError:
+            ref = {}
+        quotes.append((ref.get("speaker_label"), quote))
+    structured = getattr(conversation, "structured", None)
+    flip, outcome = jev_owner_flip(
+        candidate=candidate_content,
+        quotes=quotes,
+        title=getattr(structured, "title", None),
+        overview=getattr(structured, "overview", None),
+        source=getattr(conversation.source, "value", conversation.source),
+        user_name=user_name,
+        pipeline_subject_entity_id=subject_entity_id,
+        pipeline_subject_kind=subject_kind,
+    )
+    record_memory_owner_jev(outcome)
+    return flip
 
 
 def _canonical_extraction_unavailable(
@@ -1447,6 +1498,7 @@ def _extract_memories_canonical(
     source_captured_at = getattr(conversation, "started_at", None) or getattr(conversation, "created_at", None)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
     capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
+    owner_flips_by_memory_object: Dict[int, OwnerFlip] = {}
 
     # Relative dates in delayed external content must resolve against capture
     # time, not the worker's current wall clock.  Keep this date grounding on
@@ -1518,6 +1570,8 @@ def _extract_memories_canonical(
             return _canonical_extraction_unavailable(conversation, source, exc)
         ungrounded_candidates = 0
         seen_candidates = 0
+        owner_checks = 0
+        owner_jev_enabled = memory_owner_jev_flip_enabled()
         for candidate in extracted_candidates:
             seen_candidates += 1
             evidence_quotes = _grounded_l1_evidence_quotes(
@@ -1539,6 +1593,23 @@ def _extract_memories_canonical(
                 user_name=user_name,
                 segments=conversation.transcript_segments,
             )
+            owner_flip: Optional[OwnerFlip] = None
+            if owner_jev_enabled and subject_attribution == SubjectAttribution.third_party:
+                # Only third-party -> user, never the reverse (owner_jev.py).
+                if owner_checks >= MAX_OWNER_CHECKS_PER_CONVERSATION:
+                    record_memory_owner_jev('skipped_budget')
+                else:
+                    owner_checks += 1
+                    owner_flip = _jev_owner_flip_for_candidate(
+                        conversation,
+                        candidate_content=candidate.content,
+                        evidence_quotes=evidence_quotes,
+                        user_name=user_name,
+                        subject_entity_id=subject_entity_id,
+                        subject_kind=subject_kind,
+                    )
+                if owner_flip is not None:
+                    subject_entity_id, subject_attribution, subject_kind = "user", SubjectAttribution.user, "user"
             memory = Memory(
                 content=candidate.content,
                 category=(
@@ -1577,12 +1648,18 @@ def _extract_memories_canonical(
                 attribution=source_attribution,
             )
             if belief_model_enabled():
-                resolved_scope = subject_scope_from_extraction(
-                    extracted_scope=candidate.subject_scope,
-                    attribution=subject_attribution.value,
-                    about=candidate.about,
-                    user_name=user_name,
-                    speaker_label=candidate.speaker_label,
+                # A flipped candidate's extracted scope still says third party;
+                # scope must agree with the re-attributed subject.
+                resolved_scope = (
+                    "primary_user"
+                    if owner_flip is not None
+                    else subject_scope_from_extraction(
+                        extracted_scope=candidate.subject_scope,
+                        attribution=subject_attribution.value,
+                        about=candidate.about,
+                        user_name=user_name,
+                        speaker_label=candidate.speaker_label,
+                    )
                 )
                 resolved_class, resolved_half_life = horizon_from_extraction(
                     belief_class=candidate.belief_class,
@@ -1602,6 +1679,8 @@ def _extract_memories_canonical(
                 model_about,
                 model_about_disagrees_with_attribution(model_about, subject_attribution),
             )
+            if owner_flip is not None:
+                owner_flips_by_memory_object[id(memory)] = owner_flip
             capture_candidates.append(
                 (
                     memory,
@@ -1652,6 +1731,7 @@ def _extract_memories_canonical(
 
     is_locked = conversation.is_locked
     parsed_memories: List[Tuple[MemoryDB, List[str], str, List[str]]] = []
+    owner_flips_by_memory_id: Dict[str, OwnerFlip] = {}
     capture_decisions_by_memory_id: Dict[str, Tuple[str, bool]] = {}
     seen_norm: Set[Tuple[str, str]] = set()
     subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
@@ -1704,6 +1784,8 @@ def _extract_memories_canonical(
                 id(memory),
                 ("not_applicable", False),
             )
+            if id(memory) in owner_flips_by_memory_object:
+                owner_flips_by_memory_id[memory_db_obj.id] = owner_flips_by_memory_object[id(memory)]
         parsed_memories.append((memory_db_obj, evidence_quotes, subject_kind, sensitivity_labels))
 
     replacement_payloads = [
@@ -1714,6 +1796,7 @@ def _extract_memories_canonical(
             subject_kind=subject_kind,
             sensitivity_labels=sensitivity_labels,
             segments=conversation.transcript_segments,
+            owner_flip=owner_flips_by_memory_id.get(memory_db_obj.id) if memory_db_obj.id else None,
         )
         for (
             memory_db_obj,
