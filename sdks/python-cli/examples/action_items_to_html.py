@@ -1,54 +1,17 @@
-# Build a self-contained HTML task dashboard of your action items
+"""
+Convert Omi action items JSON exports to a standalone HTML task dashboard.
 
-Use this recipe to browse, filter, or print a structured report of your Omi
-action items and tasks without the CLI or a spreadsheet. It turns one or more
-`action-item list` exports into a single standalone HTML dashboard featuring:
+Usage:
+    # Direct pipeline export (stdin to HTML)
+    omi --json action-item list --limit 500 | python action_items_to_html.py - tasks_dashboard.html
 
-- **Executive summary metrics**: total tasks, pending/open count, completed count, and completion rate percentage.
-- **Sectioned task tables**: separate interactive sections for pending and completed commitments.
-- **Due dates and conversation anchors**: highlighting actionable deadlines and links to originating conversations.
-- **Zero external assets**: no remote CSS, JS CDNs, or images; works 100% offline and includes `@media print` styles for clean paper/PDF export.
+    # Convert from saved JSON file
+    python action_items_to_html.py action_items.json tasks_dashboard.html
 
-You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
+    # Filter only open/pending tasks
+    python action_items_to_html.py action_items.json pending_tasks.html --status open
+"""
 
----
-
-## Quickstart
-
-### 1. Direct Pipeline Export (Stdout to HTML)
-
-Stream up to 500 action items directly into a standalone HTML dashboard:
-
-```sh
-omi --json action-item list --limit 500 | python examples/action_items_to_html.py - tasks_dashboard.html
-```
-
-### 2. Export from a Saved JSON File
-
-If you have already saved an export:
-
-```sh
-omi --json action-item list --limit 500 > action_items.json
-python examples/action_items_to_html.py action_items.json tasks_dashboard.html
-```
-
-Check that the command succeeded before converting the file.
-
-### 3. Filter by Status (Pending Tasks Only)
-
-Export only open, pending action items:
-
-```sh
-python examples/action_items_to_html.py action_items.json pending_tasks.html --status open
-```
-
----
-
-## Standalone Converter Script
-
-The standalone exporter is located at `examples/action_items_to_html.py`:
-
-```python
 import argparse
 import json
 import sys
@@ -309,4 +272,3 @@ if __name__ == "__main__":
         sys.exit(f"Conversion failed: {exc}")
 
     print(f"Successfully rendered {count} action item{'s' if count != 1 else ''} to {args.destination}")
-```
