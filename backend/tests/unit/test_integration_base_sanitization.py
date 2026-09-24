@@ -13,11 +13,13 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 
 class TestIntegrationBaseSanitization(unittest.TestCase):
     def setUp(self):
-        self._stub_cm = stub_modules({
-            "database": AutoMockModule("database"),
-            "database.users": AutoMockModule("database.users"),
-            "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
-        })
+        self._stub_cm = stub_modules(
+            {
+                "database": AutoMockModule("database"),
+                "database.users": AutoMockModule("database.users"),
+                "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
+            }
+        )
         self._stub_cm.__enter__()
         tools_path = str(Path(backend_dir) / "utils" / "retrieval" / "tools" / "integration_base.py")
         self.integration_base = load_module_fresh("utils.retrieval.tools.integration_base", tools_path)
@@ -27,6 +29,7 @@ class TestIntegrationBaseSanitization(unittest.TestCase):
 
     def test_get_integration_checked_exception_does_not_leak_details(self):
         import database.users as users_db
+
         users_db.get_integration = MagicMock(
             side_effect=RuntimeError("psycopg2.OperationalError: password=secret_password connection timeout")
         )
