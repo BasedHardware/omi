@@ -70,14 +70,14 @@ def _normalize_key(key: str) -> str:
     return key.strip().lower().replace("-", "_")
 
 
-@app.command("get", help="Print a single configuration key value.")
+@app.command("get", help="Print a single configuration key value (key names are case- and dash-insensitive).")
 def get_value(
     typer_ctx: typer.Context,
-    key: str = typer.Argument(..., help=f"Config key to read. One of: {sorted(_GETTABLE_KEYS)}"),
+    key: str = typer.Argument(..., help=f"Config key to read (case/dash-insensitive). One of: {sorted(_GETTABLE_KEYS)}"),
     unmasked: bool = typer.Option(
         False,
         "--unmasked",
-        help="Print raw unmasked value for secret fields (e.g. local_token).",
+        help="Print raw unmasked value for secret fields (e.g. local_token; unset returns empty string instead of '(none)').",
     ),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -85,7 +85,7 @@ def get_value(
     if norm_key not in _GETTABLE_KEYS:
         raise UsageError(
             message=f"Unknown config key '{key}'",
-            detail=f"Gettable keys: {sorted(_GETTABLE_KEYS)}",
+            detail=f"Gettable keys (case- and dash-insensitive): {sorted(_GETTABLE_KEYS)}",
         )
     config = ctx.load_config()
     profile = config.get_profile(ctx.profile_name)
@@ -107,10 +107,10 @@ def get_value(
         typer.echo(val)
 
 
-@app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
+@app.command("set", help="Set a per-profile config value (key names are case- and dash-insensitive). Keys: api_base, local_api_url, local_token.")
 def set_value(
     typer_ctx: typer.Context,
-    key: str = typer.Argument(..., help=f"Config key to set. One of: {sorted(_SETTABLE_KEYS)}"),
+    key: str = typer.Argument(..., help=f"Config key to set (case/dash-insensitive). One of: {sorted(_SETTABLE_KEYS)}"),
     value: str = typer.Argument(..., help="New value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -118,7 +118,7 @@ def set_value(
     if norm_key not in _SETTABLE_KEYS:
         raise UsageError(
             message=f"Unknown config key '{key}'",
-            detail=f"Settable keys: {sorted(_SETTABLE_KEYS)}",
+            detail=f"Settable keys (case- and dash-insensitive): {sorted(_SETTABLE_KEYS)}",
         )
     key = norm_key
     config = ctx.load_config()

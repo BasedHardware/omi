@@ -731,6 +731,35 @@ def test_config_get_local_token_masking(config_path: Path, cli_runner) -> None:
     assert unmasked_res.exit_code == 0
     assert unmasked_res.output.strip() == "secret123456789"
 
+    # With --unmasked and --json
+    json_unmasked = cli_runner.invoke(app, ["--json", "config", "get", "local_token", "--unmasked"])
+    assert json_unmasked.exit_code == 0
+    payload = json.loads(json_unmasked.output)
+    assert payload["key"] == "local_token"
+    assert payload["value"] == "secret123456789"
+
+
+def test_config_get_unset_local_token(config_path: Path, cli_runner) -> None:
+    # Unset local token defaults to (none)
+    res = cli_runner.invoke(app, ["config", "get", "local_token"])
+    assert res.exit_code == 0
+    assert res.output.strip() == "(none)"
+
+    # In JSON mode, value is literal "(none)"
+    json_res = cli_runner.invoke(app, ["--json", "config", "get", "local_token"])
+    assert json_res.exit_code == 0
+    assert json.loads(json_res.output)["value"] == "(none)"
+
+    # With --unmasked, unset returns empty string
+    unmasked_res = cli_runner.invoke(app, ["config", "get", "local_token", "--unmasked"])
+    assert unmasked_res.exit_code == 0
+    assert unmasked_res.output.strip() == ""
+
+    # With --unmasked and --json, value is empty string
+    json_unmasked_res = cli_runner.invoke(app, ["--json", "config", "get", "local_token", "--unmasked"])
+    assert json_unmasked_res.exit_code == 0
+    assert json.loads(json_unmasked_res.output)["value"] == ""
+
 
 def test_config_get_and_set_normalizes_case_and_dashes(config_path: Path, cli_runner) -> None:
     # Set via uppercase and dash
