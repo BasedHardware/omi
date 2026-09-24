@@ -3,6 +3,7 @@ Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
 
+import logging
 import uuid
 from typing import Annotated, Optional, List
 
@@ -38,6 +39,7 @@ from routers.canonical_task_access import require_canonical_task_user
 from utils.task_intelligence.proactive_engine import run_goal_changed_wake
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
@@ -85,7 +87,11 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     try:
         created_goal = goals_db.create_goal(uid, goal_data)
     except goals_db.GoalConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        logger.warning(f"Create goal conflict: {type(exc).__name__}")
+        detail = str(exc)
+        if any(marker in detail for marker in ("Traceback", "Exception", "Error:", "Firestore", "google.cloud")):
+            detail = "Goal conflict encountered. Please verify goal state and retry."
+        raise HTTPException(status_code=409, detail=detail) from exc
 
     _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
@@ -118,8 +124,13 @@ def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc
     if isinstance(exc, goals_db.GoalConflictError):
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raise exc
+        logger.warning(f"Goal mutation conflict: {type(exc).__name__}")
+        detail = str(exc)
+        if any(marker in detail for marker in ("Traceback", "Exception", "Error:", "Firestore", "google.cloud")):
+            detail = "Goal conflict encountered. Please verify goal state and retry."
+        raise HTTPException(status_code=409, detail=detail) from exc
+    logger.error(f"Unexpected goal store error: {type(exc).__name__}")
+    raise HTTPException(status_code=500, detail="Failed to process goal operation") from exc
 
 
 @router.post('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
