@@ -18,6 +18,8 @@ import '../spine/c7_registry_test.dart' show RecordingAdapter;
 import '../support/typed_action_items_screen.dart';
 
 const _task = ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
+const _saveError = 'Failed to update task';
+const _retryLabel = 'Try Again';
 
 void main() {
   late RecordingAdapter analytics;
@@ -108,8 +110,8 @@ void main() {
       await tester.pumpAndSettle();
 
       if (control == 'swipe') {
-        expect(tester.widget<Dismissible>(find.byKey(const Key('dismiss_task-1'))).direction,
-            DismissDirection.horizontal);
+        expect(
+            tester.widget<Dismissible>(find.byKey(const Key('dismiss_task-1'))).direction, DismissDirection.horizontal);
         await tester.drag(find.byKey(const Key('dismiss_task-1')), const Offset(500, 0));
         await tester.pumpAndSettle();
       } else if (control == 'chat') {
@@ -125,7 +127,7 @@ void main() {
       await tester.pump();
       expect(writes, [targetState]);
       expect(provider.actionItems.single.completed, targetState);
-      expect(find.text('Failed to update action item'), findsNothing);
+      expect(find.text(_saveError), findsNothing);
 
       if (closeBeforeResult) {
         await tester.pumpWidget(const SizedBox.shrink());
@@ -140,12 +142,12 @@ void main() {
       firstWrite.complete(firstWriteSucceeds ? serverTask : null);
       await tester.pumpAndSettle();
       if (control == 'swipe' && !firstWriteSucceeds) {
-        expect(tester.widget<Dismissible>(find.byKey(const Key('dismiss_task-1'))).direction,
-            DismissDirection.horizontal);
+        expect(
+            tester.widget<Dismissible>(find.byKey(const Key('dismiss_task-1'))).direction, DismissDirection.horizontal);
       }
       if (firstWriteSucceeds) {
         expect(provider.actionItems.single.completed, targetState);
-        expect(find.text('Failed to update action item'), findsNothing);
+        expect(find.text(_saveError), findsNothing);
         await AnalyticsManager.flushPending(force: true);
         expect(analytics.events.where((event) => event.$1 == 'Action Item Completed'),
             hasLength(control != 'chat' && control != 'home' ? 1 : 0));
@@ -157,10 +159,10 @@ void main() {
       expect(provider.actionItems.single.completed, !targetState);
       await AnalyticsManager.flushPending(force: true);
       expect(analytics.events.where((event) => event.$1 == 'Action Item Completed'), isEmpty);
-      expect(find.text('Failed to update action item'), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text(_saveError), findsOneWidget);
+      expect(find.text(_retryLabel), findsOneWidget);
 
-      await tester.tap(find.text('Retry'));
+      await tester.tap(find.text(_retryLabel));
       await tester.pumpAndSettle();
       expect(writes, [targetState, targetState]);
       expect(provider.actionItems.single.completed, targetState);

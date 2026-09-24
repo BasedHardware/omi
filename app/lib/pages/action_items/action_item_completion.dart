@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Completion controls share persistence feedback; retry repeats the intended
@@ -13,23 +14,21 @@ Future<void> setActionItemCompleted(
   VoidCallback? onCompleted,
 }) async {
   if (provider.isUpdatingActionItemState(item.id)) return;
-  final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
-  messenger.hideCurrentSnackBar();
+  OmiFeedback.hide(context);
   final saved = await provider.updateActionItemState(item, completed);
   if (!context.mounted) return;
   if (saved) {
     if (completed) onCompleted?.call();
     return;
   }
-  messenger.showSnackBar(SnackBar(
-    content: Text(l10n.failedToUpdateActionItem),
-    action: SnackBarAction(
-      label: l10n.retry,
-      onPressed: () {
-        if (!context.mounted) return;
-        setActionItemCompleted(context, provider, item, completed, onCompleted: onCompleted);
-      },
-    ),
-  ));
+  OmiFeedback.error(
+    context,
+    l10n.failedToUpdateActionItem,
+    actionLabel: l10n.retry,
+    onAction: () {
+      if (!context.mounted) return;
+      setActionItemCompleted(context, provider, item, completed, onCompleted: onCompleted);
+    },
+  );
 }
