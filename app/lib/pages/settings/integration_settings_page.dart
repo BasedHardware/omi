@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -34,38 +36,24 @@ class IntegrationSettingsPage extends StatefulWidget {
 }
 
 class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
+  bool _disconnecting = false;
+
+  /// Confirms first, then shows the button's spinner only while the disconnect itself runs.
   Future<void> _disconnect() async {
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.disconnectFromApp(widget.appName),
+      message: l10n.disconnectFromAppDesc(widget.appName),
+      confirmLabel: l10n.disconnect,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
     final provider = context.read<TaskIntegrationProvider>();
     final navigator = Navigator.of(context);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.disconnectFromApp(widget.appName), style: const TextStyle(color: Colors.white)),
-          content: Text(
-            context.l10n.disconnectFromAppDesc(widget.appName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true) {
+    setState(() => _disconnecting = true);
+    try {
       await widget.disconnectService();
       if (!mounted) return;
       await provider.deleteConnection(widget.appKey);
@@ -85,10 +73,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         }
       }
       provider.refresh();
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
-      );
+      if (!mounted) return;
+      OmiFeedback.confirm(context, l10n.disconnectedFrom(widget.appName));
       navigator.pop();
+    } finally {
+      if (mounted) setState(() => _disconnecting = false);
     }
   }
 
@@ -105,52 +94,52 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(OmiSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(OmiSpacing.sm),
+                margin: const EdgeInsets.only(bottom: OmiSpacing.xl),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  color: OmiColors.successSurface,
+                  borderRadius: OmiRadius.smAll,
+                  border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+                    const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(
                         context.l10n.connectedToApp(widget.appName),
-                        style: const TextStyle(color: Colors.green, fontSize: 14),
+                        style: OmiType.subhead.copyWith(color: OmiColors.success),
                       ),
                     ),
                   ],
                 ),
               ),
-              Text(
-                context.l10n.account,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
+              Text(context.l10n.account, style: OmiType.headline),
+              const SizedBox(height: OmiSpacing.xs),
               Text(
                 widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
-                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
               // Wrap children in Expanded with SingleChildScrollView to handle overflow
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               OmiButton.destructive(
                 label: context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
                 icon: Icons.logout,
-                onPressed: _disconnect,
+                // Not the future: the button spins only while the disconnect runs, not while the
+                // confirm dialog is open.
+                onPressed: () => unawaited(_disconnect()),
+                isLoading: _disconnecting,
                 expand: true,
               ),
             ],

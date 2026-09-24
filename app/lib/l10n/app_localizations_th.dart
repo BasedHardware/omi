@@ -134,7 +134,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get createPersonHint => 'สร้างบุคคลใหม่และฝึก Omi ให้รู้จักเสียงพูดของพวกเขาด้วย!';
 
   @override
-  String get speechProfile => 'โปรไฟล์การพูด';
+  String get speechProfile => 'โปรไฟล์เสียง';
 
   @override
   String sampleNumber(int number) {
@@ -3787,7 +3787,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get signOutQuestion => 'ออกจากระบบ?';
 
   @override
-  String get signOutConfirmation => 'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?';
+  String get signOutConfirmation =>
+      'คุณต้องลงชื่อเข้าใช้อีกครั้งเพื่อดูบทสนทนา อุปกรณ์ที่จับคู่และการตั้งค่าแอปจะยังอยู่ในโทรศัพท์เครื่องนี้';
 
   @override
   String get customVocabularyHeader => 'คำศัพท์ที่กำหนดเอง';
@@ -8900,10 +8901,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get planUpdate => 'อัปเดตแผน';
 
   @override
-  String get planDeprecationMessage =>
-      'แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา \$49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้';
-
-  @override
   String get upgradeYourPlan => 'อัปเกรดแผนของคุณ';
 
   @override
@@ -10378,4 +10375,196 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'ระบุผู้พูด';
+
+  @override
+  String get couldNotLoadCheckout => 'โหลดหน้าชำระเงินไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+
+  @override
+  String get phoneFreeCallLimitReached => 'ถึงขีดจำกัดการโทรฟรีรายเดือนแล้ว จะรีเซ็ตในเดือนหน้า';
+
+  @override
+  String get couldNotLoadImportHistory => 'ไม่สามารถโหลดประวัติการนำเข้าได้';
+
+  @override
+  String get phoneCallButton => 'โทร';
+
+  @override
+  String get searchContacts => 'ค้นหารายชื่อติดต่อ';
+
+  @override
+  String get phoneContactsAccessTitle => 'อนุญาตให้เข้าถึงรายชื่อติดต่อ';
+
+  @override
+  String get phoneSelectCountryTitle => 'เลือกประเทศ';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'ไม่มีหมายเลขที่ยืนยันแล้ว';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'ยืนยันหมายเลขของคุณเพื่อโทรผ่าน Omi';
+
+  @override
+  String get phoneDeleteNumberFailed => 'ไม่สามารถลบหมายเลขนี้ได้';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'ลืมอุปกรณ์ใช่ไหม';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi จะหยุดเชื่อมต่อกับอุปกรณ์นี้ หากต้องการใช้อีกครั้ง คุณต้องจับคู่ใหม่';
+
+  @override
+  String get deviceForgottenMessage => 'ลืมอุปกรณ์แล้ว';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'ยกเลิกการจับคู่อุปกรณ์ใช่ไหม';
+
+  @override
+  String get rollBack => 'ย้อนกลับ';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'การวินิจฉัยอุปกรณ์ Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'ล้มเหลว';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'เชื่อมต่อใหม่ใน $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countวัน';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$durationที่แล้ว';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'ใช้ตามภาษาหลักของคุณ';
+
+  @override
+  String get creatorPayouts => 'การจ่ายเงินให้ผู้สร้าง';
+
+  @override
+  String get sttLanguageOverride => 'กำหนดเอง';
+
+  @override
+  String get sttUsePrimaryLanguage => 'ใช้ภาษาหลัก';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'ผู้ให้บริการนี้ไม่รองรับ$language จึงใช้$fallbackแทน';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'ตรวจพบ RAM: $ram GB ขั้นต่ำที่แนะนำ: 4 GB';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'ตรวจพบรุ่น: $model (เก่ากว่า iPhone XS) การจดจำบนอุปกรณ์อาจช้าลง';
+  }
+
+  @override
+  String get copyLogs => 'คัดลอกบันทึก';
+
+  @override
+  String get openProviderDocs => 'เปิดเอกสาร';
+
+  @override
+  String get getApiKey => 'รับคีย์ API';
+
+  @override
+  String get showApiKey => 'แสดงคีย์ API';
+
+  @override
+  String get hideApiKey => 'ซ่อนคีย์ API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'ลบ $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count คำ',
+      one: '1 คำ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'เหลือการโทรฟรี $remaining จาก $limit ครั้งในเดือนนี้';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'เหลือการโทรฟรี $remaining จาก $limit ครั้งในเดือนนี้ · สูงสุดครั้งละ $minutes นาที';
+  }
+
+  @override
+  String get appCreators => 'ผู้สร้างแอป';
+
+  @override
+  String get homeScreen => 'หน้าจอหลัก';
+
+  @override
+  String get phoneCalls => 'การโทร';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'กรองเสียงฝั่งเซิร์ฟเวอร์เพื่อลดค่าใช้จ่ายการถอดเสียง';
+
+  @override
+  String get flashCustomFirmware => 'แฟลชเฟิร์มแวร์กำหนดเอง';
+
+  @override
+  String get flashCustomFirmwareDescription => 'แฟลชเฟิร์มแวร์ที่คอมไพล์เอง';
+
+  @override
+  String get selectFirmwareZip => 'เลือกไฟล์ ZIP ของเฟิร์มแวร์';
+
+  @override
+  String get customFirmwareWarning =>
+      'การแฟลชเฟิร์มแวร์กำหนดเองอาจทำให้อุปกรณ์เสียหาย ตรวจสอบให้แน่ใจว่าเป็นเฟิร์มแวร์ Omi ที่ถูกต้อง และอย่าตัดการเชื่อมต่อระหว่างอัปเดต';
+
+  @override
+  String get firmwareFlashed => 'แฟลชเฟิร์มแวร์แล้ว';
+
+  @override
+  String get deviceWillRestart => 'อุปกรณ์จะรีสตาร์ต';
+
+  @override
+  String get exportFailedTryAgain => 'ส่งออกไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'อุปกรณ์: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'คงการสมัครสมาชิกไว้';
+
+  @override
+  String get couldNotLoadPage => 'โหลดหน้านี้ไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'ขั้นตอนที่ $current จาก $total';
+  }
 }

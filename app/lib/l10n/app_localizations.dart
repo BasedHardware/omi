@@ -438,7 +438,7 @@ abstract class AppLocalizations {
   /// Speech profile setting
   ///
   /// In en, this message translates to:
-  /// **'Speech Profile'**
+  /// **'Voice Profile'**
   String get speechProfile;
 
   /// Label for speech sample
@@ -7350,7 +7350,7 @@ abstract class AppLocalizations {
   /// Confirmation message in sign out dialog
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to sign out?'**
+  /// **'You\'ll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.'**
   String get signOutConfirmation;
 
   /// Custom vocabulary section header
@@ -16725,12 +16725,6 @@ abstract class AppLocalizations {
   /// **'Plan Update'**
   String get planUpdate;
 
-  /// Deprecation notice for legacy Unlimited subscribers
-  ///
-  /// In en, this message translates to:
-  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
-  String get planDeprecationMessage;
-
   /// Header for plan upgrade screen for non-paid users
   ///
   /// In en, this message translates to:
@@ -19136,6 +19130,324 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Identify speaker'**
   String get identifySpeaker;
+
+  /// No description provided for @couldNotLoadCheckout.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the checkout page. Check your connection and try again.'**
+  String get couldNotLoadCheckout;
+
+  /// No description provided for @phoneFreeCallLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly free call limit reached. It resets next month.'**
+  String get phoneFreeCallLimitReached;
+
+  /// No description provided for @couldNotLoadImportHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load import history'**
+  String get couldNotLoadImportHistory;
+
+  /// No description provided for @phoneCallButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get phoneCallButton;
+
+  /// No description provided for @searchContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts'**
+  String get searchContacts;
+
+  /// No description provided for @phoneContactsAccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Contacts Access'**
+  String get phoneContactsAccessTitle;
+
+  /// No description provided for @phoneSelectCountryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Country'**
+  String get phoneSelectCountryTitle;
+
+  /// No description provided for @phoneNoVerifiedNumbersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No Verified Numbers'**
+  String get phoneNoVerifiedNumbersTitle;
+
+  /// No description provided for @phoneNoVerifiedNumbersMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your number to make calls through Omi.'**
+  String get phoneNoVerifiedNumbersMessage;
+
+  /// No description provided for @phoneDeleteNumberFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete this number'**
+  String get phoneDeleteNumberFailed;
+
+  /// Title of the confirmation before forgetting a paired device
+  ///
+  /// In en, this message translates to:
+  /// **'Forget Device?'**
+  String get forgetDeviceConfirmTitle;
+
+  /// Consequence of forgetting a paired device
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will stop connecting to this device. To use it again, you\'ll have to pair it again.'**
+  String get forgetDeviceConfirmMessage;
+
+  /// Toast after the device was forgotten
+  ///
+  /// In en, this message translates to:
+  /// **'Device forgotten'**
+  String get deviceForgottenMessage;
+
+  /// Title of the confirmation before unpairing a Limitless device
+  ///
+  /// In en, this message translates to:
+  /// **'Unpair Device?'**
+  String get unpairDeviceConfirmTitle;
+
+  /// Confirm button: roll the firmware back to the stable version
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back'**
+  String get rollBack;
+
+  /// A data rate in kilobits per second
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} kbps'**
+  String dataRateKbps(String rate);
+
+  /// Title and subject of the shared device diagnostics file
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Device Diagnostics'**
+  String get diagnosticsExportTitle;
+
+  /// Badge on a device diagnostics event where the device failed to connect
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get diagnosticsFailBadge;
+
+  /// Detail fragment in a disconnect event row: how long reconnecting took (joined with ' · ')
+  ///
+  /// In en, this message translates to:
+  /// **'reconnected in {duration}'**
+  String diagnosticsReconnectedIn(String duration);
+
+  /// Compact duration in days (chart axis)
+  ///
+  /// In en, this message translates to:
+  /// **'{count}d'**
+  String timeCompactDays(int count);
+
+  /// A compact duration in the past, e.g. '2h 5m ago'
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} ago'**
+  String durationAgo(String duration);
+
+  /// Subtitle of the Custom STT language row when it uses the app's primary language
+  ///
+  /// In en, this message translates to:
+  /// **'Follows your primary language'**
+  String get sttLanguageFollowsPrimary;
+
+  /// No description provided for @creatorPayouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Creator Payouts'**
+  String get creatorPayouts;
+
+  /// Button: choose a Custom STT language different from the primary language
+  ///
+  /// In en, this message translates to:
+  /// **'Override'**
+  String get sttLanguageOverride;
+
+  /// Button: drop the Custom STT language override
+  ///
+  /// In en, this message translates to:
+  /// **'Use Primary Language'**
+  String get sttUsePrimaryLanguage;
+
+  /// No description provided for @sttPrimaryLanguageUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'{language} isn\'t supported by this provider, so it uses {fallback}.'**
+  String sttPrimaryLanguageUnsupported(String language, String fallback);
+
+  /// No description provided for @deviceRamBelowMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected RAM: {ram} GB. Minimum recommended: 4 GB.'**
+  String deviceRamBelowMinimum(String ram);
+
+  /// No description provided for @olderIphoneModelDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected model: {model} (older than iPhone XS). On-device recognition may be slower.'**
+  String olderIphoneModelDetected(String model);
+
+  /// No description provided for @copyLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Logs'**
+  String get copyLogs;
+
+  /// No description provided for @openProviderDocs.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Documentation'**
+  String get openProviderDocs;
+
+  /// No description provided for @getApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Get API Key'**
+  String get getApiKey;
+
+  /// No description provided for @showApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Show API Key'**
+  String get showApiKey;
+
+  /// No description provided for @hideApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide API Key'**
+  String get hideApiKey;
+
+  /// No description provided for @removeVocabularyWord.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {word}'**
+  String removeVocabularyWord(String word);
+
+  /// No description provided for @vocabularyWordCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 word} other{{count} words}}'**
+  String vocabularyWordCount(int count);
+
+  /// No description provided for @phoneFreeCallsRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{remaining} of {limit} free calls remaining this month'**
+  String phoneFreeCallsRemaining(int remaining, int limit);
+
+  /// No description provided for @phoneFreeCallsRemainingWithMax.
+  ///
+  /// In en, this message translates to:
+  /// **'{remaining} of {limit} free calls remaining this month · up to {minutes} min each'**
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes);
+
+  /// No description provided for @appCreators.
+  ///
+  /// In en, this message translates to:
+  /// **'App Creators'**
+  String get appCreators;
+
+  /// No description provided for @homeScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Home Screen'**
+  String get homeScreen;
+
+  /// No description provided for @phoneCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls'**
+  String get phoneCalls;
+
+  /// No description provided for @vadGate.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD Gate'**
+  String get vadGate;
+
+  /// No description provided for @vadGateDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-side voice gating to reduce speech-to-text costs'**
+  String get vadGateDescription;
+
+  /// No description provided for @flashCustomFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Custom Firmware'**
+  String get flashCustomFirmware;
+
+  /// No description provided for @flashCustomFirmwareDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Flash custom firmware builds'**
+  String get flashCustomFirmwareDescription;
+
+  /// No description provided for @selectFirmwareZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Select firmware ZIP file'**
+  String get selectFirmwareZip;
+
+  /// No description provided for @customFirmwareWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.'**
+  String get customFirmwareWarning;
+
+  /// No description provided for @firmwareFlashed.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware flashed'**
+  String get firmwareFlashed;
+
+  /// No description provided for @deviceWillRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device will restart.'**
+  String get deviceWillRestart;
+
+  /// No description provided for @exportFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed. Please try again.'**
+  String get exportFailedTryAgain;
+
+  /// No description provided for @firmwareFlashTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Device: {deviceName}'**
+  String firmwareFlashTarget(String deviceName);
+
+  /// No description provided for @keepSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Subscription'**
+  String get keepSubscription;
+
+  /// No description provided for @couldNotLoadPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load this page. Check your connection and try again.'**
+  String get couldNotLoadPage;
+
+  /// No description provided for @leaveFlowStepOf.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String leaveFlowStepOf(int current, int total);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

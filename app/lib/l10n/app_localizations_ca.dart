@@ -134,7 +134,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get createPersonHint => 'Creeu una nova persona i ensenyeu a Omi a reconèixer la seva veu també!';
 
   @override
-  String get speechProfile => 'Perfil de Veu';
+  String get speechProfile => 'Perfil de veu';
 
   @override
   String sampleNumber(int number) {
@@ -3831,7 +3831,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get signOutQuestion => 'Tancar sessió?';
 
   @override
-  String get signOutConfirmation => 'Estàs segur que vols tancar la sessió?';
+  String get signOutConfirmation =>
+      'Hauràs de tornar a iniciar la sessió per veure les converses. El dispositiu vinculat i les preferències de l\'app es queden en aquest telèfon.';
 
   @override
   String get customVocabularyHeader => 'VOCABULARI PERSONALITZAT';
@@ -8999,10 +9000,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get planUpdate => 'Actualització del pla';
 
   @override
-  String get planDeprecationMessage =>
-      'El vostre pla Unlimited s\'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a \$49/mes. El vostre pla actual continuarà funcionant mentrestant.';
-
-  @override
   String get upgradeYourPlan => 'Actualitza el teu pla';
 
   @override
@@ -10496,4 +10493,199 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identifica el parlant';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'No s\'ha pogut carregar la pàgina de pagament. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'S\'ha arribat al límit mensual de trucades gratuïtes. Es restableix el mes vinent.';
+
+  @override
+  String get couldNotLoadImportHistory => 'No s\'ha pogut carregar l\'historial d\'importació';
+
+  @override
+  String get phoneCallButton => 'Truca';
+
+  @override
+  String get searchContacts => 'Cerca contactes';
+
+  @override
+  String get phoneContactsAccessTitle => 'Permet l\'accés als contactes';
+
+  @override
+  String get phoneSelectCountryTitle => 'Selecciona el país';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Cap número verificat';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verifica el teu número per fer trucades amb Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'No s\'ha pogut suprimir aquest número';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Oblidar el dispositiu?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi deixarà de connectar-se a aquest dispositiu. Per tornar-lo a fer servir, l’hauràs de tornar a vincular.';
+
+  @override
+  String get deviceForgottenMessage => 'Dispositiu oblidat';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Desvincular el dispositiu?';
+
+  @override
+  String get rollBack => 'Reverteix';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnòstics del dispositiu Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Error';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'reconnectat en $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'fa $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Segueix el vostre idioma principal';
+
+  @override
+  String get creatorPayouts => 'Pagaments als creadors';
+
+  @override
+  String get sttLanguageOverride => 'Canvia';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Utilitza l\'idioma principal';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Aquest proveïdor no admet $language, així que utilitza $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM detectada: $ram GB. Mínim recomanat: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Model detectat: $model (anterior a l\'iPhone XS). El reconeixement al dispositiu pot ser més lent.';
+  }
+
+  @override
+  String get copyLogs => 'Copia els registres';
+
+  @override
+  String get openProviderDocs => 'Obre la documentació';
+
+  @override
+  String get getApiKey => 'Obtén la clau d\'API';
+
+  @override
+  String get showApiKey => 'Mostra la clau d\'API';
+
+  @override
+  String get hideApiKey => 'Amaga la clau d\'API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Elimina $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count paraules',
+      one: '1 paraula',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Queden $remaining de $limit trucades gratuïtes aquest mes';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Queden $remaining de $limit trucades gratuïtes aquest mes · fins a $minutes min cadascuna';
+  }
+
+  @override
+  String get appCreators => 'Creadors d\'apps';
+
+  @override
+  String get homeScreen => 'Pantalla d\'inici';
+
+  @override
+  String get phoneCalls => 'Trucades';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Filtre de veu al servidor per reduir el cost de la transcripció';
+
+  @override
+  String get flashCustomFirmware => 'Instal·la un firmware personalitzat';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Instal·la versions de firmware personalitzades';
+
+  @override
+  String get selectFirmwareZip => 'Selecciona el fitxer ZIP del firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Un firmware personalitzat pot inutilitzar el dispositiu. Assegura\'t que és una versió vàlida del firmware d\'Omi i no el desconnectis durant l\'actualització.';
+
+  @override
+  String get firmwareFlashed => 'Firmware instal·lat';
+
+  @override
+  String get deviceWillRestart => 'El dispositiu es reiniciarà.';
+
+  @override
+  String get exportFailedTryAgain => 'No s\'ha pogut exportar. Torna-ho a provar.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Dispositiu: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Mantén la subscripció';
+
+  @override
+  String get couldNotLoadPage => 'No s\'ha pogut carregar aquesta pàgina. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Pas $current de $total';
+  }
 }

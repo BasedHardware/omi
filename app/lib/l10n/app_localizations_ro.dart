@@ -135,7 +135,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createPersonHint => 'Creează o persoană nouă și antrenează Omi să recunoască și vorbirea ei!';
 
   @override
-  String get speechProfile => 'Profil Vocal';
+  String get speechProfile => 'Profil vocal';
 
   @override
   String sampleNumber(int number) {
@@ -3831,7 +3831,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get signOutQuestion => 'Deconectare?';
 
   @override
-  String get signOutConfirmation => 'Ești sigur că vrei să te deconectezi?';
+  String get signOutConfirmation =>
+      'Va trebui să te conectezi din nou pentru a vedea conversațiile. Dispozitivul asociat și preferințele aplicației rămân pe acest telefon.';
 
   @override
   String get customVocabularyHeader => 'VOCABULAR PERSONALIZAT';
@@ -8987,10 +8988,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get planUpdate => 'Actualizare plan';
 
   @override
-  String get planDeprecationMessage =>
-      'Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la \$49/lună. Planul dvs. actual va continua să funcționeze între timp.';
-
-  @override
   String get upgradeYourPlan => 'Îmbunătățește-ți planul';
 
   @override
@@ -10486,4 +10483,198 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identifică vorbitorul';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Pagina de plată nu a putut fi încărcată. Verifică conexiunea și încearcă din nou.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Ai atins limita lunară de apeluri gratuite. Se resetează luna viitoare.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Istoricul importurilor nu a putut fi încărcat';
+
+  @override
+  String get phoneCallButton => 'Apelează';
+
+  @override
+  String get searchContacts => 'Caută contacte';
+
+  @override
+  String get phoneContactsAccessTitle => 'Permite accesul la contacte';
+
+  @override
+  String get phoneSelectCountryTitle => 'Selectează țara';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Niciun număr verificat';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verifică-ți numărul pentru a suna prin Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Numărul nu a putut fi șters';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Uitați dispozitivul?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi nu se va mai conecta la acest dispozitiv. Pentru a-l folosi din nou, va trebui să-l asociați din nou.';
+
+  @override
+  String get deviceForgottenMessage => 'Dispozitiv uitat';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Anulați asocierea dispozitivului?';
+
+  @override
+  String get rollBack => 'Revino';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnosticarea dispozitivului Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Eșuat';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'reconectat în $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}z';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'acum $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Urmează limba ta principală';
+
+  @override
+  String get creatorPayouts => 'Plăți pentru creatori';
+
+  @override
+  String get sttLanguageOverride => 'Suprascrie';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Folosește limba principală';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Acest furnizor nu acceptă $language, așa că folosește $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM detectată: $ram GB. Minim recomandat: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Model detectat: $model (mai vechi decât iPhone XS). Recunoașterea pe dispozitiv poate fi mai lentă.';
+  }
+
+  @override
+  String get copyLogs => 'Copiază jurnalele';
+
+  @override
+  String get openProviderDocs => 'Deschide documentația';
+
+  @override
+  String get getApiKey => 'Obține cheia API';
+
+  @override
+  String get showApiKey => 'Afișează cheia API';
+
+  @override
+  String get hideApiKey => 'Ascunde cheia API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Elimină $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuvinte',
+      one: '1 cuvânt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Mai ai $remaining din $limit apeluri gratuite luna aceasta';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Mai ai $remaining din $limit apeluri gratuite luna aceasta · până la $minutes min fiecare';
+  }
+
+  @override
+  String get appCreators => 'Creatori de aplicații';
+
+  @override
+  String get homeScreen => 'Ecran principal';
+
+  @override
+  String get phoneCalls => 'Apeluri telefonice';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Filtrare vocală pe server pentru costuri mai mici de transcriere';
+
+  @override
+  String get flashCustomFirmware => 'Instalează firmware personalizat';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Instalează versiuni de firmware personalizate';
+
+  @override
+  String get selectFirmwareZip => 'Selectează fișierul ZIP cu firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Firmware-ul personalizat poate defecta dispozitivul. Asigură-te că este o versiune validă de firmware Omi și nu deconecta dispozitivul în timpul actualizării.';
+
+  @override
+  String get firmwareFlashed => 'Firmware instalat';
+
+  @override
+  String get deviceWillRestart => 'Dispozitivul se va reporni.';
+
+  @override
+  String get exportFailedTryAgain => 'Exportul a eșuat. Încearcă din nou.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Dispozitiv: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Păstrează abonamentul';
+
+  @override
+  String get couldNotLoadPage => 'Pagina nu a putut fi încărcată. Verifică conexiunea și încearcă din nou.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Pasul $current din $total';
+  }
 }

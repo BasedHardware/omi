@@ -134,7 +134,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get createPersonHint => 'فردی جدید ایجاد کنید و Omi را آموزش دهید تا صدای آن‌ها را نیز شناسایی کند!';
 
   @override
-  String get speechProfile => 'پروفایل صوتی';
+  String get speechProfile => 'نمایه صوتی';
 
   @override
   String sampleNumber(int number) {
@@ -3815,7 +3815,8 @@ class AppLocalizationsFa extends AppLocalizations {
   String get signOutQuestion => 'خروج؟';
 
   @override
-  String get signOutConfirmation => 'آیا مطمئنید که می‌خواهید خارج شوید؟';
+  String get signOutConfirmation =>
+      'برای دیدن گفتگوهایتان باید دوباره وارد شوید. دستگاه جفت‌شده و تنظیمات برنامه روی این گوشی باقی می‌مانند.';
 
   @override
   String get customVocabularyHeader => 'واژگان سفارشی';
@@ -8948,10 +8949,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get planUpdate => 'به‌روزرسانی طرح';
 
   @override
-  String get planDeprecationMessage =>
-      'طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با \$49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.';
-
-  @override
   String get upgradeYourPlan => 'طرح خود را ارتقا دهید';
 
   @override
@@ -10438,4 +10435,197 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'شناسایی گوینده';
+
+  @override
+  String get couldNotLoadCheckout => 'صفحه پرداخت بارگیری نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'به سقف ماهانه تماس‌های رایگان رسیده‌اید. ماه بعد بازنشانی می‌شود.';
+
+  @override
+  String get couldNotLoadImportHistory => 'بارگیری تاریخچه واردکردن ممکن نشد';
+
+  @override
+  String get phoneCallButton => 'تماس';
+
+  @override
+  String get searchContacts => 'جستجوی مخاطبین';
+
+  @override
+  String get phoneContactsAccessTitle => 'اجازه دسترسی به مخاطبین';
+
+  @override
+  String get phoneSelectCountryTitle => 'انتخاب کشور';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'هیچ شماره تأییدشده‌ای وجود ندارد';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'برای تماس از طریق Omi، شماره خود را تأیید کنید.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'حذف این شماره ممکن نشد';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'دستگاه فراموش شود؟';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi دیگر به این دستگاه وصل نمی‌شود. برای استفادهٔ دوباره، باید آن را دوباره جفت کنید.';
+
+  @override
+  String get deviceForgottenMessage => 'دستگاه فراموش شد';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'جفت‌سازی دستگاه لغو شود؟';
+
+  @override
+  String get rollBack => 'بازگرداندن';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate کیلوبیت/ثانیه';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'تشخیص دستگاه Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'ناموفق';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'اتصال مجدد در $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countر';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration پیش';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'از زبان اصلی شما پیروی می‌کند';
+
+  @override
+  String get creatorPayouts => 'پرداخت‌های سازندگان';
+
+  @override
+  String get sttLanguageOverride => 'تغییر';
+
+  @override
+  String get sttUsePrimaryLanguage => 'استفاده از زبان اصلی';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'این ارائه‌دهنده از $language پشتیبانی نمی‌کند، بنابراین از $fallback استفاده می‌کند.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM شناسایی‌شده: $ram گیگابایت. حداقل توصیه‌شده: ۴ گیگابایت.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'مدل شناسایی‌شده: $model (قدیمی‌تر از iPhone XS). تشخیص روی دستگاه ممکن است کندتر باشد.';
+  }
+
+  @override
+  String get copyLogs => 'کپی گزارش‌ها';
+
+  @override
+  String get openProviderDocs => 'باز کردن مستندات';
+
+  @override
+  String get getApiKey => 'دریافت کلید API';
+
+  @override
+  String get showApiKey => 'نمایش کلید API';
+
+  @override
+  String get hideApiKey => 'پنهان کردن کلید API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'حذف $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count واژه',
+      one: '۱ واژه',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining از $limit تماس رایگان این ماه باقی مانده است';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining از $limit تماس رایگان این ماه باقی مانده است · هر کدام تا $minutes دقیقه';
+  }
+
+  @override
+  String get appCreators => 'سازندگان برنامه';
+
+  @override
+  String get homeScreen => 'صفحه اصلی';
+
+  @override
+  String get phoneCalls => 'تماس‌های تلفنی';
+
+  @override
+  String get vadGate => 'دروازه VAD';
+
+  @override
+  String get vadGateDescription => 'فیلتر صدا در سرور برای کاهش هزینه تبدیل گفتار به متن';
+
+  @override
+  String get flashCustomFirmware => 'نصب فریم‌ور سفارشی';
+
+  @override
+  String get flashCustomFirmwareDescription => 'نسخه‌های سفارشی فریم‌ور را نصب کنید';
+
+  @override
+  String get selectFirmwareZip => 'فایل ZIP فریم‌ور را انتخاب کنید';
+
+  @override
+  String get customFirmwareWarning =>
+      'نصب فریم‌ور سفارشی ممکن است دستگاه شما را از کار بیندازد. مطمئن شوید این یک نسخه معتبر فریم‌ور Omi است و در حین به‌روزرسانی اتصال را قطع نکنید.';
+
+  @override
+  String get firmwareFlashed => 'فریم‌ور نصب شد';
+
+  @override
+  String get deviceWillRestart => 'دستگاه شما دوباره راه‌اندازی می‌شود.';
+
+  @override
+  String get exportFailedTryAgain => 'برون‌بری ناموفق بود. دوباره تلاش کنید.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'دستگاه: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'حفظ اشتراک';
+
+  @override
+  String get couldNotLoadPage => 'این صفحه بارگیری نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'مرحله $current از $total';
+  }
 }

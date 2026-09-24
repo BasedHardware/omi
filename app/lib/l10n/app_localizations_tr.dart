@@ -134,7 +134,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createPersonHint => 'Yeni bir kişi oluşturun ve Omi\'yi onların konuşmasını da tanımaya eğitin!';
 
   @override
-  String get speechProfile => 'Konuşma Profili';
+  String get speechProfile => 'Ses Profili';
 
   @override
   String sampleNumber(int number) {
@@ -3818,7 +3818,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get signOutQuestion => 'Çıkış yap?';
 
   @override
-  String get signOutConfirmation => 'Çıkış yapmak istediğinizden emin misiniz?';
+  String get signOutConfirmation =>
+      'Konuşmalarınızı görmek için yeniden oturum açmanız gerekecek. Eşlenen cihazınız ve uygulama tercihleriniz bu telefonda kalır.';
 
   @override
   String get customVocabularyHeader => 'ÖZEL KELIME DAĞARCIĞI';
@@ -8959,10 +8960,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get planUpdate => 'Plan Güncellemesi';
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler \$49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.';
-
-  @override
   String get upgradeYourPlan => 'Planınızı Yükseltin';
 
   @override
@@ -10450,4 +10447,197 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Konuşmacıyı belirle';
+
+  @override
+  String get couldNotLoadCheckout => 'Ödeme sayfası yüklenemedi. Bağlantını kontrol edip tekrar dene.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Aylık ücretsiz arama sınırına ulaşıldı. Gelecek ay sıfırlanır.';
+
+  @override
+  String get couldNotLoadImportHistory => 'İçe aktarma geçmişi yüklenemedi';
+
+  @override
+  String get phoneCallButton => 'Ara';
+
+  @override
+  String get searchContacts => 'Kişilerde ara';
+
+  @override
+  String get phoneContactsAccessTitle => 'Kişilere Erişime İzin Ver';
+
+  @override
+  String get phoneSelectCountryTitle => 'Ülke Seç';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Doğrulanmış Numara Yok';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Omi üzerinden arama yapmak için numaranı doğrula.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Bu numara silinemedi';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Cihaz unutulsun mu?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi bu cihaza bağlanmayı bırakacak. Tekrar kullanmak için yeniden eşleştirmeniz gerekecek.';
+
+  @override
+  String get deviceForgottenMessage => 'Cihaz unutuldu';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Cihaz eşleştirmesi kaldırılsın mı?';
+
+  @override
+  String get rollBack => 'Geri Al';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi Cihaz Tanılama';
+
+  @override
+  String get diagnosticsFailBadge => 'Başarısız';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration içinde yeniden bağlandı';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}g';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration önce';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Birincil dilinizi izler';
+
+  @override
+  String get creatorPayouts => 'İçerik Üretici Ödemeleri';
+
+  @override
+  String get sttLanguageOverride => 'Değiştir';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Birincil Dili Kullan';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Bu sağlayıcı $language dilini desteklemiyor, bu yüzden $fallback kullanılıyor.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Algılanan RAM: $ram GB. Önerilen minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Algılanan model: $model (iPhone XS\'ten eski). Cihaz üzerinde tanıma daha yavaş olabilir.';
+  }
+
+  @override
+  String get copyLogs => 'Günlükleri Kopyala';
+
+  @override
+  String get openProviderDocs => 'Belgeleri Aç';
+
+  @override
+  String get getApiKey => 'API Anahtarı Al';
+
+  @override
+  String get showApiKey => 'API Anahtarını Göster';
+
+  @override
+  String get hideApiKey => 'API Anahtarını Gizle';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word kaldır';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kelime',
+      one: '1 kelime',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Bu ay $remaining ücretsiz arama kaldı ($limit aramadan)';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Bu ay $remaining ücretsiz arama kaldı ($limit aramadan) · her biri en fazla $minutes dk';
+  }
+
+  @override
+  String get appCreators => 'Uygulama Geliştiricileri';
+
+  @override
+  String get homeScreen => 'Ana Ekran';
+
+  @override
+  String get phoneCalls => 'Telefon Aramaları';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Konuşmadan metne maliyetlerini azaltmak için sunucu tarafı ses filtresi';
+
+  @override
+  String get flashCustomFirmware => 'Özel Yazılım Yükle';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Özel yazılım sürümleri yükleyin';
+
+  @override
+  String get selectFirmwareZip => 'Yazılım ZIP dosyasını seçin';
+
+  @override
+  String get customFirmwareWarning =>
+      'Özel yazılım cihazınızı kullanılamaz hale getirebilir. Geçerli bir Omi yazılım sürümü olduğundan emin olun ve güncelleme sırasında bağlantıyı kesmeyin.';
+
+  @override
+  String get firmwareFlashed => 'Yazılım yüklendi';
+
+  @override
+  String get deviceWillRestart => 'Cihazınız yeniden başlatılacak.';
+
+  @override
+  String get exportFailedTryAgain => 'Dışa aktarma başarısız oldu. Lütfen tekrar deneyin.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Cihaz: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Aboneliği Koru';
+
+  @override
+  String get couldNotLoadPage => 'Bu sayfa yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Adım $current/$total';
+  }
 }

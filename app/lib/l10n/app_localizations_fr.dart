@@ -135,7 +135,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get createPersonHint => 'Créez une nouvelle personne et entraînez Omi à reconnaître sa voix aussi !';
 
   @override
-  String get speechProfile => 'Profil Vocal';
+  String get speechProfile => 'Profil vocal';
 
   @override
   String sampleNumber(int number) {
@@ -3843,7 +3843,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get signOutQuestion => 'Se déconnecter ?';
 
   @override
-  String get signOutConfirmation => 'Êtes-vous sûr de vouloir vous déconnecter ?';
+  String get signOutConfirmation =>
+      'Vous devrez vous reconnecter pour voir vos conversations. Votre appareil associé et les préférences de l\'app restent sur ce téléphone.';
 
   @override
   String get customVocabularyHeader => 'VOCABULAIRE PERSONNALISÉ';
@@ -9028,10 +9029,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get planUpdate => 'Mise à jour du plan';
 
   @override
-  String get planDeprecationMessage =>
-      'Votre plan Unlimited est en cours de retrait. Passez au plan Operator — les mêmes fonctionnalités à \$49/mois. Votre plan actuel continuera de fonctionner en attendant.';
-
-  @override
   String get upgradeYourPlan => 'Améliorez votre forfait';
 
   @override
@@ -10526,4 +10523,199 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identifier l\'intervenant';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Impossible de charger la page de paiement. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Limite mensuelle d\'appels gratuits atteinte. Elle sera réinitialisée le mois prochain.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Impossible de charger l\'historique des importations';
+
+  @override
+  String get phoneCallButton => 'Appeler';
+
+  @override
+  String get searchContacts => 'Rechercher des contacts';
+
+  @override
+  String get phoneContactsAccessTitle => 'Autoriser l\'accès aux contacts';
+
+  @override
+  String get phoneSelectCountryTitle => 'Choisir le pays';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Aucun numéro vérifié';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Vérifiez votre numéro pour passer des appels avec Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Impossible de supprimer ce numéro';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Oublier l’appareil ?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi ne se connectera plus à cet appareil. Pour l’utiliser à nouveau, vous devrez l’associer de nouveau.';
+
+  @override
+  String get deviceForgottenMessage => 'Appareil oublié';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Dissocier l’appareil ?';
+
+  @override
+  String get rollBack => 'Revenir';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbit/s';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostics de l\'appareil Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Échec';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'reconnecté en $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}j';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'il y a $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Suit votre langue principale';
+
+  @override
+  String get creatorPayouts => 'Paiements aux créateurs';
+
+  @override
+  String get sttLanguageOverride => 'Remplacer';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Utiliser la langue principale';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Ce fournisseur ne prend pas en charge $language, il utilise donc $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM détectée : $ram Go. Minimum recommandé : 4 Go.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Modèle détecté : $model (antérieur à l\'iPhone XS). La reconnaissance sur l\'appareil peut être plus lente.';
+  }
+
+  @override
+  String get copyLogs => 'Copier les journaux';
+
+  @override
+  String get openProviderDocs => 'Ouvrir la documentation';
+
+  @override
+  String get getApiKey => 'Obtenir une clé API';
+
+  @override
+  String get showApiKey => 'Afficher la clé API';
+
+  @override
+  String get hideApiKey => 'Masquer la clé API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Retirer $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mots',
+      one: '1 mot',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining appels gratuits sur $limit restants ce mois-ci';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining appels gratuits sur $limit restants ce mois-ci · jusqu\'à $minutes min chacun';
+  }
+
+  @override
+  String get appCreators => 'Créateurs d\'apps';
+
+  @override
+  String get homeScreen => 'Écran d\'accueil';
+
+  @override
+  String get phoneCalls => 'Appels téléphoniques';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Filtrage vocal côté serveur pour réduire les coûts de transcription';
+
+  @override
+  String get flashCustomFirmware => 'Flasher un firmware personnalisé';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Flasher des versions de firmware personnalisées';
+
+  @override
+  String get selectFirmwareZip => 'Sélectionner le fichier ZIP du firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Un firmware personnalisé peut rendre votre appareil inutilisable. Vérifiez qu\'il s\'agit d\'une version valide du firmware Omi et ne déconnectez pas l\'appareil pendant la mise à jour.';
+
+  @override
+  String get firmwareFlashed => 'Firmware flashé';
+
+  @override
+  String get deviceWillRestart => 'Votre appareil va redémarrer.';
+
+  @override
+  String get exportFailedTryAgain => 'L\'export a échoué. Veuillez réessayer.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Appareil : $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Garder l\'abonnement';
+
+  @override
+  String get couldNotLoadPage => 'Impossible de charger cette page. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Étape $current sur $total';
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
@@ -195,161 +196,78 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       onRefresh: _initializeClickUp,
       children: [
         if (_clickupService.currentUserId != null)
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: OmiColors.successSurface,
-              borderRadius: OmiRadius.smAll,
-              border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    context.l10n.connectedAsUser(_clickupService.currentUserId!),
-                    style: OmiType.footnote.copyWith(color: OmiColors.success),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          IntegrationConnectedBanner(context.l10n.connectedAsUser(_clickupService.currentUserId!)),
         Text(
           context.l10n.defaultWorkspace,
           style: OmiType.title3,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: OmiSpacing.xs),
         Text(context.l10n.tasksCreatedInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-        const SizedBox(height: 16),
+        const SizedBox(height: OmiSpacing.md),
         ..._teams.map((team) {
           final teamId = team['id'].toString();
           final teamName = team['name'] as String;
           final isSelected = _selectedTeamId == teamId;
-          return GestureDetector(
+          return IntegrationSelectionCard(
+            label: teamName,
+            isSelected: isSelected,
             onTap: () => _selectTeam(team),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.mdAll,
-                border: isSelected ? Border.all(color: OmiColors.accent, width: 2) : null,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(teamName, style: OmiType.callout),
-                  ),
-                  if (isSelected) const Icon(Icons.check_circle, color: OmiColors.accent, size: 24),
-                ],
-              ),
-            ),
           );
         }),
-        const SizedBox(height: 32),
+        const SizedBox(height: OmiSpacing.xxl),
         if (_selectedTeamId != null) ...[
           Text(
             context.l10n.defaultSpace,
             style: OmiType.title3,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.selectSpaceInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-          const SizedBox(height: 16),
+          const SizedBox(height: OmiSpacing.md),
           if (_isLoadingSpaces)
             const Center(
               child: Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: OmiSpinner()),
             )
           else if (_spaces.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
-              child: Center(
-                child: Text(
-                  context.l10n.noSpacesInWorkspace,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                ),
-              ),
-            )
+            IntegrationSelectionEmpty(context.l10n.noSpacesInWorkspace)
           else
             ..._spaces.map((space) {
               final spaceId = space['id'].toString();
               final spaceName = space['name'] as String;
               final isSelected = _selectedSpaceId == spaceId;
-              return GestureDetector(
+              return IntegrationSelectionCard(
+                label: spaceName,
+                isSelected: isSelected,
                 onTap: () => _selectSpace(space),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: OmiColors.surface1,
-                    borderRadius: OmiRadius.mdAll,
-                    border: isSelected ? Border.all(color: OmiColors.accent, width: 2) : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(spaceName, style: OmiType.callout),
-                      ),
-                      if (isSelected) const Icon(Icons.check_circle, color: OmiColors.accent, size: 24),
-                    ],
-                  ),
-                ),
               );
             }),
-          const SizedBox(height: 32),
+          const SizedBox(height: OmiSpacing.xxl),
         ],
         if (_selectedSpaceId != null) ...[
           Text(
             context.l10n.defaultList,
             style: OmiType.title3,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.tasksAddedToList, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-          const SizedBox(height: 16),
+          const SizedBox(height: OmiSpacing.md),
           if (_isLoadingLists)
             const Center(
               child: Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: OmiSpinner()),
             )
           else if (_lists.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
-              child: Center(
-                child: Text(
-                  context.l10n.noListsInSpace,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                ),
-              ),
-            )
+            IntegrationSelectionEmpty(context.l10n.noListsInSpace)
           else
             ..._lists.map((list) {
               final listId = list['id'].toString();
               final listName = list['name'] as String;
               final isSelected = _selectedListId == listId;
-              return GestureDetector(
+              return IntegrationSelectionCard(
+                label: listName,
+                isSelected: isSelected,
                 onTap: () => _selectList(list),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: OmiColors.surface1,
-                    borderRadius: OmiRadius.mdAll,
-                    border: isSelected ? Border.all(color: OmiColors.accent, width: 2) : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(listName, style: OmiType.callout),
-                      ),
-                      if (isSelected) const Icon(Icons.check_circle, color: OmiColors.accent, size: 24),
-                    ],
-                  ),
-                ),
               );
             }),
-          const SizedBox(height: 32),
+          const SizedBox(height: OmiSpacing.xxl),
         ],
       ],
     );

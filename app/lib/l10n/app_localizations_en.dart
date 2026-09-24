@@ -134,7 +134,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createPersonHint => 'Create a new person and train Omi to recognize their speech too!';
 
   @override
-  String get speechProfile => 'Speech Profile';
+  String get speechProfile => 'Voice Profile';
 
   @override
   String sampleNumber(int number) {
@@ -3812,7 +3812,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signOutQuestion => 'Sign Out?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation =>
+      'You\'ll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.';
 
   @override
   String get customVocabularyHeader => 'CUSTOM VOCABULARY';
@@ -8942,10 +8943,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planUpdate => 'Plan Update';
 
   @override
-  String get planDeprecationMessage =>
-      'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.';
-
-  @override
   String get upgradeYourPlan => 'Upgrade Your Plan';
 
   @override
@@ -10428,4 +10425,197 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identify speaker';
+
+  @override
+  String get couldNotLoadCheckout => 'Couldn\'t load the checkout page. Check your connection and try again.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Monthly free call limit reached. It resets next month.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Couldn\'t load import history';
+
+  @override
+  String get phoneCallButton => 'Call';
+
+  @override
+  String get searchContacts => 'Search contacts';
+
+  @override
+  String get phoneContactsAccessTitle => 'Allow Contacts Access';
+
+  @override
+  String get phoneSelectCountryTitle => 'Select Country';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'No Verified Numbers';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verify your number to make calls through Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Couldn\'t delete this number';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Forget Device?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi will stop connecting to this device. To use it again, you\'ll have to pair it again.';
+
+  @override
+  String get deviceForgottenMessage => 'Device forgotten';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Unpair Device?';
+
+  @override
+  String get rollBack => 'Roll Back';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi Device Diagnostics';
+
+  @override
+  String get diagnosticsFailBadge => 'Failed';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'reconnected in $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration ago';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Follows your primary language';
+
+  @override
+  String get creatorPayouts => 'Creator Payouts';
+
+  @override
+  String get sttLanguageOverride => 'Override';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Use Primary Language';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return '$language isn\'t supported by this provider, so it uses $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Detected RAM: $ram GB. Minimum recommended: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Detected model: $model (older than iPhone XS). On-device recognition may be slower.';
+  }
+
+  @override
+  String get copyLogs => 'Copy Logs';
+
+  @override
+  String get openProviderDocs => 'Open Documentation';
+
+  @override
+  String get getApiKey => 'Get API Key';
+
+  @override
+  String get showApiKey => 'Show API Key';
+
+  @override
+  String get hideApiKey => 'Hide API Key';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Remove $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count words',
+      one: '1 word',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining of $limit free calls remaining this month';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining of $limit free calls remaining this month · up to $minutes min each';
+  }
+
+  @override
+  String get appCreators => 'App Creators';
+
+  @override
+  String get homeScreen => 'Home Screen';
+
+  @override
+  String get phoneCalls => 'Phone Calls';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Server-side voice gating to reduce speech-to-text costs';
+
+  @override
+  String get flashCustomFirmware => 'Flash Custom Firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Flash custom firmware builds';
+
+  @override
+  String get selectFirmwareZip => 'Select firmware ZIP file';
+
+  @override
+  String get customFirmwareWarning =>
+      'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.';
+
+  @override
+  String get firmwareFlashed => 'Firmware flashed';
+
+  @override
+  String get deviceWillRestart => 'Your device will restart.';
+
+  @override
+  String get exportFailedTryAgain => 'Export failed. Please try again.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Device: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Keep Subscription';
+
+  @override
+  String get couldNotLoadPage => 'Couldn\'t load this page. Check your connection and try again.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Step $current of $total';
+  }
 }

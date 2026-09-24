@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "பேச்சு சுயவிவரம்",
+    "speechProfile": "குரல் சுயவிவரம்",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "வெளியேற விரும்புகிறீர்களா?",
+    "signOutConfirmation": "உங்கள் உரையாடல்களைப் பார்க்க மீண்டும் உள்நுழைய வேண்டும். இணைக்கப்பட்ட சாதனமும் ஆப் விருப்பங்களும் இந்த ஃபோனில் இருக்கும்.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் $49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "உங்கள் திட்டத்தை மேம்படுத்தவும்",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10899,5 +10895,58 @@
     "conversationTasksEmptyMessage": "இந்த உரையாடலின் பணிகள் இங்கே தோன்றும்.",
     "noPendingTasks": "நிலுவையிலுள்ள பணிகள் இல்லை",
     "nCompleted": "{count} முடிந்தது",
-    "identifySpeaker": "பேசுபவரை அடையாளம் காண்"
+    "identifySpeaker": "பேசுபவரை அடையாளம் காண்",
+    "couldNotLoadCheckout": "செக்அவுட் பக்கத்தை ஏற்ற முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
+    "phoneFreeCallLimitReached": "மாதாந்திர இலவச அழைப்பு வரம்பை அடைந்துவிட்டீர்கள். அடுத்த மாதம் மீட்டமைக்கப்படும்.",
+    "couldNotLoadImportHistory": "இறக்குமதி வரலாற்றை ஏற்ற முடியவில்லை",
+    "phoneCallButton": "அழை",
+    "searchContacts": "தொடர்புகளைத் தேடு",
+    "phoneContactsAccessTitle": "தொடர்புகளுக்கு அணுகலை அனுமதி",
+    "phoneSelectCountryTitle": "நாட்டைத் தேர்ந்தெடு",
+    "phoneNoVerifiedNumbersTitle": "சரிபார்க்கப்பட்ட எண்கள் இல்லை",
+    "phoneNoVerifiedNumbersMessage": "Omi மூலம் அழைக்க உங்கள் எண்ணைச் சரிபார்க்கவும்.",
+    "phoneDeleteNumberFailed": "இந்த எண்ணை நீக்க முடியவில்லை",
+    "forgetDeviceConfirmTitle": "சாதனத்தை மறக்கவா?",
+    "forgetDeviceConfirmMessage": "Omi இந்தச் சாதனத்துடன் இணைவதை நிறுத்தும். மீண்டும் பயன்படுத்த, அதை மீண்டும் இணைக்க வேண்டும்.",
+    "deviceForgottenMessage": "சாதனம் மறக்கப்பட்டது",
+    "unpairDeviceConfirmTitle": "சாதன இணைப்பை நீக்கவா?",
+    "rollBack": "பின்வாங்கு",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi சாதன கண்டறிதல்",
+    "diagnosticsFailBadge": "தோல்வி",
+    "diagnosticsReconnectedIn": "{duration} இல் மீண்டும் இணைக்கப்பட்டது",
+    "timeCompactDays": "{count}நா",
+    "durationAgo": "{duration} முன்",
+    "sttLanguageFollowsPrimary": "உங்கள் முதன்மை மொழியைப் பின்பற்றுகிறது",
+    "creatorPayouts": "படைப்பாளர் கொடுப்பனவுகள்",
+    "sttLanguageOverride": "மாற்று",
+    "sttUsePrimaryLanguage": "முதன்மை மொழியைப் பயன்படுத்து",
+    "sttPrimaryLanguageUnsupported": "இந்த வழங்குநர் {language} ஐ ஆதரிக்கவில்லை, எனவே {fallback} ஐப் பயன்படுத்துகிறது.",
+    "deviceRamBelowMinimum": "கண்டறியப்பட்ட RAM: {ram} GB. பரிந்துரைக்கப்படும் குறைந்தபட்சம்: 4 GB.",
+    "olderIphoneModelDetected": "கண்டறியப்பட்ட மாடல்: {model} (iPhone XS ஐ விடப் பழையது). சாதனத்தில் அறிதல் மெதுவாக இருக்கலாம்.",
+    "copyLogs": "பதிவுகளை நகலெடு",
+    "openProviderDocs": "ஆவணங்களைத் திற",
+    "getApiKey": "API விசையைப் பெறு",
+    "showApiKey": "API விசையைக் காட்டு",
+    "hideApiKey": "API விசையை மறை",
+    "removeVocabularyWord": "{word} ஐ அகற்று",
+    "vocabularyWordCount": "{count, plural, =1{1 சொல்} other{{count} சொற்கள்}}",
+    "phoneFreeCallsRemaining": "இந்த மாதம் {remaining} இலவச அழைப்புகள் மீதமுள்ளன ({limit} இல்)",
+    "phoneFreeCallsRemainingWithMax": "இந்த மாதம் {remaining} இலவச அழைப்புகள் மீதமுள்ளன ({limit} இல்) · ஒவ்வொன்றும் {minutes} நிமிடங்கள் வரை",
+    "appCreators": "ஆப் படைப்பாளர்கள்",
+    "homeScreen": "முகப்புத் திரை",
+    "phoneCalls": "தொலைபேசி அழைப்புகள்",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "பேச்சு-உரை செலவைக் குறைக்க சர்வரில் குரல் வடிகட்டல்",
+    "flashCustomFirmware": "தனிப்பயன் ஃபர்ம்வேரை நிறுவு",
+    "flashCustomFirmwareDescription": "தனிப்பயன் ஃபர்ம்வேர் பதிப்புகளை நிறுவு",
+    "selectFirmwareZip": "ஃபர்ம்வேர் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்",
+    "customFirmwareWarning": "தனிப்பயன் ஃபர்ம்வேர் உங்கள் சாதனத்தைச் செயலிழக்கச் செய்யலாம். இது சரியான Omi ஃபர்ம்வேர் பதிப்பா என்பதை உறுதிசெய்து, புதுப்பிப்பின்போது இணைப்பைத் துண்டிக்க வேண்டாம்.",
+    "firmwareFlashed": "ஃபர்ம்வேர் நிறுவப்பட்டது",
+    "deviceWillRestart": "உங்கள் சாதனம் மறுதொடக்கம் செய்யப்படும்.",
+    "exportFailedTryAgain": "ஏற்றுமதி தோல்வியடைந்தது. மீண்டும் முயற்சிக்கவும்.",
+    "firmwareFlashTarget": "சாதனம்: {deviceName}",
+    "keepSubscription": "சந்தாவை வைத்திருக்கவும்",
+    "couldNotLoadPage": "இந்தப் பக்கத்தை ஏற்ற முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "leaveFlowStepOf": "படி {current} / {total}"
 }

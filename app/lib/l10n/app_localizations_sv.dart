@@ -134,7 +134,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createPersonHint => 'Skapa en ny person och träna Omi att känna igen deras röst också!';
 
   @override
-  String get speechProfile => 'Talprofil';
+  String get speechProfile => 'Röstprofil';
 
   @override
   String sampleNumber(int number) {
@@ -3816,7 +3816,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signOutQuestion => 'Logga ut?';
 
   @override
-  String get signOutConfirmation => 'Är du säker på att du vill logga ut?';
+  String get signOutConfirmation =>
+      'Du behöver logga in igen för att se dina samtal. Din parkopplade enhet och dina appinställningar finns kvar på telefonen.';
 
   @override
   String get customVocabularyHeader => 'ANPASSAT ORDFÖRRÅD';
@@ -8952,10 +8953,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get planUpdate => 'Planuppdatering';
 
   @override
-  String get planDeprecationMessage =>
-      'Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för \$49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.';
-
-  @override
   String get upgradeYourPlan => 'Uppgradera din plan';
 
   @override
@@ -10444,4 +10441,198 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identifiera talare';
+
+  @override
+  String get couldNotLoadCheckout =>
+      'Det gick inte att läsa in betalningssidan. Kontrollera anslutningen och försök igen.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Månadsgränsen för gratissamtal är nådd. Den återställs nästa månad.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Det gick inte att läsa in importhistoriken';
+
+  @override
+  String get phoneCallButton => 'Ring';
+
+  @override
+  String get searchContacts => 'Sök kontakter';
+
+  @override
+  String get phoneContactsAccessTitle => 'Tillåt åtkomst till kontakter';
+
+  @override
+  String get phoneSelectCountryTitle => 'Välj land';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Inga verifierade nummer';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verifiera ditt nummer för att ringa via Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Det gick inte att ta bort numret';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Glöm enheten?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi slutar ansluta till den här enheten. För att använda den igen måste du parkoppla den på nytt.';
+
+  @override
+  String get deviceForgottenMessage => 'Enheten har glömts';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Ta bort parkoppling?';
+
+  @override
+  String get rollBack => 'Återställ';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi-enhetsdiagnostik';
+
+  @override
+  String get diagnosticsFailBadge => 'Misslyckades';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'återansluten efter $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'för $duration sedan';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Följer ditt primära språk';
+
+  @override
+  String get creatorPayouts => 'Utbetalningar till skapare';
+
+  @override
+  String get sttLanguageOverride => 'Åsidosätt';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Använd primärt språk';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Den här leverantören stöder inte $language, så den använder $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Upptäckt RAM: $ram GB. Rekommenderat minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Upptäckt modell: $model (äldre än iPhone XS). Igenkänning på enheten kan vara långsammare.';
+  }
+
+  @override
+  String get copyLogs => 'Kopiera loggar';
+
+  @override
+  String get openProviderDocs => 'Öppna dokumentation';
+
+  @override
+  String get getApiKey => 'Hämta API-nyckel';
+
+  @override
+  String get showApiKey => 'Visa API-nyckel';
+
+  @override
+  String get hideApiKey => 'Dölj API-nyckel';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Ta bort $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ord',
+      one: '1 ord',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining av $limit gratissamtal kvar denna månad';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining av $limit gratissamtal kvar denna månad · upp till $minutes min vardera';
+  }
+
+  @override
+  String get appCreators => 'Appskapare';
+
+  @override
+  String get homeScreen => 'Hemskärm';
+
+  @override
+  String get phoneCalls => 'Telefonsamtal';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Röstfilter på servern för att sänka kostnaderna för tal-till-text';
+
+  @override
+  String get flashCustomFirmware => 'Installera egen firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Installera egna firmwarebyggen';
+
+  @override
+  String get selectFirmwareZip => 'Välj ZIP-fil med firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Egen firmware kan göra enheten obrukbar. Se till att det är ett giltigt Omi-firmwarebygge och koppla inte från under uppdateringen.';
+
+  @override
+  String get firmwareFlashed => 'Firmware installerad';
+
+  @override
+  String get deviceWillRestart => 'Enheten startas om.';
+
+  @override
+  String get exportFailedTryAgain => 'Exporten misslyckades. Försök igen.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Enhet: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Behåll prenumerationen';
+
+  @override
+  String get couldNotLoadPage => 'Sidan kunde inte läsas in. Kontrollera anslutningen och försök igen.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Steg $current av $total';
+  }
 }

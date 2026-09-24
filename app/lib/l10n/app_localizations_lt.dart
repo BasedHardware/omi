@@ -134,7 +134,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get createPersonHint => 'Sukurkite naują asmenį ir apmokykite Omi atpažinti jų kalbą!';
 
   @override
-  String get speechProfile => 'Kalbos Profilis';
+  String get speechProfile => 'Balso profilis';
 
   @override
   String sampleNumber(int number) {
@@ -3808,7 +3808,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get signOutQuestion => 'Atsijungti?';
 
   @override
-  String get signOutConfirmation => 'Ar tikrai norite atsijungti?';
+  String get signOutConfirmation =>
+      'Norėdami matyti pokalbius, turėsite prisijungti iš naujo. Susietas įrenginys ir programėlės nuostatos lieka šiame telefone.';
 
   @override
   String get customVocabularyHeader => 'PASIRINKTINIS ŽODYNAS';
@@ -8954,10 +8955,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get planUpdate => 'Plano atnaujinimas';
 
   @override
-  String get planDeprecationMessage =>
-      'Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už \$49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.';
-
-  @override
   String get upgradeYourPlan => 'Atnaujinkite savo planą';
 
   @override
@@ -10456,4 +10453,197 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Nustatyti kalbėtoją';
+
+  @override
+  String get couldNotLoadCheckout => 'Nepavyko įkelti apmokėjimo puslapio. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Pasiektas mėnesio nemokamų skambučių limitas. Jis atsinaujins kitą mėnesį.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Nepavyko įkelti importavimo istorijos';
+
+  @override
+  String get phoneCallButton => 'Skambinti';
+
+  @override
+  String get searchContacts => 'Ieškoti kontaktų';
+
+  @override
+  String get phoneContactsAccessTitle => 'Leisti prieigą prie kontaktų';
+
+  @override
+  String get phoneSelectCountryTitle => 'Pasirinkite šalį';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Nėra patvirtintų numerių';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Patvirtinkite savo numerį, kad galėtumėte skambinti per Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Nepavyko ištrinti šio numerio';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Pamiršti įrenginį?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi nebesijungs prie šio įrenginio. Norėdami vėl juo naudotis, turėsite jį susieti iš naujo.';
+
+  @override
+  String get deviceForgottenMessage => 'Įrenginys pamirštas';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Atsieti įrenginį?';
+
+  @override
+  String get rollBack => 'Grąžinti';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi įrenginio diagnostika';
+
+  @override
+  String get diagnosticsFailBadge => 'Nepavyko';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'vėl prisijungta per $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'prieš $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Naudoja jūsų pagrindinę kalbą';
+
+  @override
+  String get creatorPayouts => 'Išmokos kūrėjams';
+
+  @override
+  String get sttLanguageOverride => 'Pakeisti';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Naudoti pagrindinę kalbą';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Šis teikėjas nepalaiko $language, todėl naudoja $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Aptikta RAM: $ram GB. Rekomenduojamas minimumas: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Aptiktas modelis: $model (senesnis nei iPhone XS). Atpažinimas įrenginyje gali būti lėtesnis.';
+  }
+
+  @override
+  String get copyLogs => 'Kopijuoti žurnalus';
+
+  @override
+  String get openProviderDocs => 'Atidaryti dokumentaciją';
+
+  @override
+  String get getApiKey => 'Gauti API raktą';
+
+  @override
+  String get showApiKey => 'Rodyti API raktą';
+
+  @override
+  String get hideApiKey => 'Slėpti API raktą';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Pašalinti $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count žodžiai',
+      one: '1 žodis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Šį mėnesį liko $remaining iš $limit nemokamų skambučių';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Šį mėnesį liko $remaining iš $limit nemokamų skambučių · iki $minutes min kiekvienas';
+  }
+
+  @override
+  String get appCreators => 'Programėlių kūrėjai';
+
+  @override
+  String get homeScreen => 'Pradinis ekranas';
+
+  @override
+  String get phoneCalls => 'Skambučiai';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Serverio balso filtras kalbos atpažinimo kaštams mažinti';
+
+  @override
+  String get flashCustomFirmware => 'Įdiegti pasirinktinę programinę aparatinę įrangą';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Įdiekite pasirinktinius programinės aparatinės įrangos leidimus';
+
+  @override
+  String get selectFirmwareZip => 'Pasirinkite programinės aparatinės įrangos ZIP failą';
+
+  @override
+  String get customFirmwareWarning =>
+      'Pasirinktinė programinė aparatinė įranga gali sugadinti įrenginį. Įsitikinkite, kad tai tinkamas Omi leidimas, ir neatjunkite įrenginio atnaujinimo metu.';
+
+  @override
+  String get firmwareFlashed => 'Programinė aparatinė įranga įdiegta';
+
+  @override
+  String get deviceWillRestart => 'Įrenginys bus paleistas iš naujo.';
+
+  @override
+  String get exportFailedTryAgain => 'Eksportuoti nepavyko. Bandykite dar kartą.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Įrenginys: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Palikti prenumeratą';
+
+  @override
+  String get couldNotLoadPage => 'Nepavyko įkelti puslapio. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '$current veiksmas iš $total';
+  }
 }

@@ -134,7 +134,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createPersonHint => '创建一个新人员并训练 Omi 识别他们的声音！';
 
   @override
-  String get speechProfile => '语音配置文件';
+  String get speechProfile => '语音档案';
 
   @override
   String sampleNumber(int number) {
@@ -3744,7 +3744,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signOutQuestion => '退出登录？';
 
   @override
-  String get signOutConfirmation => '您确定要退出登录吗？';
+  String get signOutConfirmation => '你需要重新登录才能查看对话。已配对的设备和应用偏好设置会保留在这部手机上。';
 
   @override
   String get customVocabularyHeader => '自定义词汇';
@@ -8792,9 +8792,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planUpdate => '套餐更新';
 
   @override
-  String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
-
-  @override
   String get upgradeYourPlan => '升级你的计划';
 
   @override
@@ -10247,4 +10244,195 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get identifySpeaker => '指定说话人';
+
+  @override
+  String get couldNotLoadCheckout => '无法加载结账页面。请检查网络连接后重试。';
+
+  @override
+  String get phoneFreeCallLimitReached => '已达到每月免费通话上限，将于下月重置。';
+
+  @override
+  String get couldNotLoadImportHistory => '无法加载导入记录';
+
+  @override
+  String get phoneCallButton => '呼叫';
+
+  @override
+  String get searchContacts => '搜索联系人';
+
+  @override
+  String get phoneContactsAccessTitle => '允许访问通讯录';
+
+  @override
+  String get phoneSelectCountryTitle => '选择国家/地区';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => '没有已验证的号码';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => '验证你的号码即可通过 Omi 拨打电话。';
+
+  @override
+  String get phoneDeleteNumberFailed => '无法删除此号码';
+
+  @override
+  String get forgetDeviceConfirmTitle => '要忘记设备吗?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi 将不再连接此设备。如需再次使用,你需要重新配对。';
+
+  @override
+  String get deviceForgottenMessage => '已忘记设备';
+
+  @override
+  String get unpairDeviceConfirmTitle => '要取消配对设备吗?';
+
+  @override
+  String get rollBack => '回滚';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi 设备诊断';
+
+  @override
+  String get diagnosticsFailBadge => '失败';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration后重新连接';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$count天';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration前';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => '跟随您的主要语言';
+
+  @override
+  String get creatorPayouts => '创作者收款';
+
+  @override
+  String get sttLanguageOverride => '覆盖';
+
+  @override
+  String get sttUsePrimaryLanguage => '使用主要语言';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return '此提供商不支持$language，因此使用$fallback。';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return '检测到的内存：$ram GB。建议最低：4 GB。';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return '检测到的机型：$model（早于 iPhone XS）。设备端识别可能较慢。';
+  }
+
+  @override
+  String get copyLogs => '复制日志';
+
+  @override
+  String get openProviderDocs => '打开文档';
+
+  @override
+  String get getApiKey => '获取 API 密钥';
+
+  @override
+  String get showApiKey => '显示 API 密钥';
+
+  @override
+  String get hideApiKey => '隐藏 API 密钥';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '移除 $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个词',
+      one: '1 个词',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '本月剩余 $remaining/$limit 次免费通话';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '本月剩余 $remaining/$limit 次免费通话 · 每次最长 $minutes 分钟';
+  }
+
+  @override
+  String get appCreators => '应用创作者';
+
+  @override
+  String get homeScreen => '主屏幕';
+
+  @override
+  String get phoneCalls => '电话';
+
+  @override
+  String get vadGate => 'VAD 门控';
+
+  @override
+  String get vadGateDescription => '服务器端语音门控，降低语音转文字成本';
+
+  @override
+  String get flashCustomFirmware => '刷写自定义固件';
+
+  @override
+  String get flashCustomFirmwareDescription => '刷写自定义固件版本';
+
+  @override
+  String get selectFirmwareZip => '选择固件 ZIP 文件';
+
+  @override
+  String get customFirmwareWarning => '刷写自定义固件可能导致设备无法使用。请确认这是有效的 Omi 固件版本，并且更新期间不要断开连接。';
+
+  @override
+  String get firmwareFlashed => '固件已刷写';
+
+  @override
+  String get deviceWillRestart => '设备将重新启动。';
+
+  @override
+  String get exportFailedTryAgain => '导出失败，请重试。';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return '设备：$deviceName';
+  }
+
+  @override
+  String get keepSubscription => '保留订阅';
+
+  @override
+  String get couldNotLoadPage => '无法加载此页面。请检查网络连接后重试。';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
 }

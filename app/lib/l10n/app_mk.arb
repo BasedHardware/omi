@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Профил на глас",
+    "speechProfile": "Гласовен профил",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Дали си сигурен/сигурна дека сакаш да се одјавиш?",
+    "signOutConfirmation": "Ќе треба повторно да се најавите за да ги видите разговорите. Спарениот уред и поставките на апликацијата остануваат на овој телефон.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "Вашиот Unlimited план се укинува. Преминете на Operator план — истите одлични функции за $49/мес. Вашиот тековен план ќе продолжи да работи во меѓувреме.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "Надградете го вашиот план",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10899,5 +10895,58 @@
     "conversationTasksEmptyMessage": "Задачите од овој разговор ќе се појават тука.",
     "noPendingTasks": "Нема задачи на чекање",
     "nCompleted": "Завршени: {count}",
-    "identifySpeaker": "Означи го говорникот"
+    "identifySpeaker": "Означи го говорникот",
+    "couldNotLoadCheckout": "Страницата за плаќање не можеше да се вчита. Проверете ја врската и обидете се повторно.",
+    "phoneFreeCallLimitReached": "Достигнат е месечниот лимит на бесплатни повици. Се ресетира следниот месец.",
+    "couldNotLoadImportHistory": "Историјата на увоз не можеше да се вчита",
+    "phoneCallButton": "Јави се",
+    "searchContacts": "Пребарај контакти",
+    "phoneContactsAccessTitle": "Дозволи пристап до контакти",
+    "phoneSelectCountryTitle": "Избери земја",
+    "phoneNoVerifiedNumbersTitle": "Нема потврдени броеви",
+    "phoneNoVerifiedNumbersMessage": "Потврдете го бројот за да се јавувате преку Omi.",
+    "phoneDeleteNumberFailed": "Бројот не може да се избрише",
+    "forgetDeviceConfirmTitle": "Да се заборави уредот?",
+    "forgetDeviceConfirmMessage": "Omi ќе престане да се поврзува со овој уред. За повторно да го користите, ќе треба повторно да го спарите.",
+    "deviceForgottenMessage": "Уредот е заборавен",
+    "unpairDeviceConfirmTitle": "Да се раздели уредот?",
+    "rollBack": "Врати",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Дијагностика на уредот Omi",
+    "diagnosticsFailBadge": "Неуспешно",
+    "diagnosticsReconnectedIn": "повторно поврзано за {duration}",
+    "timeCompactDays": "{count}д",
+    "durationAgo": "пред {duration}",
+    "sttLanguageFollowsPrimary": "Го следи вашиот примарен јазик",
+    "creatorPayouts": "Исплати за креатори",
+    "sttLanguageOverride": "Промени",
+    "sttUsePrimaryLanguage": "Користи примарен јазик",
+    "sttPrimaryLanguageUnsupported": "Овој провајдер не поддржува {language}, па користи {fallback}.",
+    "deviceRamBelowMinimum": "Откриена RAM: {ram} GB. Препорачан минимум: 4 GB.",
+    "olderIphoneModelDetected": "Откриен модел: {model} (постар од iPhone XS). Препознавањето на уредот може да биде побавно.",
+    "copyLogs": "Копирај дневници",
+    "openProviderDocs": "Отвори документација",
+    "getApiKey": "Земи API клуч",
+    "showApiKey": "Прикажи API клуч",
+    "hideApiKey": "Сокриј API клуч",
+    "removeVocabularyWord": "Отстрани {word}",
+    "vocabularyWordCount": "{count, plural, =1{1 збор} other{{count} зборови}}",
+    "phoneFreeCallsRemaining": "Преостануваат {remaining} од {limit} бесплатни повици овој месец",
+    "phoneFreeCallsRemainingWithMax": "Преостануваат {remaining} од {limit} бесплатни повици овој месец · до {minutes} мин секој",
+    "appCreators": "Креатори на апликации",
+    "homeScreen": "Почетен екран",
+    "phoneCalls": "Телефонски повици",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Филтрирање на гласот на серверот за помали трошоци за препознавање говор",
+    "flashCustomFirmware": "Инсталирај прилагоден фирмвер",
+    "flashCustomFirmwareDescription": "Инсталирајте прилагодени верзии на фирмвер",
+    "selectFirmwareZip": "Изберете ZIP-датотека со фирмвер",
+    "customFirmwareWarning": "Прилагодениот фирмвер може трајно да го оштети уредот. Проверете дали ова е валидна верзија на Omi фирмвер и не прекинувајте ја врската за време на ажурирањето.",
+    "firmwareFlashed": "Фирмверот е инсталиран",
+    "deviceWillRestart": "Уредот ќе се рестартира.",
+    "exportFailedTryAgain": "Извозот не успеа. Обидете се повторно.",
+    "firmwareFlashTarget": "Уред: {deviceName}",
+    "keepSubscription": "Задржи ја претплатата",
+    "couldNotLoadPage": "Страницата не можеше да се вчита. Проверете ја врската и обидете се повторно.",
+    "leaveFlowStepOf": "Чекор {current} од {total}"
 }

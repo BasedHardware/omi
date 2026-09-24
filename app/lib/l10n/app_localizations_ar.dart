@@ -134,7 +134,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get createPersonHint => 'أنشئ شخصاً جديداً ودرب Omi على التعرف على صوته أيضاً!';
 
   @override
-  String get speechProfile => 'ملف الصوت';
+  String get speechProfile => 'الملف الصوتي';
 
   @override
   String sampleNumber(int number) {
@@ -3781,7 +3781,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signOutQuestion => 'تسجيل الخروج؟';
 
   @override
-  String get signOutConfirmation => 'هل أنت متأكد من رغبتك في تسجيل الخروج؟';
+  String get signOutConfirmation =>
+      'ستحتاج إلى تسجيل الدخول مرة أخرى لرؤية محادثاتك. يبقى جهازك المقترن وتفضيلات التطبيق على هذا الهاتف.';
 
   @override
   String get customVocabularyHeader => 'المفردات المخصصة';
@@ -8884,10 +8885,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get planUpdate => 'تحديث الخطة';
 
   @override
-  String get planDeprecationMessage =>
-      'يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر \$49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.';
-
-  @override
   String get upgradeYourPlan => 'قم بترقية خطتك';
 
   @override
@@ -10376,4 +10373,197 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'تحديد المتحدث';
+
+  @override
+  String get couldNotLoadCheckout => 'تعذّر تحميل صفحة الدفع. تحقّق من اتصالك وحاول مرة أخرى.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'تم الوصول إلى حد المكالمات المجانية الشهري. يُعاد ضبطه الشهر القادم.';
+
+  @override
+  String get couldNotLoadImportHistory => 'تعذّر تحميل سجل الاستيراد';
+
+  @override
+  String get phoneCallButton => 'اتصال';
+
+  @override
+  String get searchContacts => 'البحث في جهات الاتصال';
+
+  @override
+  String get phoneContactsAccessTitle => 'السماح بالوصول إلى جهات الاتصال';
+
+  @override
+  String get phoneSelectCountryTitle => 'اختر الدولة';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'لا توجد أرقام موثّقة';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'وثّق رقمك لإجراء المكالمات عبر Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'تعذّر حذف هذا الرقم';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'نسيان الجهاز؟';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'سيتوقف Omi عن الاتصال بهذا الجهاز. لاستخدامه مرة أخرى، ستحتاج إلى إقرانه من جديد.';
+
+  @override
+  String get deviceForgottenMessage => 'تم نسيان الجهاز';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'إلغاء إقران الجهاز؟';
+
+  @override
+  String get rollBack => 'الرجوع';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate كيلوبت/ث';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'تشخيصات جهاز Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'فشل';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'أُعيد الاتصال خلال $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countي';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'منذ $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'يتبع لغتك الأساسية';
+
+  @override
+  String get creatorPayouts => 'أرباح المطوّرين';
+
+  @override
+  String get sttLanguageOverride => 'تجاوز';
+
+  @override
+  String get sttUsePrimaryLanguage => 'استخدام اللغة الأساسية';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'هذا المزوّد لا يدعم $language، لذا يستخدم $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'الذاكرة المكتشفة: $ram غيغابايت. الحد الأدنى الموصى به: 4 غيغابايت.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'الطراز المكتشف: $model (أقدم من iPhone XS). قد يكون التعرّف على الجهاز أبطأ.';
+  }
+
+  @override
+  String get copyLogs => 'نسخ السجلات';
+
+  @override
+  String get openProviderDocs => 'فتح الوثائق';
+
+  @override
+  String get getApiKey => 'الحصول على مفتاح API';
+
+  @override
+  String get showApiKey => 'إظهار مفتاح API';
+
+  @override
+  String get hideApiKey => 'إخفاء مفتاح API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'إزالة $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count كلمات',
+      one: 'كلمة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'تبقّى $remaining من $limit مكالمات مجانية هذا الشهر';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'تبقّى $remaining من $limit مكالمات مجانية هذا الشهر · حتى $minutes دقيقة لكل مكالمة';
+  }
+
+  @override
+  String get appCreators => 'منشئو التطبيقات';
+
+  @override
+  String get homeScreen => 'الشاشة الرئيسية';
+
+  @override
+  String get phoneCalls => 'المكالمات الهاتفية';
+
+  @override
+  String get vadGate => 'بوابة VAD';
+
+  @override
+  String get vadGateDescription => 'تصفية الصوت على الخادم لتقليل تكاليف تحويل الكلام إلى نص';
+
+  @override
+  String get flashCustomFirmware => 'تثبيت برنامج ثابت مخصص';
+
+  @override
+  String get flashCustomFirmwareDescription => 'ثبّت إصدارات برنامج ثابت مخصصة';
+
+  @override
+  String get selectFirmwareZip => 'اختر ملف ZIP للبرنامج الثابت';
+
+  @override
+  String get customFirmwareWarning =>
+      'قد يؤدي تثبيت برنامج ثابت مخصص إلى تعطيل جهازك نهائيًا. تأكد من أنه إصدار صالح لبرنامج Omi الثابت، ولا تقطع الاتصال أثناء التحديث.';
+
+  @override
+  String get firmwareFlashed => 'تم تثبيت البرنامج الثابت';
+
+  @override
+  String get deviceWillRestart => 'سيُعاد تشغيل جهازك.';
+
+  @override
+  String get exportFailedTryAgain => 'فشل التصدير. حاول مرة أخرى.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'الجهاز: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'الإبقاء على الاشتراك';
+
+  @override
+  String get couldNotLoadPage => 'تعذّر تحميل هذه الصفحة. تحقّق من اتصالك وحاول مرة أخرى.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'الخطوة $current من $total';
+  }
 }

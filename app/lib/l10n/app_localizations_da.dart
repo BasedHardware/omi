@@ -134,7 +134,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get createPersonHint => 'Opret en ny person og træn Omi til at genkende deres tale også!';
 
   @override
-  String get speechProfile => 'Taleprofil';
+  String get speechProfile => 'Stemmeprofil';
 
   @override
   String sampleNumber(int number) {
@@ -3798,7 +3798,8 @@ class AppLocalizationsDa extends AppLocalizations {
   String get signOutQuestion => 'Log ud?';
 
   @override
-  String get signOutConfirmation => 'Er du sikker på, at du vil logge ud?';
+  String get signOutConfirmation =>
+      'Du skal logge ind igen for at se dine samtaler. Din parrede enhed og dine app-præferencer bliver på denne telefon.';
 
   @override
   String get customVocabularyHeader => 'BRUGERDEFINERET ORDFORRÅD';
@@ -8935,10 +8936,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get planUpdate => 'Planopdatering';
 
   @override
-  String get planDeprecationMessage =>
-      'Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til \$49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.';
-
-  @override
   String get upgradeYourPlan => 'Opgrader din plan';
 
   @override
@@ -10425,4 +10422,197 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identificer taler';
+
+  @override
+  String get couldNotLoadCheckout => 'Betalingssiden kunne ikke indlæses. Tjek din forbindelse, og prøv igen.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Den månedlige grænse for gratis opkald er nået. Den nulstilles næste måned.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Importhistorikken kunne ikke indlæses';
+
+  @override
+  String get phoneCallButton => 'Ring op';
+
+  @override
+  String get searchContacts => 'Søg i kontakter';
+
+  @override
+  String get phoneContactsAccessTitle => 'Tillad adgang til kontakter';
+
+  @override
+  String get phoneSelectCountryTitle => 'Vælg land';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Ingen bekræftede numre';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Bekræft dit nummer for at ringe via Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Nummeret kunne ikke slettes';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Glem enhed?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi holder op med at oprette forbindelse til denne enhed. For at bruge den igen skal du parre den igen.';
+
+  @override
+  String get deviceForgottenMessage => 'Enhed glemt';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Ophæv parring af enhed?';
+
+  @override
+  String get rollBack => 'Rul tilbage';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi-enhedsdiagnostik';
+
+  @override
+  String get diagnosticsFailBadge => 'Mislykket';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'genforbundet efter $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration siden';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Følger dit primære sprog';
+
+  @override
+  String get creatorPayouts => 'Udbetalinger til skabere';
+
+  @override
+  String get sttLanguageOverride => 'Tilsidesæt';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Brug primært sprog';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Denne udbyder understøtter ikke $language, så den bruger $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Registreret RAM: $ram GB. Anbefalet minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Registreret model: $model (ældre end iPhone XS). Genkendelse på enheden kan være langsommere.';
+  }
+
+  @override
+  String get copyLogs => 'Kopiér logfiler';
+
+  @override
+  String get openProviderDocs => 'Åbn dokumentation';
+
+  @override
+  String get getApiKey => 'Hent API-nøgle';
+
+  @override
+  String get showApiKey => 'Vis API-nøgle';
+
+  @override
+  String get hideApiKey => 'Skjul API-nøgle';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Fjern $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ord',
+      one: '1 ord',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining af $limit gratis opkald tilbage denne måned';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining af $limit gratis opkald tilbage denne måned · op til $minutes min hver';
+  }
+
+  @override
+  String get appCreators => 'App-skabere';
+
+  @override
+  String get homeScreen => 'Startskærm';
+
+  @override
+  String get phoneCalls => 'Telefonopkald';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Stemmefilter på serveren for at sænke omkostningerne til tale-til-tekst';
+
+  @override
+  String get flashCustomFirmware => 'Installer brugerdefineret firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Installer egne firmware-builds';
+
+  @override
+  String get selectFirmwareZip => 'Vælg firmware-ZIP-fil';
+
+  @override
+  String get customFirmwareWarning =>
+      'Brugerdefineret firmware kan gøre enheden ubrugelig. Sørg for, at det er et gyldigt Omi-firmwarebuild, og afbryd ikke forbindelsen under opdateringen.';
+
+  @override
+  String get firmwareFlashed => 'Firmware installeret';
+
+  @override
+  String get deviceWillRestart => 'Enheden genstarter.';
+
+  @override
+  String get exportFailedTryAgain => 'Eksporten mislykkedes. Prøv igen.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Enhed: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Behold abonnement';
+
+  @override
+  String get couldNotLoadPage => 'Siden kunne ikke indlæses. Tjek din forbindelse, og prøv igen.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Trin $current af $total';
+  }
 }

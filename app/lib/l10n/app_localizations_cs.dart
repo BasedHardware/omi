@@ -134,7 +134,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get createPersonHint => 'Vytvořte novou osobu a naučte Omi rozpoznat i její řeč!';
 
   @override
-  String get speechProfile => 'Řečový Profil';
+  String get speechProfile => 'Hlasový profil';
 
   @override
   String sampleNumber(int number) {
@@ -3808,7 +3808,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get signOutQuestion => 'Odhlásit se?';
 
   @override
-  String get signOutConfirmation => 'Opravdu se chcete odhlásit?';
+  String get signOutConfirmation =>
+      'Pro zobrazení konverzací se budete muset znovu přihlásit. Spárované zařízení a předvolby aplikace v tomto telefonu zůstanou.';
 
   @override
   String get customVocabularyHeader => 'VLASTNÍ SLOVNÍK';
@@ -8940,10 +8941,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get planUpdate => 'Aktualizace plánu';
 
   @override
-  String get planDeprecationMessage =>
-      'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
-
-  @override
   String get upgradeYourPlan => 'Upgradujte svůj plán';
 
   @override
@@ -10437,4 +10434,197 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Určit mluvčího';
+
+  @override
+  String get couldNotLoadCheckout => 'Stránku pokladny se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Měsíční limit bezplatných hovorů je vyčerpán. Obnoví se příští měsíc.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Historii importů se nepodařilo načíst';
+
+  @override
+  String get phoneCallButton => 'Volat';
+
+  @override
+  String get searchContacts => 'Hledat kontakty';
+
+  @override
+  String get phoneContactsAccessTitle => 'Povolit přístup ke kontaktům';
+
+  @override
+  String get phoneSelectCountryTitle => 'Vyberte zemi';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Žádná ověřená čísla';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Ověřte své číslo, abyste mohli volat přes Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Toto číslo se nepodařilo smazat';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Zapomenout zařízení?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi se přestane k tomuto zařízení připojovat. Chcete-li ho znovu používat, budete ho muset znovu spárovat.';
+
+  @override
+  String get deviceForgottenMessage => 'Zařízení zapomenuto';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Zrušit spárování zařízení?';
+
+  @override
+  String get rollBack => 'Vrátit zpět';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostika zařízení Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Selhalo';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'znovu připojeno za $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return 'před $duration';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Řídí se vaším hlavním jazykem';
+
+  @override
+  String get creatorPayouts => 'Výplaty tvůrcům';
+
+  @override
+  String get sttLanguageOverride => 'Přepsat';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Použít hlavní jazyk';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Tento poskytovatel nepodporuje $language, proto používá $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Zjištěná RAM: $ram GB. Doporučené minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Zjištěný model: $model (starší než iPhone XS). Rozpoznávání v zařízení může být pomalejší.';
+  }
+
+  @override
+  String get copyLogs => 'Kopírovat protokoly';
+
+  @override
+  String get openProviderDocs => 'Otevřít dokumentaci';
+
+  @override
+  String get getApiKey => 'Získat klíč API';
+
+  @override
+  String get showApiKey => 'Zobrazit klíč API';
+
+  @override
+  String get hideApiKey => 'Skrýt klíč API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Odebrat $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count slov',
+      one: '1 slovo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Zbývá $remaining z $limit bezplatných hovorů tento měsíc';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Zbývá $remaining z $limit bezplatných hovorů tento měsíc · každý až $minutes min';
+  }
+
+  @override
+  String get appCreators => 'Tvůrci aplikací';
+
+  @override
+  String get homeScreen => 'Domovská obrazovka';
+
+  @override
+  String get phoneCalls => 'Telefonní hovory';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Filtrování hlasu na serveru pro nižší náklady na převod řeči na text';
+
+  @override
+  String get flashCustomFirmware => 'Nahrát vlastní firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Nahrávejte vlastní sestavení firmwaru';
+
+  @override
+  String get selectFirmwareZip => 'Vyberte soubor ZIP s firmwarem';
+
+  @override
+  String get customFirmwareWarning =>
+      'Vlastní firmware může zařízení nevratně poškodit. Ujistěte se, že jde o platné sestavení firmwaru Omi, a během aktualizace zařízení neodpojujte.';
+
+  @override
+  String get firmwareFlashed => 'Firmware nahrán';
+
+  @override
+  String get deviceWillRestart => 'Zařízení se restartuje.';
+
+  @override
+  String get exportFailedTryAgain => 'Export se nezdařil. Zkuste to znovu.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Zařízení: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Ponechat předplatné';
+
+  @override
+  String get couldNotLoadPage => 'Stránku se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Krok $current z $total';
+  }
 }

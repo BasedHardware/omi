@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Профіль голасу",
+    "speechProfile": "Галасавы профіль",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Вы сапраўды хочаце выйсці?",
+    "signOutConfirmation": "Каб убачыць размовы, трэба будзе ўвайсці зноў. Спалучаная прылада і налады праграмы застануцца на гэтым тэлефоне.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "Ваш план Unlimited спыняецца. Пераключыцеся на план Operator — тыя ж выдатныя магчымасці за $49/мес. Ваш бягучы план будзе працягваць працаваць тым часам.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "Палепшыце свой план",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10899,5 +10895,58 @@
     "conversationTasksEmptyMessage": "Задачы з гэтай размовы з'явяцца тут.",
     "noPendingTasks": "Няма невыкананых задач",
     "nCompleted": "Выканана: {count}",
-    "identifySpeaker": "Вызначыць удзельніка"
+    "identifySpeaker": "Вызначыць удзельніка",
+    "couldNotLoadCheckout": "Не ўдалося загрузіць старонку аплаты. Праверце злучэнне і паспрабуйце яшчэ раз.",
+    "phoneFreeCallLimitReached": "Месячны ліміт бясплатных званкоў вычарпаны. Ён абнавіцца ў наступным месяцы.",
+    "couldNotLoadImportHistory": "Не ўдалося загрузіць гісторыю імпарту",
+    "phoneCallButton": "Патэлефанаваць",
+    "searchContacts": "Пошук кантактаў",
+    "phoneContactsAccessTitle": "Дазволіць доступ да кантактаў",
+    "phoneSelectCountryTitle": "Выберыце краіну",
+    "phoneNoVerifiedNumbersTitle": "Няма пацверджаных нумароў",
+    "phoneNoVerifiedNumbersMessage": "Пацвердзіце свой нумар, каб тэлефанаваць праз Omi.",
+    "phoneDeleteNumberFailed": "Не ўдалося выдаліць гэты нумар",
+    "forgetDeviceConfirmTitle": "Забыць прыладу?",
+    "forgetDeviceConfirmMessage": "Omi перастане падключацца да гэтай прылады. Каб карыстацца ёй зноў, трэба будзе спалучыць яе нанова.",
+    "deviceForgottenMessage": "Прылада забыта",
+    "unpairDeviceConfirmTitle": "Разарваць спалучэнне з прыладай?",
+    "rollBack": "Адкаціць",
+    "dataRateKbps": "{rate} кбіт/с",
+    "diagnosticsExportTitle": "Дыягностыка прылады Omi",
+    "diagnosticsFailBadge": "Збой",
+    "diagnosticsReconnectedIn": "перападключана за {duration}",
+    "timeCompactDays": "{count}д",
+    "durationAgo": "{duration} таму",
+    "sttLanguageFollowsPrimary": "Ідзе за вашай асноўнай мовай",
+    "creatorPayouts": "Выплаты стваральнікам",
+    "sttLanguageOverride": "Змяніць",
+    "sttUsePrimaryLanguage": "Выкарыстоўваць асноўную мову",
+    "sttPrimaryLanguageUnsupported": "Гэты пастаўшчык не падтрымлівае {language}, таму выкарыстоўваецца {fallback}.",
+    "deviceRamBelowMinimum": "Выяўлена RAM: {ram} ГБ. Рэкамендаваны мінімум: 4 ГБ.",
+    "olderIphoneModelDetected": "Выяўленая мадэль: {model} (старэйшая за iPhone XS). Распазнаванне на прыладзе можа быць павольнейшым.",
+    "copyLogs": "Скапіраваць журналы",
+    "openProviderDocs": "Адкрыць дакументацыю",
+    "getApiKey": "Атрымаць ключ API",
+    "showApiKey": "Паказаць ключ API",
+    "hideApiKey": "Схаваць ключ API",
+    "removeVocabularyWord": "Выдаліць {word}",
+    "vocabularyWordCount": "{count, plural, =1{1 слова} other{{count} слоў}}",
+    "phoneFreeCallsRemaining": "Засталося {remaining} з {limit} бясплатных званкоў у гэтым месяцы",
+    "phoneFreeCallsRemainingWithMax": "Засталося {remaining} з {limit} бясплатных званкоў у гэтым месяцы · да {minutes} хв кожны",
+    "appCreators": "Стваральнікі праграм",
+    "homeScreen": "Галоўны экран",
+    "phoneCalls": "Тэлефонныя выклікі",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Фільтрацыя голасу на серверы, каб знізіць выдаткі на распазнаванне маўлення",
+    "flashCustomFirmware": "Усталяваць уласную прашыўку",
+    "flashCustomFirmwareDescription": "Усталёўвайце ўласныя зборкі прашыўкі",
+    "selectFirmwareZip": "Выберыце ZIP-файл прашыўкі",
+    "customFirmwareWarning": "Уласная прашыўка можа вывесці прыладу са строю. Пераканайцеся, што гэта сапраўдная зборка прашыўкі Omi, і не адключайце прыладу падчас абнаўлення.",
+    "firmwareFlashed": "Прашыўка ўсталявана",
+    "deviceWillRestart": "Прылада перазапусціцца.",
+    "exportFailedTryAgain": "Не ўдалося экспартаваць. Паспрабуйце яшчэ раз.",
+    "firmwareFlashTarget": "Прылада: {deviceName}",
+    "keepSubscription": "Захаваць падпіску",
+    "couldNotLoadPage": "Не ўдалося загрузіць старонку. Праверце падключэнне і паспрабуйце яшчэ раз.",
+    "leaveFlowStepOf": "Крок {current} з {total}"
 }

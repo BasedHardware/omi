@@ -134,7 +134,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get createPersonHint => 'Looge uus isik ja õpetage Omi-le ära tundma ka tema kõnet!';
 
   @override
-  String get speechProfile => 'Kõneprofiil';
+  String get speechProfile => 'Hääleprofiil';
 
   @override
   String sampleNumber(int number) {
@@ -3811,7 +3811,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get signOutQuestion => 'Logi välja?';
 
   @override
-  String get signOutConfirmation => 'Kas olete kindel, et soovite välja logida?';
+  String get signOutConfirmation =>
+      'Vestluste nägemiseks pead uuesti sisse logima. Seotud seade ja rakenduse eelistused jäävad sellesse telefoni.';
 
   @override
   String get customVocabularyHeader => 'KOHANDATUD SÕNAVARA';
@@ -8944,10 +8945,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get planUpdate => 'Plaani uuendus';
 
   @override
-  String get planDeprecationMessage =>
-      'Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga \$49/kuus. Teie praegune plaan jätkab vahepeal tööd.';
-
-  @override
   String get upgradeYourPlan => 'Uuenda oma plaani';
 
   @override
@@ -10433,4 +10430,197 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Tuvasta kõneleja';
+
+  @override
+  String get couldNotLoadCheckout => 'Makselehte ei õnnestunud laadida. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Tasuta kõnede kuulimiit on täis. See lähtestub järgmisel kuul.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Impordiajalugu ei õnnestunud laadida';
+
+  @override
+  String get phoneCallButton => 'Helista';
+
+  @override
+  String get searchContacts => 'Otsi kontakte';
+
+  @override
+  String get phoneContactsAccessTitle => 'Luba juurdepääs kontaktidele';
+
+  @override
+  String get phoneSelectCountryTitle => 'Vali riik';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Kinnitatud numbreid pole';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Kinnita oma number, et Omi kaudu helistada.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Seda numbrit ei õnnestunud kustutada';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Kas unustada seade?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi lõpetab selle seadmega ühendumise. Selle uuesti kasutamiseks pead selle uuesti siduma.';
+
+  @override
+  String get deviceForgottenMessage => 'Seade unustatud';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Kas tühistada seadme sidumine?';
+
+  @override
+  String get rollBack => 'Taasta';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi seadme diagnostika';
+
+  @override
+  String get diagnosticsFailBadge => 'Ebaõnnestus';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'taasühendatud $duration pärast';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}p';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration tagasi';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Järgib sinu põhikeelt';
+
+  @override
+  String get creatorPayouts => 'Loojate väljamaksed';
+
+  @override
+  String get sttLanguageOverride => 'Muuda';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Kasuta põhikeelt';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'See teenusepakkuja ei toeta keelt $language, seega kasutatakse keelt $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Tuvastatud RAM: $ram GB. Soovitatav miinimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Tuvastatud mudel: $model (vanem kui iPhone XS). Seadmesisene tuvastus võib olla aeglasem.';
+  }
+
+  @override
+  String get copyLogs => 'Kopeeri logid';
+
+  @override
+  String get openProviderDocs => 'Ava dokumentatsioon';
+
+  @override
+  String get getApiKey => 'Hangi API-võti';
+
+  @override
+  String get showApiKey => 'Näita API-võtit';
+
+  @override
+  String get hideApiKey => 'Peida API-võti';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Eemalda $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sõna',
+      one: '1 sõna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Sel kuul on jäänud $remaining tasuta kõnet $limit-st';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Sel kuul on jäänud $remaining tasuta kõnet $limit-st · kuni $minutes min igaüks';
+  }
+
+  @override
+  String get appCreators => 'Rakenduste loojad';
+
+  @override
+  String get homeScreen => 'Avakuva';
+
+  @override
+  String get phoneCalls => 'Telefonikõned';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Serveripoolne häälefilter kõnetuvastuse kulude vähendamiseks';
+
+  @override
+  String get flashCustomFirmware => 'Paigalda kohandatud püsivara';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Paigalda kohandatud püsivara järke';
+
+  @override
+  String get selectFirmwareZip => 'Vali püsivara ZIP-fail';
+
+  @override
+  String get customFirmwareWarning =>
+      'Kohandatud püsivara võib seadme kasutuskõlbmatuks muuta. Veendu, et see on kehtiv Omi püsivara järk, ja ära katkesta ühendust uuendamise ajal.';
+
+  @override
+  String get firmwareFlashed => 'Püsivara paigaldatud';
+
+  @override
+  String get deviceWillRestart => 'Seade taaskäivitub.';
+
+  @override
+  String get exportFailedTryAgain => 'Eksport ebaõnnestus. Proovi uuesti.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Seade: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Jäta tellimus alles';
+
+  @override
+  String get couldNotLoadPage => 'Lehte ei õnnestunud laadida. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Samm $current/$total';
+  }
 }

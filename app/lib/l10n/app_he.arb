@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "פרופיל דיבור",
+    "speechProfile": "פרופיל קולי",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -4286,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "האם אתה בטוח שברצונך להתנתק?",
+    "signOutConfirmation": "תצטרך להתחבר שוב כדי לראות את השיחות שלך. המכשיר המשויך והעדפות האפליקציה נשארים בטלפון הזה.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -10445,10 +10445,6 @@
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
     },
-    "planDeprecationMessage": "תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
     "upgradeYourPlan": "שדרג את התוכנית שלך",
     "@upgradeYourPlan": {
         "description": "Header for plan upgrade screen for non-paid users"
@@ -10899,5 +10895,58 @@
     "conversationTasksEmptyMessage": "המשימות מהשיחה הזו יופיעו כאן.",
     "noPendingTasks": "אין משימות ממתינות",
     "nCompleted": "{count} הושלמו",
-    "identifySpeaker": "זיהוי דובר"
+    "identifySpeaker": "זיהוי דובר",
+    "couldNotLoadCheckout": "לא ניתן היה לטעון את דף התשלום. בדקו את החיבור ונסו שוב.",
+    "phoneFreeCallLimitReached": "הגעת למגבלת השיחות החינמיות החודשית. היא תתאפס בחודש הבא.",
+    "couldNotLoadImportHistory": "לא ניתן לטעון את היסטוריית הייבוא",
+    "phoneCallButton": "התקשר",
+    "searchContacts": "חיפוש אנשי קשר",
+    "phoneContactsAccessTitle": "אפשר גישה לאנשי קשר",
+    "phoneSelectCountryTitle": "בחירת מדינה",
+    "phoneNoVerifiedNumbersTitle": "אין מספרים מאומתים",
+    "phoneNoVerifiedNumbersMessage": "אמת את המספר שלך כדי להתקשר דרך Omi.",
+    "phoneDeleteNumberFailed": "לא ניתן למחוק את המספר",
+    "forgetDeviceConfirmTitle": "לשכוח את המכשיר?",
+    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה. כדי להשתמש בו שוב, יהיה עליך לצמד אותו מחדש.",
+    "deviceForgottenMessage": "המכשיר נשכח",
+    "unpairDeviceConfirmTitle": "לבטל את צימוד המכשיר?",
+    "rollBack": "שחזור לגרסה קודמת",
+    "dataRateKbps": "{rate} קילוביט/ש׳",
+    "diagnosticsExportTitle": "אבחון התקן Omi",
+    "diagnosticsFailBadge": "נכשל",
+    "diagnosticsReconnectedIn": "חובר מחדש תוך {duration}",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "לפני {duration}",
+    "sttLanguageFollowsPrimary": "עוקב אחר השפה הראשית שלך",
+    "creatorPayouts": "תשלומים ליוצרים",
+    "sttLanguageOverride": "עקיפה",
+    "sttUsePrimaryLanguage": "שימוש בשפה הראשית",
+    "sttPrimaryLanguageUnsupported": "ספק זה אינו תומך ב-{language}, ולכן משתמש ב-{fallback}.",
+    "deviceRamBelowMinimum": "זיכרון RAM שזוהה: {ram} GB. מינימום מומלץ: 4 GB.",
+    "olderIphoneModelDetected": "דגם שזוהה: {model} (ישן מ-iPhone XS). הזיהוי במכשיר עשוי להיות איטי יותר.",
+    "copyLogs": "העתקת יומנים",
+    "openProviderDocs": "פתיחת התיעוד",
+    "getApiKey": "קבלת מפתח API",
+    "showApiKey": "הצגת מפתח API",
+    "hideApiKey": "הסתרת מפתח API",
+    "removeVocabularyWord": "הסרת {word}",
+    "vocabularyWordCount": "{count, plural, =1{מילה אחת} other{{count} מילים}}",
+    "phoneFreeCallsRemaining": "נותרו {remaining} מתוך {limit} שיחות חינם החודש",
+    "phoneFreeCallsRemainingWithMax": "נותרו {remaining} מתוך {limit} שיחות חינם החודש · עד {minutes} דקות כל אחת",
+    "appCreators": "יוצרי אפליקציות",
+    "homeScreen": "מסך הבית",
+    "phoneCalls": "שיחות טלפון",
+    "vadGate": "שער VAD",
+    "vadGateDescription": "סינון קול בצד השרת להפחתת עלויות תמלול",
+    "flashCustomFirmware": "צריבת קושחה מותאמת",
+    "flashCustomFirmwareDescription": "צריבת גרסאות קושחה מותאמות",
+    "selectFirmwareZip": "בחר קובץ ZIP של קושחה",
+    "customFirmwareWarning": "צריבת קושחה מותאמת עלולה להשבית את המכשיר. ודא שזו גרסת קושחה תקינה של Omi ואל תנתק במהלך העדכון.",
+    "firmwareFlashed": "הקושחה נצרבה",
+    "deviceWillRestart": "המכשיר יופעל מחדש.",
+    "exportFailedTryAgain": "הייצוא נכשל. נסה שוב.",
+    "firmwareFlashTarget": "מכשיר: {deviceName}",
+    "keepSubscription": "השארת המינוי",
+    "couldNotLoadPage": "לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.",
+    "leaveFlowStepOf": "שלב {current} מתוך {total}"
 }

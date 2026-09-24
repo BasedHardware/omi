@@ -3819,7 +3819,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get signOutQuestion => 'Keluar?';
 
   @override
-  String get signOutConfirmation => 'Apakah Anda yakin ingin keluar?';
+  String get signOutConfirmation =>
+      'Anda perlu masuk lagi untuk melihat percakapan. Perangkat yang dipasangkan dan preferensi aplikasi tetap ada di ponsel ini.';
 
   @override
   String get customVocabularyHeader => 'KOSAKATA KUSTOM';
@@ -8956,10 +8957,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get planUpdate => 'Pembaruan Paket';
 
   @override
-  String get planDeprecationMessage =>
-      'Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga \$49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.';
-
-  @override
   String get upgradeYourPlan => 'Tingkatkan Paket Anda';
 
   @override
@@ -10449,4 +10446,197 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get identifySpeaker => 'Identifikasi pembicara';
+
+  @override
+  String get couldNotLoadCheckout => 'Tidak dapat memuat halaman pembayaran. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get phoneFreeCallLimitReached => 'Batas panggilan gratis bulanan tercapai. Akan diatur ulang bulan depan.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Tidak dapat memuat riwayat impor';
+
+  @override
+  String get phoneCallButton => 'Panggil';
+
+  @override
+  String get searchContacts => 'Cari kontak';
+
+  @override
+  String get phoneContactsAccessTitle => 'Izinkan Akses Kontak';
+
+  @override
+  String get phoneSelectCountryTitle => 'Pilih Negara';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Tidak Ada Nomor Terverifikasi';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Verifikasi nomor Anda untuk menelepon melalui Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Tidak dapat menghapus nomor ini';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Lupakan Perangkat?';
+
+  @override
+  String get forgetDeviceConfirmMessage =>
+      'Omi akan berhenti terhubung ke perangkat ini. Untuk menggunakannya lagi, Anda harus memasangkannya kembali.';
+
+  @override
+  String get deviceForgottenMessage => 'Perangkat dilupakan';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Putuskan Pasangan Perangkat?';
+
+  @override
+  String get rollBack => 'Kembalikan';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Diagnostik Perangkat Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Gagal';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'tersambung kembali dalam $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}h';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration lalu';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Mengikuti bahasa utama Anda';
+
+  @override
+  String get creatorPayouts => 'Pembayaran Kreator';
+
+  @override
+  String get sttLanguageOverride => 'Timpa';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Gunakan Bahasa Utama';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Penyedia ini tidak mendukung $language, jadi menggunakan $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'RAM terdeteksi: $ram GB. Minimum yang disarankan: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Model terdeteksi: $model (lebih lama dari iPhone XS). Pengenalan di perangkat mungkin lebih lambat.';
+  }
+
+  @override
+  String get copyLogs => 'Salin Log';
+
+  @override
+  String get openProviderDocs => 'Buka Dokumentasi';
+
+  @override
+  String get getApiKey => 'Dapatkan Kunci API';
+
+  @override
+  String get showApiKey => 'Tampilkan Kunci API';
+
+  @override
+  String get hideApiKey => 'Sembunyikan Kunci API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Hapus $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kata',
+      one: '1 kata',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Tersisa $remaining dari $limit panggilan gratis bulan ini';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Tersisa $remaining dari $limit panggilan gratis bulan ini · maks. $minutes menit per panggilan';
+  }
+
+  @override
+  String get appCreators => 'Kreator Aplikasi';
+
+  @override
+  String get homeScreen => 'Layar Utama';
+
+  @override
+  String get phoneCalls => 'Panggilan Telepon';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Penyaringan suara di server untuk mengurangi biaya ucapan-ke-teks';
+
+  @override
+  String get flashCustomFirmware => 'Flash Firmware Kustom';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Flash build firmware kustom';
+
+  @override
+  String get selectFirmwareZip => 'Pilih file ZIP firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Firmware kustom dapat merusak perangkat Anda. Pastikan ini build firmware Omi yang valid, dan jangan putuskan sambungan selama pembaruan.';
+
+  @override
+  String get firmwareFlashed => 'Firmware terpasang';
+
+  @override
+  String get deviceWillRestart => 'Perangkat Anda akan dimulai ulang.';
+
+  @override
+  String get exportFailedTryAgain => 'Ekspor gagal. Silakan coba lagi.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Perangkat: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Pertahankan Langganan';
+
+  @override
+  String get couldNotLoadPage => 'Tidak dapat memuat halaman ini. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Langkah $current dari $total';
+  }
 }

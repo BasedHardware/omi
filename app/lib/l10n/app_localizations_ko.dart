@@ -3749,7 +3749,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signOutQuestion => '로그아웃하시겠습니까?';
 
   @override
-  String get signOutConfirmation => '로그아웃하시겠습니까?';
+  String get signOutConfirmation => '대화를 보려면 다시 로그인해야 합니다. 페어링된 기기와 앱 설정은 이 휴대폰에 그대로 남습니다.';
 
   @override
   String get customVocabularyHeader => '사용자 정의 어휘';
@@ -8806,10 +8806,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get planUpdate => '플랜 업데이트';
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
-
-  @override
   String get upgradeYourPlan => '플랜 업그레이드';
 
   @override
@@ -10269,4 +10265,196 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get identifySpeaker => '화자 지정';
+
+  @override
+  String get couldNotLoadCheckout => '결제 페이지를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get phoneFreeCallLimitReached => '이번 달 무료 통화 한도에 도달했습니다. 다음 달에 초기화됩니다.';
+
+  @override
+  String get couldNotLoadImportHistory => '가져오기 기록을 불러올 수 없습니다';
+
+  @override
+  String get phoneCallButton => '전화 걸기';
+
+  @override
+  String get searchContacts => '연락처 검색';
+
+  @override
+  String get phoneContactsAccessTitle => '연락처 접근 허용';
+
+  @override
+  String get phoneSelectCountryTitle => '국가 선택';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => '인증된 번호 없음';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Omi로 전화를 걸려면 번호를 인증하세요.';
+
+  @override
+  String get phoneDeleteNumberFailed => '이 번호를 삭제하지 못했습니다';
+
+  @override
+  String get forgetDeviceConfirmTitle => '기기를 삭제할까요?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi가 이 기기에 더 이상 연결하지 않습니다. 다시 사용하려면 다시 페어링해야 합니다.';
+
+  @override
+  String get deviceForgottenMessage => '기기를 삭제했습니다';
+
+  @override
+  String get unpairDeviceConfirmTitle => '기기 페어링을 해제할까요?';
+
+  @override
+  String get rollBack => '롤백';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi 기기 진단';
+
+  @override
+  String get diagnosticsFailBadge => '실패';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration 만에 재연결됨';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$count일';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration 전';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => '기본 언어를 따릅니다';
+
+  @override
+  String get creatorPayouts => '크리에이터 정산';
+
+  @override
+  String get sttLanguageOverride => '재정의';
+
+  @override
+  String get sttUsePrimaryLanguage => '기본 언어 사용';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return '이 제공업체는 $language을(를) 지원하지 않아 $fallback을(를) 사용합니다.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return '감지된 RAM: ${ram}GB. 권장 최소: 4GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return '감지된 모델: $model (iPhone XS보다 오래됨). 기기 내 인식이 느릴 수 있습니다.';
+  }
+
+  @override
+  String get copyLogs => '로그 복사';
+
+  @override
+  String get openProviderDocs => '문서 열기';
+
+  @override
+  String get getApiKey => 'API 키 받기';
+
+  @override
+  String get showApiKey => 'API 키 표시';
+
+  @override
+  String get hideApiKey => 'API 키 숨기기';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word 제거';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '단어 $count개',
+      one: '단어 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '이번 달 무료 통화 $remaining회 남음 (총 $limit회)';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '이번 달 무료 통화 $remaining회 남음 (총 $limit회) · 통화당 최대 $minutes분';
+  }
+
+  @override
+  String get appCreators => '앱 제작자';
+
+  @override
+  String get homeScreen => '홈 화면';
+
+  @override
+  String get phoneCalls => '전화 통화';
+
+  @override
+  String get vadGate => 'VAD 게이트';
+
+  @override
+  String get vadGateDescription => '음성 인식 비용을 줄이기 위한 서버 측 음성 게이트';
+
+  @override
+  String get flashCustomFirmware => '사용자 지정 펌웨어 설치';
+
+  @override
+  String get flashCustomFirmwareDescription => '사용자 지정 펌웨어 빌드 설치';
+
+  @override
+  String get selectFirmwareZip => '펌웨어 ZIP 파일 선택';
+
+  @override
+  String get customFirmwareWarning =>
+      '사용자 지정 펌웨어를 설치하면 기기가 작동하지 않을 수 있습니다. 올바른 Omi 펌웨어 빌드인지 확인하고, 업데이트 중에는 연결을 끊지 마세요.';
+
+  @override
+  String get firmwareFlashed => '펌웨어 설치 완료';
+
+  @override
+  String get deviceWillRestart => '기기가 다시 시작됩니다.';
+
+  @override
+  String get exportFailedTryAgain => '내보내기에 실패했습니다. 다시 시도하세요.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return '기기: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => '구독 유지';
+
+  @override
+  String get couldNotLoadPage => '이 페이지를 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '$current/$total단계';
+  }
 }
