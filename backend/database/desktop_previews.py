@@ -198,7 +198,15 @@ def _publish_preview_transaction(
     manifest: dict[str, Any],
     expected_generation: int | None,
 ) -> dict[str, Any]:
+    # Firestore transactions forbid reads after writes. Perform every read
+    # (manifest existence + pointer state) before staging any mutation, then
+    # apply the writes. Reading the pointer first also keeps the
+    # expected_generation compare-and-set meaningful.
     manifest_snapshot = manifest_ref.get(transaction=transaction)
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    raw_current: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
+    current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
+
     if getattr(manifest_snapshot, "exists", False):
         raw_existing: object = manifest_snapshot.to_dict()
         existing_data = cast(dict[str, Any], raw_existing) if isinstance(raw_existing, dict) else {}
@@ -208,9 +216,6 @@ def _publish_preview_transaction(
     else:
         transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
 
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
-    raw_current: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
-    current = cast(dict[str, Any], raw_current) if isinstance(raw_current, dict) else {}
     pointer = _build_preview_pointer(current, manifest, expected_generation=expected_generation)
     if pointer is not current:
         transaction.set(pointer_ref, pointer)
@@ -326,3 +331,4 @@ def get_current_preview(slug: str, *, firestore_client: Any = None) -> dict[str,
         },
         "manifest": manifest,
     }
+
