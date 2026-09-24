@@ -373,10 +373,16 @@ class _FoundDevicesState extends State<FoundDevices> {
 
                 if (!mounted) return;
 
-                // Show firmware warning after successful connection
+                // Show firmware warning after successful connection.
+                // Resolve against primary or companion so pairing a second
+                // device does not warn using the already-connected primary.
                 if (provider.isConnected) {
-                  final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
-                  await _showFirmwareWarningIfNeeded(connectedDevice);
+                  final deviceProvider = provider.deviceProvider;
+                  final connectedDevice = [deviceProvider?.connectedDevice, deviceProvider?.companionDevice]
+                      .firstWhereOrNull((connected) => connected?.id == device.id);
+                  if (connectedDevice != null) {
+                    await _showFirmwareWarningIfNeeded(connectedDevice);
+                  }
                 }
               }
             }

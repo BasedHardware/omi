@@ -44,16 +44,19 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
       builder: (context, isMemoriesPage, child) {
         // Use Selector to only rebuild when battery level, connected device, or connecting state changes
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
-        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
+        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool, BtDevice?, int)>(
           selector: (_, provider) => (
             provider.batteryLevel,
             provider.connectedDevice,
             provider.pairedDevice,
             provider.isConnecting,
             provider.isCharging,
+            provider.companionDevice,
+            provider.companionBatteryLevel,
           ),
           builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
+            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging, companionDevice,
+                companionBatteryLevel) = data;
             final l10n = context.l10n;
             if (connectedDevice != null) {
               final hasBattery = batteryLevel > 0;
@@ -109,6 +112,33 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                         color: low ? OmiColors.danger : OmiColors.textPrimary,
                       ),
                     ),
+                  ],
+                  // Second connected device (OmiGlass next to an Omi): its
+                  // icon and battery share the pill so both links are visible.
+                  if (companionDevice != null) ...[
+                    const SizedBox(width: 8.0),
+                    Container(width: 1, height: 16, color: OmiColors.border),
+                    const SizedBox(width: 8.0),
+                    SizedBox(
+                      key: const Key('companion_device_pill_icon'),
+                      width: 16,
+                      height: 16,
+                      child: Image.asset(
+                        DeviceUtils.getDeviceImageFromBtDevice(companionDevice),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    if (companionBatteryLevel > 0) ...[
+                      const SizedBox(width: 4.0),
+                      Text(
+                        '$companionBatteryLevel%',
+                        style: OmiType.caption.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: OmiColors.textPrimary,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               );
