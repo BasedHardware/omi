@@ -143,7 +143,17 @@ def test_memory_get_continues_after_short_filtered_page(authed_profile, respx_mo
     result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
     assert result.exit_code == 0, result.output
     assert len(route.calls) == 2
-    assert route.calls[1].request.url.params["offset"] == "100"
+    assert route.calls[1].request.url.params["offset"] == "200"
+
+
+def test_memory_get_enforces_10k_scan_cap(authed_profile, respx_mock, cli_runner) -> None:
+    """Scanning for a nonexistent memory must terminate at the max_offset cap and not loop endlessly."""
+    page = [{"id": "m_other", "content": "x", "category": "core", "visibility": "private", "tags": []}]
+    route = respx_mock.get("/v1/dev/user/memories").respond(json=page)
+    result = cli_runner.invoke(app, ["memory", "get", "nonexistent"])
+    assert result.exit_code == 5
+    assert len(route.calls) == 51
+    assert route.calls[-1].request.url.params["offset"] == "10000"
 
 
 @pytest.mark.parametrize("command", [["memory", "list"], ["memory", "get", "m1"]])
