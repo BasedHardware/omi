@@ -72,7 +72,9 @@ def test_prepare_apple_health_access_sanitizes_connection_error():
 
 def test_get_apple_health_steps_tool_sanitizes_exceptions():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sensitive_db_stacktrace")):
+    with patch.object(
+        apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sensitive_db_stacktrace")
+    ):
         result = apple_health_tools.get_apple_health_steps_tool(config=config)
         assert result == "Error retrieving step data."
         assert "sensitive_db_stacktrace" not in result
@@ -80,7 +82,9 @@ def test_get_apple_health_steps_tool_sanitizes_exceptions():
 
 def test_get_apple_health_sleep_tool_sanitizes_exceptions():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sensitive_token_leak")):
+    with patch.object(
+        apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sensitive_token_leak")
+    ):
         result = apple_health_tools.get_apple_health_sleep_tool(config=config)
         assert result == "Error retrieving sleep data."
         assert "sensitive_token_leak" not in result
@@ -96,7 +100,9 @@ def test_get_apple_health_heart_rate_tool_sanitizes_exceptions():
 
 def test_get_apple_health_workouts_tool_sanitizes_exceptions():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sql_injection_path")):
+    with patch.object(
+        apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("sql_injection_path")
+    ):
         result = apple_health_tools.get_apple_health_workouts_tool(config=config)
         assert result == "Error retrieving workout data."
         assert "sql_injection_path" not in result
@@ -104,7 +110,9 @@ def test_get_apple_health_workouts_tool_sanitizes_exceptions():
 
 def test_get_apple_health_summary_tool_sanitizes_exceptions():
     config = {"configurable": {"user_id": "test_user_123"}}
-    with patch.object(apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("database_error_path")):
+    with patch.object(
+        apple_health_tools, "prepare_apple_health_access", side_effect=RuntimeError("database_error_path")
+    ):
         result = apple_health_tools.get_apple_health_summary_tool(config=config)
         assert result == "Error retrieving health summary."
         assert "database_error_path" not in result
@@ -112,6 +120,7 @@ def test_get_apple_health_summary_tool_sanitizes_exceptions():
 
 def test_internal_processing_exception_is_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
+
     class ExplodingDict(dict):
         def get(self, key, default=None):
             if key == "steps":
@@ -122,7 +131,9 @@ def test_internal_processing_exception_is_sanitized():
         "connected": True,
         "health_data": ExplodingDict(),
     }
-    with patch.object(apple_health_tools, "prepare_apple_health_access", return_value=("test_user_123", malformed_integration, None)):
+    with patch.object(
+        apple_health_tools, "prepare_apple_health_access", return_value=("test_user_123", malformed_integration, None)
+    ):
         result = apple_health_tools.get_apple_health_steps_tool(config=config)
         assert result == "Error retrieving step data."
         assert "0xdeadbeef" not in result
@@ -137,4 +148,3 @@ if __name__ == "__main__":
     test_get_apple_health_summary_tool_sanitizes_exceptions()
     test_internal_processing_exception_is_sanitized()
     print("All Apple Health sanitization unit tests passed successfully!")
-
