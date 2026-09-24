@@ -12,6 +12,7 @@
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
+* [`agent_quickstart.he.md`](agent_quickstart.he.md) — מדריך omi-cli לאג'נטים (עברית).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
