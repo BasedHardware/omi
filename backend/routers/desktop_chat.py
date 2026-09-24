@@ -804,23 +804,25 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
         and isinstance(tool['function'].get('name'), str)
     ]
 
+class _RequestValidationError(ValueError): pass
+
 
 def _request(
     body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
 ) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
-        raise ValueError('request body must be an object')
+        raise _RequestValidationError('request body must be an object')
     model = body.get('model')
     messages = body.get('messages')
     if not isinstance(model, str) or model not in _MODEL_ROUTES:
-        raise ValueError('unsupported model')
+        raise _RequestValidationError('unsupported model')
     if not isinstance(messages, list):
-        raise ValueError('messages must be an array')
+        raise _RequestValidationError('messages must be an array')
     system: str | None = None
     translated: list[dict[str, object]] = []
     for message in messages:
         if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
-            raise ValueError('messages must contain role objects')
+            raise _RequestValidationError('messages must contain role objects')
         role = message['role']
         if role in {'system', 'developer'}:
             system = _text(message.get('content'))
@@ -835,11 +837,11 @@ def _request(
             if isinstance(tool_calls, list):
                 for call in tool_calls:
                     if not isinstance(call, Mapping) or not isinstance(call.get('function'), Mapping):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     function = call['function']
                     name, arguments, call_id = function.get('name'), function.get('arguments'), call.get('id')
                     if not all(isinstance(value, str) for value in (name, arguments, call_id)):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     try:
                         input_value = json.loads(arguments)
                     except ValueError:
@@ -849,7 +851,7 @@ def _request(
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
-                raise ValueError('tool message missing tool_call_id')
+                raise _RequestValidationError('tool message missing tool_call_id')
             translated.append(
                 {
                     'role': 'user',
@@ -859,10 +861,10 @@ def _request(
                 }
             )
         else:
-            raise ValueError(f'unsupported message role: {role}')
+            raise _RequestValidationError(f'unsupported message role: {role}')
     maximum = body.get('max_completion_tokens', body.get('max_tokens', 8192))
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
-        raise ValueError('max_tokens must be a positive integer')
+        raise _RequestValidationError('max_tokens must be a positive integer')
     result: dict[str, object] = {
         'model': _MODEL_ROUTES[model],
         'max_tokens': min(maximum, _MAX_TOKENS),
@@ -1741,9 +1743,7 @@ async def _chat_completions_unobserved(
         )
     )
     try:
-        jit_headers = _jit_headers_for_forward(
-            *jit_header_values,
-        )
+        jit_headers = _jit_headers_for_forward(*jit_header_values)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid request parameters.") from exc
     request_id = x_omi_request_id or str(uuid4())
@@ -1813,7 +1813,7 @@ async def _chat_completions_unobserved(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=(str(exc) if isinstance(exc, _RequestValidationError) else "Invalid request parameters.")) from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
