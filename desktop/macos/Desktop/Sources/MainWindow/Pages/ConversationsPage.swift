@@ -502,12 +502,6 @@ struct ConversationsPage: View {
 
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
-  /// Loaded rows hidden behind their capture group's representative.
-  private var collapsedAwayConversationIds: Set<String> {
-    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
-    return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
-  }
-
   private var displayedConversationIds: [String] {
     CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
   }
