@@ -151,13 +151,13 @@ def _validate_authorize_request(
     code_challenge_method: Optional[str],
 ) -> Tuple[Dict[str, Any], List[str]]:
     client = mcp_oauth_db.get_client(client_id)
-    client_ok = bool(client) and not client.get("disabled_at")
+    client_ok = client is not None and not client.get("disabled_at")
     redirect_ok = client_ok and mcp_oauth_db.validate_redirect_uri(client or {}, redirect_uri)
     if response_type != "code":
         raise _AuthorizeRequestError(
             "response_type must be code", error="unsupported_response_type", redirect_allowed=redirect_ok
         )
-    if not client_ok:
+    if client is None or client.get("disabled_at"):
         raise _AuthorizeRequestError("Unknown OAuth client")
     if not redirect_ok:
         raise _AuthorizeRequestError("redirect_uri is not registered for this client")

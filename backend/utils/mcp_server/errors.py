@@ -59,7 +59,7 @@ def tool_error_from_http(exc: HTTPException) -> ToolExecutionError:
         )
     if exc.status_code in {409, 503}:
         return ToolExecutionError(str(exc.detail), code=-32009, http_status=exc.status_code)
-    if isinstance(exc.status_code, int) and exc.status_code >= 500:
+    if exc.status_code >= 500:
         # A domain-code 5xx is a backend failure, never a client input problem;
         # keep the detail server-side rather than echoing limiter/store internals.
         return ToolExecutionError(

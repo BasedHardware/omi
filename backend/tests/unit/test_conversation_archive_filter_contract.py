@@ -370,7 +370,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.action_items" not in selected_fields
     assert "structured.sections" not in selected_fields
     assert "structured.events" not in selected_fields
-    assert ("select", tuple(module._MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
+    assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
     transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields

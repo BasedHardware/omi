@@ -650,7 +650,8 @@ def header_violation_error(
                     f"Mcp-Method header '{mcp_method}' does not match message method '{body.get('method')}'.",
                 )
             if mcp_name is not None:
-                params = body.get("params") if isinstance(body.get("params"), dict) else {}
+                raw_params = body.get("params")
+                params: Dict[str, Any] = raw_params if isinstance(raw_params, dict) else {}
                 expected_name = params.get("name") if body.get("method") == "tools/call" else None
                 if expected_name != mcp_name:
                     return create_mcp_error(

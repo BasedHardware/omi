@@ -5,14 +5,12 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import firebase_admin.auth
 from fastapi import HTTPException
 from google.api_core import exceptions as google_api_exceptions
 
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
 import database.mcp_token_cache as mcp_token_cache_db
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_server.metadata import protected_resource_metadata_url

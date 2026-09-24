@@ -2,7 +2,7 @@
 
 from collections import Counter
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from google.api_core.exceptions import FailedPrecondition
 
@@ -160,6 +160,14 @@ def _screen_activity_bucket_label(key: str, group_by: str) -> Dict[str, Any]:
     return {"hour": key}
 
 
+class _ScreenActivityBucket(TypedDict):
+    count: int
+    estimated_observation_seconds: int
+    first_seen: Any
+    last_seen: Any
+    titles: Counter[str]
+
+
 def _screen_activity_buckets(
     rows: List[Dict[str, Any]],
     group_by: str,
@@ -174,7 +182,7 @@ def _screen_activity_buckets(
     ``seed_row`` (the previous page's last row, carried by the cursor) lets
     the gap that bridges a page boundary still count.
     """
-    buckets: Dict[str, Dict[str, Any]] = {}
+    buckets: Dict[str, _ScreenActivityBucket] = {}
     previous_key = ""
     previous_app = ""
     previous_ts: Optional[datetime] = None
@@ -189,13 +197,13 @@ def _screen_activity_buckets(
         key = _screen_activity_bucket_key(row, group_by)
         bucket = buckets.get(key)
         if bucket is None:
-            bucket = {
-                "count": 0,
-                "estimated_observation_seconds": 0,
-                "first_seen": timestamp,
-                "last_seen": timestamp,
-                "titles": Counter(),
-            }
+            bucket = _ScreenActivityBucket(
+                count=0,
+                estimated_observation_seconds=0,
+                first_seen=timestamp,
+                last_seen=timestamp,
+                titles=Counter(),
+            )
             buckets[key] = bucket
         bucket["count"] += 1
         bucket["last_seen"] = timestamp

@@ -39,7 +39,7 @@ import ssl
 import threading
 import time
 import unicodedata
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 from urllib.parse import urlsplit
 
 import database.mcp_cache_integrity as mcp_cache_integrity
@@ -326,7 +326,7 @@ def _parse_metadata_response(raw: bytes) -> Optional[Tuple[Dict[str, Any], int]]
     """Parse the buffered response: 200 + application/json + bounded JSON
     object body, or ``None``. Returns ``(document, cache_ttl_seconds)``."""
     try:
-        response = http.client.HTTPResponse(_PreloadedSocket(raw), method="GET")
+        response = http.client.HTTPResponse(cast(socket.socket, _PreloadedSocket(raw)), method="GET")
         response.begin()
         if response.status != 200:
             return None

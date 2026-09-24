@@ -952,9 +952,10 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     if cache_ok:
         try:
             expires_at = data.get("expires_at")
-            mcp_token_cache.fill_access_token(
-                access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
-            )
+            if isinstance(expires_at, datetime):
+                mcp_token_cache.fill_access_token(
+                    access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
+                )
             # A revoke that landed during the Firestore reads or the fill must
             # deny this request too — the marker is re-checked before crediting.
             if mcp_token_cache.grant_revocation_marker_exists(grant_id):

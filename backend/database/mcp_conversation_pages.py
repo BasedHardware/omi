@@ -14,9 +14,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import get_firestore_client
 from .conversations import (
-    _MCP_CONVERSATION_CARD_FIELD_PATHS,
-    _document_data_with_revision,
-    _prepare_conversation_for_read,
+    MCP_CONVERSATION_CARD_FIELD_PATHS,
+    document_data_with_revision,
+    prepare_conversation_for_read,
     conversations_collection,
     is_soft_deleted,
 )
@@ -29,13 +29,13 @@ MCP_CARD_PAGE_SCAN_BUDGET = 500
 
 
 def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
-    paths = list(_MCP_CONVERSATION_CARD_FIELD_PATHS)
+    paths: List[str] = list(MCP_CONVERSATION_CARD_FIELD_PATHS)
     if extra_field_paths:
         paths.extend(extra_field_paths)
     return paths
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_mcp_conversation_cards(
     uid: str,
     limit: int,
@@ -70,7 +70,7 @@ def get_mcp_conversation_cards(
     )
     conversations: List[Dict[str, Any]] = []
     for doc in query.stream():
-        conversation = _document_data_with_revision(doc)
+        conversation = document_data_with_revision(doc)
         if conversation is None:
             continue
         if is_soft_deleted(conversation):
@@ -80,7 +80,7 @@ def get_mcp_conversation_cards(
     return conversations
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_mcp_conversation_cards_page(
     uid: str,
     limit: int,
@@ -144,7 +144,7 @@ def get_mcp_conversation_cards_page(
         for doc in raw_docs:
             raw = doc.to_dict() or {}
             last_position = (raw.get('created_at'), doc.id)
-            conversation = _document_data_with_revision(doc)
+            conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
             if is_soft_deleted(conversation):

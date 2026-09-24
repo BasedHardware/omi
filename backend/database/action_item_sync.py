@@ -18,9 +18,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import get_firestore_client
 from .action_items import (
-    _ACTION_ITEMS_LIST_SELECT_FIELDS,
-    _prepare_action_item_for_read,
-    _typed_doc,
+    ACTION_ITEMS_LIST_SELECT_FIELDS,
+    prepare_action_item_for_read,
+    typed_doc,
     action_items_collection,
 )
 
@@ -60,19 +60,19 @@ def get_action_items_sync_page(
         if not after_id.strip() or '/' in after_id:
             raise ValueError('action item sync doc id is invalid')
         query = query.start_after({'updated_at': after_dt, '__name__': collection.document(after_id)})
-    query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(limit + 1)
+    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(limit + 1)
 
     docs = list(query.stream())
     page_docs = docs[:limit]
     items: List[Dict[str, Any]] = []
     last_position: Optional[Tuple[Any, str]] = None
     for doc in page_docs:
-        data = _typed_doc(doc)
+        data = typed_doc(doc)
         # The resume value must be the raw stored timestamp: the read prep
         # normalizes it to a plain datetime and could round the keyset edge.
         raw_updated_at = data.get('updated_at')
         data['id'] = doc.id
-        items.append(_prepare_action_item_for_read(data))
+        items.append(prepare_action_item_for_read(data))
         last_position = (raw_updated_at, doc.id)
     resume = last_position if len(docs) > limit else None
     return items, resume
