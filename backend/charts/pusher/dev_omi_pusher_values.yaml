@@ -177,6 +177,10 @@ env:
     value: "true"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
+    value: "true"
+  - name: MEMORY_OWNER_JEV_FLIP_ENABLED
+    value: "true"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
   - name: MEMORY_BELIEF_AUTOMATION_PAUSED
