@@ -50,7 +50,8 @@ enum ActionItemRowActionVisibility {
   }
 }
 
-/// One action item in a conversation summary.
+/// One action item in a conversation summary. It draws no card of its own: the Action Items
+/// section groups its rows in one card with separators.
 struct ConversationActionItemRow: View {
   let item: ActionItem
   let taskState: ActionItemTaskState
@@ -74,17 +75,18 @@ struct ConversationActionItemRow: View {
     let showsTranscript = ActionItemRowActionVisibility.showsTranscriptAction(
       isHovered: isHovered, hasFocus: hasFocus)
 
-    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
       Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-        .scaledFont(size: OmiType.subheading)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
+        .frame(width: 16)
 
       Text(item.description)
         .scaledFont(size: OmiType.body)
         .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
         .strikethrough(item.completed, color: Ink.secondary)
-
-      Spacer(minLength: OmiSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
 
       taskButton
         .focused($focusedControl, equals: .task)
@@ -96,16 +98,9 @@ struct ConversationActionItemRow: View {
         .opacity(showsTranscript ? 1 : 0)
         .allowsHitTesting(showsTranscript)
     }
-    .padding(OmiSpacing.md)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(Ink.rowFillHover)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .stroke(Ink.rowFillHover.opacity(0.3), lineWidth: 1)
-    )
     .contentShape(Rectangle())
     .onHover { isHovered = $0 }
     // One element for VoiceOver: the item, its task state, and both controls as named actions,
@@ -167,7 +162,7 @@ struct ConversationActionItemRow: View {
         Image(systemName: taskIcon)
         Text(taskState.actionTitle)
       }
-      .scaledFont(size: OmiType.caption)
+      .scaledFont(size: OmiType.caption, weight: .medium)
       .foregroundColor(taskColor)
     }
     .buttonStyle(.plain)
@@ -182,10 +177,10 @@ struct ConversationActionItemRow: View {
         Image(systemName: "text.quote")
         Text(transcriptTitle)
       }
-      .scaledFont(size: OmiType.caption)
+      .scaledFont(size: OmiType.caption, weight: .medium)
       .foregroundColor(Ink.secondary)
     }
     .buttonStyle(.plain)
-    .help("Open the full transcript")
+    .help(transcriptTitle == "Source" ? "Show where this was said" : "Open the full transcript")
   }
 }

@@ -119,7 +119,7 @@ struct ConversationsPage: View {
       .conversationRowPrompts(rowPrompts, appState: appState)
       .shellConfirmation(
         isPresented: $showMergeConfirmation,
-        title: "Merge \(selectedConversationIds.count) Conversations?",
+        title: "Merge \(mergeableSelectedIds.count) Conversations?",
         message: "They become one conversation and the originals are deleted. This can't be undone.",
         confirmTitle: "Merge"
       ) {
@@ -276,7 +276,12 @@ struct ConversationsPage: View {
         initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
         onCaptureFocusResolved: onCaptureFocusResolved,
         onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
-        onOpenLinkedTask: onOpenLinkedTask
+        onOpenLinkedTask: onOpenLinkedTask,
+        onOpenConversation: { selectedConversation = $0 },
+        onCaptureGroupChanged: {
+          // The list refresh is AppState's; an open search holds its own results.
+          if !searchQuery.isEmpty { performSearch(query: searchQuery) }
+        }
       )
     } else {
       // Main view with recording header and conversation list
@@ -364,6 +369,11 @@ struct ConversationsPage: View {
       if !isLive {
         isLiveTranscriptExpanded = false
       }
+    }
+    // A row that becomes hidden behind its event's row must not stay selected for
+    // a merge or delete the user can no longer see.
+    .onChange(of: collapsedAwayConversationIds) { _, hidden in
+      selectedConversationIds.subtract(hidden)
     }
   }
 
@@ -478,10 +488,22 @@ struct ConversationsPage: View {
     }
   }
 
+  /// Loaded rows hidden behind their capture group's representative.
+  private var collapsedAwayConversationIds: Set<String> {
+    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
+    return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
+  }
+
+  /// The selection a merge may act on: only rows the user can see. A member hidden behind its
+  /// event's row never reaches a merge, even if it was selected before its group collapsed.
+  private var mergeableSelectedIds: [String] {
+    displayedConversationIds.filter { selectedConversationIds.contains($0) }
+  }
+
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    searchQuery.isEmpty ? appState.conversations.map { $0.id } : visibleSearchResults.map { $0.id }
+    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
   }
 
   /// Search is text-only at the API boundary. Apply the same local refinements
@@ -653,7 +675,7 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     LazyVStack(spacing: OmiSpacing.sm) {
-      ForEach(visibleSearchResults) { conversation in
+      ForEach(CaptureGroupPresentation.collapse(visibleSearchResults)) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
@@ -1057,13 +1079,13 @@ struct ConversationsPage: View {
   }
 
   private func performMerge() async {
-    guard selectedConversationIds.count >= 2 else { return }
+    let ids = mergeableSelectedIds
+    guard ids.count >= 2 else { return }
 
     isMerging = true
     mergeError = nil
 
     do {
-      let ids = Array(selectedConversationIds)
       let response = try await APIClient.shared.mergeConversations(ids: ids)
 
       log("Merge completed: \(response.message)")

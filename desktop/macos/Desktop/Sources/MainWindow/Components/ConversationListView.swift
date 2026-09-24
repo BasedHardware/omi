@@ -48,7 +48,8 @@ struct ConversationListView: View {
 
     var order: [Date] = []
     var groups: [Date: [ServerConversation]] = [:]
-    for conversation in conversations {
+    // One row per recorded event: other devices' recordings stay reachable from its detail.
+    for conversation in CaptureGroupPresentation.collapse(conversations) {
       let day = calendar.startOfDay(for: conversation.startedAt ?? conversation.createdAt)
       if groups[day] == nil { order.append(day) }
       groups[day, default: []].append(conversation)
