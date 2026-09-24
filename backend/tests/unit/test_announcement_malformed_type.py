@@ -59,3 +59,39 @@ def test_valid_id_and_created_at_preserved():
     ts = datetime(2026, 6, 1, tzinfo=timezone.utc)
     a = Announcement.from_dict({'id': 'keep', 'created_at': ts, 'type': 'announcement'})
     assert a.id == 'keep' and a.created_at == ts
+
+
+def test_naive_and_malformed_datetimes_normalized_to_utc():
+    naive_created = datetime(2026, 6, 1, 12, 0, 0)
+    naive_expires = datetime(2026, 7, 1, 12, 0, 0)
+    a = Announcement.from_dict(
+        {
+            'id': 'a-naive',
+            'created_at': naive_created,
+            'expires_at': naive_expires,
+            'display': {'start_at': datetime(2026, 5, 1, 8, 0, 0), 'expires_at': '2026-08-01T00:00:00'},
+        }
+    )
+    assert a.created_at == datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert a.expires_at == datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert a.display is not None
+    assert a.display.start_at == datetime(2026, 5, 1, 8, 0, 0, tzinfo=timezone.utc)
+    assert a.display.expires_at == datetime(2026, 8, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    malformed = Announcement.from_dict({'id': 'a-bad-dt', 'created_at': 'not-a-date', 'expires_at': 'not-a-date'})
+    assert malformed.created_at == datetime.fromtimestamp(0, tz=timezone.utc)
+    assert malformed.expires_at is None
+
+
+def test_null_active_and_null_content_fall_back_instead_of_raising():
+    a = Announcement.from_dict(
+        {
+            'id': 'a-nulls',
+            'active': None,
+            'content': None,
+            'device_models': ['Omi DevKit 2', None],
+        }
+    )
+    assert a.active is True
+    assert a.content == {}
+    assert a.device_models == ['Omi DevKit 2']

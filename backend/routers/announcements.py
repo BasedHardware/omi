@@ -96,6 +96,8 @@ def get_announcements(
     if last_checked_at:
         try:
             checked_at = datetime.fromisoformat(last_checked_at.replace("Z", "+00:00"))
+            if checked_at.tzinfo is None:
+                checked_at = checked_at.replace(tzinfo=timezone.utc)
         except ValueError:
             pass
 
