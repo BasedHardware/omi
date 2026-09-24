@@ -10606,4 +10606,226 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get keepRecording => '録音を続ける';
+
+  @override
+  String get view => '表示';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName にアクセスを許可しますか？';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName は、あなたの会話・メモリー・録音を開発元のサーバーで受け取ります。そこでのデータの扱いについて Omi は責任を負いません。';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName を無効にしました';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の評価',
+      one: '1件の評価',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'スクリーンショット $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName とチャット';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName の設定';
+  }
+
+  @override
+  String get appOptions => 'アプリのオプション';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => '現在の請求期間の終わりまでは引き続き利用できます。';
+
+  @override
+  String get chatSendMessage => 'メッセージを送信';
+
+  @override
+  String get chatAddAttachment => '添付ファイルを追加';
+
+  @override
+  String get removeAttachment => '添付ファイルを削除';
+
+  @override
+  String get chatRemoveSelectedText => '引用テキストを削除';
+
+  @override
+  String get chatOfflineHint => 'オフラインです。メッセージを送信するには再接続してください。';
+
+  @override
+  String get chatReplyFailed => 'Omi は返信できませんでした。接続を確認して、もう一度お試しください。';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName を無効にする';
+  }
+
+  @override
+  String get whatWentWrong => '何が問題でしたか？';
+
+  @override
+  String get selectAReason => '理由を選択';
+
+  @override
+  String get submit => '送信';
+
+  @override
+  String get feedbackReasonTooVerbose => '冗長すぎる';
+
+  @override
+  String get feedbackReasonIncorrect => '誤り・作り話';
+
+  @override
+  String get feedbackReasonNotHelpful => '役に立たない・無関係';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => '指示に従っていない';
+
+  @override
+  String get additionalFeedbackOptional => 'その他のフィードバック（任意）';
+
+  @override
+  String get helpful => '役に立った';
+
+  @override
+  String daySummaryForDate(String date) {
+    return '1日のまとめ · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => '昨日は何をしましたか？';
+
+  @override
+  String get chatStarterDoDifferently => '今日は何を変えられますか？';
+
+  @override
+  String get chatStarterTeachMe => '何か新しいことを教えてくれますか？';
+
+  @override
+  String get thinking => '考え中';
+
+  @override
+  String get couldNotLoadWhatsNew => '新機能を読み込めませんでした';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub リポジトリの URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'アプリのソースコードのリポジトリへのリンク';
+
+  @override
+  String get triggerEvents => 'トリガーイベント';
+
+  @override
+  String get noAppsInCategoryYet => 'このカテゴリにはまだアプリがありません';
+
+  @override
+  String get scopes => 'スコープ';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'ワンタップで AI がアプリを作成';
+
+  @override
+  String get refreshManifest => 'マニフェストを更新';
+
+  @override
+  String versionLabel(String version) {
+    return 'バージョン $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ 人のユーザー';
+  }
+
+  @override
+  String get discovery => '発見';
+
+  @override
+  String get chatBlockShowMore => 'もっと見る';
+
+  @override
+  String get chatBlockShowLess => '表示を減らす';
+
+  @override
+  String get triggerEvent => 'トリガーイベント';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'アプリのホームURL';
+
+  @override
+  String get authUrl => '認証URL';
+
+  @override
+  String get setupCompletedUrl => 'セットアップ完了URL';
+
+  @override
+  String get chatToolsManifestUrl => 'チャットツールのマニフェストURL';
+
+  @override
+  String get invalidWebhookUrlError => '有効なWebhook URLを入力してください';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHubリポジトリのURLは必須です';
+
+  @override
+  String get removeScreenshot => 'スクリーンショットを削除';
+
+  @override
+  String get addScreenshot => 'スクリーンショットを追加';
+
+  @override
+  String get aiGenRegenerateIcon => 'アイコンを再生成';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件のアプリ',
+      one: '1 件のアプリ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => '説明を生成';
+
+  @override
+  String get selectImageFileTitle => '画像ファイルを選択';
+
+  @override
+  String get selectThumbnailImageTitle => 'サムネイル画像を選択';
+
+  @override
+  String get appIdNotFoundError => 'アプリIDが見つかりません';
+
+  @override
+  String get manifestRefreshedSuccess => 'マニフェストが正常に更新されました';
+
+  @override
+  String get manifestRefreshFailed => 'マニフェストの更新に失敗しました';
 }

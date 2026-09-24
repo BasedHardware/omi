@@ -10698,4 +10698,226 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get keepRecording => 'המשך הקלטה';
+
+  @override
+  String get view => 'הצג';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'לאפשר גישה ל-$appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName יקבל את השיחות, הזיכרונות וההקלטות שלך בשרת של המפתח שלו. Omi אינה אחראית לאופן השימוש בנתונים האלה שם.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName הושבתה';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count דירוגים',
+      one: 'דירוג אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'צילום מסך $index מתוך $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'צ\'אט עם $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'הגדרות $appName';
+  }
+
+  @override
+  String get appOptions => 'אפשרויות האפליקציה';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'הגישה תישאר עד סוף תקופת החיוב הנוכחית.';
+
+  @override
+  String get chatSendMessage => 'שליחת הודעה';
+
+  @override
+  String get chatAddAttachment => 'הוספת קובץ מצורף';
+
+  @override
+  String get removeAttachment => 'הסרת הקובץ המצורף';
+
+  @override
+  String get chatRemoveSelectedText => 'הסרת הטקסט המצוטט';
+
+  @override
+  String get chatOfflineHint => 'אין חיבור. התחבר מחדש כדי לשלוח הודעות.';
+
+  @override
+  String get chatReplyFailed => 'Omi לא הצליחה להשיב. בדוק את החיבור ונסה שוב.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'השבתת $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'מה השתבש?';
+
+  @override
+  String get selectAReason => 'בחר סיבה';
+
+  @override
+  String get submit => 'שליחה';
+
+  @override
+  String get feedbackReasonTooVerbose => 'ארוך מדי';
+
+  @override
+  String get feedbackReasonIncorrect => 'שגוי או מומצא';
+
+  @override
+  String get feedbackReasonNotHelpful => 'לא מועיל או לא רלוונטי';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'לא עקב אחר ההוראות';
+
+  @override
+  String get additionalFeedbackOptional => 'משוב נוסף (אופציונלי)';
+
+  @override
+  String get helpful => 'מועיל';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'סיכום יום · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'מה עשיתי אתמול?';
+
+  @override
+  String get chatStarterDoDifferently => 'מה אני יכול לעשות אחרת היום?';
+
+  @override
+  String get chatStarterTeachMe => 'תוכל ללמד אותי משהו חדש?';
+
+  @override
+  String get thinking => 'חושב';
+
+  @override
+  String get couldNotLoadWhatsNew => 'לא ניתן לטעון את החידושים';
+
+  @override
+  String get githubRepositoryUrl => 'כתובת מאגר GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'קישור למאגר קוד המקור של האפליקציה';
+
+  @override
+  String get triggerEvents => 'אירועי הפעלה';
+
+  @override
+  String get noAppsInCategoryYet => 'אין עדיין אפליקציות בקטגוריה הזו';
+
+  @override
+  String get scopes => 'הרשאות';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'בנו אפליקציה עם AI בהקשה אחת';
+
+  @override
+  String get refreshManifest => 'רענון המניפסט';
+
+  @override
+  String versionLabel(String version) {
+    return 'גרסה $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ משתמשים';
+  }
+
+  @override
+  String get discovery => 'תגלית';
+
+  @override
+  String get chatBlockShowMore => 'הצג עוד';
+
+  @override
+  String get chatBlockShowLess => 'הצג פחות';
+
+  @override
+  String get triggerEvent => 'אירוע מפעיל';
+
+  @override
+  String get webhookUrl => 'כתובת ה-Webhook';
+
+  @override
+  String get appHomeUrl => 'כתובת דף הבית של האפליקציה';
+
+  @override
+  String get authUrl => 'כתובת האימות';
+
+  @override
+  String get setupCompletedUrl => 'כתובת השלמת ההגדרה';
+
+  @override
+  String get chatToolsManifestUrl => 'כתובת מניפסט כלי הצ׳אט';
+
+  @override
+  String get invalidWebhookUrlError => 'יש להזין כתובת Webhook תקינה';
+
+  @override
+  String get githubRepositoryUrlRequired => 'נדרשת כתובת מאגר GitHub';
+
+  @override
+  String get removeScreenshot => 'הסרת צילום המסך';
+
+  @override
+  String get addScreenshot => 'הוספת צילום מסך';
+
+  @override
+  String get aiGenRegenerateIcon => 'יצירת הסמל מחדש';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count אפליקציות',
+      one: 'אפליקציה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'צור תיאור';
+
+  @override
+  String get selectImageFileTitle => 'בחר קובץ תמונה';
+
+  @override
+  String get selectThumbnailImageTitle => 'בחר תמונה ממוזערת';
+
+  @override
+  String get appIdNotFoundError => 'מזהה האפליקציה לא נמצא';
+
+  @override
+  String get manifestRefreshedSuccess => 'המניפסט רוענן בהצלחה';
+
+  @override
+  String get manifestRefreshFailed => 'רענון המניפסט נכשל';
 }

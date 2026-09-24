@@ -10797,4 +10797,226 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get keepRecording => 'ریکارڈنگ جاری رکھیں';
+
+  @override
+  String get view => 'دیکھیں';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName کو رسائی دیں؟';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName آپ کی گفتگو، یادیں اور ریکارڈنگز اپنے ڈویلپر کے سرور پر وصول کرے گا۔ وہاں اس ڈیٹا کے استعمال کی ذمہ داری Omi پر نہیں ہے۔';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName غیر فعال کر دی گئی';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریٹنگز',
+      one: '1 ریٹنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'اسکرین شاٹ $index از $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName سے چیٹ کریں';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName کی ترتیبات';
+  }
+
+  @override
+  String get appOptions => 'ایپ کے اختیارات';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'موجودہ بلنگ مدت کے اختتام تک آپ کی رسائی برقرار رہے گی۔';
+
+  @override
+  String get chatSendMessage => 'پیغام بھیجیں';
+
+  @override
+  String get chatAddAttachment => 'اٹیچمنٹ شامل کریں';
+
+  @override
+  String get removeAttachment => 'اٹیچمنٹ ہٹائیں';
+
+  @override
+  String get chatRemoveSelectedText => 'اقتباس شدہ متن ہٹائیں';
+
+  @override
+  String get chatOfflineHint => 'آپ آف لائن ہیں۔ پیغامات بھیجنے کے لیے دوبارہ جڑیں۔';
+
+  @override
+  String get chatReplyFailed => 'Omi جواب نہیں دے سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName غیر فعال کریں';
+  }
+
+  @override
+  String get whatWentWrong => 'کیا غلط ہوا؟';
+
+  @override
+  String get selectAReason => 'ایک وجہ منتخب کریں';
+
+  @override
+  String get submit => 'جمع کرائیں';
+
+  @override
+  String get feedbackReasonTooVerbose => 'بہت طویل';
+
+  @override
+  String get feedbackReasonIncorrect => 'غلط یا من گھڑت';
+
+  @override
+  String get feedbackReasonNotHelpful => 'مددگار نہیں یا غیر متعلق';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'ہدایات پر عمل نہیں کیا';
+
+  @override
+  String get additionalFeedbackOptional => 'اضافی رائے (اختیاری)';
+
+  @override
+  String get helpful => 'مددگار';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'دن کا خلاصہ · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'میں نے کل کیا کیا؟';
+
+  @override
+  String get chatStarterDoDifferently => 'آج میں کیا مختلف کر سکتا ہوں؟';
+
+  @override
+  String get chatStarterTeachMe => 'کیا تم مجھے کچھ نیا سکھا سکتے ہو؟';
+
+  @override
+  String get thinking => 'سوچ رہا ہے';
+
+  @override
+  String get couldNotLoadWhatsNew => 'نیا کیا ہے لوڈ نہیں ہو سکا';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub ریپوزیٹری URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'آپ کی ایپ کے سورس کوڈ ریپوزیٹری کا لنک';
+
+  @override
+  String get triggerEvents => 'ٹرگر ایونٹس';
+
+  @override
+  String get noAppsInCategoryYet => 'اس زمرے میں ابھی کوئی ایپ نہیں';
+
+  @override
+  String get scopes => 'دائرہ کار';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'ایک ٹیپ میں AI سے ایپ بنائیں';
+
+  @override
+  String get refreshManifest => 'مینی فیسٹ ریفریش کریں';
+
+  @override
+  String versionLabel(String version) {
+    return 'ورژن $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ صارفین';
+  }
+
+  @override
+  String get discovery => 'دریافت';
+
+  @override
+  String get chatBlockShowMore => 'مزید دکھائیں';
+
+  @override
+  String get chatBlockShowLess => 'کم دکھائیں';
+
+  @override
+  String get triggerEvent => 'ٹرگر ایونٹ';
+
+  @override
+  String get webhookUrl => 'ویب ہک URL';
+
+  @override
+  String get appHomeUrl => 'ایپ ہوم URL';
+
+  @override
+  String get authUrl => 'تصدیقی URL';
+
+  @override
+  String get setupCompletedUrl => 'سیٹ اپ مکمل URL';
+
+  @override
+  String get chatToolsManifestUrl => 'چیٹ ٹولز مینی فیسٹ URL';
+
+  @override
+  String get invalidWebhookUrlError => 'براہ کرم درست ویب ہک URL درج کریں';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub ریپوزٹری URL درکار ہے';
+
+  @override
+  String get removeScreenshot => 'اسکرین شاٹ ہٹائیں';
+
+  @override
+  String get addScreenshot => 'اسکرین شاٹ شامل کریں';
+
+  @override
+  String get aiGenRegenerateIcon => 'آئیکن دوبارہ بنائیں';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ایپس',
+      one: '1 ایپ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'تفصیل تیار کریں';
+
+  @override
+  String get selectImageFileTitle => 'ایک تصویری فائل منتخب کریں';
+
+  @override
+  String get selectThumbnailImageTitle => 'ایک تھمب نیل تصویر منتخب کریں';
+
+  @override
+  String get appIdNotFoundError => 'ایپ ID نہیں ملی';
+
+  @override
+  String get manifestRefreshedSuccess => 'مینی فیسٹ کامیابی سے ریفریش ہو گیا';
+
+  @override
+  String get manifestRefreshFailed => 'مینی فیسٹ ریفریش کرنے میں ناکام';
 }

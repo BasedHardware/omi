@@ -10823,4 +10823,226 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get keepRecording => 'Продолжить запись';
+
+  @override
+  String get view => 'Открыть';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Разрешить доступ приложению $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName будет получать ваши разговоры, воспоминания и записи на сервер своего разработчика. Omi не отвечает за то, как там используются эти данные.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName отключено';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Оценок: $count',
+      one: '1 оценка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Снимок экрана $index из $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Чат с $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Настройки $appName';
+  }
+
+  @override
+  String get appOptions => 'Параметры приложения';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Доступ сохранится до конца текущего расчётного периода.';
+
+  @override
+  String get chatSendMessage => 'Отправить сообщение';
+
+  @override
+  String get chatAddAttachment => 'Добавить вложение';
+
+  @override
+  String get removeAttachment => 'Удалить вложение';
+
+  @override
+  String get chatRemoveSelectedText => 'Удалить цитату';
+
+  @override
+  String get chatOfflineHint => 'Нет подключения. Подключитесь, чтобы отправлять сообщения.';
+
+  @override
+  String get chatReplyFailed => 'Omi не смог ответить. Проверьте подключение и повторите попытку.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Отключить $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Что пошло не так?';
+
+  @override
+  String get selectAReason => 'Выберите причину';
+
+  @override
+  String get submit => 'Отправить';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Слишком многословно';
+
+  @override
+  String get feedbackReasonIncorrect => 'Неверно или выдумано';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Бесполезно или не по теме';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не выполнил инструкции';
+
+  @override
+  String get additionalFeedbackOptional => 'Дополнительный отзыв (необязательно)';
+
+  @override
+  String get helpful => 'Полезно';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Итоги дня · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Что я делал вчера?';
+
+  @override
+  String get chatStarterDoDifferently => 'Что я могу сделать сегодня по-другому?';
+
+  @override
+  String get chatStarterTeachMe => 'Можешь научить меня чему-то новому?';
+
+  @override
+  String get thinking => 'Думаю';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Не удалось загрузить новинки';
+
+  @override
+  String get githubRepositoryUrl => 'URL репозитория GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Ссылка на репозиторий исходного кода приложения';
+
+  @override
+  String get triggerEvents => 'События запуска';
+
+  @override
+  String get noAppsInCategoryYet => 'В этой категории пока нет приложений';
+
+  @override
+  String get scopes => 'Области доступа';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Создайте приложение с ИИ в одно касание';
+
+  @override
+  String get refreshManifest => 'Обновить манифест';
+
+  @override
+  String versionLabel(String version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ пользователей';
+  }
+
+  @override
+  String get discovery => 'Открытие';
+
+  @override
+  String get chatBlockShowMore => 'Показать больше';
+
+  @override
+  String get chatBlockShowLess => 'Показать меньше';
+
+  @override
+  String get triggerEvent => 'Событие-триггер';
+
+  @override
+  String get webhookUrl => 'URL вебхука';
+
+  @override
+  String get appHomeUrl => 'URL главной страницы приложения';
+
+  @override
+  String get authUrl => 'URL авторизации';
+
+  @override
+  String get setupCompletedUrl => 'URL завершения настройки';
+
+  @override
+  String get chatToolsManifestUrl => 'URL манифеста инструментов чата';
+
+  @override
+  String get invalidWebhookUrlError => 'Введите действительный URL вебхука';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Требуется URL репозитория GitHub';
+
+  @override
+  String get removeScreenshot => 'Удалить скриншот';
+
+  @override
+  String get addScreenshot => 'Добавить скриншот';
+
+  @override
+  String get aiGenRegenerateIcon => 'Сгенерировать значок заново';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Приложений: $count',
+      one: '1 приложение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Сгенерировать описание';
+
+  @override
+  String get selectImageFileTitle => 'Выберите файл изображения';
+
+  @override
+  String get selectThumbnailImageTitle => 'Выберите миниатюру изображения';
+
+  @override
+  String get appIdNotFoundError => 'ID приложения не найден';
+
+  @override
+  String get manifestRefreshedSuccess => 'Манифест успешно обновлён';
+
+  @override
+  String get manifestRefreshFailed => 'Не удалось обновить манифест';
 }

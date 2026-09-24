@@ -10883,4 +10883,227 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get keepRecording => 'Ipagpatuloy ang Pag-record';
+
+  @override
+  String get view => 'Tingnan';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Payagan ang access ng $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return 'Matatanggap ng $appName ang iyong mga usapan, alaala at recording sa server ng developer nito. Walang pananagutan ang Omi sa kung paano gagamitin doon ang data na iyon.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return 'Na-disable ang $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rating',
+      one: '1 rating',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index ng $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Makipag-chat sa $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Mga setting ng $appName';
+  }
+
+  @override
+  String get appOptions => 'Mga opsyon ng app';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Mananatili ang iyong access hanggang sa katapusan ng kasalukuyang billing period.';
+
+  @override
+  String get chatSendMessage => 'Ipadala ang mensahe';
+
+  @override
+  String get chatAddAttachment => 'Magdagdag ng attachment';
+
+  @override
+  String get removeAttachment => 'Alisin ang attachment';
+
+  @override
+  String get chatRemoveSelectedText => 'Alisin ang sinipi na teksto';
+
+  @override
+  String get chatOfflineHint => 'Offline ka. Kumonekta muli para makapagpadala ng mensahe.';
+
+  @override
+  String get chatReplyFailed => 'Hindi nakasagot si Omi. Tingnan ang iyong koneksyon at subukang muli.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'I-disable ang $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Ano ang mali?';
+
+  @override
+  String get selectAReason => 'Pumili ng dahilan';
+
+  @override
+  String get submit => 'Ipasa';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Masyadong mahaba';
+
+  @override
+  String get feedbackReasonIncorrect => 'Mali o gawa-gawa';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Hindi nakatulong o walang kaugnayan';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Hindi sinunod ang mga tagubilin';
+
+  @override
+  String get additionalFeedbackOptional => 'Karagdagang feedback (opsyonal)';
+
+  @override
+  String get helpful => 'Nakatulong';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Buod ng Araw · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Ano ang ginawa ko kahapon?';
+
+  @override
+  String get chatStarterDoDifferently => 'Ano ang puwede kong gawin nang iba ngayon?';
+
+  @override
+  String get chatStarterTeachMe => 'Puwede mo ba akong turuan ng bago?';
+
+  @override
+  String get thinking => 'Nag-iisip';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Hindi ma-load ang mga bago';
+
+  @override
+  String get githubRepositoryUrl => 'URL ng GitHub Repository';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link sa source code repository ng iyong app';
+
+  @override
+  String get triggerEvents => 'Mga Trigger Event';
+
+  @override
+  String get noAppsInCategoryYet => 'Wala Pang App sa Kategoryang Ito';
+
+  @override
+  String get scopes => 'Mga Scope';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Gumawa ng app gamit ang AI sa isang tap';
+
+  @override
+  String get refreshManifest => 'I-refresh ang manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Bersyon $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ user';
+  }
+
+  @override
+  String get discovery => 'Natuklasan';
+
+  @override
+  String get chatBlockShowMore => 'Magpakita Pa';
+
+  @override
+  String get chatBlockShowLess => 'Magpakita ng Mas Kaunti';
+
+  @override
+  String get triggerEvent => 'Trigger Event';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'URL ng Home ng App';
+
+  @override
+  String get authUrl => 'Auth URL';
+
+  @override
+  String get setupCompletedUrl => 'URL ng Natapos na Setup';
+
+  @override
+  String get chatToolsManifestUrl => 'URL ng Manifest ng Chat Tools';
+
+  @override
+  String get invalidWebhookUrlError => 'Maglagay ng valid na webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Kailangan ang URL ng GitHub repository';
+
+  @override
+  String get removeScreenshot => 'Alisin ang screenshot';
+
+  @override
+  String get addScreenshot => 'Magdagdag ng screenshot';
+
+  @override
+  String get aiGenRegenerateIcon => 'Gumawa muli ng icon';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na app',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Bumuo ng paglalarawan';
+
+  @override
+  String get selectImageFileTitle => 'Pumili ng image file';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pumili ng thumbnail na imahe';
+
+  @override
+  String get appIdNotFoundError => 'Hindi nahanap ang App ID';
+
+  @override
+  String get manifestRefreshedSuccess => 'Matagumpay na na-refresh ang manifest';
+
+  @override
+  String get manifestRefreshFailed => 'Nabigong i-refresh ang manifest';
 }

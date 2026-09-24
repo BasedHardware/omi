@@ -10821,4 +10821,226 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get keepRecording => 'Verder opnemen';
+
+  @override
+  String get view => 'Bekijken';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName toegang geven?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName ontvangt je gesprekken, herinneringen en opnames op de server van de ontwikkelaar. Omi is niet verantwoordelijk voor hoe die gegevens daar worden gebruikt.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName uitgeschakeld';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beoordelingen',
+      one: '1 beoordeling',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index van $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatten met $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Instellingen van $appName';
+  }
+
+  @override
+  String get appOptions => 'App-opties';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Je houdt toegang tot het einde van de huidige factuurperiode.';
+
+  @override
+  String get chatSendMessage => 'Bericht versturen';
+
+  @override
+  String get chatAddAttachment => 'Bijlage toevoegen';
+
+  @override
+  String get removeAttachment => 'Bijlage verwijderen';
+
+  @override
+  String get chatRemoveSelectedText => 'Geciteerde tekst verwijderen';
+
+  @override
+  String get chatOfflineHint => 'Je bent offline. Maak opnieuw verbinding om berichten te versturen.';
+
+  @override
+  String get chatReplyFailed => 'Omi kon niet antwoorden. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName uitschakelen';
+  }
+
+  @override
+  String get whatWentWrong => 'Wat ging er mis?';
+
+  @override
+  String get selectAReason => 'Kies een reden';
+
+  @override
+  String get submit => 'Versturen';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Te langdradig';
+
+  @override
+  String get feedbackReasonIncorrect => 'Onjuist of verzonnen';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Niet nuttig of niet relevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Volgde de instructies niet';
+
+  @override
+  String get additionalFeedbackOptional => 'Aanvullende feedback (optioneel)';
+
+  @override
+  String get helpful => 'Nuttig';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dagoverzicht · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Wat heb ik gisteren gedaan?';
+
+  @override
+  String get chatStarterDoDifferently => 'Wat kan ik vandaag anders doen?';
+
+  @override
+  String get chatStarterTeachMe => 'Kun je me iets nieuws leren?';
+
+  @override
+  String get thinking => 'Aan het nadenken';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Kan de nieuwe functies niet laden';
+
+  @override
+  String get githubRepositoryUrl => 'URL van GitHub-repository';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link naar de broncode-repository van je app';
+
+  @override
+  String get triggerEvents => 'Triggergebeurtenissen';
+
+  @override
+  String get noAppsInCategoryYet => 'Nog geen apps in deze categorie';
+
+  @override
+  String get scopes => 'Scopes';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Maak met één tik een app met AI';
+
+  @override
+  String get refreshManifest => 'Manifest vernieuwen';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versie $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ gebruikers';
+  }
+
+  @override
+  String get discovery => 'Ontdekking';
+
+  @override
+  String get chatBlockShowMore => 'Meer tonen';
+
+  @override
+  String get chatBlockShowLess => 'Minder tonen';
+
+  @override
+  String get triggerEvent => 'Triggergebeurtenis';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Startpagina-URL van de app';
+
+  @override
+  String get authUrl => 'Authenticatie-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL voor voltooide installatie';
+
+  @override
+  String get chatToolsManifestUrl => 'URL van chattoolsmanifest';
+
+  @override
+  String get invalidWebhookUrlError => 'Voer een geldige webhook-URL in';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repository-URL is verplicht';
+
+  @override
+  String get removeScreenshot => 'Screenshot verwijderen';
+
+  @override
+  String get addScreenshot => 'Screenshot toevoegen';
+
+  @override
+  String get aiGenRegenerateIcon => 'Pictogram opnieuw genereren';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count apps',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Beschrijving genereren';
+
+  @override
+  String get selectImageFileTitle => 'Selecteer een afbeeldingsbestand';
+
+  @override
+  String get selectThumbnailImageTitle => 'Selecteer een miniatuurafbeelding';
+
+  @override
+  String get appIdNotFoundError => 'App-ID niet gevonden';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest succesvol vernieuwd';
+
+  @override
+  String get manifestRefreshFailed => 'Manifest vernieuwen mislukt';
 }

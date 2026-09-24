@@ -10862,4 +10862,227 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get keepRecording => 'Συνέχεια εγγραφής';
+
+  @override
+  String get view => 'Προβολή';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Να επιτραπεί η πρόσβαση στο $appName;';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return 'Το $appName θα λαμβάνει τις συνομιλίες, τις αναμνήσεις και τις ηχογραφήσεις σας στον διακομιστή του προγραμματιστή του. Το Omi δεν ευθύνεται για τον τρόπο χρήσης αυτών των δεδομένων εκεί.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return 'Το $appName απενεργοποιήθηκε';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αξιολογήσεις',
+      one: '1 αξιολόγηση',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Στιγμιότυπο $index από $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Συνομιλία με το $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Ρυθμίσεις $appName';
+  }
+
+  @override
+  String get appOptions => 'Επιλογές εφαρμογής';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Θα διατηρήσετε την πρόσβαση έως το τέλος της τρέχουσας περιόδου χρέωσης.';
+
+  @override
+  String get chatSendMessage => 'Αποστολή μηνύματος';
+
+  @override
+  String get chatAddAttachment => 'Προσθήκη συνημμένου';
+
+  @override
+  String get removeAttachment => 'Αφαίρεση συνημμένου';
+
+  @override
+  String get chatRemoveSelectedText => 'Αφαίρεση κειμένου παράθεσης';
+
+  @override
+  String get chatOfflineHint => 'Είστε εκτός σύνδεσης. Συνδεθείτε ξανά για να στείλετε μηνύματα.';
+
+  @override
+  String get chatReplyFailed => 'Το Omi δεν μπόρεσε να απαντήσει. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Απενεργοποίηση $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Τι πήγε στραβά;';
+
+  @override
+  String get selectAReason => 'Επιλέξτε λόγο';
+
+  @override
+  String get submit => 'Υποβολή';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Υπερβολικά φλύαρο';
+
+  @override
+  String get feedbackReasonIncorrect => 'Λάθος ή επινοημένο';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Άχρηστο ή άσχετο';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Δεν ακολούθησε τις οδηγίες';
+
+  @override
+  String get additionalFeedbackOptional => 'Επιπλέον σχόλια (προαιρετικά)';
+
+  @override
+  String get helpful => 'Χρήσιμο';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Σύνοψη ημέρας · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Τι έκανα χθες;';
+
+  @override
+  String get chatStarterDoDifferently => 'Τι θα μπορούσα να κάνω διαφορετικά σήμερα;';
+
+  @override
+  String get chatStarterTeachMe => 'Μπορείς να μου μάθεις κάτι καινούργιο;';
+
+  @override
+  String get thinking => 'Σκέφτεται';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Δεν ήταν δυνατή η φόρτωση των νέων';
+
+  @override
+  String get githubRepositoryUrl => 'URL αποθετηρίου GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Σύνδεσμος στο αποθετήριο πηγαίου κώδικα της εφαρμογής';
+
+  @override
+  String get triggerEvents => 'Συμβάντα ενεργοποίησης';
+
+  @override
+  String get noAppsInCategoryYet => 'Δεν υπάρχουν ακόμη εφαρμογές σε αυτή την κατηγορία';
+
+  @override
+  String get scopes => 'Εύρη πρόσβασης';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Φτιάξτε εφαρμογή με AI με ένα πάτημα';
+
+  @override
+  String get refreshManifest => 'Ανανέωση manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Έκδοση $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ χρήστες';
+  }
+
+  @override
+  String get discovery => 'Ανακάλυψη';
+
+  @override
+  String get chatBlockShowMore => 'Εμφάνιση περισσότερων';
+
+  @override
+  String get chatBlockShowLess => 'Εμφάνιση λιγότερων';
+
+  @override
+  String get triggerEvent => 'Συμβάν ενεργοποίησης';
+
+  @override
+  String get webhookUrl => 'URL webhook';
+
+  @override
+  String get appHomeUrl => 'URL αρχικής σελίδας εφαρμογής';
+
+  @override
+  String get authUrl => 'URL ελέγχου ταυτότητας';
+
+  @override
+  String get setupCompletedUrl => 'URL ολοκλήρωσης ρύθμισης';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifest εργαλείων συνομιλίας';
+
+  @override
+  String get invalidWebhookUrlError => 'Εισαγάγετε ένα έγκυρο URL webhook';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Το URL αποθετηρίου GitHub είναι υποχρεωτικό';
+
+  @override
+  String get removeScreenshot => 'Αφαίρεση στιγμιότυπου οθόνης';
+
+  @override
+  String get addScreenshot => 'Προσθήκη στιγμιότυπου οθόνης';
+
+  @override
+  String get aiGenRegenerateIcon => 'Επαναδημιουργία εικονιδίου';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εφαρμογές',
+      one: '1 εφαρμογή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Δημιουργία περιγραφής';
+
+  @override
+  String get selectImageFileTitle => 'Επιλέξτε ένα αρχείο εικόνας';
+
+  @override
+  String get selectThumbnailImageTitle => 'Επιλέξτε μια μικρογραφία εικόνας';
+
+  @override
+  String get appIdNotFoundError => 'Δεν βρέθηκε αναγνωριστικό εφαρμογής';
+
+  @override
+  String get manifestRefreshedSuccess => 'Το manifest ανανεώθηκε επιτυχώς';
+
+  @override
+  String get manifestRefreshFailed => 'Αποτυχία ανανέωσης του manifest';
 }

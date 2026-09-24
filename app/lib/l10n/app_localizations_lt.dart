@@ -10806,4 +10806,226 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get keepRecording => 'Tęsti įrašymą';
+
+  @override
+  String get view => 'Peržiūrėti';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Leisti $appName prieigą?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName gaus jūsų pokalbius, prisiminimus ir įrašus savo kūrėjo serveryje. Omi neatsako už tai, kaip ten naudojami šie duomenys.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName išjungta';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įvertinimai',
+      one: '1 įvertinimas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ekrano kopija $index iš $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Pokalbis su $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName nustatymai';
+  }
+
+  @override
+  String get appOptions => 'Programėlės parinktys';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Prieiga išliks iki dabartinio atsiskaitymo laikotarpio pabaigos.';
+
+  @override
+  String get chatSendMessage => 'Siųsti žinutę';
+
+  @override
+  String get chatAddAttachment => 'Pridėti priedą';
+
+  @override
+  String get removeAttachment => 'Pašalinti priedą';
+
+  @override
+  String get chatRemoveSelectedText => 'Pašalinti cituojamą tekstą';
+
+  @override
+  String get chatOfflineHint => 'Esate neprisijungę. Prisijunkite, kad galėtumėte siųsti žinutes.';
+
+  @override
+  String get chatReplyFailed => 'Omi nepavyko atsakyti. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Išjungti $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Kas buvo negerai?';
+
+  @override
+  String get selectAReason => 'Pasirinkite priežastį';
+
+  @override
+  String get submit => 'Pateikti';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Per daug žodžių';
+
+  @override
+  String get feedbackReasonIncorrect => 'Neteisinga arba išgalvota';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Nenaudinga arba nesusiję';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nesilaikė nurodymų';
+
+  @override
+  String get additionalFeedbackOptional => 'Papildomi atsiliepimai (neprivaloma)';
+
+  @override
+  String get helpful => 'Naudinga';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dienos santrauka · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Ką veikiau vakar?';
+
+  @override
+  String get chatStarterDoDifferently => 'Ką šiandien galėčiau daryti kitaip?';
+
+  @override
+  String get chatStarterTeachMe => 'Ar gali išmokyti mane ko nors naujo?';
+
+  @override
+  String get thinking => 'Galvoju';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Nepavyko įkelti naujienų';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub saugyklos URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Nuoroda į programėlės šaltinio kodo saugyklą';
+
+  @override
+  String get triggerEvents => 'Paleidimo įvykiai';
+
+  @override
+  String get noAppsInCategoryYet => 'Šioje kategorijoje dar nėra programėlių';
+
+  @override
+  String get scopes => 'Aprėptys';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Sukurkite programėlę su DI vienu palietimu';
+
+  @override
+  String get refreshManifest => 'Atnaujinti manifestą';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versija $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ naudotojų';
+  }
+
+  @override
+  String get discovery => 'Atradimas';
+
+  @override
+  String get chatBlockShowMore => 'Rodyti daugiau';
+
+  @override
+  String get chatBlockShowLess => 'Rodyti mažiau';
+
+  @override
+  String get triggerEvent => 'Paleidimo įvykis';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'Programėlės pagrindinio puslapio URL';
+
+  @override
+  String get authUrl => 'Autentifikavimo URL';
+
+  @override
+  String get setupCompletedUrl => 'Sąrankos užbaigimo URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Pokalbių įrankių manifesto URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Įveskite galiojantį webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub saugyklos URL yra privalomas';
+
+  @override
+  String get removeScreenshot => 'Pašalinti ekrano kopiją';
+
+  @override
+  String get addScreenshot => 'Pridėti ekrano kopiją';
+
+  @override
+  String get aiGenRegenerateIcon => 'Sugeneruoti piktogramą iš naujo';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Programėlės: $count',
+      one: '1 programėlė',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Generuoti aprašymą';
+
+  @override
+  String get selectImageFileTitle => 'Pasirinkite vaizdo failą';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pasirinkite miniatiūrą';
+
+  @override
+  String get appIdNotFoundError => 'Programos ID nerastas';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifestas sėkmingai atnaujintas';
+
+  @override
+  String get manifestRefreshFailed => 'Nepavyko atnaujinti manifesto';
 }

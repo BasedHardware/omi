@@ -131,8 +131,27 @@ Future<void> openVoiceProfile(BuildContext context) async {
   );
 }
 
+/// Help center languages (checked 2026-09-24); any other app language opens English.
+const _helpCenterLocales = {
+  'ar', 'bg', 'bn', 'bs', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr', 'he', 'hi', 'hr', 'hu', //
+  'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nl', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'ta', 'th', //
+  'tl', 'tr', 'uk', 'ur', 'vi',
+};
+
+/// The help center URL in the app's language (was always `/en/`).
+@visibleForTesting
+Uri helpCenterUrl(Locale locale) {
+  final code = switch (locale.languageCode) {
+    'zh' => 'zh-CN',
+    'no' => 'nb',
+    final c when _helpCenterLocales.contains(c) => c,
+    _ => 'en',
+  };
+  return Uri.parse('https://help.omi.me/$code/');
+}
+
 Future<void> _openHelpCenter(BuildContext context) async {
-  final url = Uri.parse('https://help.omi.me/en/');
+  final url = helpCenterUrl(Localizations.localeOf(context));
   if (!await canLaunchUrl(url)) return;
   try {
     await launchUrl(url, mode: LaunchMode.inAppBrowserView);

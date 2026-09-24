@@ -12720,5 +12720,322 @@
     "keepRecording": "Keep Recording",
     "@keepRecording": {
         "description": "Button that dismisses the discard-recording dialog and continues"
+    },
+    "view": "View",
+    "@view": {
+        "description": "Button on an app row that opens the app's page (for apps that need payment or setup before they can be enabled)"
+    },
+    "appDataAccessTitle": "Allow {appName} Access?",
+    "@appDataAccessTitle": {
+        "description": "Title of the consent dialog before enabling an app that works outside Omi",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "appDataAccessMessage": "{appName} will receive your conversations, memories and recordings on its developer's server. Omi isn't responsible for how that data is used there.",
+    "@appDataAccessMessage": {
+        "description": "Body of the consent dialog before enabling an app that works outside Omi: what leaves Omi and where it goes",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "appDisabledNamed": "{appName} disabled",
+    "@appDisabledNamed": {
+        "description": "Undo toast after disabling an app",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "appRatingCount": "{count, plural, =1{1 rating} other{{count} ratings}}",
+    "@appRatingCount": {
+        "description": "Number of ratings an app has, under its name in the store",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "previewImageLabel": "Screenshot {index} of {total}",
+    "@previewImageLabel": {
+        "description": "Screen-reader label of an app screenshot in the store",
+        "placeholders": {
+            "index": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "chatWithApp": "Chat with {appName}",
+    "@chatWithApp": {
+        "description": "Label of the chat button on an app's page",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "appSettingsLabel": "{appName} settings",
+    "@appSettingsLabel": {
+        "description": "Label of the gear button on an app's page that opens the app's own settings page",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "appOptions": "App options",
+    "@appOptions": {
+        "description": "Label of the button on an app's page that opens the owner's options (visibility, edit, delete)"
+    },
+    "cancelSubscriptionKeepAccessMessage": "You'll keep access until the end of your current billing period.",
+    "@cancelSubscriptionKeepAccessMessage": {
+        "description": "Message of the dialog that confirms cancelling an app subscription"
+    },
+    "@keepSubscription": {
+        "description": "Cancel button of the dialog that confirms cancelling an app subscription"
+    },
+    "chatSendMessage": "Send message",
+    "@chatSendMessage": {
+        "description": "Screen-reader label and tooltip of the chat Send button"
+    },
+    "chatAddAttachment": "Add attachment",
+    "@chatAddAttachment": {
+        "description": "Screen-reader label and tooltip of the chat + button (photo, library, file)"
+    },
+    "removeAttachment": "Remove attachment",
+    "@removeAttachment": {
+        "description": "Screen-reader label of the X on a file picked for the next chat message"
+    },
+    "chatRemoveSelectedText": "Remove quoted text",
+    "@chatRemoveSelectedText": {
+        "description": "Screen-reader label of the X on the quoted text the next chat message asks about"
+    },
+    "chatOfflineHint": "You're offline. Reconnect to send messages.",
+    "@chatOfflineHint": {
+        "description": "Shown above the chat composer while the phone is offline; Send is disabled"
+    },
+    "chatReplyFailed": "Omi couldn't reply. Check your connection and try again.",
+    "@chatReplyFailed": {
+        "description": "Shown in place of a chat reply that failed, next to Try Again"
+    },
+    "disableAppNamed": "Disable {appName}",
+    "@disableAppNamed": {
+        "description": "Screen-reader label and tooltip of the control in the chat apps drawer that disables an app",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "whatWentWrong": "What Went Wrong?",
+    "@whatWentWrong": {
+        "description": "Title of the sheet that asks why a chat reply was rated down"
+    },
+    "selectAReason": "Select a reason",
+    "@selectAReason": {
+        "description": "Label above the reasons in the chat feedback sheet"
+    },
+    "submit": "Submit",
+    "@submit": {
+        "description": "Button that sends the chat feedback"
+    },
+    "feedbackReasonTooVerbose": "Too verbose",
+    "@feedbackReasonTooVerbose": {
+        "description": "Reason a chat reply was rated down"
+    },
+    "feedbackReasonIncorrect": "Incorrect or made up",
+    "@feedbackReasonIncorrect": {
+        "description": "Reason a chat reply was rated down"
+    },
+    "feedbackReasonNotHelpful": "Not helpful or irrelevant",
+    "@feedbackReasonNotHelpful": {
+        "description": "Reason a chat reply was rated down"
+    },
+    "feedbackReasonIgnoredInstructions": "Didn't follow instructions",
+    "@feedbackReasonIgnoredInstructions": {
+        "description": "Reason a chat reply was rated down"
+    },
+    "additionalFeedbackOptional": "Additional feedback (optional)",
+    "@additionalFeedbackOptional": {
+        "description": "Label above the comment field in the chat feedback sheet"
+    },
+    "helpful": "Helpful",
+    "@helpful": {
+        "description": "Label of the thumbs-up under a chat reply (pairs with 'Not Helpful')"
+    },
+    "daySummaryForDate": "Day Summary · {date}",
+    "@daySummaryForDate": {
+        "description": "Heading of a day summary message in chat; date is already formatted for the locale",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "chatStarterYesterday": "What did I do yesterday?",
+    "@chatStarterYesterday": {
+        "description": "Suggested first question in a new chat"
+    },
+    "chatStarterDoDifferently": "What could I do differently today?",
+    "@chatStarterDoDifferently": {
+        "description": "Suggested first question in a new chat"
+    },
+    "chatStarterTeachMe": "Can you teach me something new?",
+    "@chatStarterTeachMe": {
+        "description": "Suggested first question in a new chat"
+    },
+    "thinking": "Thinking",
+    "@thinking": {
+        "description": "Shown while Omi prepares a chat reply, before it names a step"
+    },
+    "couldNotLoadWhatsNew": "Couldn't load what's new",
+    "@couldNotLoadWhatsNew": {
+        "description": "Error in the What's New sheet when the changelog fails to load"
+    },
+    "@couldNotLoadPage": {
+        "description": "Error shown in an in-app web page (referral, app home) that failed to load"
+    },
+    "githubRepositoryUrl": "GitHub Repository URL",
+    "@githubRepositoryUrl": {
+        "description": "Label of the field for an app's source repository when submitting an app"
+    },
+    "githubRepositoryUrlHint": "Link to your app's source code repository",
+    "@githubRepositoryUrlHint": {
+        "description": "Helper text under the GitHub repository field when submitting an app"
+    },
+    "triggerEvents": "Trigger Events",
+    "@triggerEvents": {
+        "description": "Section title in app submission: which events start an external integration"
+    },
+    "noAppsInCategoryYet": "No Apps in This Category Yet",
+    "@noAppsInCategoryYet": {
+        "description": "Empty-state title of an app category with no apps"
+    },
+    "scopes": "Scopes",
+    "@scopes": {
+        "description": "Section title in app submission: the permissions an app requests"
+    },
+    "aiAppGeneratorBannerTitle": "Build an app with AI in one tap",
+    "@aiAppGeneratorBannerTitle": {
+        "description": "Title of the banner in the app store that opens the AI app generator"
+    },
+    "refreshManifest": "Refresh manifest",
+    "@refreshManifest": {
+        "description": "Tooltip of the button that reloads an MCP app's manifest"
+    },
+    "versionLabel": "Version {version}",
+    "@versionLabel": {
+        "description": "Heading of a version's page in the What's New sheet",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "appUsersCount": "{count}+ users",
+    "@appUsersCount": {
+        "description": "Rounded number of people using an app, under its name on the app page",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "discovery": "Discovery",
+    "@discovery": {
+        "description": "Eyebrow label of a chat card that shows something Omi discovered"
+    },
+    "chatBlockShowMore": "Show More",
+    "@chatBlockShowMore": {
+        "description": "Button on a chat discovery card that expands it to its full text"
+    },
+    "chatBlockShowLess": "Show Less",
+    "@chatBlockShowLess": {
+        "description": "Button on an expanded chat discovery card that collapses it back to its summary"
+    },
+    "triggerEvent": "Trigger Event",
+    "@triggerEvent": {
+        "description": "Placeholder of the trigger-event picker field when submitting an app with external integration"
+    },
+    "webhookUrl": "Webhook URL",
+    "@webhookUrl": {
+        "description": "Label of the webhook URL field when submitting an app with external integration"
+    },
+    "appHomeUrl": "App Home URL",
+    "@appHomeUrl": {
+        "description": "Label of the app home URL field when submitting an app with external integration"
+    },
+    "authUrl": "Auth URL",
+    "@authUrl": {
+        "description": "Label of the authentication URL field when submitting an app with external integration"
+    },
+    "setupCompletedUrl": "Setup Completed URL",
+    "@setupCompletedUrl": {
+        "description": "Label of the setup-completed URL field when submitting an app with external integration"
+    },
+    "chatToolsManifestUrl": "Chat Tools Manifest URL",
+    "@chatToolsManifestUrl": {
+        "description": "Label of the chat tools manifest URL field when submitting an app with external integration"
+    },
+    "invalidWebhookUrlError": "Please enter a valid webhook URL",
+    "@invalidWebhookUrlError": {
+        "description": "Validation error under the webhook URL field when submitting an app"
+    },
+    "githubRepositoryUrlRequired": "GitHub repository URL is required",
+    "@githubRepositoryUrlRequired": {
+        "description": "Validation error when the GitHub repository field is empty while submitting an app"
+    },
+    "removeScreenshot": "Remove screenshot",
+    "@removeScreenshot": {
+        "description": "Accessibility label and tooltip of the X on an app screenshot in the submit/update app form"
+    },
+    "addScreenshot": "Add screenshot",
+    "@addScreenshot": {
+        "description": "Accessibility label and tooltip of the control that adds an app screenshot in the submit/update app form"
+    },
+    "aiGenRegenerateIcon": "Regenerate icon",
+    "@aiGenRegenerateIcon": {
+        "description": "Tooltip and accessibility label of the icon-only button that regenerates the app icon on the AI app generator preview card"
+    },
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "@categoryAppCount": {
+        "description": "Number of apps listed on a category page in the app store, above the list",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "generateDescription": "Generate description",
+    "@generateDescription": {
+        "description": "Tooltip of the icon button that AI-generates the app description in the submit/update app forms"
+    },
+    "selectImageFileTitle": "Select an Image File",
+    "@selectImageFileTitle": {
+        "description": "Native file-picker dialog title when choosing an app icon or thumbnail image on web"
+    },
+    "selectThumbnailImageTitle": "Select a Thumbnail Image",
+    "@selectThumbnailImageTitle": {
+        "description": "Native file-picker dialog title when choosing an app screenshot thumbnail on web"
+    },
+    "appIdNotFoundError": "App ID not found",
+    "@appIdNotFoundError": {
+        "description": "Error toast when refreshing an app's manifest without a known app id"
+    },
+    "manifestRefreshedSuccess": "Manifest refreshed successfully",
+    "@manifestRefreshedSuccess": {
+        "description": "Success toast after manually refreshing an MCP app's manifest"
+    },
+    "manifestRefreshFailed": "Failed to refresh manifest",
+    "@manifestRefreshFailed": {
+        "description": "Error toast when manually refreshing an MCP app's manifest fails"
     }
 }

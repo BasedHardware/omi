@@ -10784,4 +10784,226 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get keepRecording => 'Pokračovat v nahrávání';
+
+  @override
+  String get view => 'Zobrazit';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Povolit přístup aplikaci $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName bude dostávat vaše konverzace, vzpomínky a nahrávky na server svého vývojáře. Omi neodpovídá za to, jak se tam s těmito daty nakládá.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName je vypnuta';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hodnocení',
+      one: '1 hodnocení',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Snímek obrazovky $index z $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatovat s $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Nastavení $appName';
+  }
+
+  @override
+  String get appOptions => 'Možnosti aplikace';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Přístup vám zůstane do konce aktuálního zúčtovacího období.';
+
+  @override
+  String get chatSendMessage => 'Odeslat zprávu';
+
+  @override
+  String get chatAddAttachment => 'Přidat přílohu';
+
+  @override
+  String get removeAttachment => 'Odebrat přílohu';
+
+  @override
+  String get chatRemoveSelectedText => 'Odebrat citovaný text';
+
+  @override
+  String get chatOfflineHint => 'Jste offline. Pro odesílání zpráv se znovu připojte.';
+
+  @override
+  String get chatReplyFailed => 'Omi nemohl odpovědět. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Vypnout $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Co se nepovedlo?';
+
+  @override
+  String get selectAReason => 'Vyberte důvod';
+
+  @override
+  String get submit => 'Odeslat';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Příliš rozvláčné';
+
+  @override
+  String get feedbackReasonIncorrect => 'Nesprávné nebo smyšlené';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Neužitečné nebo mimo téma';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nedodržel pokyny';
+
+  @override
+  String get additionalFeedbackOptional => 'Další zpětná vazba (volitelné)';
+
+  @override
+  String get helpful => 'Užitečné';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Shrnutí dne · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Co jsem dělal včera?';
+
+  @override
+  String get chatStarterDoDifferently => 'Co bych dnes mohl udělat jinak?';
+
+  @override
+  String get chatStarterTeachMe => 'Můžeš mě naučit něco nového?';
+
+  @override
+  String get thinking => 'Přemýšlím';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Novinky se nepodařilo načíst';
+
+  @override
+  String get githubRepositoryUrl => 'URL repozitáře na GitHubu';
+
+  @override
+  String get githubRepositoryUrlHint => 'Odkaz na repozitář se zdrojovým kódem aplikace';
+
+  @override
+  String get triggerEvents => 'Spouštěcí události';
+
+  @override
+  String get noAppsInCategoryYet => 'V této kategorii zatím nejsou žádné aplikace';
+
+  @override
+  String get scopes => 'Rozsahy';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Vytvořte aplikaci pomocí AI jedním klepnutím';
+
+  @override
+  String get refreshManifest => 'Obnovit manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Verze $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ uživatelů';
+  }
+
+  @override
+  String get discovery => 'Objev';
+
+  @override
+  String get chatBlockShowMore => 'Zobrazit více';
+
+  @override
+  String get chatBlockShowLess => 'Zobrazit méně';
+
+  @override
+  String get triggerEvent => 'Spouštěcí událost';
+
+  @override
+  String get webhookUrl => 'URL webhooku';
+
+  @override
+  String get appHomeUrl => 'URL domovské stránky aplikace';
+
+  @override
+  String get authUrl => 'URL ověření';
+
+  @override
+  String get setupCompletedUrl => 'URL dokončení nastavení';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifestu nástrojů chatu';
+
+  @override
+  String get invalidWebhookUrlError => 'Zadejte platnou URL webhooku';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repozitáře GitHub je povinná';
+
+  @override
+  String get removeScreenshot => 'Odebrat snímek obrazovky';
+
+  @override
+  String get addScreenshot => 'Přidat snímek obrazovky';
+
+  @override
+  String get aiGenRegenerateIcon => 'Znovu vygenerovat ikonu';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aplikace: $count',
+      one: '1 aplikace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Vygenerovat popis';
+
+  @override
+  String get selectImageFileTitle => 'Vyberte soubor obrázku';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vyberte miniaturu obrázku';
+
+  @override
+  String get appIdNotFoundError => 'ID aplikace nebylo nalezeno';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest byl úspěšně obnoven';
+
+  @override
+  String get manifestRefreshFailed => 'Nepodařilo se obnovit manifest';
 }

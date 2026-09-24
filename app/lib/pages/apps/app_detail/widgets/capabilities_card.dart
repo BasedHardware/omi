@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class CapabilitiesCard extends StatelessWidget {
   final List<AppCapability> capabilities;
@@ -30,7 +32,7 @@ class CapabilitiesCard extends StatelessWidget {
   }
 
   Color _getCapabilityColor(String id) {
-    return Colors.grey;
+    return OmiColors.textSecondary;
   }
 
   @override
@@ -49,33 +51,30 @@ class CapabilitiesCard extends StatelessWidget {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16.0),
+        color: OmiColors.surface1.withValues(alpha: 0.8),
+        borderRadius: OmiRadius.lgAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Capabilities',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 16),
+          Text(context.l10n.capabilities, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: OmiSpacing.md),
           Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: OmiSpacing.sm,
+            runSpacing: OmiSpacing.sm,
             children: capabilities.map((capability) {
               final color = _getCapabilityColor(capability.id);
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: OmiRadius.mdAll),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     FaIcon(_getCapabilityIcon(capability.id), size: 14, color: color),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: OmiSpacing.xs),
                     Text(
                       capability.getLocalizedTitle(context),
-                      style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+                      style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),

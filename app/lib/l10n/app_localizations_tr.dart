@@ -10799,4 +10799,226 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get keepRecording => 'Kayda Devam Et';
+
+  @override
+  String get view => 'Görüntüle';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName erişimine izin verilsin mi?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName, konuşmalarını, anılarını ve kayıtlarını geliştiricisinin sunucusunda alacak. Omi, bu verilerin orada nasıl kullanıldığından sorumlu değildir.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName devre dışı bırakıldı';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puan',
+      one: '1 puan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ekran görüntüsü $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName ile sohbet et';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName ayarları';
+  }
+
+  @override
+  String get appOptions => 'Uygulama seçenekleri';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Mevcut fatura döneminin sonuna kadar erişimin devam eder.';
+
+  @override
+  String get chatSendMessage => 'Mesajı gönder';
+
+  @override
+  String get chatAddAttachment => 'Ek ekle';
+
+  @override
+  String get removeAttachment => 'Eki kaldır';
+
+  @override
+  String get chatRemoveSelectedText => 'Alıntılanan metni kaldır';
+
+  @override
+  String get chatOfflineHint => 'Çevrimdışısın. Mesaj göndermek için yeniden bağlan.';
+
+  @override
+  String get chatReplyFailed => 'Omi yanıt veremedi. Bağlantını kontrol edip tekrar dene.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName uygulamasını devre dışı bırak';
+  }
+
+  @override
+  String get whatWentWrong => 'Ne ters gitti?';
+
+  @override
+  String get selectAReason => 'Bir neden seç';
+
+  @override
+  String get submit => 'Gönder';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Fazla uzun';
+
+  @override
+  String get feedbackReasonIncorrect => 'Yanlış veya uydurma';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Faydasız veya alakasız';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Talimatlara uymadı';
+
+  @override
+  String get additionalFeedbackOptional => 'Ek geri bildirim (isteğe bağlı)';
+
+  @override
+  String get helpful => 'Yararlı';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Gün Özeti · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Dün ne yaptım?';
+
+  @override
+  String get chatStarterDoDifferently => 'Bugün neyi farklı yapabilirim?';
+
+  @override
+  String get chatStarterTeachMe => 'Bana yeni bir şey öğretebilir misin?';
+
+  @override
+  String get thinking => 'Düşünüyor';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Yenilikler yüklenemedi';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub Depo URL\'si';
+
+  @override
+  String get githubRepositoryUrlHint => 'Uygulamanın kaynak kod deposunun bağlantısı';
+
+  @override
+  String get triggerEvents => 'Tetikleyici Olaylar';
+
+  @override
+  String get noAppsInCategoryYet => 'Bu Kategoride Henüz Uygulama Yok';
+
+  @override
+  String get scopes => 'Kapsamlar';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Tek dokunuşla yapay zekâyla uygulama oluştur';
+
+  @override
+  String get refreshManifest => 'Manifesti yenile';
+
+  @override
+  String versionLabel(String version) {
+    return 'Sürüm $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ kullanıcı';
+  }
+
+  @override
+  String get discovery => 'Keşif';
+
+  @override
+  String get chatBlockShowMore => 'Daha Fazla Göster';
+
+  @override
+  String get chatBlockShowLess => 'Daha Az Göster';
+
+  @override
+  String get triggerEvent => 'Tetikleyici Olay';
+
+  @override
+  String get webhookUrl => 'Webhook URL\'si';
+
+  @override
+  String get appHomeUrl => 'Uygulama Ana Sayfa URL\'si';
+
+  @override
+  String get authUrl => 'Kimlik Doğrulama URL\'si';
+
+  @override
+  String get setupCompletedUrl => 'Kurulum Tamamlandı URL\'si';
+
+  @override
+  String get chatToolsManifestUrl => 'Sohbet Araçları Bildirim URL\'si';
+
+  @override
+  String get invalidWebhookUrlError => 'Lütfen geçerli bir webhook URL\'si girin';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub depo URL\'si gerekli';
+
+  @override
+  String get removeScreenshot => 'Ekran görüntüsünü kaldır';
+
+  @override
+  String get addScreenshot => 'Ekran görüntüsü ekle';
+
+  @override
+  String get aiGenRegenerateIcon => 'Simgeyi yeniden oluştur';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count uygulama',
+      one: '1 uygulama',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Açıklama oluştur';
+
+  @override
+  String get selectImageFileTitle => 'Bir resim dosyası seçin';
+
+  @override
+  String get selectThumbnailImageTitle => 'Bir küçük resim seçin';
+
+  @override
+  String get appIdNotFoundError => 'Uygulama Kimliği bulunamadı';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest başarıyla yenilendi';
+
+  @override
+  String get manifestRefreshFailed => 'Manifest yenilenemedi';
 }

@@ -19431,13 +19431,13 @@ abstract class AppLocalizations {
   /// **'Device: {deviceName}'**
   String firmwareFlashTarget(String deviceName);
 
-  /// No description provided for @keepSubscription.
+  /// Cancel button of the dialog that confirms cancelling an app subscription
   ///
   /// In en, this message translates to:
   /// **'Keep Subscription'**
   String get keepSubscription;
 
-  /// No description provided for @couldNotLoadPage.
+  /// Error shown in an in-app web page (referral, app home) that failed to load
   ///
   /// In en, this message translates to:
   /// **'Couldn\'t load this page. Check your connection and try again.'**
@@ -19724,6 +19724,378 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep Recording'**
   String get keepRecording;
+
+  /// Button on an app row that opens the app's page (for apps that need payment or setup before they can be enabled)
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get view;
+
+  /// Title of the consent dialog before enabling an app that works outside Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Allow {appName} Access?'**
+  String appDataAccessTitle(String appName);
+
+  /// Body of the consent dialog before enabling an app that works outside Omi: what leaves Omi and where it goes
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} will receive your conversations, memories and recordings on its developer\'s server. Omi isn\'t responsible for how that data is used there.'**
+  String appDataAccessMessage(String appName);
+
+  /// Undo toast after disabling an app
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} disabled'**
+  String appDisabledNamed(String appName);
+
+  /// Number of ratings an app has, under its name in the store
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 rating} other{{count} ratings}}'**
+  String appRatingCount(int count);
+
+  /// Screen-reader label of an app screenshot in the store
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot {index} of {total}'**
+  String previewImageLabel(int index, int total);
+
+  /// Label of the chat button on an app's page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with {appName}'**
+  String chatWithApp(String appName);
+
+  /// Label of the gear button on an app's page that opens the app's own settings page
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} settings'**
+  String appSettingsLabel(String appName);
+
+  /// Label of the button on an app's page that opens the owner's options (visibility, edit, delete)
+  ///
+  /// In en, this message translates to:
+  /// **'App options'**
+  String get appOptions;
+
+  /// Message of the dialog that confirms cancelling an app subscription
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll keep access until the end of your current billing period.'**
+  String get cancelSubscriptionKeepAccessMessage;
+
+  /// Screen-reader label and tooltip of the chat Send button
+  ///
+  /// In en, this message translates to:
+  /// **'Send message'**
+  String get chatSendMessage;
+
+  /// Screen-reader label and tooltip of the chat + button (photo, library, file)
+  ///
+  /// In en, this message translates to:
+  /// **'Add attachment'**
+  String get chatAddAttachment;
+
+  /// Screen-reader label of the X on a file picked for the next chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Remove attachment'**
+  String get removeAttachment;
+
+  /// Screen-reader label of the X on the quoted text the next chat message asks about
+  ///
+  /// In en, this message translates to:
+  /// **'Remove quoted text'**
+  String get chatRemoveSelectedText;
+
+  /// Shown above the chat composer while the phone is offline; Send is disabled
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Reconnect to send messages.'**
+  String get chatOfflineHint;
+
+  /// Shown in place of a chat reply that failed, next to Try Again
+  ///
+  /// In en, this message translates to:
+  /// **'Omi couldn\'t reply. Check your connection and try again.'**
+  String get chatReplyFailed;
+
+  /// Screen-reader label and tooltip of the control in the chat apps drawer that disables an app
+  ///
+  /// In en, this message translates to:
+  /// **'Disable {appName}'**
+  String disableAppNamed(String appName);
+
+  /// Title of the sheet that asks why a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'What Went Wrong?'**
+  String get whatWentWrong;
+
+  /// Label above the reasons in the chat feedback sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Select a reason'**
+  String get selectAReason;
+
+  /// Button that sends the chat feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Submit'**
+  String get submit;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Too verbose'**
+  String get feedbackReasonTooVerbose;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect or made up'**
+  String get feedbackReasonIncorrect;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Not helpful or irrelevant'**
+  String get feedbackReasonNotHelpful;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t follow instructions'**
+  String get feedbackReasonIgnoredInstructions;
+
+  /// Label above the comment field in the chat feedback sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Additional feedback (optional)'**
+  String get additionalFeedbackOptional;
+
+  /// Label of the thumbs-up under a chat reply (pairs with 'Not Helpful')
+  ///
+  /// In en, this message translates to:
+  /// **'Helpful'**
+  String get helpful;
+
+  /// Heading of a day summary message in chat; date is already formatted for the locale
+  ///
+  /// In en, this message translates to:
+  /// **'Day Summary · {date}'**
+  String daySummaryForDate(String date);
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'What did I do yesterday?'**
+  String get chatStarterYesterday;
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'What could I do differently today?'**
+  String get chatStarterDoDifferently;
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'Can you teach me something new?'**
+  String get chatStarterTeachMe;
+
+  /// Shown while Omi prepares a chat reply, before it names a step
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get thinking;
+
+  /// Error in the What's New sheet when the changelog fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load what\'s new'**
+  String get couldNotLoadWhatsNew;
+
+  /// Label of the field for an app's source repository when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Repository URL'**
+  String get githubRepositoryUrl;
+
+  /// Helper text under the GitHub repository field when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Link to your app\'s source code repository'**
+  String get githubRepositoryUrlHint;
+
+  /// Section title in app submission: which events start an external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Events'**
+  String get triggerEvents;
+
+  /// Empty-state title of an app category with no apps
+  ///
+  /// In en, this message translates to:
+  /// **'No Apps in This Category Yet'**
+  String get noAppsInCategoryYet;
+
+  /// Section title in app submission: the permissions an app requests
+  ///
+  /// In en, this message translates to:
+  /// **'Scopes'**
+  String get scopes;
+
+  /// Title of the banner in the app store that opens the AI app generator
+  ///
+  /// In en, this message translates to:
+  /// **'Build an app with AI in one tap'**
+  String get aiAppGeneratorBannerTitle;
+
+  /// Tooltip of the button that reloads an MCP app's manifest
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh manifest'**
+  String get refreshManifest;
+
+  /// Heading of a version's page in the What's New sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String versionLabel(String version);
+
+  /// Rounded number of people using an app, under its name on the app page
+  ///
+  /// In en, this message translates to:
+  /// **'{count}+ users'**
+  String appUsersCount(int count);
+
+  /// Eyebrow label of a chat card that shows something Omi discovered
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery'**
+  String get discovery;
+
+  /// Button on a chat discovery card that expands it to its full text
+  ///
+  /// In en, this message translates to:
+  /// **'Show More'**
+  String get chatBlockShowMore;
+
+  /// Button on an expanded chat discovery card that collapses it back to its summary
+  ///
+  /// In en, this message translates to:
+  /// **'Show Less'**
+  String get chatBlockShowLess;
+
+  /// Placeholder of the trigger-event picker field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Event'**
+  String get triggerEvent;
+
+  /// Label of the webhook URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook URL'**
+  String get webhookUrl;
+
+  /// Label of the app home URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'App Home URL'**
+  String get appHomeUrl;
+
+  /// Label of the authentication URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Auth URL'**
+  String get authUrl;
+
+  /// Label of the setup-completed URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Setup Completed URL'**
+  String get setupCompletedUrl;
+
+  /// Label of the chat tools manifest URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Tools Manifest URL'**
+  String get chatToolsManifestUrl;
+
+  /// Validation error under the webhook URL field when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid webhook URL'**
+  String get invalidWebhookUrlError;
+
+  /// Validation error when the GitHub repository field is empty while submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub repository URL is required'**
+  String get githubRepositoryUrlRequired;
+
+  /// Accessibility label and tooltip of the X on an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Remove screenshot'**
+  String get removeScreenshot;
+
+  /// Accessibility label and tooltip of the control that adds an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Add screenshot'**
+  String get addScreenshot;
+
+  /// Tooltip and accessibility label of the icon-only button that regenerates the app icon on the AI app generator preview card
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate icon'**
+  String get aiGenRegenerateIcon;
+
+  /// Number of apps listed on a category page in the app store, above the list
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 app} other{{count} apps}}'**
+  String categoryAppCount(int count);
+
+  /// Tooltip of the icon button that AI-generates the app description in the submit/update app forms
+  ///
+  /// In en, this message translates to:
+  /// **'Generate description'**
+  String get generateDescription;
+
+  /// Native file-picker dialog title when choosing an app icon or thumbnail image on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select an Image File'**
+  String get selectImageFileTitle;
+
+  /// Native file-picker dialog title when choosing an app screenshot thumbnail on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select a Thumbnail Image'**
+  String get selectThumbnailImageTitle;
+
+  /// Error toast when refreshing an app's manifest without a known app id
+  ///
+  /// In en, this message translates to:
+  /// **'App ID not found'**
+  String get appIdNotFoundError;
+
+  /// Success toast after manually refreshing an MCP app's manifest
+  ///
+  /// In en, this message translates to:
+  /// **'Manifest refreshed successfully'**
+  String get manifestRefreshedSuccess;
+
+  /// Error toast when manually refreshing an MCP app's manifest fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh manifest'**
+  String get manifestRefreshFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

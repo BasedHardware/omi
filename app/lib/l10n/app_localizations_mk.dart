@@ -10847,4 +10847,226 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get keepRecording => 'Продолжи со снимање';
+
+  @override
+  String get view => 'Прикажи';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Да се дозволи пристап на $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName ќе ги прима вашите разговори, спомени и снимки на серверот на својот развивач. Omi не е одговорен за тоа како тие податоци се користат таму.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName е оневозможена';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count оценки',
+      one: '1 оценка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Слика од екран $index од $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Разговор со $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Поставки на $appName';
+  }
+
+  @override
+  String get appOptions => 'Опции на апликацијата';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Пристапот ќе остане до крајот на тековниот период на наплата.';
+
+  @override
+  String get chatSendMessage => 'Испрати порака';
+
+  @override
+  String get chatAddAttachment => 'Додај прилог';
+
+  @override
+  String get removeAttachment => 'Отстрани прилог';
+
+  @override
+  String get chatRemoveSelectedText => 'Отстрани цитиран текст';
+
+  @override
+  String get chatOfflineHint => 'Не сте поврзани. Поврзете се повторно за да испраќате пораки.';
+
+  @override
+  String get chatReplyFailed => 'Omi не можеше да одговори. Проверете ја врската и обидете се повторно.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Оневозможи $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Што тргна наопаку?';
+
+  @override
+  String get selectAReason => 'Изберете причина';
+
+  @override
+  String get submit => 'Испрати';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Премногу опширно';
+
+  @override
+  String get feedbackReasonIncorrect => 'Неточно или измислено';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Некорисно или ирелевантно';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не ги следеше упатствата';
+
+  @override
+  String get additionalFeedbackOptional => 'Дополнителни коментари (незадолжително)';
+
+  @override
+  String get helpful => 'Корисно';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Резиме на денот · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Што правев вчера?';
+
+  @override
+  String get chatStarterDoDifferently => 'Што можам да направам поинаку денес?';
+
+  @override
+  String get chatStarterTeachMe => 'Можеш ли да ме научиш нешто ново?';
+
+  @override
+  String get thinking => 'Размислувам';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Новостите не можеа да се вчитаат';
+
+  @override
+  String get githubRepositoryUrl => 'URL на GitHub складиште';
+
+  @override
+  String get githubRepositoryUrlHint => 'Врска до складиштето со изворниот код на апликацијата';
+
+  @override
+  String get triggerEvents => 'Настани за активирање';
+
+  @override
+  String get noAppsInCategoryYet => 'Сè уште нема апликации во оваа категорија';
+
+  @override
+  String get scopes => 'Опсези';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Направете апликација со ВИ со еден допир';
+
+  @override
+  String get refreshManifest => 'Освежи манифест';
+
+  @override
+  String versionLabel(String version) {
+    return 'Верзија $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ корисници';
+  }
+
+  @override
+  String get discovery => 'Откритие';
+
+  @override
+  String get chatBlockShowMore => 'Прикажи повеќе';
+
+  @override
+  String get chatBlockShowLess => 'Прикажи помалку';
+
+  @override
+  String get triggerEvent => 'Настан за активирање';
+
+  @override
+  String get webhookUrl => 'URL на webhook';
+
+  @override
+  String get appHomeUrl => 'URL на почетната страница на апликацијата';
+
+  @override
+  String get authUrl => 'URL за автентикација';
+
+  @override
+  String get setupCompletedUrl => 'URL за завршено поставување';
+
+  @override
+  String get chatToolsManifestUrl => 'URL на манифестот со алатки за разговор';
+
+  @override
+  String get invalidWebhookUrlError => 'Внесете важечки URL на webhook';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL на GitHub складиштето е задолжителен';
+
+  @override
+  String get removeScreenshot => 'Отстрани снимка од екранот';
+
+  @override
+  String get addScreenshot => 'Додај снимка од екранот';
+
+  @override
+  String get aiGenRegenerateIcon => 'Повторно генерирај икона';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count апликации',
+      one: '1 апликација',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Генерирај опис';
+
+  @override
+  String get selectImageFileTitle => 'Изберете датотека со слика';
+
+  @override
+  String get selectThumbnailImageTitle => 'Изберете сликичка';
+
+  @override
+  String get appIdNotFoundError => 'ID на апликацијата не е пронајден';
+
+  @override
+  String get manifestRefreshedSuccess => 'Манифестот е успешно освежен';
+
+  @override
+  String get manifestRefreshFailed => 'Неуспешно освежување на манифестот';
 }

@@ -10781,4 +10781,226 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get keepRecording => 'Tiếp tục ghi âm';
+
+  @override
+  String get view => 'Xem';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Cho phép $appName truy cập?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName sẽ nhận các cuộc trò chuyện, ký ức và bản ghi âm của bạn trên máy chủ của nhà phát triển. Omi không chịu trách nhiệm về cách dữ liệu đó được sử dụng ở đó.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return 'Đã tắt $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count đánh giá',
+      one: '1 đánh giá',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ảnh chụp màn hình $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Trò chuyện với $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Cài đặt $appName';
+  }
+
+  @override
+  String get appOptions => 'Tùy chọn ứng dụng';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Bạn vẫn có quyền truy cập đến hết kỳ thanh toán hiện tại.';
+
+  @override
+  String get chatSendMessage => 'Gửi tin nhắn';
+
+  @override
+  String get chatAddAttachment => 'Thêm tệp đính kèm';
+
+  @override
+  String get removeAttachment => 'Xóa tệp đính kèm';
+
+  @override
+  String get chatRemoveSelectedText => 'Xóa đoạn trích dẫn';
+
+  @override
+  String get chatOfflineHint => 'Bạn đang ngoại tuyến. Hãy kết nối lại để gửi tin nhắn.';
+
+  @override
+  String get chatReplyFailed => 'Omi không thể trả lời. Hãy kiểm tra kết nối và thử lại.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Tắt $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Có vấn đề gì?';
+
+  @override
+  String get selectAReason => 'Chọn lý do';
+
+  @override
+  String get submit => 'Gửi';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Quá dài dòng';
+
+  @override
+  String get feedbackReasonIncorrect => 'Sai hoặc bịa đặt';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Không hữu ích hoặc không liên quan';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Không làm theo hướng dẫn';
+
+  @override
+  String get additionalFeedbackOptional => 'Phản hồi thêm (không bắt buộc)';
+
+  @override
+  String get helpful => 'Hữu ích';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Tóm tắt ngày · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Hôm qua tôi đã làm gì?';
+
+  @override
+  String get chatStarterDoDifferently => 'Hôm nay tôi có thể làm gì khác đi?';
+
+  @override
+  String get chatStarterTeachMe => 'Bạn có thể dạy tôi điều gì mới không?';
+
+  @override
+  String get thinking => 'Đang suy nghĩ';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Không tải được nội dung mới';
+
+  @override
+  String get githubRepositoryUrl => 'URL kho GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Liên kết đến kho mã nguồn của ứng dụng';
+
+  @override
+  String get triggerEvents => 'Sự kiện kích hoạt';
+
+  @override
+  String get noAppsInCategoryYet => 'Chưa có ứng dụng nào trong danh mục này';
+
+  @override
+  String get scopes => 'Phạm vi';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Tạo ứng dụng bằng AI chỉ với một chạm';
+
+  @override
+  String get refreshManifest => 'Làm mới manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Phiên bản $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ người dùng';
+  }
+
+  @override
+  String get discovery => 'Khám phá';
+
+  @override
+  String get chatBlockShowMore => 'Xem thêm';
+
+  @override
+  String get chatBlockShowLess => 'Thu gọn';
+
+  @override
+  String get triggerEvent => 'Sự kiện kích hoạt';
+
+  @override
+  String get webhookUrl => 'URL webhook';
+
+  @override
+  String get appHomeUrl => 'URL trang chủ ứng dụng';
+
+  @override
+  String get authUrl => 'URL xác thực';
+
+  @override
+  String get setupCompletedUrl => 'URL hoàn tất thiết lập';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifest công cụ trò chuyện';
+
+  @override
+  String get invalidWebhookUrlError => 'Vui lòng nhập URL webhook hợp lệ';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Bắt buộc nhập URL kho GitHub';
+
+  @override
+  String get removeScreenshot => 'Xóa ảnh chụp màn hình';
+
+  @override
+  String get addScreenshot => 'Thêm ảnh chụp màn hình';
+
+  @override
+  String get aiGenRegenerateIcon => 'Tạo lại biểu tượng';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ứng dụng',
+      one: '1 ứng dụng',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Tạo mô tả';
+
+  @override
+  String get selectImageFileTitle => 'Chọn tệp hình ảnh';
+
+  @override
+  String get selectThumbnailImageTitle => 'Chọn hình thu nhỏ';
+
+  @override
+  String get appIdNotFoundError => 'Không tìm thấy ID ứng dụng';
+
+  @override
+  String get manifestRefreshedSuccess => 'Đã làm mới manifest thành công';
+
+  @override
+  String get manifestRefreshFailed => 'Không thể làm mới manifest';
 }

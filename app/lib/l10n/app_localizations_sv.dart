@@ -10796,4 +10796,227 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get keepRecording => 'Fortsätt spela in';
+
+  @override
+  String get view => 'Visa';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Ge $appName åtkomst?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName tar emot dina samtal, minnen och inspelningar på utvecklarens server. Omi ansvarar inte för hur uppgifterna används där.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName har inaktiverats';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count betyg',
+      one: '1 betyg',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Skärmbild $index av $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Chatta med $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Inställningar för $appName';
+  }
+
+  @override
+  String get appOptions => 'Appalternativ';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Du behåller åtkomsten till slutet av den nuvarande faktureringsperioden.';
+
+  @override
+  String get chatSendMessage => 'Skicka meddelande';
+
+  @override
+  String get chatAddAttachment => 'Lägg till bilaga';
+
+  @override
+  String get removeAttachment => 'Ta bort bilaga';
+
+  @override
+  String get chatRemoveSelectedText => 'Ta bort citerad text';
+
+  @override
+  String get chatOfflineHint => 'Du är offline. Anslut igen för att skicka meddelanden.';
+
+  @override
+  String get chatReplyFailed => 'Omi kunde inte svara. Kontrollera anslutningen och försök igen.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Inaktivera $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Vad blev fel?';
+
+  @override
+  String get selectAReason => 'Välj en orsak';
+
+  @override
+  String get submit => 'Skicka';
+
+  @override
+  String get feedbackReasonTooVerbose => 'För mångordigt';
+
+  @override
+  String get feedbackReasonIncorrect => 'Felaktigt eller påhittat';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Inte till hjälp eller irrelevant';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Följde inte instruktionerna';
+
+  @override
+  String get additionalFeedbackOptional => 'Ytterligare feedback (valfritt)';
+
+  @override
+  String get helpful => 'Till hjälp';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Dagens sammanfattning · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Vad gjorde jag igår?';
+
+  @override
+  String get chatStarterDoDifferently => 'Vad kan jag göra annorlunda i dag?';
+
+  @override
+  String get chatStarterTeachMe => 'Kan du lära mig något nytt?';
+
+  @override
+  String get thinking => 'Tänker';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Det gick inte att läsa in nyheterna';
+
+  @override
+  String get githubRepositoryUrl => 'URL till GitHub-repo';
+
+  @override
+  String get githubRepositoryUrlHint => 'Länk till appens källkodsrepo';
+
+  @override
+  String get triggerEvents => 'Utlösande händelser';
+
+  @override
+  String get noAppsInCategoryYet => 'Inga appar i den här kategorin än';
+
+  @override
+  String get scopes => 'Behörigheter';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Bygg en app med AI med ett tryck';
+
+  @override
+  String get refreshManifest => 'Uppdatera manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ användare';
+  }
+
+  @override
+  String get discovery => 'Upptäckt';
+
+  @override
+  String get chatBlockShowMore => 'Visa mer';
+
+  @override
+  String get chatBlockShowLess => 'Visa mindre';
+
+  @override
+  String get triggerEvent => 'Utlösande händelse';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Appens startsides-URL';
+
+  @override
+  String get authUrl => 'Autentiserings-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL för slutförd konfiguration';
+
+  @override
+  String get chatToolsManifestUrl => 'URL för chattverktygsmanifest';
+
+  @override
+  String get invalidWebhookUrlError => 'Ange en giltig webhook-URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repositoriets URL krävs';
+
+  @override
+  String get removeScreenshot => 'Ta bort skärmbild';
+
+  @override
+  String get addScreenshot => 'Lägg till skärmbild';
+
+  @override
+  String get aiGenRegenerateIcon => 'Generera ikonen igen';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count appar',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Generera beskrivning';
+
+  @override
+  String get selectImageFileTitle => 'Välj en bildfil';
+
+  @override
+  String get selectThumbnailImageTitle => 'Välj en miniatyrbild';
+
+  @override
+  String get appIdNotFoundError => 'App-ID hittades inte';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifestet har uppdaterats';
+
+  @override
+  String get manifestRefreshFailed => 'Det gick inte att uppdatera manifestet';
 }

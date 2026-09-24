@@ -10784,4 +10784,226 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get keepRecording => 'Jätka salvestamist';
+
+  @override
+  String get view => 'Vaata';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Kas lubada rakendusele $appName juurdepääs?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName saab sinu vestlused, mälestused ja salvestised oma arendaja serverisse. Omi ei vastuta selle eest, kuidas neid andmeid seal kasutatakse.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName on keelatud';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hinnangut',
+      one: '1 hinnang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Ekraanipilt $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Vestle rakendusega $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Rakenduse $appName seaded';
+  }
+
+  @override
+  String get appOptions => 'Rakenduse valikud';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Juurdepääs jääb alles kuni praeguse arveldusperioodi lõpuni.';
+
+  @override
+  String get chatSendMessage => 'Saada sõnum';
+
+  @override
+  String get chatAddAttachment => 'Lisa manus';
+
+  @override
+  String get removeAttachment => 'Eemalda manus';
+
+  @override
+  String get chatRemoveSelectedText => 'Eemalda tsiteeritud tekst';
+
+  @override
+  String get chatOfflineHint => 'Oled võrguühenduseta. Sõnumite saatmiseks loo uuesti ühendus.';
+
+  @override
+  String get chatReplyFailed => 'Omi ei saanud vastata. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Keela $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Mis läks valesti?';
+
+  @override
+  String get selectAReason => 'Vali põhjus';
+
+  @override
+  String get submit => 'Saada';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Liiga sõnaohter';
+
+  @override
+  String get feedbackReasonIncorrect => 'Vale või välja mõeldud';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Ei aidanud või pole asjakohane';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Ei järginud juhiseid';
+
+  @override
+  String get additionalFeedbackOptional => 'Lisatagasiside (valikuline)';
+
+  @override
+  String get helpful => 'Kasulik';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Päeva kokkuvõte · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Mida ma eile tegin?';
+
+  @override
+  String get chatStarterDoDifferently => 'Mida saaksin täna teisiti teha?';
+
+  @override
+  String get chatStarterTeachMe => 'Kas saad mulle midagi uut õpetada?';
+
+  @override
+  String get thinking => 'Mõtlen';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Uudiseid ei õnnestunud laadida';
+
+  @override
+  String get githubRepositoryUrl => 'GitHubi hoidla URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link rakenduse lähtekoodi hoidlale';
+
+  @override
+  String get triggerEvents => 'Käivitavad sündmused';
+
+  @override
+  String get noAppsInCategoryYet => 'Selles kategoorias pole veel rakendusi';
+
+  @override
+  String get scopes => 'Ulatused';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Loo tehisintellektiga rakendus ühe puudutusega';
+
+  @override
+  String get refreshManifest => 'Värskenda manifesti';
+
+  @override
+  String versionLabel(String version) {
+    return 'Versioon $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ kasutajat';
+  }
+
+  @override
+  String get discovery => 'Avastus';
+
+  @override
+  String get chatBlockShowMore => 'Näita rohkem';
+
+  @override
+  String get chatBlockShowLess => 'Näita vähem';
+
+  @override
+  String get triggerEvent => 'Käivitussündmus';
+
+  @override
+  String get webhookUrl => 'Webhooki URL';
+
+  @override
+  String get appHomeUrl => 'Rakenduse avalehe URL';
+
+  @override
+  String get authUrl => 'Autentimise URL';
+
+  @override
+  String get setupCompletedUrl => 'Seadistuse lõpetamise URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Vestlustööriistade manifesti URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Sisesta kehtiv webhooki URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHubi hoidla URL on kohustuslik';
+
+  @override
+  String get removeScreenshot => 'Eemalda ekraanipilt';
+
+  @override
+  String get addScreenshot => 'Lisa ekraanipilt';
+
+  @override
+  String get aiGenRegenerateIcon => 'Loo ikoon uuesti';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakendust',
+      one: '1 rakendus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Genereeri kirjeldus';
+
+  @override
+  String get selectImageFileTitle => 'Vali pildifail';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vali pisipilt';
+
+  @override
+  String get appIdNotFoundError => 'Rakenduse ID-d ei leitud';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest värskendati edukalt';
+
+  @override
+  String get manifestRefreshFailed => 'Manifesti värskendamine ebaõnnestus';
 }

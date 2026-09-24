@@ -10835,4 +10835,226 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get keepRecording => 'రికార్డింగ్ కొనసాగించు';
+
+  @override
+  String get view => 'చూడండి';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appNameకి యాక్సెస్ ఇవ్వాలా?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName మీ సంభాషణలు, జ్ఞాపకాలు మరియు రికార్డింగ్‌లను దాని డెవలపర్ సర్వర్‌లో అందుకుంటుంది. అక్కడ ఆ డేటాను ఎలా ఉపయోగిస్తారనే దానికి Omi బాధ్యత వహించదు.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName నిలిపివేయబడింది';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రేటింగ్‌లు',
+      one: '1 రేటింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'స్క్రీన్‌షాట్ $index / $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appNameతో చాట్';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName సెట్టింగ్‌లు';
+  }
+
+  @override
+  String get appOptions => 'యాప్ ఎంపికలు';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'ప్రస్తుత బిల్లింగ్ వ్యవధి ముగిసే వరకు మీ యాక్సెస్ కొనసాగుతుంది.';
+
+  @override
+  String get chatSendMessage => 'సందేశం పంపండి';
+
+  @override
+  String get chatAddAttachment => 'అటాచ్‌మెంట్ జోడించండి';
+
+  @override
+  String get removeAttachment => 'అటాచ్‌మెంట్ తీసివేయండి';
+
+  @override
+  String get chatRemoveSelectedText => 'కోట్ చేసిన టెక్స్ట్ తీసివేయండి';
+
+  @override
+  String get chatOfflineHint => 'మీరు ఆఫ్‌లైన్‌లో ఉన్నారు. సందేశాలు పంపడానికి మళ్లీ కనెక్ట్ అవ్వండి.';
+
+  @override
+  String get chatReplyFailed => 'Omi సమాధానం ఇవ్వలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appNameని నిలిపివేయండి';
+  }
+
+  @override
+  String get whatWentWrong => 'ఏమి తప్పు జరిగింది?';
+
+  @override
+  String get selectAReason => 'ఒక కారణాన్ని ఎంచుకోండి';
+
+  @override
+  String get submit => 'సమర్పించండి';
+
+  @override
+  String get feedbackReasonTooVerbose => 'చాలా పొడవుగా ఉంది';
+
+  @override
+  String get feedbackReasonIncorrect => 'తప్పు లేదా కల్పితం';
+
+  @override
+  String get feedbackReasonNotHelpful => 'ఉపయోగకరంగా లేదు లేదా సంబంధం లేదు';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'సూచనలను పాటించలేదు';
+
+  @override
+  String get additionalFeedbackOptional => 'అదనపు అభిప్రాయం (ఐచ్ఛికం)';
+
+  @override
+  String get helpful => 'ఉపయోగకరం';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'రోజు సారాంశం · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'నిన్న నేను ఏమి చేశాను?';
+
+  @override
+  String get chatStarterDoDifferently => 'ఈరోజు నేను ఏమి భిన్నంగా చేయగలను?';
+
+  @override
+  String get chatStarterTeachMe => 'నాకు ఏదైనా కొత్తది నేర్పగలవా?';
+
+  @override
+  String get thinking => 'ఆలోచిస్తోంది';
+
+  @override
+  String get couldNotLoadWhatsNew => 'కొత్తవి లోడ్ కాలేదు';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub రిపోజిటరీ URL';
+
+  @override
+  String get githubRepositoryUrlHint => 'మీ యాప్ సోర్స్ కోడ్ రిపోజిటరీ లింక్';
+
+  @override
+  String get triggerEvents => 'ట్రిగర్ ఈవెంట్‌లు';
+
+  @override
+  String get noAppsInCategoryYet => 'ఈ వర్గంలో ఇంకా యాప్‌లు లేవు';
+
+  @override
+  String get scopes => 'స్కోప్‌లు';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'ఒక్క ట్యాప్‌తో AI ద్వారా యాప్ తయారు చేయండి';
+
+  @override
+  String get refreshManifest => 'మానిఫెస్ట్ రిఫ్రెష్ చేయండి';
+
+  @override
+  String versionLabel(String version) {
+    return 'వెర్షన్ $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ వినియోగదారులు';
+  }
+
+  @override
+  String get discovery => 'ఆవిష్కరణ';
+
+  @override
+  String get chatBlockShowMore => 'మరిన్ని చూపించు';
+
+  @override
+  String get chatBlockShowLess => 'తక్కువ చూపించు';
+
+  @override
+  String get triggerEvent => 'ట్రిగ్గర్ ఈవెంట్';
+
+  @override
+  String get webhookUrl => 'వెబ్‌హుక్ URL';
+
+  @override
+  String get appHomeUrl => 'యాప్ హోమ్ URL';
+
+  @override
+  String get authUrl => 'ప్రమాణీకరణ URL';
+
+  @override
+  String get setupCompletedUrl => 'సెటప్ పూర్తి URL';
+
+  @override
+  String get chatToolsManifestUrl => 'చాట్ టూల్స్ మానిఫెస్ట్ URL';
+
+  @override
+  String get invalidWebhookUrlError => 'దయచేసి చెల్లుబాటు అయ్యే వెబ్‌హుక్ URL నమోదు చేయండి';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub రిపోజిటరీ URL అవసరం';
+
+  @override
+  String get removeScreenshot => 'స్క్రీన్‌షాట్‌ను తీసివేయండి';
+
+  @override
+  String get addScreenshot => 'స్క్రీన్‌షాట్‌ను జోడించండి';
+
+  @override
+  String get aiGenRegenerateIcon => 'ఐకాన్‌ను మళ్లీ రూపొందించండి';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count యాప్‌లు',
+      one: '1 యాప్',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'వివరణను రూపొందించండి';
+
+  @override
+  String get selectImageFileTitle => 'చిత్రం ఫైల్‌ను ఎంచుకోండి';
+
+  @override
+  String get selectThumbnailImageTitle => 'థంబ్‌నెయిల్ చిత్రాన్ని ఎంచుకోండి';
+
+  @override
+  String get appIdNotFoundError => 'అ్యాప్ ID కనుగొనబడలేదు';
+
+  @override
+  String get manifestRefreshedSuccess => 'మానిఫెస్ట్ విజయవంతంగా రిఫ్రెష్ చేయబడింది';
+
+  @override
+  String get manifestRefreshFailed => 'మానిఫెస్ట్‌ను రిఫ్రెష్ చేయడంలో విఫలమైంది';
 }

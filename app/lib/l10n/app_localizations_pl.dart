@@ -10822,4 +10822,226 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get keepRecording => 'Kontynuuj nagrywanie';
+
+  @override
+  String get view => 'Zobacz';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Zezwolić aplikacji $appName na dostęp?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName będzie otrzymywać Twoje rozmowy, wspomnienia i nagrania na serwerze swojego dewelopera. Omi nie odpowiada za to, jak są tam wykorzystywane te dane.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return 'Wyłączono $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oceny: $count',
+      one: '1 ocena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Zrzut ekranu $index z $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Czat z $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Ustawienia $appName';
+  }
+
+  @override
+  String get appOptions => 'Opcje aplikacji';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Dostęp zachowasz do końca bieżącego okresu rozliczeniowego.';
+
+  @override
+  String get chatSendMessage => 'Wyślij wiadomość';
+
+  @override
+  String get chatAddAttachment => 'Dodaj załącznik';
+
+  @override
+  String get removeAttachment => 'Usuń załącznik';
+
+  @override
+  String get chatRemoveSelectedText => 'Usuń cytowany tekst';
+
+  @override
+  String get chatOfflineHint => 'Jesteś offline. Połącz się ponownie, aby wysyłać wiadomości.';
+
+  @override
+  String get chatReplyFailed => 'Omi nie mógł odpowiedzieć. Sprawdź połączenie i spróbuj ponownie.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Wyłącz $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Co poszło nie tak?';
+
+  @override
+  String get selectAReason => 'Wybierz powód';
+
+  @override
+  String get submit => 'Wyślij';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Zbyt rozwlekłe';
+
+  @override
+  String get feedbackReasonIncorrect => 'Nieprawdziwe lub zmyślone';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Nieprzydatne lub nie na temat';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Nie wykonał poleceń';
+
+  @override
+  String get additionalFeedbackOptional => 'Dodatkowe uwagi (opcjonalnie)';
+
+  @override
+  String get helpful => 'Pomocne';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Podsumowanie dnia · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Co robiłem wczoraj?';
+
+  @override
+  String get chatStarterDoDifferently => 'Co mógłbym dziś zrobić inaczej?';
+
+  @override
+  String get chatStarterTeachMe => 'Czy możesz nauczyć mnie czegoś nowego?';
+
+  @override
+  String get thinking => 'Myślę';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Nie udało się wczytać nowości';
+
+  @override
+  String get githubRepositoryUrl => 'Adres URL repozytorium GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link do repozytorium z kodem źródłowym aplikacji';
+
+  @override
+  String get triggerEvents => 'Zdarzenia wyzwalające';
+
+  @override
+  String get noAppsInCategoryYet => 'W tej kategorii nie ma jeszcze aplikacji';
+
+  @override
+  String get scopes => 'Zakresy';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Zbuduj aplikację z AI jednym dotknięciem';
+
+  @override
+  String get refreshManifest => 'Odśwież manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Wersja $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ użytkowników';
+  }
+
+  @override
+  String get discovery => 'Odkrycie';
+
+  @override
+  String get chatBlockShowMore => 'Pokaż więcej';
+
+  @override
+  String get chatBlockShowLess => 'Pokaż mniej';
+
+  @override
+  String get triggerEvent => 'Zdarzenie wyzwalające';
+
+  @override
+  String get webhookUrl => 'URL webhooka';
+
+  @override
+  String get appHomeUrl => 'URL strony głównej aplikacji';
+
+  @override
+  String get authUrl => 'URL uwierzytelniania';
+
+  @override
+  String get setupCompletedUrl => 'URL zakończenia konfiguracji';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifestu narzędzi czatu';
+
+  @override
+  String get invalidWebhookUrlError => 'Wprowadź prawidłowy URL webhooka';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repozytorium GitHub jest wymagany';
+
+  @override
+  String get removeScreenshot => 'Usuń zrzut ekranu';
+
+  @override
+  String get addScreenshot => 'Dodaj zrzut ekranu';
+
+  @override
+  String get aiGenRegenerateIcon => 'Wygeneruj ikonę ponownie';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aplikacje: $count',
+      one: '1 aplikacja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Wygeneruj opis';
+
+  @override
+  String get selectImageFileTitle => 'Wybierz plik obrazu';
+
+  @override
+  String get selectThumbnailImageTitle => 'Wybierz miniaturę obrazu';
+
+  @override
+  String get appIdNotFoundError => 'Nie znaleziono ID aplikacji';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest został pomyślnie odświeżony';
+
+  @override
+  String get manifestRefreshFailed => 'Nie udało się odświeżyć manifestu';
 }
