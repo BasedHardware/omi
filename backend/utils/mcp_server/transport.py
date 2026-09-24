@@ -491,6 +491,36 @@ def _charge_write_bucket(auth_context: MCPAuthContext, policy_name: str) -> None
         check_rate_limit_inline(auth_context.uid, policy_name)
 
 
+def _write_bucket_failure(exc: HTTPException) -> Tuple[str, str, str, str]:
+    """Map a write-bucket limiter failure to (stable code, model-visible
+    message, authorization_outcome, error_category).
+
+    Only the 429 detail is forwarded — it is the limiter's own message. Other
+    details can carry internal identifiers (limiter backend addresses, bucket
+    keys), so model-visible text stays generic.
+    """
+    if exc.status_code == 429:
+        return (
+            "rate_limited",
+            f"{exc.detail} Retry after the current rate-limit window.",
+            "not_applicable",
+            "validation",
+        )
+    if exc.status_code == 403:
+        return (
+            "authorization_denied",
+            "This credential is not permitted to perform this write. Reconnect the account and retry.",
+            "denied",
+            "authorization_denied",
+        )
+    return (
+        "unavailable",
+        "Tool temporarily unavailable. Retry shortly.",
+        "not_applicable",
+        "internal",
+    )
+
+
 def _write_rate_policy(
     auth_context: MCPAuthContext, message: Dict[str, Any], request: McpRequestContext
 ) -> Optional[str]:
@@ -547,17 +577,14 @@ async def dispatch_message(
                 effective_version = resolve_effective_version(message, request.header_version)
             except JsonRpcProtocolError:
                 return await run_blocking(db_executor, handle_mcp_message, auth_context, message, request)
-            if exc.status_code == 429:
-                code, detail = "rate_limited", (f"{exc.detail} Retry after the current rate-limit window.")
-            else:
-                code, detail = "authorization_denied", str(exc.detail)
+            code, detail, authorization_outcome, error_category = _write_bucket_failure(exc)
             _tool_call_analytics(
                 auth_context,
                 request,
                 (message.get("params") or {}).get("name"),
                 outcome="error",
-                authorization_outcome="not_applicable",
-                error_category="validation",
+                authorization_outcome=authorization_outcome,
+                error_category=error_category,
                 error_code=code,
                 duration_ms=0,
                 result_count=0,

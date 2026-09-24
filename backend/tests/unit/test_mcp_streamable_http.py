@@ -8,6 +8,7 @@ rate-limit charging, the tool result contract (``structuredContent`` /
 
 import importlib
 import json
+import logging
 import math
 import sys
 from types import SimpleNamespace
@@ -437,6 +438,35 @@ class TestRateLimitCharging:
         assert result["structuredContent"]["error"]["code"] == "rate_limited"
         assert "Retry" in result["structuredContent"]["error"]["message"]
         execute.assert_not_called()  # charge precedes handler execution
+
+    def test_write_bucket_503_returns_unavailable_without_leaking(self, client, authed, caplog):
+        """Redis fail-closed in the context limiter (503) is a temporary outage,
+        not an auth denial; its raw detail never reaches the model or logs."""
+        auth = _full_auth(memory_context=SimpleNamespace(kind="ctx"))
+        with (
+            patch.object(mcp_transport, "authenticate_mcp_request", return_value=auth),
+            patch.object(mcp_transport, "execute_tool") as execute,
+            patch.object(
+                mcp_transport,
+                "check_rate_limit_context",
+                side_effect=HTTPException(status_code=503, detail="private redis client addr or key"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("create_memory", {"content": "x"}))
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["isError"] is True
+        error = result["structuredContent"]["error"]
+        assert error["code"] == "unavailable"
+        assert "Retry" in error["message"]
+        assert "private redis" not in json.dumps(result)
+        assert "private redis" not in caplog.text
+        execute.assert_not_called()  # charge precedes handler execution
+        event = authed.tool_event.call_args.kwargs
+        assert event["error_category"] == "internal"
+        assert event["error_code"] == "unavailable"
+        assert event["authorization_outcome"] == "not_applicable"
 
     def test_action_item_writes_share_write_bucket(self):
         auth = _full_auth()
