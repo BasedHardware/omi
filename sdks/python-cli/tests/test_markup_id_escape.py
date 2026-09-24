@@ -70,3 +70,77 @@ def test_update_markup_id_renders_literally(
     assert route.call_count == 1
     assert "MarkupError" not in result.stderr
     assert MARKUP_ID in result.stderr
+
+
+LOCAL_TASK_CASES = [
+    ("complete", ["local", "task", "complete", MARKUP_ID]),
+    ("delete", ["local", "task", "delete", MARKUP_ID, "--yes"]),
+]
+
+
+@pytest.mark.parametrize("subcommand,args", LOCAL_TASK_CASES)
+def test_local_task_markup_id_renders_literally(subcommand, args, cli_runner, respx_mock, monkeypatch) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    local_url = "http://127.0.0.1:47778"
+    route = respx_mock.post(f"{local_url}/v1/local/tool").respond(
+        json={"ok": True, "name": "tool", "content_type": "text/plain", "result": '{"ok": true}'}
+    )
+    result = cli_runner.invoke(
+        app,
+        ["--no-color", *args],
+        env={"OMI_LOCAL_API_URL": local_url, "OMI_LOCAL_TOKEN": "test_token"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
+
+
+def test_local_screenshot_markup_path_renders_literally(cli_runner, respx_mock, monkeypatch, tmp_path) -> None:
+    import base64
+
+    monkeypatch.setenv("COLUMNS", "1000")
+    local_url = "http://127.0.0.1:47778"
+    markup_filename = "test_[bold]shot.png"
+    output_path = tmp_path / markup_filename
+    route = respx_mock.post(f"{local_url}/v1/local/tool").respond(
+        json={
+            "ok": True,
+            "name": "get_screenshot",
+            "image_base64": base64.b64encode(b"img").decode("ascii"),
+            "screenshot_id": "9",
+        }
+    )
+    result = cli_runner.invoke(
+        app,
+        ["--no-color", "local", "screenshot", "9", "-o", str(output_path)],
+        env={"OMI_LOCAL_API_URL": local_url, "OMI_LOCAL_TOKEN": "test_token"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert markup_filename in result.stderr
+
+
+CREATE_CASES = [
+    ("memory", "/v1/dev/user/memories", ["create", "hello"]),
+    ("conversation", "/v1/dev/user/conversations", ["create", "--text", "hello"]),
+    ("action-item", "/v1/dev/user/action-items", ["create", "hello"]),
+    ("goal", "/v1/dev/user/goals", ["create", "hello"]),
+]
+
+
+@pytest.mark.parametrize("command,collection,args", CREATE_CASES)
+def test_create_markup_id_renders_literally(
+    command, collection, args, authed_profile, respx_mock, cli_runner, monkeypatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    route = respx_mock.post(collection).respond(json={"id": MARKUP_ID, "status": "processing"})
+    result = cli_runner.invoke(app, ["--no-color", command, *args])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
