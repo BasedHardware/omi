@@ -123,7 +123,14 @@ def render_goals_table(items: Sequence[Dict[str, Any]]) -> str:
 
         # Status determination
         is_active = g.get("is_active") in (True, 1, "true", "1", "yes", "active")
-        if curr is not None and target is not None and float(target) > 0 and float(curr) >= float(target):
+        is_completed = False
+        try:
+            if curr is not None and target is not None and float(target) > 0 and float(curr) >= float(target):
+                is_completed = True
+        except (ValueError, TypeError):
+            pass
+
+        if is_completed:
             badge_cls = "badge-done"
             badge_txt = "Completed"
         elif is_active:
@@ -135,8 +142,8 @@ def render_goals_table(items: Sequence[Dict[str, Any]]) -> str:
 
         # Metric string
         if curr is not None or target is not None:
-            c_disp = curr if curr is not None else 0
-            t_disp = target if target is not None else "N/A"
+            c_disp = escape(str(curr)) if curr is not None else "0"
+            t_disp = escape(str(target)) if target is not None else "N/A"
             u_disp = f" {unit}" if unit else ""
             metric_str = f"{c_disp} / {t_disp}{u_disp}"
         else:

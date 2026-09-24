@@ -81,10 +81,48 @@ class TestGoalsToHtml(unittest.TestCase):
         self.assertEqual(utc_stamp(None), "")
 
     def test_html_escaping(self):
-        dashboard = generate_html_dashboard(SAMPLE_GOALS)
+        xss_goals = [
+            {
+                "id": "xss_1",
+                "title": "Clean Title <script>alert('title')</script>",
+                "current_value": "<img src=x onerror=alert(1)>",
+                "target_value": "<svg onload=alert(2)>",
+                "unit": "<b>unit</b>",
+                "is_active": True,
+            }
+        ]
+        dashboard = generate_html_dashboard(xss_goals + SAMPLE_GOALS)
         self.assertNotIn("<script>", dashboard)
+        self.assertNotIn("<img", dashboard)
+        self.assertNotIn("<svg", dashboard)
+        self.assertNotIn("<b>unit</b>", dashboard)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", dashboard)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", dashboard)
+        self.assertIn("&lt;svg onload=alert(2)&gt;", dashboard)
+        self.assertIn("&lt;b&gt;unit&lt;/b&gt;", dashboard)
         self.assertIn("Read 20 books &amp; articles", dashboard)
+
+    def test_non_numeric_values_do_not_crash(self):
+        non_numeric = [
+            {
+                "id": "goal_str_curr",
+                "title": "String metric goal",
+                "current_value": "abc",
+                "target_value": 20,
+                "is_active": True,
+            },
+            {
+                "id": "goal_str_target",
+                "title": "String target goal",
+                "current_value": 10,
+                "target_value": "xyz",
+                "is_active": True,
+            },
+        ]
+        dashboard = generate_html_dashboard(non_numeric)
+        self.assertIn("String metric goal", dashboard)
+        self.assertIn("abc / 20", dashboard)
+        self.assertIn("10 / xyz", dashboard)
 
     def test_dashboard_metrics_and_sections(self):
         dashboard = generate_html_dashboard(SAMPLE_GOALS)
