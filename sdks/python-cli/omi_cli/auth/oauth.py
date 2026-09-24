@@ -101,11 +101,13 @@ def login_with_browser(
     ``open_browser=False`` is useful in headless tests; the caller is then
     responsible for actually visiting the printed URL.
     """
-    if provider not in {"google", "apple"}:
+    cleaned_provider = (provider or "").strip().lower()
+    if cleaned_provider not in {"google", "apple"}:
         raise UsageError(
-            message=f"Unknown OAuth provider: {provider}",
+            message=f"Unknown OAuth provider: {provider!r}",
             detail="Supported: google, apple.",
         )
+    provider = cleaned_provider
 
     state = secrets.token_urlsafe(32)
     code_verifier, code_challenge = _generate_pkce_pair()
