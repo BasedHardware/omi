@@ -470,6 +470,64 @@ After making changes, verify them in the live app:
 4. Capture evidence: `agent-flutter screenshot /tmp/evidence.png`
 5. Generate video: `ffmpeg -framerate 1 -pattern_type glob -i '/tmp/e2e-*.png' -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1" -c:v libx264 -pix_fmt yuv420p /tmp/report.mp4`
 
+## Visual audit (before/after screenshots without a device)
+
+`app/scripts/visual_audit.sh` screenshots registered screen states at two revisions and pairs them
+in one gallery. It pumps **production widgets** in `flutter-tester` with synthetic local state: the
+app's own fonts (FontManifest plus Roboto from the pinned SDK), `buildOmiTheme()`, 390×844 logical
+px at 2×, and a loopback-only network guard over the hermetic fixture backend. No login, simulator,
+signing, customer data or external API.
+
+**Use it** for layout, copy, grouping and visual-regression review of a UI change, and for the
+before/after images a UI PR description needs. **Use agent-flutter / flow-walker (above) instead**
+for anything a headless capture cannot show: native keyboard, status bar and safe areas, system
+permission dialogs, BLE, audio, real network timing, screen readers, or a claim about the installed
+app. The captures are evidence of a widget rendering, not of device behavior.
+
+```bash
+app/scripts/visual_audit.sh --list                                  # registered scenario ids
+app/scripts/visual_audit.sh --base origin/main --head HEAD          # every scenario, both sides
+app/scripts/visual_audit.sh --base <sha> --head <sha> --only settings-sheet,settings-device
+app/scripts/visual_audit.sh --head WORKTREE --only settings-help    # this checkout, uncommitted, one side
+```
+
+Each revision is checked out in a temporary detached worktree under `$OMI_WORKTREES` (default: the
+system temp dir), prepared like CI (generated env files, `pub get`, `build_runner`) and removed on
+exit. The harness and scenarios always come from the checkout you run the command in, copied over
+both sides, so a scenario must compile against both revisions. The output directory (`--out`,
+default a new temp dir; it must be empty and outside the repository) holds `before/` and `after/`
+PNGs named `<id>.png` or `<id>-<step>.png`, per-side `capture.log`, `INDEX.md` with both SHAs and
+capture times, and a static `gallery.html`. A scenario that throws on one side is reported as failed
+there and the rest still capture. **Never commit screenshots.**
+
+**Add a scenario** in `app/integration_test/visual_audit/scenarios/<area>.dart` (new areas are
+spread into `registry.dart`). Put `id` first; it is lowercase-hyphenated, starts with the area, and
+names the PNGs:
+
+```dart
+AuditScenario(
+  id: 'settings-device',
+  title: 'Device group, device connected',
+  page: 'lib/pages/settings/settings_groups.dart (DeviceGroupPage)',
+  state: 'Signed-in fixture account; a device connected',
+  run: (a) async {
+    await a.pump(const DeviceGroupPage(), providers: [
+      ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
+    ]);
+    await a.scrollSeries('Open Device from the Settings sheet');
+  },
+),
+```
+
+`AuditRun` (`a`) gives `pump` (the production theme and a broad inert provider roster from
+`fakes.dart`; your `providers` win), `pumpHost` (opens a sheet or dialog from a neutral host),
+`tap`/`longPress`/`enterText` (each settles), `shot(action, step:)`, `scrollSeries(action)` (top,
+every 700 px, exact bottom) and `server` (the running fixture backend: seed conversations, set
+`assistantReplyText`, `failNext`). Seed state through providers and the fixture backend, find
+widgets by stable `Key`s, and keep `expect(...)` checks that prove the intended state rendered.
+`app/test/visual_audit/visual_audit_smoke_test.dart` renders every registered scenario in the
+ordinary `app/test.sh` suite without writing images, so a scenario that breaks fails CI.
+
 ## Decision Tree
 
 | Problem | Solution |

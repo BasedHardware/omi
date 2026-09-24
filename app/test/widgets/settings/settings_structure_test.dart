@@ -98,7 +98,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed', (tester) async {
+  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed',
+      (tester) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
