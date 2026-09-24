@@ -1,5 +1,6 @@
 """Memory tool handlers for the hosted MCP server."""
 
+import logging
 from typing import Any, Dict, List, Optional, cast
 
 from fastapi import HTTPException
@@ -33,6 +34,26 @@ from utils.mcp_server.errors import (
     authorization_denied_error,
     raise_tool_error_from_http,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _log_grant_denial(tool: str, grant: Any) -> None:
+    """Log a memory-grant denial's observability reason server-side.
+
+    The model-visible error stays generic; the structured ``reason`` (missing
+    grant, disabled key, rollout state) is what ops needs to tell "user has no
+    memories" apart from "credential is not authorized". Only the reason field
+    is logged — the rest of the observability payload can carry internal doc
+    ids and must stay out of logs.
+    """
+    observability = getattr(grant, "observability", None)
+    reason = (
+        observability.get("reason")
+        if isinstance(observability, dict)
+        else observability if isinstance(observability, str) else getattr(grant, "reason", "unknown")
+    )
+    logger.warning("mcp memory grant denied tool=%s reason=%s", tool, reason)
 
 
 def get_memories(
@@ -76,6 +97,7 @@ def get_memories(
         raise authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
+        _log_grant_denial("get_memories", app_key_grant)
         raise authorization_denied_error(
             "This credential is not permitted to read memories. Check that it has the "
             "memories.read permission, or reconnect the account."
@@ -119,6 +141,7 @@ def create_memory(
         raise authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
     write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
     if not write_grant.allowed:
+        _log_grant_denial("create_memory", write_grant)
         raise authorization_denied_error(
             "This credential is not permitted to write memories. Check that it has the "
             "memories.write permission, or reconnect the account."
@@ -173,6 +196,7 @@ def delete_memory(
         raise authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
     write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
     if not write_grant.allowed:
+        _log_grant_denial("delete_memory", write_grant)
         raise authorization_denied_error(
             "This credential is not permitted to write memories. Check that it has the "
             "memories.write permission, or reconnect the account."
@@ -206,6 +230,7 @@ def edit_memory(
         raise authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
     write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
     if not write_grant.allowed:
+        _log_grant_denial("edit_memory", write_grant)
         raise authorization_denied_error(
             "This credential is not permitted to write memories. Check that it has the "
             "memories.write permission, or reconnect the account."
@@ -246,6 +271,7 @@ def search_memories(
         raise authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
+        _log_grant_denial("search_memories", app_key_grant)
         raise authorization_denied_error(
             "This credential is not permitted to read memories. Check that it has the "
             "memories.read permission, or reconnect the account."

@@ -14,7 +14,7 @@ import database.mcp_oauth as mcp_oauth_db
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
-from utils.mcp_server.metadata import MCP_PROTECTED_RESOURCE_METADATA_URL
+from utils.mcp_server.metadata import protected_resource_metadata_url
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.observability.api_keys import record_api_key_repairs
 from utils.other.endpoints import (
@@ -167,14 +167,20 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
 
 def invalid_mcp_auth_exception(
     detail: str = "Invalid or missing API key. Provide via Authorization header.",
+    path_kind: str = "canonical",
 ) -> HTTPException:
-    """Return an MCP OAuth discovery hint for clients that need authorization."""
+    """Return an MCP OAuth discovery hint for clients that need authorization.
+
+    The challenge advertises the protected-resource document for the path that
+    was actually requested, so a legacy-path client discovers the legacy
+    ``/v1/mcp/sse`` audience rather than the canonical one.
+    """
     return HTTPException(
         status_code=401,
         detail=detail,
         headers={
             "WWW-Authenticate": (
-                f'Bearer resource_metadata="{MCP_PROTECTED_RESOURCE_METADATA_URL}", '
+                f'Bearer resource_metadata="{protected_resource_metadata_url(path_kind)}", '
                 'error="invalid_token", '
                 'error_description="Valid Omi MCP OAuth bearer token required"'
             )

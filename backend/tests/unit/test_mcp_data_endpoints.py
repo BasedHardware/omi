@@ -564,7 +564,7 @@ async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_de
         patch.object(sse_transport, 'run_blocking', side_effect=_run_blocking_inline),
         patch.object(sse_transport, 'authenticate_mcp_request', return_value=auth_context),
         patch.object(sse_transport, 'execute_tool', side_effect=RuntimeError('private failure detail')),
-        patch.object(sse_transport.logger, 'warning') as log_warning,
+        patch.object(sse_transport.logger, 'exception') as log_exception,
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
 
@@ -576,11 +576,9 @@ async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_de
         'message': 'Tool temporarily unavailable. Retry shortly.',
     }
     assert 'private failure detail' not in response.body.decode()
-    # Only the normalized tool name and exception type reach logs; the
-    # exception's own message (potentially user content) never does.
-    log_warning.assert_called_once_with(
-        'hosted MCP tool call failed tool=%s error=%s', 'get_conversations', 'RuntimeError'
-    )
+    # The stack trace is logged server-side via logger.exception; the log
+    # message itself carries only the normalized tool name — never arguments.
+    log_exception.assert_called_once_with('hosted MCP tool call failed tool=%s', 'get_conversations')
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,10 @@ def tool_error_from_http(exc: HTTPException) -> ToolExecutionError:
         )
     if exc.status_code in {409, 503}:
         return ToolExecutionError(str(exc.detail), code=-32009)
+    if isinstance(exc.status_code, int) and exc.status_code >= 500:
+        # A domain-code 5xx is a backend failure, never a client input problem;
+        # keep the detail server-side rather than echoing limiter/store internals.
+        return ToolExecutionError("Tool temporarily unavailable. Retry shortly.", code=-32010)
     return ToolExecutionError(str(exc.detail))
 
 
@@ -97,4 +101,5 @@ def stable_error_code(exc: ToolExecutionError) -> str:
         -32000: "invalid_arguments",
         -32003: "authorization_denied",
         -32009: "unavailable",
+        -32010: "internal",
     }.get(exc.code, "internal")

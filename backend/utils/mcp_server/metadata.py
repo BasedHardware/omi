@@ -9,9 +9,13 @@ from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
 MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
 MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
-# Canonical protected-resource metadata URL advertised in challenges. The
-# legacy ``/v1/mcp/sse`` document path keeps serving the same document.
+# Protected-resource metadata is per path (RFC 9728 §3.3: ``resource`` equals
+# the described URL): challenges on ``/v1/mcp`` advertise the canonical
+# document, challenges on ``/v1/mcp/sse`` the legacy one.
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp"
+MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL = (
+    f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
+)
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
@@ -29,9 +33,19 @@ SCOPE_PERMISSION_TEXT = {
 }
 
 
-def protected_resource_document() -> Dict[str, Any]:
+def protected_resource_metadata_url(path_kind: str) -> str:
+    """The well-known document URL a challenge on ``path_kind`` must advertise."""
+    if path_kind == "legacy_sse":
+        return MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL
+    return MCP_PROTECTED_RESOURCE_METADATA_URL
+
+
+def protected_resource_document(resource: str) -> Dict[str, Any]:
+    """RFC 9728 document for one resource path: ``resource`` equals the URL
+    the document describes — canonical for ``/v1/mcp``, legacy for
+    ``/v1/mcp/sse`` (and the unqualified root document, for now)."""
     return {
-        "resource": mcp_oauth_db.MCP_RESOURCE_URL,
+        "resource": resource,
         "authorization_servers": [MCP_AUTHORIZATION_SERVER_URL],
         "scopes_supported": MCP_SCOPES_SUPPORTED,
         "bearer_methods_supported": ["header"],

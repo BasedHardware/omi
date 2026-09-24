@@ -133,25 +133,32 @@ def mcp_sse_get(
 
 @router.head("/v1/mcp", tags=["mcp"], response_class=Response)
 @router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
-def mcp_sse_head(authorization: Optional[str] = Header(None, alias="Authorization")):
-    return _transport.handle_head(authorization)
+def mcp_sse_head(request: Request, authorization: Optional[str] = Header(None, alias="Authorization")):
+    return _transport.handle_head(authorization, path_kind=_path_kind(request))
 
 
 @router.delete("/v1/mcp", tags=["mcp"], response_class=Response)
 @router.delete("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_delete_session(
+    request: Request,
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Delete/terminate an MCP session (stateless: always 204 when authed)."""
-    return _transport.handle_delete(authorization)
+    return _transport.handle_delete(authorization, path_kind=_path_kind(request))
 
 
 @router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.get("/.well-known/oauth-protected-resource/v1/mcp", tags=["mcp"])
 @router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
-def oauth_protected_resource_metadata():
-    return _metadata.protected_resource_document()
+def oauth_protected_resource_metadata(request: Request):
+    """Per-path RFC 9728 document: the unqualified root keeps describing the
+    legacy ``/v1/mcp/sse`` resource until canonical OAuth clients roll out."""
+    if request.url.path.rstrip("/").endswith("/v1/mcp"):
+        resource = mcp_oauth_db.MCP_RESOURCE_URL
+    else:
+        resource = mcp_oauth_db.MCP_LEGACY_RESOURCE_URL
+    return _metadata.protected_resource_document(resource)
 
 
 @router.head("/.well-known/oauth-protected-resource", tags=["mcp"])

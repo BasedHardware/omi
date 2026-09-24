@@ -70,12 +70,13 @@ def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONRe
 
 def _effective_resource(resource: Optional[str]) -> str:
     # RFC 8707 resource indicators are optional; connector clients such as claude.ai
-    # omit the parameter entirely. An omitted indicator at the authorization step binds
-    # the grant to this deployment's canonical resource — the audience advertised in
-    # the protected-resource metadata. Cross-plane clients with a second allowed
-    # resource must keep sending it explicitly, and a present-but-invalid value
-    # (an empty string included) still fails validate_resource exactly as before.
-    return mcp_oauth_db.MCP_RESOURCE_URL if resource is None else resource
+    # omit the parameter entirely. An omitted indicator binds the grant to the
+    # LEGACY ``/v1/mcp/sse`` audience — the same audience old backend code
+    # exact-matches — so a rollback keeps every token minted after this deploy
+    # valid. The canonical audience is stored only when a client explicitly
+    # requests it, and a present-but-invalid value (an empty string included)
+    # still fails validate_resource exactly as before.
+    return mcp_oauth_db.MCP_LEGACY_RESOURCE_URL if resource is None else resource
 
 
 def _validate_authorize_request(

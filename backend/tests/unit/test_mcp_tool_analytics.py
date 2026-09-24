@@ -22,7 +22,7 @@ def test_memory_retrieval_event_has_only_bounded_allowlisted_properties(monkeypa
     captured = []
     monkeypatch.setattr(
         mcp_analytics,
-        "emit_posthog_event",
+        "emit_mcp_posthog_event",
         lambda distinct_id, event, properties: captured.append((distinct_id, event, properties)),
     )
 
@@ -57,7 +57,8 @@ def test_memory_retrieval_event_has_only_bounded_allowlisted_properties(monkeypa
                 "client_name": "unknown",
                 "in_batch": False,
                 "write_operation": "none",
-                "sample_rate": 1.0,
+                "user_sample_rate": 0.25,
+                "$process_person_profile": False,
             },
         )
     ]
@@ -147,7 +148,7 @@ def test_tool_names_share_the_stable_event_contract(monkeypatch):
     captured = []
     monkeypatch.setattr(
         mcp_analytics,
-        "emit_posthog_event",
+        "emit_mcp_posthog_event",
         lambda distinct_id, event, properties: captured.append((distinct_id, event, properties)),
     )
 
@@ -175,7 +176,7 @@ def test_nonexistent_tool_names_never_emit_named_operations(monkeypatch):
     captured = []
     monkeypatch.setattr(
         mcp_analytics,
-        "emit_posthog_event",
+        "emit_mcp_posthog_event",
         lambda distinct_id, event, properties: captured.append((distinct_id, event, properties)),
     )
 
@@ -293,7 +294,7 @@ def test_read_tools_have_named_operations(monkeypatch):
     captured = []
     monkeypatch.setattr(
         mcp_analytics,
-        "emit_posthog_event",
+        "emit_mcp_posthog_event",
         lambda distinct_id, event, properties: captured.append(properties),
     )
 

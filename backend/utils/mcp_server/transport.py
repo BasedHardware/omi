@@ -19,19 +19,19 @@ from utils.executors import critical_executor, db_executor, run_blocking
 from utils.mcp_analytics import (
     authorization_outcome_for_code,
     error_category_for_code,
+    log_mcp_request,
     mcp_method_enum,
-    mcp_protocol_version_enum,
     mcp_tool_enum,
     normalize_client_name,
     result_count_for_tool_result,
-    schedule_mcp_request,
+    schedule_mcp_active,
     schedule_mcp_tool_call,
 )
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 from utils.mcp_server.auth import MCPAuthContext, authenticate_mcp_request, invalid_mcp_auth_exception
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
 from utils.mcp_server.errors import ToolExecutionError, stable_error_code, tool_error_from_http
-from utils.mcp_server.metadata import MCP_PROTECTED_RESOURCE_METADATA_URL
+from utils.mcp_server.metadata import protected_resource_metadata_url
 from utils.mcp_server.registry import (
     MCP_TOOLS,
     TOOL_REQUIRED_SCOPE,
@@ -76,6 +76,7 @@ class McpRequestContext:
     in_batch: bool = False
     client_name: str = "unknown"
     user_agent: Optional[str] = None
+    path_kind: str = "canonical"
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -234,12 +235,8 @@ def _handle_tool_call(
         tool_error = e
     except HTTPException as exc:
         tool_error = tool_error_from_http(exc)
-    except Exception as exc:
-        logger.warning(
-            "hosted MCP tool call failed tool=%s error=%s",
-            mcp_tool_enum(tool_name),
-            type(exc).__name__,
-        )
+    except Exception:
+        logger.exception("hosted MCP tool call failed tool=%s", mcp_tool_enum(tool_name))
         _tool_call_analytics(
             auth_context,
             request,
@@ -288,7 +285,7 @@ def _handle_tool_call(
                 data={
                     "_meta": {
                         "mcp/www_authenticate": (
-                            f'Bearer resource_metadata="{MCP_PROTECTED_RESOURCE_METADATA_URL}", '
+                            f'Bearer resource_metadata="{protected_resource_metadata_url(request.path_kind)}", '
                             f'error="insufficient_scope", scope="{required_scope}"'
                         )
                     }
@@ -450,14 +447,19 @@ def handle_mcp_message(
         )
 
     if method == "server/discover":
+        # DiscoverResult extends CacheableResult: supportedVersions,
+        # capabilities, optional instructions, plus the required ttlMs and
+        # cacheScope pair (private — capabilities may vary by token scopes).
         return create_mcp_response(
             msg_id,
             _complete_result(
                 {
-                    "protocolVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
+                    "supportedVersions": list(SUPPORTED_PROTOCOL_VERSIONS),
                     "capabilities": dict(MCP_CAPABILITIES),
                     "serverInfo": dict(SERVER_INFO),
                     "instructions": MCP_SERVER_INSTRUCTIONS,
+                    "ttlMs": TOOLS_LIST_TTL_MS,
+                    "cacheScope": TOOLS_LIST_CACHE_SCOPE,
                 },
                 effective_version,
             ),
@@ -634,7 +636,7 @@ def prepare_messages(
     if declared:
         version = next(iter(declared))
         if not is_supported_version(version):
-            return None, _protocol_error_response(None, unsupported_version_error())
+            return None, _protocol_error_response(None, unsupported_version_error(version))
         if not is_batch_era_version(version):
             return None, create_mcp_error(
                 None,
@@ -648,6 +650,62 @@ def prepare_messages(
             "Mcp-Method and Mcp-Name headers cannot annotate a JSON-RPC batch request.",
         )
     return body, None
+
+
+def header_violation_error(
+    body: Any,
+    *,
+    header_version: Optional[str],
+    mcp_method: Optional[str],
+    mcp_name: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Return a JSON-RPC error body when the request HEADERS are at fault.
+
+    ``HeaderMismatchError`` (-32020) and ``UnsupportedProtocolVersionError``
+    (-32022) caused by HTTP headers answer HTTP 400 per the 2026-07-28 schema.
+    Body-level ``_meta`` version problems are NOT checked here — they stay
+    per-message errors on a 200 response.
+    """
+    if header_version is not None and not is_supported_version(header_version):
+        return _protocol_error_response(None, unsupported_version_error(header_version))
+    if mcp_method or mcp_name:
+        if isinstance(body, list):
+            return create_mcp_error(
+                None,
+                -32020,
+                "Mcp-Method and Mcp-Name headers cannot annotate a JSON-RPC batch request.",
+            )
+        if isinstance(body, dict):
+            if mcp_method is not None and body.get("method") != mcp_method:
+                return create_mcp_error(
+                    body.get("id"),
+                    -32020,
+                    f"Mcp-Method header '{mcp_method}' does not match message method '{body.get('method')}'.",
+                )
+            if mcp_name is not None:
+                params = body.get("params") if isinstance(body.get("params"), dict) else {}
+                expected_name = params.get("name") if body.get("method") == "tools/call" else None
+                if expected_name != mcp_name:
+                    return create_mcp_error(
+                        body.get("id"),
+                        -32020,
+                        "Mcp-Name header does not match the tools/call params.name for this message.",
+                    )
+    if header_version:
+        declared_versions = (
+            {declared_protocol_version(message) for message in body if isinstance(message, dict)}
+            if isinstance(body, list)
+            else {declared_protocol_version(body)} if isinstance(body, dict) else set()
+        )
+        declared_versions.discard(None)
+        if declared_versions and header_version not in declared_versions:
+            return create_mcp_error(
+                None,
+                -32020,
+                f"MCP-Protocol-Version header '{header_version}' does not match the declared "
+                "protocol version in the request body.",
+            )
+    return None
 
 
 def _request_client_name(messages: List[Any], user_agent: Optional[str]) -> str:
@@ -682,30 +740,25 @@ def _emit_request_observability(
     tool_name: Optional[str],
     duration_ms: float,
 ) -> None:
-    """One sanitized INFO log plus the sampled ``MCP Request`` PostHog event."""
-    logger.info(
-        "mcp_request path=%s status=%s methods=%s tool=%s messages=%d duration_ms=%d client=%s protocol_version=%s",
-        path_kind,
-        http_status,
-        ",".join(method_enums) if method_enums else "unknown",
-        mcp_tool_enum(tool_name),
-        message_count,
-        int(duration_ms),
-        client_name,
-        mcp_protocol_version_enum(protocol_version),
-    )
-    schedule_mcp_request(
-        uid=uid,
+    """The 100% ``mcp_request`` structured log plus the daily ``MCP Active`` marker."""
+    log_mcp_request(
         jsonrpc_methods=method_enums,
         message_count=message_count,
         is_handshake=is_handshake,
         protocol_version=protocol_version,
         client_name=client_name,
-        transport=auth_type,
+        auth_type=auth_type,
         http_status=http_status,
         path=path_kind,
         duration_ms=duration_ms,
         tool_name=tool_name,
+    )
+    schedule_mcp_active(
+        uid=uid,
+        client_name=client_name,
+        transport=auth_type,
+        protocol_version=protocol_version,
+        first_tool=tool_name,
     )
 
 
@@ -728,7 +781,7 @@ async def handle_post_request(
     try:
         auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
         if not auth_context:
-            raise invalid_mcp_auth_exception()
+            raise invalid_mcp_auth_exception(path_kind=path_kind)
         uid = auth_context.uid
         auth_type = auth_context.auth_type
 
@@ -753,7 +806,20 @@ async def handle_post_request(
             in_batch=is_batch,
             client_name=client_name,
             user_agent=request.headers.get("user-agent"),
+            path_kind=path_kind,
         )
+
+        # Header-level protocol failures (-32020/-32022) answer HTTP 400 per
+        # the 2026-07-28 schema; body-level version problems stay on a 200.
+        header_error = header_violation_error(
+            body,
+            header_version=header_version,
+            mcp_method=request_context.mcp_method,
+            mcp_name=request_context.mcp_name,
+        )
+        if header_error is not None:
+            http_status = 400
+            return JSONResponse(status_code=400, content=header_error)
 
         messages, error_response = prepare_messages(
             body,
@@ -763,6 +829,9 @@ async def handle_post_request(
         )
         if error_response is not None:
             http_status = 200
+            accept = request.headers.get("accept") or ""
+            if "text/event-stream" in accept:
+                return _sse_response([error_response])
             return JSONResponse(content=error_response)
         messages = cast(List[Dict[str, Any]], messages)
 
@@ -790,20 +859,7 @@ async def handle_post_request(
         http_status = 200
         accept = request.headers.get("accept") or ""
         if "text/event-stream" in accept:
-
-            async def event_generator():
-                for resp in responses:
-                    yield f"event: message\ndata: {json.dumps(resp, default=str)}\n\n"
-
-            return StreamingResponse(
-                event_generator(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
-            )
+            return _sse_response(responses)
         return JSONResponse(content=responses[0] if len(responses) == 1 else responses)
     except HTTPException as exc:
         http_status = exc.status_code
@@ -824,21 +880,39 @@ async def handle_post_request(
         )
 
 
+def _sse_response(responses: List[Dict[str, Any]]) -> StreamingResponse:
+    """Wrap JSON-RPC payloads as ``event: message`` SSE frames."""
+
+    async def event_generator():
+        for resp in responses:
+            yield f"event: message\ndata: {json.dumps(resp, default=str)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def no_stream_get_response() -> Response:
     """GET: this server offers no server-initiated stream, so 405 per spec."""
     return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 
-def handle_head(authorization: Optional[str]) -> Response:
+def handle_head(authorization: Optional[str], path_kind: str = "canonical") -> Response:
     if not authenticate_mcp_request(authorization):
-        raise invalid_mcp_auth_exception()
+        raise invalid_mcp_auth_exception(path_kind=path_kind)
     return Response(status_code=200)
 
 
-def handle_delete(authorization: Optional[str]) -> Response:
+def handle_delete(authorization: Optional[str], path_kind: str = "canonical") -> Response:
     auth_context = authenticate_mcp_request(authorization)
     if not auth_context:
-        raise invalid_mcp_auth_exception("Invalid or missing API key")
+        raise invalid_mcp_auth_exception("Invalid or missing API key", path_kind=path_kind)
 
     # Hosted MCP is stateless; terminate requests are best-effort so stale
     # or load-balanced session ids do not create client-visible errors.

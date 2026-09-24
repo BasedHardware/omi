@@ -20,15 +20,15 @@ AUTH_REFRESH_FAILED = 'Integration Auth Refresh Failed'
 GOOGLE_CALENDAR = 'Google Calendar'
 X = 'X'
 
-# Capture and decision clients are intentionally separate: event capture may be
-# routed to a dedicated events project via POSTHOG_EVENTS_API_KEY (falling back
-# to the project key), while rollout/feature-flag decisions must always read
-# the project key and never the events key. Neither client reads the legacy
-# shared POSTHOG_API_KEY.
-_posthog_capture_client: Optional[Any] = None
-_posthog_capture_disabled = False
-_posthog_decision_client: Optional[Any] = None
-_posthog_decision_disabled = False
+# Generic event capture keeps the original key resolution
+# (POSTHOG_PROJECT_API_KEY, falling back to the legacy shared POSTHOG_API_KEY).
+# Hosted MCP events are the exception: utils/mcp_analytics owns a dedicated
+# capture client built from POSTHOG_EVENTS_API_KEY only, so the events key
+# never becomes the capture key for every emit_posthog_event caller. Rollout
+# decisions (utils/jit_rollout) build their own client from
+# POSTHOG_PROJECT_API_KEY and never read the events key.
+_posthog_client: Optional[Any] = None
+_posthog_disabled = False
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,7 @@ def emit_posthog_event(distinct_id: Optional[str], event: str, properties: Dict[
         return
 
     try:
-        client = _get_posthog_capture_client()
+        client = _get_posthog_client()
         if client is not None:
             client.capture(distinct_id=distinct_id, event=event, properties=properties)
     except Exception as exc:
@@ -185,48 +185,26 @@ def _build_posthog_client(api_key: str) -> Any:
     return posthog_client_cls(project_api_key=api_key, host=host)
 
 
-def _get_posthog_capture_client() -> Optional[Any]:
-    """Client for event capture: events key first, project key as fallback."""
-    global _posthog_capture_client, _posthog_capture_disabled
-    if _posthog_capture_disabled:
+def _get_posthog_client() -> Optional[Any]:
+    """Client for event capture: project key first, legacy shared key as fallback."""
+    global _posthog_client, _posthog_disabled
+    if _posthog_disabled:
         return None
-    if _posthog_capture_client is not None:
-        return _posthog_capture_client
+    if _posthog_client is not None:
+        return _posthog_client
 
-    api_key = os.getenv('POSTHOG_EVENTS_API_KEY') or os.getenv('POSTHOG_PROJECT_API_KEY')
+    api_key = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
     if not api_key:
-        _posthog_capture_disabled = True
+        _posthog_disabled = True
         return None
 
     try:
-        _posthog_capture_client = _build_posthog_client(api_key)
+        _posthog_client = _build_posthog_client(api_key)
     except Exception as exc:
         logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
-        _posthog_capture_disabled = True
+        _posthog_disabled = True
         return None
-    return _posthog_capture_client
-
-
-def get_posthog_client_for_decisions() -> Optional[Any]:
-    """Client for fail-closed rollout reads: the project key only, never the events key."""
-    global _posthog_decision_client, _posthog_decision_disabled
-    if _posthog_decision_disabled:
-        return None
-    if _posthog_decision_client is not None:
-        return _posthog_decision_client
-
-    api_key = os.getenv('POSTHOG_PROJECT_API_KEY')
-    if not api_key:
-        _posthog_decision_disabled = True
-        return None
-
-    try:
-        _posthog_decision_client = _build_posthog_client(api_key)
-    except Exception as exc:
-        logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
-        _posthog_decision_disabled = True
-        return None
-    return _posthog_decision_client
+    return _posthog_client
 
 
 def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optional[int]:
@@ -295,23 +273,6 @@ def _bucket_count(value: int) -> str:
 
 
 def set_posthog_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_capture_client, _posthog_capture_disabled
-    global _posthog_decision_client, _posthog_decision_disabled
-    _posthog_capture_client = client
-    _posthog_capture_disabled = client is None
-    _posthog_decision_client = client
-    _posthog_decision_disabled = client is None
-
-
-def set_posthog_capture_client_for_tests(client: Optional[Any]) -> None:
-    """Reset only the capture client (used by split-key telemetry tests)."""
-    global _posthog_capture_client, _posthog_capture_disabled
-    _posthog_capture_client = client
-    _posthog_capture_disabled = client is None
-
-
-def set_posthog_decision_client_for_tests(client: Optional[Any]) -> None:
-    """Reset only the decision client (used by split-key telemetry tests)."""
-    global _posthog_decision_client, _posthog_decision_disabled
-    _posthog_decision_client = client
-    _posthog_decision_disabled = client is None
+    global _posthog_client, _posthog_disabled
+    _posthog_client = client
+    _posthog_disabled = client is None

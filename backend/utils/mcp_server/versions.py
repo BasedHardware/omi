@@ -105,11 +105,19 @@ def client_info_name(message: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def unsupported_version_error() -> JsonRpcProtocolError:
+def unsupported_version_error(requested: Optional[str] = None) -> JsonRpcProtocolError:
+    """``UnsupportedProtocolVersionError`` (-32022) per the 2026-07-28 schema.
+
+    ``error.data`` is exactly ``{supported, requested}`` — the client picks a
+    mutually supported version from ``supported`` and retries.
+    """
     return JsonRpcProtocolError(
         -32022,
         "Unsupported MCP protocol version",
-        data={"supportedProtocolVersions": list(SUPPORTED_PROTOCOL_VERSIONS)},
+        data={
+            "supported": list(SUPPORTED_PROTOCOL_VERSIONS),
+            "requested": requested if isinstance(requested, str) else None,
+        },
     )
 
 
@@ -128,10 +136,10 @@ def resolve_effective_version(message: Dict[str, Any], header_version: Optional[
         )
     if declared:
         if not is_supported_version(declared):
-            raise unsupported_version_error()
+            raise unsupported_version_error(declared)
         return declared
     if header_version:
         if not is_supported_version(header_version):
-            raise unsupported_version_error()
+            raise unsupported_version_error(header_version)
         return header_version
     return DEFAULT_PROTOCOL_VERSION

@@ -9,7 +9,6 @@ rate-limit charging, the tool result contract (``structuredContent`` /
 import importlib
 import json
 import logging
-import math
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -27,7 +26,10 @@ from routers import mcp_sse
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_server.auth import MCPAuthContext
 from utils.mcp_server.errors import ToolExecutionError, authorization_denied_error
-from utils.mcp_server.metadata import MCP_PROTECTED_RESOURCE_METADATA_URL
+from utils.mcp_server.metadata import (
+    MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL,
+    MCP_PROTECTED_RESOURCE_METADATA_URL,
+)
 from utils.mcp_server.registry import MCP_TOOLS, TOOL_SPECS
 from utils.mcp_server.versions import (
     DEFAULT_PROTOCOL_VERSION,
@@ -131,13 +133,15 @@ def authed():
         patch.object(mcp_transport, "authenticate_mcp_request", return_value=_full_auth()),
         patch.object(mcp_transport, "check_rate_limit_inline") as admission,
         patch.object(mcp_transport, "check_rate_limit_context") as context_limit,
-        patch.object(mcp_transport, "schedule_mcp_request") as request_event,
+        patch.object(mcp_transport, "log_mcp_request") as request_log,
+        patch.object(mcp_transport, "schedule_mcp_active") as active_event,
         patch.object(mcp_transport, "schedule_mcp_tool_call") as tool_event,
     ):
         yield SimpleNamespace(
             admission=admission,
             context_limit=context_limit,
-            request_event=request_event,
+            request_log=request_log,
+            active_event=active_event,
             tool_event=tool_event,
         )
 
@@ -174,17 +178,22 @@ class TestRouteParity:
             for path in ("/v1/mcp", "/v1/mcp/sse"):
                 assert client.delete(path, headers={"Authorization": "Bearer tok"}).status_code == 204
 
-    def test_protected_resource_metadata_parity(self, client):
-        paths = [
+    def test_protected_resource_metadata_is_per_path(self, client):
+        """Each well-known document describes the resource for its own path;
+        the unqualified root keeps the legacy audience for now."""
+        canonical = client.get("/.well-known/oauth-protected-resource/v1/mcp").json()
+        legacy = client.get("/.well-known/oauth-protected-resource/v1/mcp/sse").json()
+        root = client.get("/.well-known/oauth-protected-resource").json()
+        assert canonical["resource"] == mcp_oauth_db.MCP_RESOURCE_URL
+        assert legacy["resource"] == mcp_oauth_db.MCP_LEGACY_RESOURCE_URL
+        assert root["resource"] == mcp_oauth_db.MCP_LEGACY_RESOURCE_URL
+        assert canonical["authorization_servers"]
+        assert legacy["authorization_servers"]
+        for path in (
             "/.well-known/oauth-protected-resource",
             "/.well-known/oauth-protected-resource/v1/mcp",
             "/.well-known/oauth-protected-resource/v1/mcp/sse",
-        ]
-        docs = [client.get(path).json() for path in paths]
-        assert all(doc == docs[0] for doc in docs)
-        assert docs[0]["resource"] == mcp_oauth_db.MCP_RESOURCE_URL
-        assert docs[0]["authorization_servers"]
-        for path in paths:
+        ):
             assert client.head(path).status_code == 200
 
     def test_authorization_server_metadata(self, client):
@@ -243,10 +252,13 @@ class TestStateless2026:
         auth = _full_auth()
         response = mcp_transport.handle_mcp_message(auth, _msg("server/discover"))
         result = response["result"]
-        assert result["protocolVersions"] == list(SUPPORTED_PROTOCOL_VERSIONS)
+        assert result["supportedVersions"] == list(SUPPORTED_PROTOCOL_VERSIONS)
         assert result["serverInfo"] == SERVER_INFO
         assert result["instructions"]
         assert "tools" in result["capabilities"]
+        # DiscoverResult extends CacheableResult.
+        assert result["ttlMs"] == TOOLS_LIST_TTL_MS
+        assert result["cacheScope"] == TOOLS_LIST_CACHE_SCOPE
 
     def test_ping_removed_in_2026(self):
         auth = _full_auth()
@@ -259,7 +271,8 @@ class TestStateless2026:
         request = mcp_transport.McpRequestContext(auth_context=auth, header_version="1999-01-01")
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"), request)
         assert response["error"]["code"] == -32022
-        assert response["error"]["data"]["supportedProtocolVersions"] == list(SUPPORTED_PROTOCOL_VERSIONS)
+        assert response["error"]["data"]["supported"] == list(SUPPORTED_PROTOCOL_VERSIONS)
+        assert response["error"]["data"]["requested"] == "1999-01-01"
 
     def test_unsupported_meta_version_rejected(self):
         auth = _full_auth()
@@ -611,6 +624,26 @@ class TestUnknownsAndScope:
         assert 'scope="memories.read"' in challenge
         assert "/v1/mcp/sse" not in challenge  # canonical resource metadata URL
 
+    def test_insufficient_scope_challenge_on_legacy_path(self):
+        auth = _full_auth(scopes=["conversations.read"])
+        request = mcp_transport.McpRequestContext(auth_context=auth, path_kind="legacy_sse")
+        response = mcp_transport.handle_mcp_message(auth, _tool_call("get_memories"), request)
+        challenge = response["error"]["data"]["_meta"]["mcp/www_authenticate"]
+        assert f'resource_metadata="{MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL}"' in challenge
+
+    @pytest.mark.parametrize(
+        ("path", "metadata_url"),
+        [
+            ("/v1/mcp", MCP_PROTECTED_RESOURCE_METADATA_URL),
+            ("/v1/mcp/sse", MCP_LEGACY_PROTECTED_RESOURCE_METADATA_URL),
+        ],
+    )
+    def test_401_challenge_advertises_per_path_metadata(self, client, path, metadata_url):
+        response = client.post(path, json=_msg("ping"))
+        assert response.status_code == 401
+        challenge = response.headers["www-authenticate"]
+        assert f'resource_metadata="{metadata_url}"' in challenge
+
     def test_tools_list_filtered_by_scopes(self):
         auth = _full_auth(scopes=["conversations.read"])
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"))
@@ -737,7 +770,8 @@ class TestSseAcceptAndAudiences:
             patch("utils.mcp_server.auth._enforce_mcp_cutover_access"),
             patch("utils.mcp_server.auth._mcp_memory_context_from_auth_data", return_value=None),
             patch.object(mcp_transport, "check_rate_limit_inline"),
-            patch.object(mcp_transport, "schedule_mcp_request"),
+            patch.object(mcp_transport, "log_mcp_request"),
+            patch.object(mcp_transport, "schedule_mcp_active"),
             patch.object(mcp_transport, "schedule_mcp_tool_call"),
         ):
             response = _post(client, path, _msg("ping"))
@@ -745,280 +779,6 @@ class TestSseAcceptAndAudiences:
         # Whatever path served the request, token validation binds the canonical
         # audience; legacy-audience tokens still match via canonicalization.
         validate.assert_called_once_with("tok", mcp_oauth_db.MCP_RESOURCE_URL)
-
-
-class TestRequestAnalytics:
-    def test_request_event_once_per_post(self, client, authed):
-        _post(client, "/v1/mcp", _msg("tools/list"), **{"mcp-protocol-version": "2025-06-18"})
-        authed.request_event.assert_called_once()
-        kwargs = authed.request_event.call_args.kwargs
-        assert kwargs["uid"] == "uid-test"
-        assert kwargs["jsonrpc_methods"] == ["tools/list"]
-        assert kwargs["http_status"] == 200
-        assert kwargs["path"] == "canonical"
-        assert kwargs["protocol_version"] == "2025-06-18"
-        assert kwargs["is_handshake"] is False
-
-    def test_request_event_on_401_uses_anonymous_id(self, client):
-        with (
-            patch.object(mcp_transport, "authenticate_mcp_request", return_value=None),
-            patch.object(mcp_transport, "schedule_mcp_request") as request_event,
-        ):
-            response = _post(client, "/v1/mcp", _msg("ping"))
-        assert response.status_code == 401
-        request_event.assert_called_once()
-        kwargs = request_event.call_args.kwargs
-        assert kwargs["uid"] == "mcp-anonymous"
-        assert kwargs["http_status"] == 401
-
-    @pytest.mark.parametrize(("path", "label"), [("/v1/mcp", "canonical"), ("/v1/mcp/sse", "legacy_sse")])
-    def test_request_event_on_auth_403_uses_anonymous_id(self, client, path, label):
-        """A 403 raised inside authentication still emits exactly one request
-        event per POST, labeled by path, before any uid is known."""
-        with (
-            patch.object(
-                mcp_transport,
-                "authenticate_mcp_request",
-                side_effect=HTTPException(status_code=403, detail="blocked"),
-            ),
-            patch.object(mcp_transport, "schedule_mcp_request") as request_event,
-        ):
-            response = _post(client, path, _msg("ping"))
-        assert response.status_code == 403
-        request_event.assert_called_once()
-        kwargs = request_event.call_args.kwargs
-        assert kwargs["uid"] == "mcp-anonymous"
-        assert kwargs["http_status"] == 403
-        assert kwargs["path"] == label
-
-    def test_request_event_on_admission_403_keeps_known_uid(self, client, authed):
-        """A 403 raised after authentication (admission limiter) still emits one
-        request event carrying the resolved uid."""
-        authed.admission.side_effect = HTTPException(status_code=403, detail="blocked")
-        response = _post(client, "/v1/mcp", _msg("ping"))
-        assert response.status_code == 403
-        authed.request_event.assert_called_once()
-        kwargs = authed.request_event.call_args.kwargs
-        assert kwargs["uid"] == "uid-test"
-        assert kwargs["http_status"] == 403
-        assert kwargs["path"] == "canonical"
-
-    def test_request_event_on_admission_429(self, client, authed):
-        with patch.object(
-            mcp_transport,
-            "check_rate_limit_inline",
-            side_effect=HTTPException(status_code=429, detail="Rate limit exceeded"),
-        ):
-            response = _post(client, "/v1/mcp", _msg("ping"))
-        assert response.status_code == 429
-        authed.request_event.assert_called_once()
-        assert authed.request_event.call_args.kwargs["http_status"] == 429
-
-    def test_request_event_fields_stay_low_cardinality(self):
-        properties_allowed = {
-            "jsonrpc_methods",
-            "message_count",
-            "is_handshake",
-            "protocol_version",
-            "client_name",
-            "transport",
-            "http_status",
-            "path",
-            "duration_ms",
-            "tool",
-            "sample_rate",
-        }
-        with patch.object(mcp_analytics, "emit_posthog_event") as emit:
-            mcp_analytics.emit_mcp_request(
-                uid="u",
-                jsonrpc_methods=["tools/call", "custom_method_xyz"],
-                message_count=2,
-                is_handshake=False,
-                protocol_version="2025-03-26",
-                client_name="not-in-enum",
-                transport="oauth",
-                http_status=200,
-                path="canonical",
-                duration_ms=5.0,
-                tool_name="get_memories",
-                sample_rate=1.0,
-            )
-        _, event, properties = emit.call_args.args
-        assert event == mcp_analytics.MCP_REQUEST
-        assert set(properties) <= properties_allowed
-        assert properties["jsonrpc_methods"] == ["tools/call", "unknown"]
-        assert properties["client_name"] == "unknown"
-
-    def test_jsonrpc_methods_bounded_to_full_batch_cap(self):
-        """The event carries every method of an accepted 20-message batch and
-        truncates only beyond the cap."""
-        with patch.object(mcp_analytics, "emit_posthog_event") as emit:
-            mcp_analytics.emit_mcp_request(
-                uid="u",
-                jsonrpc_methods=["tools/call"] * 20,
-                message_count=20,
-                is_handshake=False,
-                protocol_version="2025-03-26",
-                client_name="unknown",
-                transport="oauth",
-                http_status=200,
-                path="canonical",
-                duration_ms=1.0,
-                sample_rate=1.0,
-            )
-            assert emit.call_args.args[2]["jsonrpc_methods"] == ["tools/call"] * 20
-            mcp_analytics.emit_mcp_request(
-                uid="u",
-                jsonrpc_methods=["ping"] * 25,
-                message_count=25,
-                is_handshake=False,
-                protocol_version="2025-03-26",
-                client_name="unknown",
-                transport="oauth",
-                http_status=200,
-                path="canonical",
-                duration_ms=1.0,
-                sample_rate=1.0,
-            )
-            assert emit.call_args.args[2]["jsonrpc_methods"] == ["ping"] * 20
-
-
-class TestSampling:
-    def _schedule(self, monkeypatch, env_value, random_value=None):
-        monkeypatch.setenv(mcp_analytics.MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, env_value)
-        submit = MagicMock()
-        monkeypatch.setattr(mcp_analytics, "submit_with_context", submit)
-        if random_value is not None:
-            monkeypatch.setattr(mcp_analytics.random, "random", lambda: random_value)
-        mcp_analytics.schedule_mcp_request(
-            uid="u",
-            jsonrpc_methods=["ping"],
-            message_count=1,
-            is_handshake=False,
-            protocol_version="2025-03-26",
-            client_name="unknown",
-            transport="oauth",
-            http_status=200,
-            path="canonical",
-            duration_ms=1.0,
-        )
-        return submit
-
-    def test_rate_zero_never_samples(self, monkeypatch):
-        assert not self._schedule(monkeypatch, "0").called
-
-    def test_rate_one_always_samples(self, monkeypatch):
-        submit = self._schedule(monkeypatch, "1")
-        submit.assert_called_once()
-        assert submit.call_args.kwargs["sample_rate"] == 1.0
-
-    def test_partial_rate_uses_random_draw(self, monkeypatch):
-        assert self._schedule(monkeypatch, ".05", random_value=0.01).called
-        assert not self._schedule(monkeypatch, ".05", random_value=0.5).called
-
-    def test_invalid_and_out_of_range_rates_clamp(self, monkeypatch):
-        monkeypatch.setenv(mcp_analytics.MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, "bogus")
-        assert mcp_analytics.request_sample_rate() == mcp_analytics.MCP_REQUEST_SAMPLE_RATE_DEFAULT
-        monkeypatch.setenv(mcp_analytics.MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, "2")
-        assert mcp_analytics.request_sample_rate() == 1.0
-        monkeypatch.setenv(mcp_analytics.MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, "-1")
-        assert mcp_analytics.request_sample_rate() == 0.0
-
-    @pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
-    def test_nonfinite_rates_fall_back_to_default(self, monkeypatch, value):
-        monkeypatch.setenv(mcp_analytics.MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, value)
-        assert mcp_analytics.request_sample_rate() == mcp_analytics.MCP_REQUEST_SAMPLE_RATE_DEFAULT
-        monkeypatch.setenv(mcp_analytics.MCP_TOOL_CALL_EVENT_SAMPLE_RATE_ENV, value)
-        assert mcp_analytics.tool_call_sample_rate() == mcp_analytics.MCP_TOOL_CALL_SAMPLE_RATE_DEFAULT
-
-    @pytest.mark.parametrize("value", [float("nan"), float("inf"), 2.0, "bogus"])
-    def test_emitted_sample_rate_is_finite_and_bounded(self, monkeypatch, value):
-        monkeypatch.setattr(mcp_analytics, "emit_posthog_event", MagicMock())
-        emit = mcp_analytics.emit_posthog_event
-        mcp_analytics.emit_mcp_request(
-            uid="u",
-            jsonrpc_methods=[],
-            message_count=0,
-            is_handshake=False,
-            protocol_version="2025-03-26",
-            client_name="unknown",
-            transport="oauth",
-            http_status=200,
-            path="canonical",
-            duration_ms=1.0,
-            sample_rate=value,
-        )
-        sample_rate = emit.call_args.args[2]["sample_rate"]
-        assert 0.0 <= sample_rate <= 1.0
-        assert math.isfinite(sample_rate)
-
-
-class TestPostHogClientSplit:
-    def _reset(self, monkeypatch):
-        import utils.integration_telemetry as it
-
-        monkeypatch.setattr(it, "_posthog_capture_client", None)
-        monkeypatch.setattr(it, "_posthog_capture_disabled", False)
-        monkeypatch.setattr(it, "_posthog_decision_client", None)
-        monkeypatch.setattr(it, "_posthog_decision_disabled", False)
-        for name in ("POSTHOG_EVENTS_API_KEY", "POSTHOG_PROJECT_API_KEY", "POSTHOG_API_KEY"):
-            monkeypatch.delenv(name, raising=False)
-        return it
-
-    def test_capture_prefers_events_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_capture_client() == "client:events-key"
-
-    def test_capture_falls_back_to_project_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_capture_client() == "client:project-key"
-
-    def test_capture_ignores_legacy_shared_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_API_KEY", "legacy-key")
-        assert it._get_posthog_capture_client() is None
-
-    def test_decision_uses_project_key_only(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_API_KEY", "legacy-key")
-        # Neither the events key nor the legacy key may serve rollout decisions.
-        assert it.get_posthog_client_for_decisions() is None
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it.get_posthog_client_for_decisions() == "client:project-key"
-
-    def test_disabled_state_is_independent(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        monkeypatch.setattr(it, "_posthog_capture_disabled", True)
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_capture_client() is None
-        assert it.get_posthog_client_for_decisions() == "client:project-key"
-
-    def test_events_key_only_captures_and_never_builds_decision_client(self, monkeypatch):
-        """POSTHOG_EVENTS_API_KEY alone serves event capture while the decision
-        getter returns None and never builds a client from the events key."""
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        fake = MagicMock()
-        build = MagicMock(return_value=fake)
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        it.emit_posthog_event("u", "MCP Request", {"http_status": 200})
-        fake.capture.assert_called_once_with(distinct_id="u", event="MCP Request", properties={"http_status": 200})
-        assert it.get_posthog_client_for_decisions() is None
-        build.assert_called_once_with("events-key")
 
 
 class TestMemoryToolBehavior:
@@ -1099,7 +859,7 @@ class TestObservabilityNormalization:
     PII_VERSION = "attacker@example.com|uid-12345|session-secret"
     PII_TOOL = "get_memories_for_alice@corp.io_ssn_123-45-6789"
 
-    def test_request_log_and_event_normalize_hostile_values(self, client, authed, caplog):
+    def test_request_log_normalizes_hostile_values(self, client, authed, capsys, caplog):
         import logging
 
         with caplog.at_level(logging.INFO, logger="utils.mcp_server.transport"):
@@ -1109,38 +869,37 @@ class TestObservabilityNormalization:
                 _tool_call(self.PII_TOOL, {"x": 1}),
                 **{"mcp-protocol-version": self.PII_VERSION},
             )
-        # Unsupported version is rejected, and nothing client-supplied leaks.
+        # Unsupported header version is rejected at HTTP 400, and nothing
+        # client-supplied leaks into logs.
+        assert response.status_code == 400
         assert response.json()["error"]["code"] == -32022
         joined = "\n".join(record.getMessage() for record in caplog.records)
         assert self.PII_VERSION not in joined
         assert self.PII_TOOL not in joined
-        authed.request_event.assert_called_once()
-        kwargs = authed.request_event.call_args.kwargs
-        assert kwargs["protocol_version"] == self.PII_VERSION  # raw to schedule...
-        # ...but the emitted event normalizes it away.
-        with patch.object(mcp_analytics, "emit_posthog_event") as emit:
-            mcp_analytics.emit_mcp_request(
-                uid=kwargs["uid"],
-                jsonrpc_methods=kwargs["jsonrpc_methods"],
-                message_count=kwargs["message_count"],
-                is_handshake=kwargs["is_handshake"],
-                protocol_version=kwargs["protocol_version"],
-                client_name=kwargs["client_name"],
-                transport=kwargs["transport"],
-                http_status=kwargs["http_status"],
-                path=kwargs["path"],
-                duration_ms=kwargs["duration_ms"],
-                tool_name=self.PII_TOOL,
-                sample_rate=1.0,
-            )
-        properties = emit.call_args.args[2]
-        assert properties["protocol_version"] == "unknown"
-        assert properties["tool"] == "unknown"
-        assert self.PII_VERSION not in json.dumps(properties)
-        assert self.PII_TOOL not in json.dumps(properties)
+        authed.request_log.assert_called_once()
+        # The transport forwards the raw declared version to the log seam...
+        assert authed.request_log.call_args.kwargs["protocol_version"] == self.PII_VERSION
+        # ...and the emitted log line normalizes it away.
+        mcp_analytics.log_mcp_request(
+            jsonrpc_methods=["tools/call"],
+            message_count=1,
+            is_handshake=False,
+            protocol_version=self.PII_VERSION,
+            client_name="unknown",
+            auth_type="oauth",
+            http_status=400,
+            path="canonical",
+            duration_ms=1.0,
+            tool_name=self.PII_TOOL,
+        )
+        record = json.loads(capsys.readouterr().out.strip())
+        assert record["protocol_version"] == "unknown"
+        assert record["tool"] == "unknown"
+        assert self.PII_VERSION not in json.dumps(record)
+        assert self.PII_TOOL not in json.dumps(record)
 
     def test_tool_call_event_normalizes_error_code_and_version(self):
-        with patch.object(mcp_analytics, "emit_posthog_event") as emit:
+        with patch.object(mcp_analytics, "emit_mcp_posthog_event") as emit:
             mcp_analytics.emit_mcp_tool_call(
                 uid="u",
                 tool_name=self.PII_TOOL,
@@ -1154,20 +913,21 @@ class TestObservabilityNormalization:
                 result_count=0,
                 protocol_version=self.PII_VERSION,
                 client_name="not-in-enum",
-                sample_rate=1.0,
+                user_sample_rate=1.0,
             )
         properties = emit.call_args.args[2]
         assert properties["tool"] == "unknown"
         assert properties["error_code"] == "internal"
         assert properties["protocol_version"] == "unknown"
         assert properties["client_name"] == "unknown"
+        assert properties["$process_person_profile"] is False
         assert self.PII_VERSION not in json.dumps(properties)
         assert "raw-client-id-must-not-leak" not in json.dumps(properties)
 
-    def test_exception_text_never_reaches_logs(self, caplog):
-        """A tool exception whose message contains sensitive content must log
-        only the normalized tool name and exception type — no stack trace and
-        no exception text."""
+    def test_tool_exception_logs_stack_with_tool_name_only(self, caplog):
+        """A tool exception logs via ``logger.exception`` — the trace is
+        useful server-side, but the log *message* carries only the normalized
+        tool name, never arguments or user content."""
         import logging
 
         marker = "user-secret-memory-content-9f8e7d"
@@ -1176,16 +936,12 @@ class TestObservabilityNormalization:
             with patch.object(mcp_transport, "execute_tool", side_effect=RuntimeError(marker)):
                 response = mcp_transport.handle_mcp_message(auth, _tool_call("get_memories", {"query": marker}))
         assert response["result"]["structuredContent"]["error"]["code"] == "internal"
-        joined = "\n".join(record.getMessage() for record in caplog.records)
-        assert marker not in joined
-        warnings = [
-            r for r in caplog.records if r.name == "utils.mcp_server.transport" and r.levelno >= logging.WARNING
-        ]
-        assert warnings, "expected the sanitized tool-failure warning"
-        for record in warnings:
-            assert record.exc_info is None
-            assert marker not in record.getMessage()
-        assert "RuntimeError" in warnings[0].getMessage()
+        errors = [r for r in caplog.records if r.name == "utils.mcp_server.transport" and r.levelno >= logging.ERROR]
+        assert errors, "expected the tool-failure logger.exception record"
+        record = errors[0]
+        assert record.exc_info is not None  # stack trace is intentional
+        assert record.getMessage() == "hosted MCP tool call failed tool=get_memories"
+        assert marker not in record.getMessage()
 
     def test_known_error_codes_pass_through(self):
         for code in (
@@ -1234,6 +990,32 @@ class TestAuthDenialPrivacy:
         assert result["structuredContent"]["error"]["code"] == "authorization_denied"
         assert marker not in json.dumps(result)
         assert "permission" in result["structuredContent"]["error"]["message"]
+
+    def test_denied_memory_grant_logs_reason_at_warning(self, caplog):
+        """Grant denials log the server-side observability reason at WARNING —
+        the reason only, never the rest of the observability payload."""
+        import logging
+
+        from utils.mcp_server.handlers import memories as memory_handlers
+
+        marker = "internal-grant-doc-id-9f8e7d6c_secret"
+        grant = SimpleNamespace(allowed=False, observability={"grant_doc": marker, "reason": "no_grant"})
+        with (
+            patch.object(
+                memory_handlers,
+                "authorize_memory_external_default_memory_write",
+                return_value=grant,
+            ),
+            caplog.at_level(logging.WARNING, logger="utils.mcp_server.handlers.memories"),
+            pytest.raises(Exception),
+        ):
+            memory_handlers.create_memory("u1", {"content": "x"}, auth_context=SimpleNamespace())
+        warnings = [r for r in caplog.records if r.name == "utils.mcp_server.handlers.memories"]
+        assert warnings, "expected the grant-denial warning"
+        message = warnings[0].getMessage()
+        assert "reason=no_grant" in message
+        assert "tool=create_memory" in message
+        assert marker not in message
 
 
 class TestOAuthResourceCanonicalization:
