@@ -128,6 +128,28 @@ class TestOmiSolanaPay(unittest.TestCase):
         self.assertIsNotNone(data["error"])
         self.assertIn("Invalid Solana signature", data["error"])
 
+    def test_check_solana_balance_invalid_network(self):
+        resp = self.client.post(
+            "/tools/check_solana_balance",
+            json={"wallet_address": "FhthDcQ1UhdRetMXtEurj6YM24xiwTAZJc4WADmr9EB8", "network": "testnet"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data["error"])
+        self.assertIn("Invalid network 'testnet'", data["error"])
+
+    def test_verify_signature_invalid_network(self):
+        valid_sig = "5Ver7CFvVTXZx12Q3pS8f2r4s81qT3G6x87p3h12984712093847102938471029384710293847102938471029"
+        resp = self.client.post(
+            "/tools/verify_transaction_signature",
+            json={"signature": valid_sig, "network": "ropsten"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data["error"])
+        self.assertIn("Invalid network 'ropsten'", data["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
