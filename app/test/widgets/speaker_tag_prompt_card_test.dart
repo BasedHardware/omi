@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -113,5 +115,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(answers.single.answer, 'new_person');
     expect(answers.single.name, 'Ana');
+  });
+
+  testWidgets('someone new opens a working name field in the iOS dialog', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final (answers, _) = await pumpCard(tester, prompts: [prompt('a', 'identify')]);
+      await tester.tap(find.byKey(const Key('speaker_tag_prompt_answer_someone_new')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.enterText(find.byKey(const Key('speaker_tag_prompt_name_field')), 'Ana');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('speaker_tag_prompt_name_save')));
+      await tester.pumpAndSettle();
+      expect(answers.single.name, 'Ana');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('suggested people appear once the people list loads after the card', (tester) async {
+    final people = PeopleProvider(
+      loadPeople: () async => [
+        Person(id: 'p2', name: 'Ana', createdAt: DateTime.utc(2026, 9, 1), updatedAt: DateTime.utc(2026, 9, 1)),
+      ],
+    );
+    addTearDown(people.dispose);
+    final provider = SpeakerTagPromptsProvider(
+      fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse(
+        prompts: [
+          GeneratedSpeakerTagPrompt(
+            id: 'a',
+            kind: 'identify',
+            origin: 'unnamed',
+            conversationId: 'c1',
+            conversationTitle: 'Coffee chat',
+            speakerId: 1,
+            segmentIds: ['s1'],
+            clipStart: 0,
+            clipEnd: 8,
+            excerpt: '',
+            suggestedPersonIds: ['p2'],
+          ),
+        ],
+        firstTime: false,
+      )),
+      markShown: (_) async => const ApiSuccess(false),
+      emit: (_) {},
+    );
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ChangeNotifierProvider.value(value: provider),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_person_p2')), findsNothing);
+
+    await people.setPeople();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_person_p2')), findsOneWidget);
   });
 }

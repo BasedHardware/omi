@@ -312,7 +312,7 @@ class _Answers extends StatelessWidget {
   }
 
   List<Person> _suggestedPeople(BuildContext context) {
-    final people = context.read<PeopleProvider>().people;
+    final people = context.watch<PeopleProvider>().people;
     final byId = {for (final person in people) person.id: person};
     return [
       for (final id in prompt.suggestedPersonIds ?? const <String>[])
@@ -384,17 +384,21 @@ class _NameDialogState extends State<_NameDialog> {
   Widget build(BuildContext context) {
     return OmiAlertDialog(
       title: context.l10n.speakerTagPromptWhoIsThis,
-      content: TextField(
-        key: const Key('speaker_tag_prompt_name_field'),
-        controller: _controller,
-        autofocus: true,
-        maxLength: 40,
-        textCapitalization: TextCapitalization.words,
-        decoration: InputDecoration(hintText: context.l10n.speakerTagPromptNameHint),
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (_) {
-          if (_valid) Navigator.of(context).pop(_controller.text.trim());
-        },
+      // The Cupertino dialog has no Material ancestor; the text field needs one.
+      content: Material(
+        type: MaterialType.transparency,
+        child: TextField(
+          key: const Key('speaker_tag_prompt_name_field'),
+          controller: _controller,
+          autofocus: true,
+          maxLength: 40,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(hintText: context.l10n.speakerTagPromptNameHint),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) {
+            if (_valid) Navigator.of(context).pop(_controller.text.trim());
+          },
+        ),
       ),
       actions: [
         OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
