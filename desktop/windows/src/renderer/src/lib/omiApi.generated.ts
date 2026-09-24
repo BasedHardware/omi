@@ -2470,6 +2470,11 @@ export interface ImportJobResponse {
 
 export type ImportJobStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
+export interface Insight {
+  kind: "prior_meeting" | "goal" | "memory" | "person";
+  text: string;
+}
+
 export interface IntegrationData {
   access_token?: string | null;
   connected?: boolean;
@@ -3323,6 +3328,15 @@ export interface PageContext {
   type: "conversation" | "task" | "memory" | "recap";
 }
 
+export interface Participant {
+  email?: string | null;
+  is_ai_agent?: boolean;
+  name?: string | null;
+  organization?: string | null;
+  role?: string | null;
+  source: "roster" | "transcript";
+}
+
 export interface PayPalPaymentDetailsResponse {
   email: string;
   paypalme_url: string;
@@ -3824,6 +3838,7 @@ export interface SearchedMemory {
 export interface Section {
   body_markdown: string;
   heading: string;
+  kind?: "main" | "side_notes";
   source_segment_ids?: Array<string>;
 }
 
@@ -3966,6 +3981,14 @@ export interface SharedEvent {
   title: string;
 }
 
+export interface SharedParticipant {
+  is_ai_agent?: boolean;
+  name?: string | null;
+  organization?: string | null;
+  role?: string | null;
+  source?: "roster" | "transcript" | null;
+}
+
 export interface SharedPerson {
   id: string;
   name: string;
@@ -3981,7 +4004,9 @@ export interface SharedStructured {
   category?: CategoryEnum;
   emoji?: string;
   events?: Array<SharedEvent>;
+  meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
   overview?: string;
+  participants?: Array<SharedParticipant>;
   title?: string;
 }
 
@@ -4136,7 +4161,10 @@ export interface Structured {
   category?: CategoryEnum;
   emoji?: string;
   events?: Array<Event>;
+  insights?: Array<Insight>;
+  meeting_type?: "interview" | "intro" | "sales" | "customer" | "one_on_one" | "team_sync" | "planning" | "demo" | "social" | "other" | null;
   overview?: string;
+  participants?: Array<Participant>;
   sections?: Array<Section>;
   title?: string;
 }
@@ -5312,6 +5340,7 @@ export interface OmiApiSchemas {
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
   "ImportJobResponse": ImportJobResponse;
   "ImportJobStatus": ImportJobStatus;
+  "Insight": Insight;
   "IntegrationData": IntegrationData;
   "IntegrationMutationResponse": IntegrationMutationResponse;
   "IntegrationNotificationResponse": IntegrationNotificationResponse;
@@ -5424,6 +5453,7 @@ export interface OmiApiSchemas {
   "OutcomeRecord": OutcomeRecord;
   "OverageInfoResponse": OverageInfoResponse;
   "PageContext": PageContext;
+  "Participant": Participant;
   "PayPalPaymentDetailsResponse": PayPalPaymentDetailsResponse;
   "PaymentCheckoutSessionResponse": PaymentCheckoutSessionResponse;
   "PaymentMethodStatusResponse": PaymentMethodStatusResponse;
@@ -5522,6 +5552,7 @@ export interface OmiApiSchemas {
   "SharedChatMessagesResponse": SharedChatMessagesResponse;
   "SharedConversationResponse": SharedConversationResponse;
   "SharedEvent": SharedEvent;
+  "SharedParticipant": SharedParticipant;
   "SharedPerson": SharedPerson;
   "SharedPluginResult": SharedPluginResult;
   "SharedStructured": SharedStructured;
