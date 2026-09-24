@@ -6,6 +6,7 @@ from database import voice_profiles
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 USER = ('users', 'u')
+STATE = ('users', 'u', 'speaker_tag_prompts', 'state')
 
 
 def _pool(vectors):
@@ -55,6 +56,28 @@ def test_no_enrollment_pools_confirmations_only():
     row = store.rows[USER]
     assert 'speaker_embedding_base' not in row
     assert row['speaker_embedding'] == [0.5, 1.0]
+
+
+def test_a_missing_user_document_is_created_not_updated():
+    store = StrictFirestore()
+    count = voice_profiles.add_owner_voice_confirmation(
+        'u', [0.0, 1.0], _pool, conversation_id='c1', firestore_client=store
+    )
+    row = store.rows[USER]
+    assert count == 1
+    assert row['speaker_embedding'] == [0.0, 1.0]
+    assert row['owner_voice_confirmations'][0]['conversation_id'] == 'c1'
+    assert 'speaker_embedding_base' not in row
+    transaction = store.transactions[-1]
+    assert transaction.creates and not transaction.updates
+
+
+def test_an_existing_empty_document_is_updated_not_created():
+    store = StrictFirestore({USER: {}})
+    voice_profiles.add_owner_voice_confirmation('u', [0.0, 1.0], _pool, conversation_id='c1', firestore_client=store)
+    transaction = store.transactions[-1]
+    assert transaction.updates and not transaction.creates
+    assert store.rows[USER]['speaker_embedding'] == [0.0, 1.0]
 
 
 class _Doc:
@@ -113,18 +136,33 @@ def test_settings_default_on_and_reject_unknown_keys():
         voice_profiles.set_voice_profile_settings('u', {'is_admin': True}, firestore_client=client)
 
 
-def test_pacing_state_tracks_first_set_streak_and_answers():
-    client = _Client()
+def test_pacing_writes_run_in_transactions_and_track_first_set_streak_and_answers():
+    store = StrictFirestore()
     now = datetime(2026, 9, 24, tzinfo=timezone.utc)
-    voice_profiles.mark_tag_prompts_empty('u', now, firestore_client=client)
-    assert voice_profiles.record_tag_prompts_shown('u', now, firestore_client=client) is True
-    assert voice_profiles.record_tag_prompts_shown('u', now, firestore_client=client) is False
-    assert voice_profiles.record_tag_prompts_dismissed('u', now, firestore_client=client) == 1
-    assert voice_profiles.record_tag_prompts_dismissed('u', now, firestore_client=client) == 2
-    voice_profiles.record_tag_prompt_answered('u', 'old', now - timedelta(days=8), firestore_client=client)
-    voice_profiles.record_tag_prompt_answered('u', 'new', now, firestore_client=client)
-    state = voice_profiles.get_tag_prompt_state('u', firestore_client=client)
+
+    assert voice_profiles.record_tag_prompts_shown('u', now, firestore_client=store) is True
+    transaction = store.transactions[-1]
+    assert transaction.creates and not transaction.updates
+    assert store.rows[STATE]['first_shown_at'] == now
+
+    store.rows[STATE]['last_empty_check_at'] = now
+    assert voice_profiles.record_tag_prompts_shown('u', now, firestore_client=store) is False
+    transaction = store.transactions[-1]
+    assert transaction.updates and not transaction.creates
+    # StrictFirestore keeps the DELETE_FIELD sentinel in the row rather than applying it.
+    assert (
+        store.rows[STATE].get('last_empty_check_at', voice_profiles.firestore.DELETE_FIELD)
+        is voice_profiles.firestore.DELETE_FIELD
+    )
+    assert store.rows[STATE]['shown_sets'] == 2
+
+    assert voice_profiles.record_tag_prompts_dismissed('u', now, firestore_client=store) == 1
+    assert voice_profiles.record_tag_prompts_dismissed('u', now, firestore_client=store) == 2
+    voice_profiles.record_tag_prompt_answered('u', 'old', now - timedelta(days=8), firestore_client=store)
+    voice_profiles.record_tag_prompt_answered('u', 'new', now, firestore_client=store)
+    state = store.rows[STATE]
     assert state['consecutive_dismissals'] == 0
-    assert 'last_empty_check_at' not in state
     assert state['shown_sets'] == 2
     assert voice_profiles.answered_prompt_ids(state, now) == {'new'}
+    assert len(store.transactions) == 6
+    assert all(transaction.has_written for transaction in store.transactions)

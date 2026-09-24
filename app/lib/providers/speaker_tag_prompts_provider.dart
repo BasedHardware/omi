@@ -81,8 +81,12 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   AudioPlayer? _player;
   DateTime? _lastFetchAt;
   bool _shownReported = false;
+  bool _isDisposed = false;
   final Set<String> _played = {};
   final Map<String, Uint8List> _clips = {};
+
+  int _sessionGeneration = 0;
+  int _playbackTicket = 0;
 
   List<GeneratedSpeakerTagPrompt> prompts = [];
   int index = 0;
@@ -101,14 +105,18 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   GeneratedSpeakerTagPrompt? get current => index < prompts.length ? prompts[index] : null;
 
+  bool _isCurrent(int generation) => !_isDisposed && generation == _sessionGeneration;
+
   /// Fetch today's set when the conversations page appears. Cheap to call often.
   Future<void> loadIfDue() async {
     final now = _now();
-    if (visible || loading) return;
+    if (_isDisposed || visible || loading) return;
     if (_lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
     _lastFetchAt = now;
     loading = true;
+    final generation = _sessionGeneration;
     final result = await _fetchPrompts();
+    if (!_isCurrent(generation)) return;
     loading = false;
     final GeneratedSpeakerTagPromptsResponse response;
     switch (result) {
@@ -140,10 +148,12 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   /// Called once the card is actually on screen; starts the server's daily cooldown.
   Future<void> reportShown() async {
-    if (_shownReported || prompts.isEmpty) return;
+    if (_isDisposed || _shownReported || prompts.isEmpty) return;
     _shownReported = true;
     _emit(SpeakerTagPromptsViewed(promptCount: prompts.length, firstTime: firstTime));
+    final generation = _sessionGeneration;
     final result = await _markShown(prompts.map((prompt) => prompt.id).toList());
+    if (!_isCurrent(generation)) return;
     switch (result) {
       case ApiSuccess(:final data):
         if (data != firstTime) {
@@ -157,8 +167,11 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   Future<void> togglePlay(GeneratedSpeakerTagPrompt prompt) async {
+    if (_isDisposed) return;
+    final ticket = ++_playbackTicket;
     if (playingPromptId == prompt.id) {
       await _player?.stop();
+      if (_isDisposed || ticket != _playbackTicket) return;
       playingPromptId = null;
       notifyListeners();
       return;
@@ -166,6 +179,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     playingPromptId = prompt.id;
     clipErrorPromptId = null;
     notifyListeners();
+    final generation = _sessionGeneration;
     var wav = _clips[prompt.id];
     if (wav == null) {
       switch (await _loadClip(prompt)) {
@@ -175,10 +189,13 @@ class SpeakerTagPromptsProvider extends BaseProvider {
           Logger.debug('speaker tag prompt clip unavailable: $problem');
       }
     }
+    if (!_isCurrent(generation) || ticket != _playbackTicket) return;
     var played = false;
     if (wav != null && wav.isNotEmpty) {
       _clips[prompt.id] = wav;
-      played = await (_playClipOverride ?? _playWithJustAudio)(prompt.id, wav);
+      final playClip = _playClipOverride;
+      played = playClip != null ? await playClip(prompt.id, wav) : await _playWithJustAudio(wav, generation, ticket);
+      if (!_isCurrent(generation) || ticket != _playbackTicket) return;
     }
     _played.add(prompt.id);
     _emit(SpeakerTagPromptClipPlayed(kind: _kind(prompt.kind), loaded: played));
@@ -190,10 +207,11 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   /// Returns true when the answer was saved and the card moved on.
   Future<bool> answer(SpeakerTagAnswer answer, {String? personId, String? name}) async {
     final prompt = current;
-    if (prompt == null || submitting) return false;
+    if (_isDisposed || prompt == null || submitting) return false;
     submitting = true;
     answerFailed = false;
     notifyListeners();
+    final generation = _sessionGeneration;
     final result = await _submitAnswer(
       GeneratedSpeakerTagPromptAnswerRequest(
         promptId: prompt.id,
@@ -209,6 +227,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         firstTime: firstTime,
       ),
     );
+    if (!_isCurrent(generation)) return false;
     final succeeded = result is ApiSuccess<GeneratedSpeakerTagPromptAnswerResponse>;
     _emit(
       SpeakerTagPromptAnswerSubmitted(
@@ -225,7 +244,9 @@ class SpeakerTagPromptsProvider extends BaseProvider {
       notifyListeners();
       return false;
     }
+    _playbackTicket++;
     await _player?.stop();
+    if (!_isCurrent(generation)) return false;
     playingPromptId = null;
     answeredCount += 1;
     index += 1;
@@ -236,10 +257,13 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   /// The user closed the card. An unanswered set counts toward the server's back-off.
   Future<void> close() async {
-    if (!visible) return;
+    if (_isDisposed || !visible) return;
     _emit(SpeakerTagPromptsClosed(answeredCount: answeredCount, promptCount: prompts.length));
     visible = false;
+    final generation = _sessionGeneration;
+    _playbackTicket++;
     await _player?.stop();
+    if (!_isCurrent(generation)) return;
     playingPromptId = null;
     notifyListeners();
     if (answeredCount == 0 && _shownReported) {
@@ -250,8 +274,12 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   Future<void> loadSettings() async {
+    if (_isDisposed) return;
+    final generation = _sessionGeneration;
+    final result = await _fetchSettings();
+    if (!_isCurrent(generation)) return;
     final GeneratedVoiceProfileSettings settings;
-    switch (await _fetchSettings()) {
+    switch (result) {
       case ApiSuccess(:final data):
         settings = data;
       case ApiFailure(:final problem):
@@ -267,12 +295,15 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   /// Returns false and restores the previous value when the server rejects the change.
   Future<bool> setSaveOtherVoiceProfiles(bool enabled, {required bool fromFirstPrompt}) async {
+    if (_isDisposed) return false;
     final previous = saveOtherVoiceProfiles;
     saveOtherVoiceProfiles = enabled;
     notifyListeners();
+    final generation = _sessionGeneration;
     final settings = _settingsOrNull(
       await _updateSettings(saveOtherVoiceProfiles: enabled, source: fromFirstPrompt ? 'first_prompt' : 'settings'),
     );
+    if (!_isCurrent(generation)) return false;
     _emit(
       VoiceProfileSettingToggled(
         setting: VoiceProfileSettingToggledSetting.saveOtherVoices,
@@ -293,10 +324,13 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   Future<bool> setSpeakerTagPromptsEnabled(bool enabled) async {
+    if (_isDisposed) return false;
     final previous = speakerTagPromptsEnabled;
     speakerTagPromptsEnabled = enabled;
     notifyListeners();
+    final generation = _sessionGeneration;
     final settings = _settingsOrNull(await _updateSettings(speakerTagPromptsEnabled: enabled, source: 'settings'));
+    if (!_isCurrent(generation)) return false;
     _emit(
       VoiceProfileSettingToggled(
         setting: VoiceProfileSettingToggledSetting.tagPrompts,
@@ -320,39 +354,63 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   void clearUserData() {
+    _sessionGeneration++;
+    _playbackTicket++;
     prompts = [];
     index = 0;
     answeredCount = 0;
+    firstTime = false;
     visible = false;
     finished = false;
+    submitting = false;
+    loading = false;
+    playingPromptId = null;
+    clipErrorPromptId = null;
+    answerFailed = false;
+    saveOtherVoiceProfiles = true;
+    speakerTagPromptsEnabled = true;
+    settingsLoaded = false;
     _lastFetchAt = null;
     _shownReported = false;
     _played.clear();
     _clips.clear();
-    settingsLoaded = false;
     _player?.stop();
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _sessionGeneration++;
+    _playbackTicket++;
     _player?.dispose();
     super.dispose();
   }
 
-  Future<bool> _playWithJustAudio(String promptId, Uint8List wav) async {
+  Future<bool> _playWithJustAudio(Uint8List wav, int generation, int ticket) async {
+    File? file;
     try {
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/speaker_tag_prompt_$promptId.wav');
+      if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
+      file = File('${directory.path}/speaker_tag_prompt_${generation}_$ticket.wav');
       await file.writeAsBytes(wav, flush: true);
+      if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
       final player = _player ??= AudioPlayer();
       await player.stop();
+      if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
       await player.setFilePath(file.path);
+      if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
       await player.play();
       return true;
     } catch (error) {
-      Logger.debug('speaker tag prompt clip playback failed: $error');
+      Logger.debug('speaker tag prompt clip playback failed: ${error.runtimeType}');
       return false;
+    } finally {
+      if (file != null) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
     }
   }
 

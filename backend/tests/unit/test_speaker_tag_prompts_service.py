@@ -181,6 +181,15 @@ def test_empty_scan_is_remembered(monkeypatch):
     assert world.state['last_empty_check_at'] == NOW
 
 
+def test_owner_clip_window_keeps_text_of_a_long_segment_cropped_to_the_clip():
+    conversation = {
+        'transcript_segments': [
+            {'id': 'a', 'start': 0, 'end': 30, 'is_user': True, 'speaker_id': 0, 'text': 'one long owner turn'},
+        ]
+    }
+    assert service.owner_clip_window(conversation, ['a']) == (10.0, 20.0, 'one long owner turn')
+
+
 def test_owner_clip_window_requires_clean_owner_stretch():
     conversation = {
         'transcript_segments': [
@@ -192,6 +201,93 @@ def test_owner_clip_window_requires_clean_owner_stretch():
     assert service.owner_clip_window(conversation, ['a', 'b']) == (0.0, 8.0, 'one two three four')
     assert service.owner_clip_window(conversation, ['a']) is None  # too short
     assert service.owner_clip_window(conversation, ['a', 'c']) is None  # not all the owner
+
+
+def test_owner_clip_window_rejects_a_second_diarized_voice_even_labeled_user():
+    conversation = {
+        'transcript_segments': [
+            {'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'speaker_id': 0, 'text': 'mine'},
+            {'id': 'b', 'start': 3, 'end': 4, 'is_user': True, 'speaker_id': 1, 'text': 'theirs'},
+        ]
+    }
+    assert service.owner_clip_window(conversation, ['a']) is None
+
+
+def test_owner_clip_window_uses_only_text_inside_the_clip():
+    conversation = {
+        'transcript_segments': [
+            {'id': 'a', 'start': 0, 'end': 3, 'is_user': True, 'speaker_id': 0, 'text': 'outside before'},
+            {'id': 'b', 'start': 5, 'end': 15, 'is_user': True, 'speaker_id': 0, 'text': 'inside clip'},
+            {'id': 'c', 'start': 17, 'end': 20, 'is_user': True, 'speaker_id': 0, 'text': 'outside after'},
+        ]
+    }
+    assert service.owner_clip_window(conversation, ['a', 'b', 'c']) == (5.0, 15.0, 'inside clip')
+    no_inside_text = {
+        'transcript_segments': [
+            {'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'speaker_id': 0, 'text': ''},
+            {'id': 'b', 'start': 8, 'end': 20, 'is_user': True, 'speaker_id': 0, 'text': ''},
+        ]
+    }
+    assert service.owner_clip_window(no_inside_text, ['a', 'b']) is None
+
+
+def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
+    conversation = {
+        'id': 'c1',
+        'language': 'en',
+        'transcript_segments': [
+            {'id': 'a', 'start': 0, 'end': 3, 'is_user': True, 'speaker_id': 0, 'text': 'outside before'},
+            {'id': 'b', 'start': 5, 'end': 15, 'is_user': True, 'speaker_id': 0, 'text': 'inside clip'},
+            {'id': 'c', 'start': 17, 'end': 20, 'is_user': True, 'speaker_id': 0, 'text': 'outside after'},
+        ],
+    }
+    clipped = []
+    monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
+    monkeypatch.setattr(
+        service,
+        'conversation_clip_pcm',
+        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * 16000,
+    )
+
+    async def verify(wav, rate, text, language=None):
+        assert text == 'inside clip'
+        return text, True, 'ok'
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]], dtype=np.float32))
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'add_owner_voice_confirmation', lambda uid, embedding, pool, conversation_id: 1
+    )
+    assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
+    assert clipped == [(5.0, 15.0)]
+
+
+def test_owner_sample_gets_only_prompt_segments_still_assigned(monkeypatch):
+    world = World(monkeypatch, paid=False)
+
+    def assign(uid, conversation_id, **kwargs):
+        return {'transcript_segments': [{'id': 's1', 'start': 0, 'end': 9}]}, ['s1', 's9'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
+    response = service.apply_answer(
+        'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1', 'stale']), world.schedule, NOW
+    )
+    fn, kwargs = world.scheduled[0]
+    assert fn is service.store_owner_voice_sample and kwargs['segment_ids'] == ['s1']
+    assert response.voice_sample_queued
+
+
+def test_owner_sample_not_queued_when_prompt_segments_are_gone(monkeypatch):
+    world = World(monkeypatch, paid=False)
+
+    def assign(uid, conversation_id, **kwargs):
+        return {'transcript_segments': [{'id': 's9', 'start': 0, 'end': 9}]}, ['s9'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
+    response = service.apply_answer(
+        'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1']), world.schedule, NOW
+    )
+    assert world.scheduled == [] and not response.voice_sample_queued
 
 
 def test_owner_sample_is_verified_then_pooled(monkeypatch):

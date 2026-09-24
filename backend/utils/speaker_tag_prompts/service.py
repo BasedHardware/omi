@@ -46,6 +46,7 @@ from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MIN_CLIP_SECONDS,
     PROMPT_WINDOW,
+    _speaker_id,
     select_prompts,
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
@@ -120,7 +121,12 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
 
     named_allowed = named_speaker_prompts_allowed(uid)
     conversations = conversations_db.get_conversations(
-        uid, limit=RECENT_CONVERSATION_LIMIT, start_date=now - PROMPT_WINDOW, end_date=now
+        # created_at >= started_at, so this existing indexed range is a superset of conversations that
+        # started in the window; selection then applies the started_at bound.
+        uid,
+        limit=RECENT_CONVERSATION_LIMIT,
+        start_date=now - PROMPT_WINDOW,
+        end_date=now,
     )
     people = {person['id']: person.get('name') or '' for person in users_db.get_people(uid) if person.get('id')}
     prompts = select_prompts(
@@ -282,15 +288,18 @@ def apply_answer(
         SpeakerTagPromptAnswer.someone_else,
     }
     if answer == SpeakerTagPromptAnswer.me:
-        _assign(uid, request, is_user=True, person_id=None, train=False)
+        conversation, resolved = _assign(uid, request, is_user=True, person_id=None, train=False)
         if schedule is not None:
-            schedule(
-                store_owner_voice_sample,
-                uid=uid,
-                conversation_id=request.conversation_id,
-                segment_ids=list(request.segment_ids),
-            )
-            voice_sample_queued = True
+            assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
+            segment_ids = [sid for sid in request.segment_ids if sid in assigned]
+            if segment_ids:
+                schedule(
+                    store_owner_voice_sample,
+                    uid=uid,
+                    conversation_id=request.conversation_id,
+                    segment_ids=segment_ids,
+                )
+                voice_sample_queued = True
     elif person_id is not None:
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
@@ -378,9 +387,13 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
     ]
     if not chosen or len(chosen) != len(wanted):
         return None
+    speaker_ids = {_speaker_id(segment) for segment in chosen}
+    if len(speaker_ids) != 1:
+        return None
+    speaker_id = speaker_ids.pop()
     chosen.sort(key=lambda segment: float(segment.get('start') or 0))
     start = float(chosen[0].get('start') or 0)
-    end = float(chosen[-1].get('end') or 0)
+    end = max(float(segment.get('end') or 0) for segment in chosen)
     if end - start < MIN_CLIP_SECONDS:
         return None
     if end - start > MAX_CLIP_SECONDS:
@@ -391,11 +404,19 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
         for segment in conversation.get('transcript_segments') or []
         if float(segment.get('start') or 0) < end
         and float(segment.get('end') or 0) > start
-        and not segment.get('is_user')
+        and _speaker_id(segment) != speaker_id
     ]
     if others:
         return None
-    text = ' '.join((segment.get('text') or '').strip() for segment in chosen)
+    text = ' '.join(
+        (segment.get('text') or '').strip()
+        for segment in chosen
+        # Overlapping, not contained: the quality gate checks the clip's words are contained in this
+        # text, so a cropped long segment must still contribute its words.
+        if float(segment.get('start') or 0) < end and float(segment.get('end') or 0) > start
+    ).strip()
+    if not text:
+        return None
     return start, end, text
 
 

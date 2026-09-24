@@ -119,7 +119,7 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
                     identity=_identity(current[0]),
                     segment_ids=tuple(s['id'] for s in current),
                     start=float(current[0].get('start') or 0),
-                    end=float(current[-1].get('end') or 0),
+                    end=max(float(s.get('end') or 0) for s in current),
                     text=' '.join((s.get('text') or '').strip() for s in current).strip(),
                 )
             )
@@ -149,6 +149,16 @@ def _clip_window(run: _Run) -> Tuple[float, float]:
     center = (run.start + run.end) / 2
     half = MAX_CLIP_SECONDS / 2
     return center - half, center + half
+
+
+def _clip_overlaps_other_speaker(segments: Sequence[Mapping[str, Any]], run: _Run) -> bool:
+    clip_start, clip_end = _clip_window(run)
+    return any(
+        segment['speaker_id'] != run.speaker_id
+        and float(segment.get('start') or 0) < clip_end
+        and float(segment.get('end') or 0) > clip_start
+        for segment in segments
+    )
 
 
 def _excerpt(text: str) -> str:
@@ -207,7 +217,11 @@ def select_prompts(
 
         best_run: Dict[Tuple[int, str], _Run] = {}
         for run in _runs(segments, decided_segments):
-            if str(run.speaker_id) in decided_speakers or run.duration < MIN_CLIP_SECONDS:
+            if (
+                str(run.speaker_id) in decided_speakers
+                or run.duration < MIN_CLIP_SECONDS
+                or _clip_overlaps_other_speaker(segments, run)
+            ):
                 continue
             key = (run.speaker_id, run.identity)
             if key not in best_run or run.duration > best_run[key].duration:
@@ -228,6 +242,13 @@ def select_prompts(
             if pid in answered:
                 return
             clip_start, clip_end = _clip_window(run)
+            excerpt = ' '.join(
+                (segment.get('text') or '').strip()
+                for segment in segments
+                if segment['id'] in run.segment_ids
+                and float(segment.get('start') or 0) >= clip_start
+                and float(segment.get('end') or 0) <= clip_end
+            )
             prompt = SpeakerTagPrompt(
                 id=pid,
                 kind=kind,
@@ -239,7 +260,7 @@ def select_prompts(
                 segment_ids=list(run.segment_ids),
                 clip_start=round(clip_start, 3),
                 clip_end=round(clip_end, 3),
-                excerpt=_excerpt(run.text),
+                excerpt=_excerpt(excerpt),
                 **extra,
             )
             candidates.append(_Candidate(score + freshness, prompt))

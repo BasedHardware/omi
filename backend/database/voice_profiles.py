@@ -76,18 +76,29 @@ def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
 
 def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any = None) -> bool:
     """Stamp a shown set. Returns True when this was the first set ever shown."""
-    ref = _state_ref(uid, firestore_client)
-    state = ref.get().to_dict() or {}
-    first = not state.get('first_shown_at')
-    update: Dict[str, Any] = {
-        'last_shown_at': now,
-        'shown_sets': int(state.get('shown_sets') or 0) + 1,
-        'last_empty_check_at': firestore.DELETE_FIELD,
-    }
-    if first:
-        update['first_shown_at'] = now
-    ref.set(update, merge=True)
-    return first
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def stamp(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        first = not state.get('first_shown_at')
+        update: Dict[str, Any] = {
+            'last_shown_at': now,
+            'shown_sets': int(state.get('shown_sets') or 0) + 1,
+        }
+        if first:
+            update['first_shown_at'] = now
+        if snapshot.exists:
+            if state.get('last_empty_check_at') is not None:
+                update['last_empty_check_at'] = firestore.DELETE_FIELD
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
+        return first
+
+    return run_transactional(client, stamp)
 
 
 def mark_tag_prompts_empty(uid: str, now: datetime, *, firestore_client: Any = None) -> None:
@@ -97,19 +108,40 @@ def mark_tag_prompts_empty(uid: str, now: datetime, *, firestore_client: Any = N
 
 def record_tag_prompts_dismissed(uid: str, now: datetime, *, firestore_client: Any = None) -> int:
     """Count a set closed without any answer. Returns the new streak length."""
-    ref = _state_ref(uid, firestore_client)
-    state = ref.get().to_dict() or {}
-    streak = int(state.get('consecutive_dismissals') or 0) + 1
-    ref.set({'consecutive_dismissals': streak, 'last_dismissed_at': now}, merge=True)
-    return streak
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def bump(transaction: Any) -> int:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        streak = int(state.get('consecutive_dismissals') or 0) + 1
+        update = {'consecutive_dismissals': streak, 'last_dismissed_at': now}
+        if snapshot.exists:
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
+        return streak
+
+    return run_transactional(client, bump)
 
 
 def record_tag_prompt_answered(uid: str, prompt_id: str, now: datetime, *, firestore_client: Any = None) -> None:
-    ref = _state_ref(uid, firestore_client)
-    state = ref.get().to_dict() or {}
-    answered = _pruned_answers(state, now)
-    answered[prompt_id] = now
-    ref.set({'answered': answered, 'consecutive_dismissals': 0, 'last_answered_at': now}, merge=True)
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def record(transaction: Any) -> None:
+        snapshot = ref.get(transaction=transaction)
+        answered = _pruned_answers(snapshot.to_dict() or {}, now)
+        answered[prompt_id] = now
+        update = {'answered': answered, 'consecutive_dismissals': 0, 'last_answered_at': now}
+        if snapshot.exists:
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
+
+    run_transactional(client, record)
 
 
 def answered_prompt_ids(state: Dict[str, Any], now: Optional[datetime] = None) -> set:
@@ -136,7 +168,8 @@ def add_owner_voice_confirmation(
 
     @firestore.transactional
     def pool_in(transaction: Any) -> int:
-        data = ref.get(transaction=transaction).to_dict() or {}
+        snapshot = ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
         current = data.get('speaker_embedding')
         base = data.get('speaker_embedding_base')
         pooled_at = data.get('owner_voice_pooled_at')
@@ -156,7 +189,10 @@ def add_owner_voice_confirmation(
         }
         if base:
             update['speaker_embedding_base'] = list(base)
-        transaction.update(ref, update)
+        if snapshot.exists:
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
         return len(confirmations)
 
     return run_transactional(client, pool_in)

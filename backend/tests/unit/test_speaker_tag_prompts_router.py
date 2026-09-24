@@ -89,6 +89,33 @@ def test_clip_rejects_long_windows_and_missing_audio(monkeypatch):
     assert base64.b64decode(body['audio_base64'])[:4] == b'RIFF'
 
 
+def test_clip_rejects_deleted_and_locked_before_storage(monkeypatch):
+    client = _client(monkeypatch)
+    seen = []
+    clips = []
+
+    def get_conversation(uid, cid):
+        seen.append((uid, cid))
+        return {'id': cid, 'deleted': cid == 'deleted-c', 'is_locked': cid == 'locked-c'}
+
+    monkeypatch.setattr(router_module.conversations_db, 'get_conversation', get_conversation)
+    monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *a: clips.append(a) or b'')
+    assert (
+        client.get(
+            '/v1/speaker-tag-prompts/clip', params={'conversation_id': 'deleted-c', 'start': 0, 'end': 5}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            '/v1/speaker-tag-prompts/clip', params={'conversation_id': 'locked-c', 'start': 0, 'end': 5}
+        ).status_code
+        == 402
+    )
+    assert seen == [('u', 'deleted-c'), ('u', 'locked-c')]
+    assert clips == []
+
+
 def test_settings_patch_passes_source_and_drops_it_from_updates(monkeypatch):
     seen = {}
 

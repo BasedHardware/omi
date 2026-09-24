@@ -99,6 +99,71 @@ def test_other_voice_between_segments_splits_the_clip():
     assert _select([conversation]) == []
 
 
+def test_clip_overlapping_another_diarized_voice_is_not_asked():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 8),
+            _segment('b', 1, 3, 4),
+        ]
+    )
+    assert _select([conversation]) == []
+
+
+def test_capped_clip_overlapping_another_voice_is_not_asked():
+    overlapping = _conversation(
+        segments=[
+            _segment('a', 0, 0, 30),
+            _segment('b', 1, 14, 16),
+        ]
+    )
+    assert _select([overlapping]) == []
+    clear = _conversation(
+        segments=[
+            _segment('a', 0, 0, 30),
+            _segment('b', 1, 2, 4),
+        ]
+    )
+    prompt = _select([clear])[0]
+    assert (prompt.clip_start, prompt.clip_end) == (10.0, 20.0)
+
+
+def test_a_clean_run_wins_over_a_longer_overlapping_run_for_the_same_voice():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 20),
+            _segment('x', 1, 10, 11),
+            _segment('b', 0, 30, 37),
+        ]
+    )
+    prompts = _select([conversation])
+    assert len(prompts) == 1
+    assert prompts[0].speaker_id == 0
+    assert prompts[0].segment_ids == ['b']
+    assert (prompts[0].clip_start, prompts[0].clip_end) == (30.0, 37.0)
+
+
+def test_touching_clip_boundary_is_not_an_overlap():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 8),
+            _segment('b', 1, 8, 9),
+        ]
+    )
+    prompts = _select([conversation])
+    assert prompts and (prompts[0].clip_start, prompts[0].clip_end) == (0.0, 8.0)
+
+
+def test_overlapping_same_speaker_segments_keep_the_full_span():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 8),
+            _segment('b', 0, 3, 5),
+        ]
+    )
+    prompt = _select([conversation])[0]
+    assert (prompt.clip_start, prompt.clip_end) == (0.0, 8.0)
+
+
 def test_conversations_outside_48h_or_without_audio_are_skipped():
     old = _conversation('old', hours_ago=49, segments=[_segment('a', 0, 0, 9)])
     silent = _conversation('silent', segments=[_segment('a', 0, 0, 9)], audio_files=[])
@@ -118,6 +183,25 @@ def test_clip_is_capped_and_centered():
     prompt = _select([conversation])[0]
     assert prompt.clip_end - prompt.clip_start == selection.MAX_CLIP_SECONDS
     assert prompt.clip_start == 10.0
+
+
+def test_excerpt_only_covers_segments_inside_the_clip():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 7, 'before the clip'),
+            _segment('b', 0, 7, 13, 'inside the clip'),
+            _segment('c', 0, 13, 20, 'after the clip'),
+        ]
+    )
+    prompt = _select([conversation])[0]
+    assert (prompt.clip_start, prompt.clip_end) == (5.0, 15.0)
+    assert prompt.excerpt == 'inside the clip'
+
+
+def test_a_long_single_segment_can_leave_an_empty_excerpt():
+    conversation = _conversation(segments=[_segment('a', 0, 0, 20, 'one long utterance')])
+    prompt = _select([conversation])[0]
+    assert prompt.excerpt == ''
 
 
 def test_limits_per_conversation_and_owner_checks():
