@@ -209,14 +209,19 @@ from utils.conversations.meeting_context import (
     resolve_meeting_context,
     select_overlapping_meeting,
 )
-from utils.conversations.meeting_context_pack import (
-    gather_meeting_context_pack,
-    load_people_documents,
-    render_meeting_context_pack,
-    resolve_owner_identity,
-    should_gather_meeting_context,
+from utils.conversations.meeting_context import (
+    meeting_context_from_redis_mapping as _meeting_context_from_redis_mapping,
+    meeting_context_from_time_overlap as _meeting_context_from_time_overlap,
+    stored_meeting_context as _stored_meeting_context,
+    store_meeting_context as _store_meeting_context,
 )
-from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
+from utils.conversations.meeting_notes_wiring import (
+    meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
+    meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
+    rich_notes_inputs,
+    rich_roster_inputs,
+)
+from utils.conversations.meeting_participants import MeetingRoster
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.jit_first_open_policy import resolve_authorized_first_open_plan
 from utils.other.storage import (
@@ -328,14 +333,6 @@ def _ocr_meeting_context_enabled() -> bool:
     return _flag_enabled('CONVERSATION_OCR_CONTEXT_ENABLED')
 
 
-def _meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
-
-
-def _meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
-
-
 def _stored_meeting_lookup_enabled() -> bool:
     # Defaults ON: this is a bounded, read-only query of the user's own stored
     # meetings, wrapped in try/except, and it is the only identity source that
@@ -414,74 +411,6 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
-def _rich_meeting_roster(
-    uid: str,
-    conversation: Any,
-    calendar_context: Optional[CalendarMeetingContext],
-) -> Tuple[Optional[MeetingRoster], List[Dict[str, Any]], bool]:
-    """Best-effort normalized roster plus the people-catalog read used for it.
-
-    The roster exists whenever this is meeting-like — resolved meeting context,
-    a desktop meeting-role capture, or the multi-party-speech gate — which is
-    also the condition under which the background pack may be gathered. Every
-    read inside degrades to absent context; nothing here may block note
-    generation. Returns ``(roster, people_docs, desktop_meeting_capture)`` so
-    the notes path can reuse the people read for the context pack and every
-    shared-prefix caller can pass the desktop flag through.
-    """
-    source_value = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
-    external_data = getattr(conversation, 'external_data', None) or {}
-    desktop_capture = (
-        source_value == 'desktop'
-        and isinstance(external_data, Mapping)
-        and external_data.get('conversation_role') == 'meeting'
-    )
-    try:
-        gather = should_gather_meeting_context(conversation, calendar_context)
-        if calendar_context is None and not desktop_capture and not gather:
-            return None, [], desktop_capture
-        people_docs = load_people_documents(uid)
-        owner_name, owner_emails = resolve_owner_identity(uid)
-        roster = normalize_meeting_participants(
-            calendar_context,
-            getattr(conversation, 'source', None),
-            owner_name,
-            owner_emails,
-            people_docs,
-        )
-        return roster, people_docs, desktop_capture
-    except Exception as exc:  # noqa: BLE001 - rich roster is best effort
-        logger.warning('rich meeting roster build failed uid=%s: %s', uid, type(exc).__name__)
-        # An EMPTY roster, never None — None would re-enable the unsafe legacy
-        # one-name speaker guard while the rich flag is on.
-        return MeetingRoster(entries=(), display_title=None, title_is_window_title=False), [], desktop_capture
-
-
-def _rich_meeting_context_block(
-    uid: str,
-    conversation: Any,
-    roster: MeetingRoster,
-    people_docs: List[Dict[str, Any]],
-    tz_str: str,
-) -> Optional[str]:
-    """Render the BACKGROUND CONTEXT block for the notes prompt; None when the
-    pack comes back empty. Called only at the notes call site — memory and app
-    prompts share the roster but never gather background."""
-    try:
-        pack = gather_meeting_context_pack(
-            uid,
-            conversation,
-            roster,
-            people=people_docs,
-            include_screen_text=_meeting_notes_screen_text_context_enabled(),
-            timezone_name=tz_str,
-        )
-        return render_meeting_context_pack(pack) if pack else None
-    except Exception as exc:  # noqa: BLE001 - background is best effort
-        logger.warning('rich meeting context build failed uid=%s: %s', uid, type(exc).__name__)
-        return None
-
-
 def _get_structured(
     uid: str,
     language_code: str,
@@ -534,13 +463,14 @@ def _get_structured(
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
                     if _meeting_notes_rich_context_enabled():
-                        roster, people_docs, _desktop_capture = _rich_meeting_roster(
-                            uid, conversation, calendar_context
+                        roster, meeting_context_block, _desktop_capture = rich_notes_inputs(
+                            uid,
+                            conversation,
+                            calendar_context,
+                            tz_str,
+                            include_background=True,
+                            include_screen_text=_meeting_notes_screen_text_context_enabled(),
                         )
-                        if roster is not None:
-                            meeting_context_block = _rich_meeting_context_block(
-                                uid, conversation, roster, people_docs, tz_str
-                            )
                     prefix = build_conversation_prompt_prefix(
                         conversation_id=prompt_conversation_id,
                         transcript=ext_conv.text,
@@ -690,9 +620,14 @@ def _get_structured(
             meeting_context_block: Optional[str] = None
             desktop_capture = False
             if _meeting_notes_rich_context_enabled():
-                roster, people_docs, desktop_capture = _rich_meeting_roster(uid, main_conv, calendar_context)
-                if roster is not None:
-                    meeting_context_block = _rich_meeting_context_block(uid, main_conv, roster, people_docs, tz_str)
+                roster, meeting_context_block, desktop_capture = rich_notes_inputs(
+                    uid,
+                    main_conv,
+                    calendar_context,
+                    tz_str,
+                    include_background=True,
+                    include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                )
             prefix = build_conversation_prompt_prefix(
                 conversation_id=prompt_conversation_id,
                 transcript=action_items_transcript,
@@ -960,9 +895,7 @@ def trigger_conversation_apps(
                 app_roster: Optional[MeetingRoster] = None
                 app_desktop_capture = False
                 if _meeting_notes_rich_context_enabled():
-                    app_roster, _people_docs, app_desktop_capture = _rich_meeting_roster(
-                        uid, conversation, app_calendar_context
-                    )
+                    app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
                     transcript=app_transcript,
@@ -1666,9 +1599,7 @@ def _extract_memories_canonical(
             prompt_roster: Optional[MeetingRoster] = None
             prompt_desktop_capture = False
             if _meeting_notes_rich_context_enabled():
-                prompt_roster, _people_docs, prompt_desktop_capture = _rich_meeting_roster(
-                    uid, conversation, calendar_context
-                )
+                prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -2583,56 +2514,6 @@ def _flag_off_identified_basic_deny(
     return plan
 
 
-def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
-    direct = getattr(conversation, 'calendar_meeting_context', None)
-    if isinstance(direct, CalendarMeetingContext):
-        return direct
-    if isinstance(direct, dict) and direct:
-        return CalendarMeetingContext(**direct)
-    raw_external_data = getattr(conversation, 'external_data', None)
-    external_data = raw_external_data if isinstance(raw_external_data, dict) else {}
-    raw = external_data.get('calendar_meeting_context')
-    if isinstance(raw, CalendarMeetingContext):
-        return raw
-    if isinstance(raw, dict) and raw:
-        return CalendarMeetingContext(**raw)
-    return None
-
-
-def _store_meeting_context(conversation: Any, context: CalendarMeetingContext) -> None:
-    if isinstance(conversation, CreateConversation):
-        conversation.calendar_meeting_context = context
-        return
-    external_data = dict(getattr(conversation, 'external_data', None) or {})
-    external_data['calendar_meeting_context'] = context.model_dump(mode='json')
-    conversation.external_data = external_data
-
-
-def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
-    """Exact conversation->meeting association, when one was recorded.
-
-    `redis_db.set_conversation_meeting_id` is written in exactly one place
-    (`routers/listen/conversations.py`, at desktop conversation creation) and only
-    when a stored meeting already overlaps that instant, so this is frequently
-    absent. It is an optimization, never the only path.
-    """
-    conversation_id = getattr(conversation, 'id', None)
-    if not isinstance(conversation, Conversation) or not conversation_id:
-        return None
-    try:
-        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
-        if not meeting_id:
-            return None
-        meeting_data = calendar_db.get_meeting(uid, meeting_id)
-        if not meeting_data:
-            return None
-        parsed = CalendarMeetingContext.from_records([meeting_data])
-        return parsed[0] if parsed else None
-    except Exception as exc:
-        logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
-        return None
-
-
 def _calendar_overlap_retains_conversation(
     uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
 ) -> bool:
@@ -2662,25 +2543,6 @@ def _calendar_overlap_retains_conversation(
     except Exception as exc:
         logger.error('Error reading Google Calendar for discard override uid=%s: %s', uid, exc)
         return False
-
-
-def _meeting_context_from_time_overlap(
-    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
-) -> Optional[CalendarMeetingContext]:
-    """Time-overlap lookup against the user's stored meetings.
-
-    Independent of the Redis mapping and of any OAuth grant: it reads the same
-    `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
-    """
-    if started_at is None or finished_at is None:
-        return None
-    try:
-        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
-        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
-        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
-    except Exception as exc:
-        logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
-        return None
 
 
 def _enrich_meeting_context(uid: str, conversation: Any) -> None:

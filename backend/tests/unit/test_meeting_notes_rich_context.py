@@ -954,17 +954,17 @@ class TestMeetingContextPack:
 
 class TestRichFailOpen:
     def test_normalizer_failure_returns_empty_roster_not_none(self, monkeypatch):
-        import utils.conversations.process_conversation as pc
+        import utils.conversations.meeting_notes_wiring as wiring
 
         def boom(*a, **k):
             raise ValueError('malformed people document with private details')
 
-        monkeypatch.setattr(pc, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(pc, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(pc, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
-        monkeypatch.setattr(pc, 'normalize_meeting_participants', boom)
+        monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
+        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
         conversation = SimpleNamespace(source=ConversationSource.omi, external_data={})
-        roster, people_docs, desktop_capture = pc._rich_meeting_roster('uid', conversation, None)
+        roster, people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
         # An empty roster — never None — keeps the strict rich speaker path.
         assert roster is not None
         assert roster.entries == ()
@@ -972,47 +972,53 @@ class TestRichFailOpen:
         assert desktop_capture is False
 
     def test_gather_gate_failure_preserves_desktop_capture(self, monkeypatch):
-        import utils.conversations.process_conversation as pc
+        import utils.conversations.meeting_notes_wiring as wiring
 
         def boom(*a, **k):
             raise RuntimeError('gate blew up')
 
-        monkeypatch.setattr(pc, 'should_gather_meeting_context', boom)
+        monkeypatch.setattr(wiring, 'should_gather_meeting_context', boom)
         conversation = SimpleNamespace(
             source=ConversationSource.desktop,
             external_data={'conversation_role': 'meeting'},
         )
-        roster, _people_docs, desktop_capture = pc._rich_meeting_roster('uid', conversation, None)
+        roster, _people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
         assert roster is not None
         assert roster.entries == ()
         assert desktop_capture is True
 
     def test_context_block_failure_returns_none(self, monkeypatch):
-        import utils.conversations.process_conversation as pc
+        import utils.conversations.meeting_notes_wiring as wiring
 
-        monkeypatch.setattr(pc, '_meeting_notes_screen_text_context_enabled', lambda: False)
         monkeypatch.setattr(
-            pc,
+            wiring,
             'gather_meeting_context_pack',
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError('pack exploded')),
         )
         roster = _roster([_entry('Ash Kalb', 'ash@fulcra.com')])
-        assert pc._rich_meeting_context_block('uid', SimpleNamespace(), roster, [], 'UTC') is None
+        assert (
+            wiring._rich_meeting_context_block('uid', SimpleNamespace(), roster, [], 'UTC', include_screen_text=False)
+            is None
+        )
         monkeypatch.setattr(
-            pc,
+            wiring,
             'gather_meeting_context_pack',
             lambda *a, **k: MeetingContextPack(goals=('g',)),
         )
         monkeypatch.setattr(
-            pc,
+            wiring,
             'render_meeting_context_pack',
             lambda *a, **k: (_ for _ in ()).throw(RuntimeError('render exploded')),
         )
-        assert pc._rich_meeting_context_block('uid', SimpleNamespace(), roster, [], 'UTC') is None
+        assert (
+            wiring._rich_meeting_context_block('uid', SimpleNamespace(), roster, [], 'UTC', include_screen_text=False)
+            is None
+        )
 
     def test_notes_call_path_survives_roster_and_pack_failures(self, monkeypatch):
         import contextlib
 
+        import utils.conversations.meeting_notes_wiring as wiring
         import utils.conversations.process_conversation as pc
         from models.conversation_enums import ExternalIntegrationConversationSource
         from models.structured import Structured
@@ -1029,11 +1035,11 @@ class TestRichFailOpen:
         monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: contextlib.nullcontext())
         monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
         monkeypatch.setattr(pc, 'validate_structured_source_segment_ids', lambda *a, **k: None)
-        monkeypatch.setattr(pc, 'should_gather_meeting_context', lambda *a, **k: True)
-        monkeypatch.setattr(pc, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(pc, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
-        monkeypatch.setattr(pc, 'normalize_meeting_participants', boom)
-        monkeypatch.setattr(pc, 'gather_meeting_context_pack', boom)
+        monkeypatch.setattr(wiring, 'should_gather_meeting_context', lambda *a, **k: True)
+        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
+        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
+        monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
+        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', boom)
 
         captured = {}
 
