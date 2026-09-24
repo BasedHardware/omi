@@ -542,6 +542,12 @@ class SharedPreferencesUtil {
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
 
+  // User-configured accessible directory for storing batch/offline recordings.
+  // When empty, falls back to the default app documents directory.
+  String get customAudioStorageDir => getString('customAudioStorageDir');
+
+  set customAudioStorageDir(String value) => saveString('customAudioStorageDir', value);
+
   // Phone-mic batch capture marker. false = explicit Transcribe Later (files
   // named audio_omibatchphone_...), true = automatic offline fallback (files
   // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.

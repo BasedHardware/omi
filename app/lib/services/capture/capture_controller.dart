@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -724,8 +723,8 @@ class CaptureController extends ChangeNotifier
     }
     _preferences.batchModeEnabled = enabled;
     PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
-    final docs = await getApplicationDocumentsDirectory();
-    await _preferences.saveString('batchAudioDir', docs.path);
+    final audioDir = await resolveEffectiveBatchAudioDirectory();
+    await _preferences.saveString('batchAudioDir', audioDir.path);
     // Only re-enable native streaming when turning batch OFF, a device with a
     // native BLE route is connected, and background mode is opted in.
     final enableNativeStreaming = _shouldEnableNativeBackgroundStreaming;
@@ -1710,7 +1709,7 @@ class CaptureController extends ChangeNotifier
     // and ensure the native realtime socket is disabled while batch mode is on
     // (batch mode takes precedence over background streaming).
     final batchMode = _preferences.batchModeEnabled;
-    final docsDir = await getApplicationDocumentsDirectory();
+    final docsDir = await resolveEffectiveBatchAudioDirectory();
     await _preferences.saveString('batchAudioDir', docsDir.path);
 
     await _preferences.saveBool('nativeBleForegroundReady', false);
@@ -2210,8 +2209,8 @@ class CaptureController extends ChangeNotifier
 
     // batchAudioDir may never have been written if batch was chosen via the
     // offline auto-switch (setBatchMode was never called with batch on).
-    final docs = await getApplicationDocumentsDirectory();
-    await _preferences.saveString('batchAudioDir', docs.path);
+    final audioDir = await resolveEffectiveBatchAudioDirectory();
+    await _preferences.saveString('batchAudioDir', audioDir.path);
     await _preferences.saveBool('phoneBatchAuto', auto);
     if (_preferences.batchCutRequested) _preferences.batchCutRequested = false;
 
