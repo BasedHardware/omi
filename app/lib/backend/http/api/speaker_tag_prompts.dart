@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 /// Speaker tag prompts ("Is this you?" / "Who is this?") and voice-profile preferences.
@@ -14,18 +14,18 @@ Map<String, dynamic> _object(String body) {
   return decoded;
 }
 
-Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> getSpeakerTagPrompts() => executeApi(
+Future<ApiResult<wire.GeneratedSpeakerTagPromptsResponse>> getSpeakerTagPrompts() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts', method: 'GET'),
-      decode: (body) => GeneratedSpeakerTagPromptsResponse.fromJson(_object(body)),
+      decode: (body) => wire.GeneratedSpeakerTagPromptsResponse.fromJson(_object(body)),
     );
 
 Future<ApiResult<bool>> markSpeakerTagPromptsShown(List<String> promptIds) => executeApi(
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/shown',
         method: 'POST',
-        body: jsonEncode(GeneratedSpeakerTagPromptsShownRequest(promptIds: promptIds).toJson()),
+        body: jsonEncode(wire.GeneratedSpeakerTagPromptsShownRequest(promptIds: promptIds).toJson()),
       ),
-      decode: (body) => GeneratedSpeakerTagPromptsShownResponse.fromJson(_object(body)).firstTime,
+      decode: (body) => wire.GeneratedSpeakerTagPromptsShownResponse.fromJson(_object(body)).firstTime,
     );
 
 Future<ApiResult<void>> dismissSpeakerTagPrompts() => executeApi<void>(
@@ -33,8 +33,8 @@ Future<ApiResult<void>> dismissSpeakerTagPrompts() => executeApi<void>(
       decode: (_) {},
     );
 
-Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> answerSpeakerTagPrompt(
-  GeneratedSpeakerTagPromptAnswerRequest request,
+Future<ApiResult<wire.GeneratedSpeakerTagPromptAnswerResponse>> answerSpeakerTagPrompt(
+  wire.GeneratedSpeakerTagPromptAnswerRequest request,
 ) =>
     executeApi(
       request: ApiRequest(
@@ -42,7 +42,7 @@ Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> answerSpeakerTagPromp
         method: 'POST',
         body: jsonEncode(request.toJson()),
       ),
-      decode: (body) => GeneratedSpeakerTagPromptAnswerResponse.fromJson(_object(body)),
+      decode: (body) => wire.GeneratedSpeakerTagPromptAnswerResponse.fromJson(_object(body)),
     );
 
 /// WAV bytes for a short window of the user's own stored conversation audio.
@@ -60,16 +60,20 @@ Future<ApiResult<Uint8List>> getSpeakerTagPromptClip({
   ).query;
   return executeApi(
     request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/clip?$query', method: 'GET'),
-    decode: (body) => base64Decode(GeneratedSpeakerTagPromptClip.fromJson(_object(body)).audioBase64),
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException('Expected a JSON object');
+      return base64Decode(wire.GeneratedSpeakerTagPromptClip.fromJson(decoded).audioBase64);
+    },
   );
 }
 
-Future<ApiResult<GeneratedVoiceProfileSettings>> getVoiceProfileSettings() => executeApi(
+Future<ApiResult<wire.GeneratedVoiceProfileSettings>> getVoiceProfileSettings() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/users/voice-profile-settings', method: 'GET'),
-      decode: (body) => GeneratedVoiceProfileSettings.fromJson(_object(body)),
+      decode: (body) => wire.GeneratedVoiceProfileSettings.fromJson(_object(body)),
     );
 
-Future<ApiResult<GeneratedVoiceProfileSettings>> updateVoiceProfileSettings({
+Future<ApiResult<wire.GeneratedVoiceProfileSettings>> updateVoiceProfileSettings({
   bool? speakerTagPromptsEnabled,
   bool? saveOtherVoiceProfiles,
   required String source,
@@ -80,6 +84,10 @@ Future<ApiResult<GeneratedVoiceProfileSettings>> updateVoiceProfileSettings({
   return executeApi(
     request:
         ApiRequest(url: '${Env.apiBaseUrl}v1/users/voice-profile-settings', method: 'PATCH', body: jsonEncode(body)),
-    decode: (body) => GeneratedVoiceProfileSettings.fromJson(_object(body)),
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) throw const FormatException('Expected a JSON object');
+      return wire.GeneratedVoiceProfileSettings.fromJson(decoded);
+    },
   );
 }
