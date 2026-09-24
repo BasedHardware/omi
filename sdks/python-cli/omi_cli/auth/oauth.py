@@ -87,6 +87,24 @@ _CLI_KEY_SCOPES = [
 # --- Browser flow ----------------------------------------------------------
 
 
+SUPPORTED_PROVIDERS: frozenset[str] = frozenset({"google", "apple"})
+
+
+def validate_oauth_provider(provider: str) -> str:
+    """Normalize and validate an OAuth provider name.
+
+    Returns the canonical (lowercase, stripped) provider name or raises
+    :class:`UsageError`.
+    """
+    cleaned = (provider or "").strip().lower()
+    if cleaned not in SUPPORTED_PROVIDERS:
+        raise UsageError(
+            message=f"Unknown OAuth provider: {provider!r}",
+            detail="Supported: google, apple.",
+        )
+    return cleaned
+
+
 def login_with_browser(
     profile_name: str,
     *,
@@ -101,13 +119,7 @@ def login_with_browser(
     ``open_browser=False`` is useful in headless tests; the caller is then
     responsible for actually visiting the printed URL.
     """
-    cleaned_provider = (provider or "").strip().lower()
-    if cleaned_provider not in {"google", "apple"}:
-        raise UsageError(
-            message=f"Unknown OAuth provider: {provider!r}",
-            detail="Supported: google, apple.",
-        )
-    provider = cleaned_provider
+    provider = validate_oauth_provider(provider)
 
     state = secrets.token_urlsafe(32)
     code_verifier, code_challenge = _generate_pkce_pair()

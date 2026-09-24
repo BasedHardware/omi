@@ -184,6 +184,15 @@ def test_login_with_browser_rejects_unknown_provider(config_path, bad_provider: 
     assert excinfo.value.detail == "Supported: google, apple."
 
 
+def test_validate_oauth_provider_helper() -> None:
+    assert oauth.validate_oauth_provider(" Google ") == "google"
+    assert oauth.validate_oauth_provider("APPLE") == "apple"
+    with pytest.raises(UsageError) as excinfo:
+        oauth.validate_oauth_provider("invalid")
+    assert "Unknown OAuth provider: 'invalid'" in str(excinfo.value)
+    assert excinfo.value.detail == "Supported: google, apple."
+
+
 @pytest.mark.parametrize("provider_input", [" Google ", "GOOGLE", "Apple", " APPLE ", " apple "])
 def test_login_with_browser_normalizes_provider_case_and_whitespace(
     monkeypatch, config_path, provider_input: str

@@ -58,13 +58,7 @@ def login(
             detail="`--browser` and `--api-key` are mutually exclusive.",
         )
 
-    cleaned_provider = (provider or "").strip().lower()
-    if cleaned_provider not in {"google", "apple"}:
-        raise UsageError(
-            message=f"Unknown OAuth provider: {provider!r}",
-            detail="Supported: google, apple.",
-        )
-    provider = cleaned_provider
+    provider = oauth_auth.validate_oauth_provider(provider)
 
     # Explicit flags win over the picker.
     if browser:
