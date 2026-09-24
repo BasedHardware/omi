@@ -20,7 +20,7 @@ You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
 Stream your goals directly from the CLI into an interactive HTML dashboard:
 
 ```sh
-omi --json goal list --include-inactive | python examples/goals_to_html.py - goals_dashboard.html
+omi --json goal list --limit 100 --include-inactive | python examples/goals_to_html.py - goals_dashboard.html
 ```
 
 ### 2. Export from a Saved JSON File
@@ -28,9 +28,11 @@ omi --json goal list --include-inactive | python examples/goals_to_html.py - goa
 If you have already saved an export:
 
 ```sh
-omi --json goal list --include-inactive > goals.json
+omi --json goal list --limit 100 --include-inactive > goals.json
 python examples/goals_to_html.py goals.json goals_dashboard.html
 ```
+
+> **Tip:** `goal list` defaults to `--limit 10` (max 100). Specifying `--limit 100` ensures up to 100 goals are included in a single export.
 
 Check that the command succeeded before opening the generated file in any browser.
 
