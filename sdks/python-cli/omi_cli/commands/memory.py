@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -107,7 +108,9 @@ def create_memory(
         body["category"] = category.value
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
+    raw_id = result.get("id") if isinstance(result, Mapping) else None
+    memory_id = escape(str(raw_id)) if raw_id is not None else ""
+    ctx.renderer.success(f"Memory created: [bold]{memory_id}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 

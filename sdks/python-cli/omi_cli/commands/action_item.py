@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -114,7 +115,9 @@ def create_action_item(
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    raw_id = result.get("id") if isinstance(result, Mapping) else None
+    item_id = escape(str(raw_id)) if raw_id is not None else ""
+    ctx.renderer.success(f"Action item created: [bold]{item_id}[/bold]")
     ctx.renderer.emit(result)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -161,7 +162,11 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    raw_id = result.get("id") if isinstance(result, Mapping) else None
+    raw_status = result.get("status") if isinstance(result, Mapping) else None
+    conv_id = escape(str(raw_id)) if raw_id is not None else ""
+    conv_status = escape(str(raw_status)) if raw_status is not None else ""
+    ctx.renderer.success(f"Conversation queued: [bold]{conv_id}[/bold] (status={conv_status})")
     ctx.renderer.emit(result)
 
 
@@ -209,7 +214,9 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    raw_id = result.get("id") if isinstance(result, Mapping) else None
+    conv_id = escape(str(raw_id)) if raw_id is not None else ""
+    ctx.renderer.success(f"Conversation queued: [bold]{conv_id}[/bold]")
     ctx.renderer.emit(result)
 
 

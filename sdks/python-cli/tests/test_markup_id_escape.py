@@ -1,12 +1,15 @@
 """Regression tests for Rich markup-like resource IDs in success messages.
 
-IDs come straight from ``typer.Argument`` (argv), so a value like
-``bad[/bold]id`` used to raise ``MarkupError`` (or silently eat text) when
+IDs come straight from ``typer.Argument`` (argv) or backend responses, so a value
+like ``bad[/bold]id`` used to raise ``MarkupError`` (or silently eat text) when
 interpolated into pretty ``[bold]...[/bold]`` success messages. Every
-update/delete/complete/progress command must escape user-controlled IDs.
+create/update/delete/complete/progress command must escape user-controlled or
+server-returned IDs and statuses.
 """
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -96,6 +99,51 @@ def test_local_task_markup_id_renders_literally(
         json={"ok": True, "name": tool_name, "content_type": "text/plain", "result": "{}"}
     )
     result = cli_runner.invoke(app, ["--no-color", *cli_args])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
+
+
+MARKUP_STATUS = "bad[/bold]status"
+
+CREATE_CASES = [
+    ("memory", "/v1/dev/user/memories", ["create", "some memory content"]),
+    ("conversation", "/v1/dev/user/conversations", ["create", "--text", "hello world"]),
+    ("action-item", "/v1/dev/user/action-items", ["create", "some action item"]),
+    ("goal", "/v1/dev/user/goals", ["create", "reach 100 users", "--target", "100"]),
+]
+
+
+@pytest.mark.parametrize("command,collection,extra", CREATE_CASES)
+def test_create_markup_id_renders_literally(
+    command, collection, extra, authed_profile, respx_mock, cli_runner, monkeypatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    route = respx_mock.post(collection).respond(
+        json={"id": MARKUP_ID, "status": MARKUP_STATUS, "title": "test", "content": "test", "description": "test"}
+    )
+    result = cli_runner.invoke(app, ["--no-color", command, *extra])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
+    if command == "conversation":
+        assert MARKUP_STATUS in result.stderr
+
+
+def test_conversation_from_segments_markup_id_renders_literally(
+    authed_profile, respx_mock, cli_runner, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    segments_file = tmp_path / "segments.json"
+    segments_file.write_text(json.dumps([{"text": "hello", "start": 0.0, "end": 1.0}]))
+    route = respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": MARKUP_ID, "status": "queued"}
+    )
+    result = cli_runner.invoke(app, ["--no-color", "conversation", "from-segments", str(segments_file)])
 
     assert result.exit_code == 0, result.output
     assert route.call_count == 1
