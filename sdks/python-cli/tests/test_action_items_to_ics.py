@@ -112,9 +112,14 @@ class TestActionItemsToIcs(unittest.TestCase):
         self.assertIn("DTEND:20260930T173000Z", ics_text)  # +30 mins
         self.assertIn("Send proposal\\, contract\\; review notes\\\\brief", ics_text)
 
-        # Task 2 (completed)
+        # Task 2 (completed, no created_at)
         self.assertIn("UID:task_2@omi", ics_text)
         self.assertIn("STATUS:COMPLETED", ics_text)
+
+        # CREATED property: present when created_at exists, omitted when absent
+        self.assertIn("CREATED:20260920T090000Z", ics_text)
+        task_2_block = [b for b in ics_text.split("BEGIN:VEVENT") if "UID:task_2@omi" in b][0]
+        self.assertNotIn("CREATED:", task_2_block)
 
         # Task 3 should NOT appear as a VEVENT
         self.assertNotIn("UID:task_3@omi", ics_text)

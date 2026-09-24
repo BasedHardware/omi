@@ -125,7 +125,7 @@ def item_to_event(item: Dict[str, Any], now_utc: datetime) -> Optional[List[str]
     completed = bool(item.get("completed", False))
     status = "COMPLETED" if completed else "NEEDS-ACTION"
 
-    created = ics_datetime(item.get("created_at")) or due
+    created = ics_datetime(item.get("created_at"))
     end = due + EVENT_LENGTH
 
     conv_id = item.get("conversation_id")
@@ -143,9 +143,10 @@ def item_to_event(item: Dict[str, Any], now_utc: datetime) -> Optional[List[str]
         f"SUMMARY:{summary}",
         f"DESCRIPTION:{desc_text}",
         f"STATUS:{status}",
-        f"CREATED:{stamp(created)}",
-        "END:VEVENT",
     ]
+    if created is not None:
+        lines.append(f"CREATED:{stamp(created)}")
+    lines.append("END:VEVENT")
     return lines
 
 
