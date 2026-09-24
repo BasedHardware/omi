@@ -148,7 +148,7 @@ typedef enum {
 // =============================================================================
 // BLE UUID DEFINITIONS - OMI Protocol
 // =============================================================================
-#define OMI_SERVICE_UUID "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define OMI_SERVICE_UUID "814B9B7C-25FD-4ACD-8604-D28877BEEE6D"
 #define AUDIO_DATA_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
 #define AUDIO_CODEC_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 #define PHOTO_DATA_UUID "19B10005-E8F2-537E-4F6C-D104768A1214"

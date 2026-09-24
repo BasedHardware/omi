@@ -26,7 +26,7 @@ class _FakeBleHostApi extends BleHostApi {
 
 void main() {
   const uuid = 'AA:BB:CC:DD:EE:FF';
-  const serviceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
+  const serviceUuid = '814b9b7c-25fd-4acd-8604-d28877beee6d';
   const charUuid = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
   final services = [
