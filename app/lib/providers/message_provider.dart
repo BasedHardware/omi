@@ -368,7 +368,7 @@ class MessageProvider extends ChangeNotifier {
         type: FileType.custom,
         allowMultiple: true,
         allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
-        dialogTitle: 'Select files',
+        dialogTitle: l10n?.chooseFile ?? 'Select files',
         withData: false,
         withReadStream: false,
       );

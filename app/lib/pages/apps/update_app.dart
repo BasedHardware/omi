@@ -108,7 +108,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               },
                               generatingDescription: provider.isGenratingDescription,
                               allowPaidApps: provider.allowPaidApps,
-                              appPricing: provider.isPaid ? 'Paid' : 'Free',
+                              appPricing: provider.isPaid ? l10n.pricingPaid : l10n.pricingFree,
                               imageFile: provider.imageFile,
                               appNameController: provider.appNameController,
                               appDescriptionController: provider.appDescriptionController,
