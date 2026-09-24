@@ -282,6 +282,8 @@ def new_memories_extractor(
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
 
+    language_instruction = _get_language_instruction(uid, language)
+
     try:
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         with track_usage(uid, Features.MEMORIES):
