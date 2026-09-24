@@ -79,6 +79,80 @@ def auto_mergeable(row: dict) -> bool:
     )
 
 
+def _find_matching_records(index, load, incoming, candidate_id, own_id, target_id, target, target_hint, receipt_owner):
+    from copy import deepcopy
+
+    matched = {}
+    extent = deepcopy(incoming)
+    if target_id and target:
+        matched[target_id] = target
+        extent['started_at'] = min(extent['started_at'], target['started_at'])
+        extent['finished_at'] = max(extent['finished_at'], target['finished_at'])
+    while True:
+        ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
+        ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
+        before = len(matched)
+        candidates = []
+        for cid in sorted(ids - matched.keys()):
+            raw = load(cid)
+            if raw and not raw.get('deleted') and interval_matches(raw, extent):
+                # Live and user-managed rows can only be explicit targets.
+                if not auto_mergeable(raw) and cid != target_id:
+                    continue
+                candidates.append((cid, raw))
+        if receipt_owner is None:
+            labeled = [(cid, raw) for cid, raw in candidates if raw.get('manual_speaker_assignments')]
+            if labeled:
+                receipt_owner = min(labeled, key=lambda item: (item[1]['started_at'], item[0]))[0]
+        for cid, raw in candidates:
+            # Excluded receipts must not extend the search or survivor's timestamps.
+            if raw.get('manual_speaker_assignments') and cid != receipt_owner:
+                continue
+            matched[cid] = raw
+            extent['started_at'] = min(extent['started_at'], raw['started_at'])
+            extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
+        if len(matched) == before:
+            break
+    return matched, extent, receipt_owner
+
+
+def _merge_transcripts(incoming, records, canonical, origin, target, result, current):
+    from copy import deepcopy
+
+    existing = []
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(result.get('transcript_segments', []) if current else [])
+    for row in sorted(records, key=lambda row: row['id'] != canonical):
+        new = deepcopy(row.get('transcript_segments', []))
+        for segment in new:
+            segment['timestamp'] = row['started_at'].timestamp() + segment['start']
+            duration = segment['end'] - segment['start']
+            segment['start'] = segment['timestamp'] - origin
+            segment['end'] = segment['start'] + duration
+        retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+        if row['id'] != canonical:
+            for segment in retained:
+                if not segment.get('speaker_id_scope'):
+                    segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
+                allocator.assign(segment)
+        existing += retained
+    new = deepcopy(incoming['transcript_segments'])
+    for segment in new:
+        segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
+    survivors = dedupe_segments_for_merge(
+        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
+    )
+    for segment in survivors:
+        allocator.assign(segment)
+    segments = existing + deepcopy(survivors)
+    segments.sort(key=lambda s: (s['timestamp'], s['end'] - s['start'], s.get('text', '')))
+    for segment in segments:
+        duration = segment['end'] - segment['start']
+        segment['start'] = segment.pop('timestamp') - origin
+        segment['end'] = segment['start'] + duration
+    return segments, survivors
+
+
 def assign_in_transaction(
     transaction: 'firestore_transaction.Transaction',
     user_ref: 'DocumentReference',
@@ -146,37 +220,9 @@ def assign_in_transaction(
         raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
 
     receipt_owner = target_id or (own_id if own_anchor and own_anchor.get('manual_speaker_assignments') else None)
-    matched = {}
-    extent = deepcopy(incoming)
-    if target_id and target:
-        matched[target_id] = target
-        extent['started_at'] = min(extent['started_at'], target['started_at'])
-        extent['finished_at'] = max(extent['finished_at'], target['finished_at'])
-    while True:
-        ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
-        ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
-        before = len(matched)
-        candidates = []
-        for cid in sorted(ids - matched.keys()):
-            raw = load(cid)
-            if raw and not raw.get('deleted') and interval_matches(raw, extent):
-                # Live and user-managed rows can only be explicit targets.
-                if not auto_mergeable(raw) and cid != target_id:
-                    continue
-                candidates.append((cid, raw))
-        if receipt_owner is None:
-            labeled = [(cid, raw) for cid, raw in candidates if raw.get('manual_speaker_assignments')]
-            if labeled:
-                receipt_owner = min(labeled, key=lambda item: (item[1]['started_at'], item[0]))[0]
-        for cid, raw in candidates:
-            # Excluded receipts must not extend the search or survivor's timestamps.
-            if raw.get('manual_speaker_assignments') and cid != receipt_owner:
-                continue
-            matched[cid] = raw
-            extent['started_at'] = min(extent['started_at'], raw['started_at'])
-            extent['finished_at'] = max(extent['finished_at'], raw['finished_at'])
-        if len(matched) == before:
-            break
+    matched, extent, receipt_owner = _find_matching_records(
+        index, load, incoming, candidate_id, own_id, target_id, target, target_hint, receipt_owner
+    )
 
     canonical = (
         target_id
@@ -194,37 +240,7 @@ def assign_in_transaction(
     if not result['sync_live_target']:
         result['created_at'] = extent['started_at']
     origin = extent['started_at'].timestamp()
-    existing = []
-    allocator = ConversationSpeakerIdAllocator()
-    allocator.hydrate(result.get('transcript_segments', []) if current else [])
-    for row in sorted(records, key=lambda row: row['id'] != canonical):
-        new = deepcopy(row.get('transcript_segments', []))
-        for segment in new:
-            segment['timestamp'] = row['started_at'].timestamp() + segment['start']
-            duration = segment['end'] - segment['start']
-            segment['start'] = segment['timestamp'] - origin
-            segment['end'] = segment['start'] + duration
-        retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
-        if row['id'] != canonical:
-            for segment in retained:
-                if not segment.get('speaker_id_scope'):
-                    segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
-                allocator.assign(segment)
-        existing += retained
-    new = deepcopy(incoming['transcript_segments'])
-    for segment in new:
-        segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
-    survivors = dedupe_segments_for_merge(
-        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
-    )
-    for segment in survivors:
-        allocator.assign(segment)
-    segments = existing + deepcopy(survivors)
-    segments.sort(key=lambda s: (s['timestamp'], s['end'] - s['start'], s.get('text', '')))
-    for segment in segments:
-        duration = segment['end'] - segment['start']
-        segment['start'] = segment.pop('timestamp') - origin
-        segment['end'] = segment['start'] + duration
+    segments, survivors = _merge_transcripts(incoming, records, canonical, origin, target, result, current)
     result.update(
         started_at=extent['started_at'],
         finished_at=extent['finished_at'],
