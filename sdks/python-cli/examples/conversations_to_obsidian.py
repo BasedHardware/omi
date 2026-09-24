@@ -26,7 +26,12 @@ from typing import Any, Dict, List, Set
 def extract_conversations(content: str, source_label: str = "<input>") -> List[Dict[str, Any]]:
     """Parse JSON and extract list of conversation items."""
     raw = content.lstrip("\ufeff")
-    items = json.loads(raw)
+    if not raw.strip():
+        raise ValueError(f"{source_label}: empty JSON input")
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{source_label}: invalid JSON ({exc.msg} at line {exc.lineno} column {exc.colno})") from exc
 
     if isinstance(items, dict):
         for key in ("conversations", "items", "data"):
@@ -50,20 +55,28 @@ def slugify(text: str) -> str:
     return text[:40].strip("-") or "conversation"
 
 
-def render_obsidian_note(conv: Dict[str, Any]) -> tuple[str, str, Dict[str, Any]]:
+def render_obsidian_note(conv: Dict[str, Any], idx: int = 1) -> tuple[str, str, Dict[str, Any]]:
     """Render conversation as an Obsidian markdown note with YAML frontmatter."""
-    cid = str(conv.get("id") or "unknown")
+    cid = str(conv.get("id") or f"conv_{idx}")
     st = conv.get("structured") or {}
     title = str(st.get("title") or conv.get("title") or f"Conversation {cid}").strip()
     overview = str(st.get("overview") or conv.get("overview") or "").strip()
     category = str(st.get("category") or conv.get("category") or "general").strip()
 
+    # Strictly validate date against YYYY-MM-DD to avoid path traversal
     raw_date = str(conv.get("started_at") or conv.get("created_at") or "")
-    date_day = raw_date[:10] if len(raw_date) >= 10 else "undated"
-    month_folder = date_day[:7] if date_day != "undated" else "undated"
+    date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", raw_date)
+    if date_match:
+        date_day = date_match.group(1)
+        month_folder = date_day[:7]
+    else:
+        date_day = "undated"
+        month_folder = "undated"
 
     slug = slugify(title)
-    filename = f"{date_day}-{slug}.md" if date_day != "undated" else f"{slug}-{cid[:6]}.md"
+    cid_clean = re.sub(r"[^\w-]", "", cid)
+    short_id = cid_clean[:8] if cid_clean else f"{idx:03d}"
+    base_filename = f"{date_day}-{slug}-{short_id}"
 
     # Extract speakers
     speakers: Set[str] = set()
@@ -85,23 +98,23 @@ def render_obsidian_note(conv: Dict[str, Any]) -> tuple[str, str, Dict[str, Any]
 
     speakers_list = sorted(list(speakers))
 
-    # Build Frontmatter
+    # Build Frontmatter with safe JSON-serialized scalar strings
     fm = [
         "---",
-        f'id: "{cid}"',
-        f'title: "{title.replace(chr(34), chr(92) + chr(34))}"',
-        f"date: {date_day}",
-        f"category: {category}",
+        f"id: {json.dumps(cid)}",
+        f"title: {json.dumps(title)}",
+        f"date: {json.dumps(date_day)}",
+        f"category: {json.dumps(category)}",
     ]
     if speakers_list:
         fm.append("speakers:")
         for s in speakers_list:
-            fm.append(f'  - "{s}"')
+            fm.append(f"  - {json.dumps(s)}")
     fm.extend([
         "tags:",
         "  - omi",
         "  - conversation",
-        f"  - omi/{category}",
+        f"  - {json.dumps(f'omi/{category}')}",
         "---",
         "",
     ])
@@ -122,10 +135,10 @@ def render_obsidian_note(conv: Dict[str, Any]) -> tuple[str, str, Dict[str, Any]
         "id": cid,
         "title": title,
         "date": date_day,
-        "filename": filename,
+        "base_filename": base_filename,
         "month_folder": month_folder,
     }
-    return filename, note_content, meta
+    return base_filename, note_content, meta
 
 
 def export_obsidian_vault(conversations: List[Dict[str, Any]], output_dir: Path) -> None:
@@ -135,13 +148,23 @@ def export_obsidian_vault(conversations: List[Dict[str, Any]], output_dir: Path)
     conv_dir.mkdir(parents=True, exist_ok=True)
 
     index_entries: List[Dict[str, Any]] = []
+    used_paths: Set[Path] = set()
 
-    for conv in conversations:
-        fname, content, meta = render_obsidian_note(conv)
+    for idx, conv in enumerate(conversations, start=1):
+        if not isinstance(conv, dict):
+            continue
+        base_name, content, meta = render_obsidian_note(conv, idx=idx)
         month_dir = conv_dir / meta["month_folder"]
         month_dir.mkdir(parents=True, exist_ok=True)
 
-        note_path = month_dir / fname
+        note_path = month_dir / f"{base_name}.md"
+        counter = 1
+        while note_path in used_paths or note_path.exists():
+            counter += 1
+            note_path = month_dir / f"{base_name}_{counter}.md"
+
+        used_paths.add(note_path)
+        meta["filename"] = note_path.name
         note_path.write_text(content, encoding="utf-8")
         index_entries.append(meta)
 
@@ -176,14 +199,18 @@ def main() -> None:
     args = parser.parse_args()
 
     all_conversations: List[Dict[str, Any]] = []
-    for src in args.inputs:
-        if str(src) == "-":
-            content = sys.stdin.read()
-            all_conversations.extend(extract_conversations(content, "<stdin>"))
-        else:
-            p = Path(src)
-            content = p.read_text(encoding="utf-8")
-            all_conversations.extend(extract_conversations(content, str(p)))
+    try:
+        for src in args.inputs:
+            if str(src) == "-":
+                content = sys.stdin.read()
+                all_conversations.extend(extract_conversations(content, "<stdin>"))
+            else:
+                p = Path(src)
+                content = p.read_text(encoding="utf-8")
+                all_conversations.extend(extract_conversations(content, str(p)))
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     out_dir = Path(args.output_dir)
     export_obsidian_vault(all_conversations, out_dir)

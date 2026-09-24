@@ -50,6 +50,55 @@ class TestConversationsToObsidian(unittest.TestCase):
             self.assertTrue((out_dir / "Conversations_Index.md").exists())
             self.assertTrue((out_dir / "Conversations" / "2026-09").exists())
 
+    def test_same_day_same_title_collision_preserves_both(self):
+        convs = [
+            {
+                "id": "c101",
+                "started_at": "2026-09-24T10:00:00Z",
+                "title": "Sync",
+                "overview": "First sync"
+            },
+            {
+                "id": "c102",
+                "started_at": "2026-09-24T14:00:00Z",
+                "title": "Sync",
+                "overview": "Second sync"
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "Vault"
+            export_obsidian_vault(convs, out_dir)
+            notes = list((out_dir / "Conversations" / "2026-09").glob("*.md"))
+            self.assertEqual(len(notes), 2, "Both collision notes must be preserved")
+
+    def test_malformed_date_traversal_falls_back_to_undated(self):
+        convs = [
+            {
+                "id": "c999",
+                "started_at": "../../../evil-path",
+                "title": "Escape Attempt",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "Vault"
+            export_obsidian_vault(convs, out_dir)
+            # Must land in undated inside vault, not escape
+            self.assertTrue((out_dir / "Conversations" / "undated").exists())
+            notes = list((out_dir / "Conversations" / "undated").glob("*.md"))
+            self.assertEqual(len(notes), 1)
+
+    def test_speaker_name_escaping_in_frontmatter(self):
+        conv = {
+            "id": "c50",
+            "started_at": "2026-09-24T10:00:00Z",
+            "title": "Quote Test",
+            "transcript_segments": [
+                {"speaker": 'Alice "BOB" Lee', "text": "Testing quotes"}
+            ]
+        }
+        _, content, _ = render_obsidian_note(conv)
+        self.assertIn('- "Alice \\"BOB\\" Lee"', content)
+
 
 if __name__ == "__main__":
     unittest.main()

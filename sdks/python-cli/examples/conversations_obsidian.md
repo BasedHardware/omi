@@ -52,7 +52,7 @@ Or convert a saved export file:
 python conversations_to_obsidian.py conversations.json -o ~/Documents/Obsidian/OmiVault
 ```
 
-Output:
+Output (stderr):
 ```
 Exported 35 conversation notes into Obsidian vault at /Users/.../Obsidian/OmiVault
 ```
