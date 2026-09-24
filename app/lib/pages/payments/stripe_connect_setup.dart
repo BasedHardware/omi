@@ -23,19 +23,19 @@ class StripeConnectSetup extends StatefulWidget {
 
 class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+  late final PaymentMethodProvider _payments = context.read<PaymentMethodProvider>();
 
   @override
   void initState() {
     super.initState();
     _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    context.read<PaymentMethodProvider>().getSupportedCountries();
+    _payments.getSupportedCountries();
   }
 
   @override
   void dispose() {
-    if (context.mounted) {
-      context.read<PaymentMethodProvider>().stopStripePolling();
-    }
+    // The provider was captured while mounted; context lookups no longer work in dispose.
+    _payments.stopStripePolling();
     _pulseController.dispose();
     super.dispose();
   }
@@ -66,7 +66,8 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
 
   String _selectedCountryName(PaymentMethodProvider provider) {
     if (provider.selectedCountryId?.isEmpty ?? true) return context.l10n.selectYourCountry;
-    final name = provider.filteredCountries.firstWhereOrNull(
+    // Not filteredCountries: that still carries the picker's last search.
+    final name = provider.supportedCountries.firstWhereOrNull(
       (country) => country['id'] == provider.selectedCountryId,
     )?['name'] as String?;
     return name?.decodeString ?? context.l10n.selectYourCountry;

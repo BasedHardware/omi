@@ -766,13 +766,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   sendInitialAppMessage(App? app) async {
-    context.read<MessageProvider>().setSendingMessage(true);
+    // The provider outlives this page: release the composer even if the page closes mid-request.
+    final provider = context.read<MessageProvider>();
+    provider.setSendingMessage(true);
     _resumeFollowingAndScroll();
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    if (mounted) {
-      context.read<MessageProvider>().addMessage(message);
+    try {
+      final message = await getInitialAppMessage(app?.id);
+      if (!mounted) return;
+      provider.addMessage(message);
       _resumeFollowingAndScroll();
-      context.read<MessageProvider>().setSendingMessage(false);
+    } finally {
+      provider.setSendingMessage(false);
     }
   }
 

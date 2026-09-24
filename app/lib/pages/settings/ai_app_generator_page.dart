@@ -717,6 +717,11 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {
     final appId = await provider.submitGeneratedApp();
+    // The error text lives on the prompt view; the reader is on the generated view here.
+    if (appId == null && mounted && provider.errorMessage != null) {
+      OmiFeedback.error(context, provider.errorMessage!);
+      return;
+    }
     if (appId != null && mounted) {
       // Get the app and navigate to detail page (same as normal app creation flow)
       App? app = await context.read<AppProvider>().getAppFromId(appId);

@@ -55,12 +55,15 @@ Future<bool> disableAppWithUndo(
   VoidCallback? onRestored,
 }) async {
   final provider = context.read<AppProvider>();
+  provider.pendingDisables.add(app.id);
   onHidden?.call();
   final undone = await OmiFeedback.undo(
     context,
     context.l10n.appDisabledNamed(app.name.decodeString),
     onUndo: () {},
   );
+  // Enabled again inside the Undo window (e.g. the detail page's Enable): that choice wins.
+  if (!provider.pendingDisables.remove(app.id)) return false;
   if (undone) {
     onRestored?.call();
     return false;

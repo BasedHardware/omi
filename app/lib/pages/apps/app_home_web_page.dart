@@ -6,6 +6,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/omi_web_page.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/browser.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -17,10 +19,19 @@ class AppHomeWebPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = appSetupUrlWithUid(app.externalIntegration?.appHomeUrl ?? '', SharedPreferencesUtil().uid);
+    final url = Uri.tryParse(
+      appSetupUrlWithUid(app.externalIntegration?.appHomeUrl ?? '', SharedPreferencesUtil().uid),
+    );
+    // A malformed app-provided URL gets the page's error state, not a crash in build.
+    if (url == null || !url.hasScheme) {
+      return Scaffold(
+        appBar: AppBar(leading: const OmiBackButton(), title: Text(app.name.decodeString)),
+        body: OmiErrorState(message: context.l10n.couldNotLoadPage),
+      );
+    }
     return OmiWebPage(
       title: app.name.decodeString,
-      url: Uri.parse(url),
+      url: url,
       userAgent: topUserAgents[Random().nextInt(topUserAgents.length)],
     );
   }

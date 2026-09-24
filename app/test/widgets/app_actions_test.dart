@@ -187,5 +187,31 @@ void main() {
       expect(events, ['hidden', 'restored']);
       await tearDownProvider(tester);
     });
+
+    testWidgets('a refused disable brings the app back', (tester) async {
+      provider.disableAppOverride = (id) async {
+        disabledIds.add(id);
+        return false;
+      };
+      await startDisable(tester);
+      for (var i = 0; i < 70; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(outcome, isFalse);
+      expect(disabledIds, ['app-1']);
+      expect(events, ['hidden', 'restored']);
+      await tearDownProvider(tester);
+    });
+
+    testWidgets('enabling again inside the Undo window cancels the pending disable', (tester) async {
+      await startDisable(tester);
+      await provider.toggleApp('app-1', true, null);
+      for (var i = 0; i < 70; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(outcome, isFalse);
+      expect(disabledIds, isEmpty, reason: 'the later Enable wins');
+      await tearDownProvider(tester);
+    });
   });
 }

@@ -30,6 +30,8 @@ class _OmiWebPageState extends State<OmiWebPage> {
   bool _loading = true;
   bool _failed = false;
   bool _canGoBack = false;
+  // The page the reader was going to; Try Again reloads it, not the first URL.
+  Uri? _lastRequested;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
     _controller
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageStarted: (url) => _lastRequested = Uri.tryParse(url),
           onPageFinished: (_) async {
             final canGoBack = await _controller.canGoBack();
             if (!mounted) return;
@@ -66,7 +69,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
       _failed = false;
       _loading = true;
     });
-    await _controller.loadRequest(widget.url);
+    await _controller.loadRequest(_lastRequested ?? widget.url);
   }
 
   @override

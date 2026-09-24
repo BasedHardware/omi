@@ -890,7 +890,12 @@ class MessageProvider extends ChangeNotifier {
   /// [sendingMessage] the same way it does for a normal send.
   Future<void> retryFailedReply(ServerMessage message) async {
     final failed = _failedReplies.remove(message);
-    if (failed == null || !failed.canRetry) return;
+    if (failed == null || !failed.canRetry) {
+      // The failure was cleared (a refresh) between build and tap: nothing to resend, so release the
+      // composer the caller locked.
+      setSendingMessage(false);
+      return;
+    }
     messages.removeWhere((m) => identical(m, message));
     notifyListeners();
     await _streamReply(failed.text!, context: failed.context, retryFileIds: failed.fileIds);
