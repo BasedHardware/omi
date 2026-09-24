@@ -1334,6 +1334,51 @@ final class ProductValueEvent extends RegisteredEvent {
   Map<String, Object> get properties => {"kind": kind.wireName, "surface": surface.wireName, if (objectId != null) "object_id": objectId!.value};
 }
 
+enum ConversationActionAction {
+  askOmi("ask_omi"),
+  star("star"),
+  unstar("unstar"),
+  share("share"),
+  rename("rename"),
+  moveFolder("move_folder"),
+  recordingsOpen("recordings_open"),
+  separate("separate"),
+  delete("delete"),
+  copyTranscript("copy_transcript"),
+  copySummary("copy_summary"),
+  shareAudio("share_audio"),
+  linkEvent("link_event"),
+  reprocess("reprocess"),
+  search("search"),
+  visibility("visibility"),
+  open("open"),
+  select("select"),
+  copyConversationId("copy_conversation_id"),
+  testPrompt("test_prompt");
+  const ConversationActionAction(this.wireName);
+  final String wireName;
+}
+
+enum ConversationActionSurface {
+  topBar("top_bar"),
+  overflow("overflow"),
+  detailBody("detail_body"),
+  rowLongPress("row_long_press"),
+  rowSwipe("row_swipe");
+  const ConversationActionSurface(this.wireName);
+  final String wireName;
+}
+
+final class ConversationAction extends RegisteredEvent {
+  const ConversationAction({required this.action, required this.surface});
+  final ConversationActionAction action;
+  final ConversationActionSurface surface;
+  @override
+  String get wireName => "Conversation Action";
+  @override
+  Map<String, Object> get properties => {"action": action.wireName, "surface": surface.wireName};
+}
+
 final class SpeakerTagPromptsViewed extends RegisteredEvent {
   const SpeakerTagPromptsViewed({required this.promptCount, required this.firstTime});
   final int promptCount;

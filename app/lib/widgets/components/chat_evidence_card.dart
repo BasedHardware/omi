@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Supplemental evidence chrome for a chat answer.
 ///
@@ -21,27 +23,22 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canOpen = reference.canOpen && onOpen != null;
-    final colorScheme = Theme.of(context).colorScheme;
     final borderColor = reference.state == ChatEvidenceReferenceState.available
-        ? colorScheme.outline.withValues(alpha: 0.55)
-        : colorScheme.outline.withValues(alpha: 0.3);
+        ? OmiColors.border
+        : OmiColors.border.withValues(alpha: 0.5);
     final card = Container(
       key: ValueKey('chat-evidence-${reference.id}'),
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(10),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.mdAll,
         border: Border.all(color: borderColor),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            _iconFor(reference),
-            size: 18,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(_iconFor(reference), size: 18, color: OmiColors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -55,20 +52,14 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
                   reference.summary?.trim().isNotEmpty == true ? reference.summary! : reference.statusLabel,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                 ),
               ],
             ),
           ),
           if (canOpen) ...[
             const SizedBox(width: 8),
-            Icon(
-              Icons.open_in_new,
-              size: 16,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            const Icon(Icons.open_in_new, size: 16, color: OmiColors.textSecondary),
           ],
         ],
       ),
@@ -79,11 +70,11 @@ class ChatEvidenceReferenceCard extends StatelessWidget {
       label: reference.accessibilityLabel,
       button: canOpen,
       enabled: canOpen,
-      hint: canOpen ? 'Open evidence' : null,
+      hint: canOpen ? context.l10n.open : null,
       child: canOpen
           ? InkWell(
               onTap: onOpen,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: OmiRadius.mdAll,
               child: card,
             )
           : card,

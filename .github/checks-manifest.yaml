@@ -514,6 +514,16 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
     lanes: ["local", "ci"]
     reason: "INV-UI-2: the desktop app shipped ~11 back buttons, 6 close buttons, 9 date formats and 4 delete policies because every page drew its own; new code uses the shared components in desktop/macos/docs/ux-contract.md"
+  - id: mobile-ux-contract-tests
+    command: ["python3", ".github/scripts/test_check_mobile_ux_contract.py"]
+    triggers: [".github/scripts/check_mobile_ux_contract.py", ".github/scripts/test_check_mobile_ux_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-3 is a no-increase ratchet; every rule must keep a case proving it fails on the defect it targets"
+  - id: mobile-ux-contract
+    command: ["python3", ".github/scripts/check_mobile_ux_contract.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
   - id: rayban-dat-plugin-boundary
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
