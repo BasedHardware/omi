@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "डिवाइस: {deviceName}",
     "keepSubscription": "सदस्यता रखें",
     "couldNotLoadPage": "यह पेज लोड नहीं हो सका। अपना कनेक्शन जांचें और फिर से कोशिश करें।",
-    "leaveFlowStepOf": "चरण {current} / {total}"
+    "leaveFlowStepOf": "चरण {current} / {total}",
+    "sharedTasksLinkExpired": "ये साझा किए गए कार्य नहीं मिले, या लिंक की समय-सीमा समाप्त हो गई है।",
+    "sharedTasksUnknownSender": "कोई"
 }

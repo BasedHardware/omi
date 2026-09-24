@@ -10640,4 +10640,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Adım $current/$total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Bu paylaşılan görevler bulunamadı veya bağlantının süresi doldu.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Birisi';
 }

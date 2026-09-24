@@ -10720,4 +10720,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Hakbang $current ng $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Hindi nahanap ang mga ibinahaging task na ito, o nag-expire na ang link.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Isang tao';
 }

@@ -10684,4 +10684,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Чекор $current од $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Овие споделени задачи не се пронајдени или врската е истечена.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Некој';
 }

@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Zariadenie: {deviceName}",
     "keepSubscription": "Ponechať predplatné",
     "couldNotLoadPage": "Stránku sa nepodarilo načítať. Skontrolujte pripojenie a skúste to znova.",
-    "leaveFlowStepOf": "Krok {current} z {total}"
+    "leaveFlowStepOf": "Krok {current} z {total}",
+    "sharedTasksLinkExpired": "Tieto zdieľané úlohy sa nenašli alebo platnosť odkazu vypršala.",
+    "sharedTasksUnknownSender": "Niekto"
 }

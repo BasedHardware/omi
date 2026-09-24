@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Dispositiu: {deviceName}",
     "keepSubscription": "Mantén la subscripció",
     "couldNotLoadPage": "No s'ha pogut carregar aquesta pàgina. Comprova la connexió i torna-ho a provar.",
-    "leaveFlowStepOf": "Pas {current} de {total}"
+    "leaveFlowStepOf": "Pas {current} de {total}",
+    "sharedTasksLinkExpired": "No s'han trobat aquestes tasques compartides o l'enllaç ha caducat.",
+    "sharedTasksUnknownSender": "Algú"
 }

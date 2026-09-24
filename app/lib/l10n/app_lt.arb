@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Įrenginys: {deviceName}",
     "keepSubscription": "Palikti prenumeratą",
     "couldNotLoadPage": "Nepavyko įkelti puslapio. Patikrinkite ryšį ir bandykite dar kartą.",
-    "leaveFlowStepOf": "{current} veiksmas iš {total}"
+    "leaveFlowStepOf": "{current} veiksmas iš {total}",
+    "sharedTasksLinkExpired": "Šios bendrinamos užduotys nerastos arba nuorodos galiojimas baigėsi.",
+    "sharedTasksUnknownSender": "Kažkas"
 }

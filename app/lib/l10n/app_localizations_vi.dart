@@ -10624,4 +10624,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Bước $current/$total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Không tìm thấy các nhiệm vụ được chia sẻ này hoặc liên kết đã hết hạn.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Ai đó';
 }

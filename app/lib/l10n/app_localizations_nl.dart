@@ -10660,4 +10660,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Stap $current van $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Deze gedeelde taken zijn niet gevonden of de link is verlopen.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Iemand';
 }

@@ -10646,4 +10646,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return '$current veiksmas iš $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Šios bendrinamos užduotys nerastos arba nuorodos galiojimas baigėsi.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Kažkas';
 }

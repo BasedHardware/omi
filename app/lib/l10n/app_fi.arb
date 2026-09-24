@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Laite: {deviceName}",
     "keepSubscription": "Pidä tilaus",
     "couldNotLoadPage": "Sivua ei voitu ladata. Tarkista yhteys ja yritä uudelleen.",
-    "leaveFlowStepOf": "Vaihe {current}/{total}"
+    "leaveFlowStepOf": "Vaihe {current}/{total}",
+    "sharedTasksLinkExpired": "Näitä jaettuja tehtäviä ei löytynyt tai linkki on vanhentunut.",
+    "sharedTasksUnknownSender": "Joku"
 }

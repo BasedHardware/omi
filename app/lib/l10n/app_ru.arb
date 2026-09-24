@@ -3411,5 +3411,7 @@
     "firmwareFlashTarget": "Устройство: {deviceName}",
     "keepSubscription": "Сохранить подписку",
     "couldNotLoadPage": "Не удалось загрузить страницу. Проверьте подключение и повторите попытку.",
-    "leaveFlowStepOf": "Шаг {current} из {total}"
+    "leaveFlowStepOf": "Шаг {current} из {total}",
+    "sharedTasksLinkExpired": "Эти общие задачи не найдены, или срок действия ссылки истёк.",
+    "sharedTasksUnknownSender": "Кто-то"
 }

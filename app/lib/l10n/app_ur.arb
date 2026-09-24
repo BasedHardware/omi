@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "ڈیوائس: {deviceName}",
     "keepSubscription": "سبسکرپشن برقرار رکھیں",
     "couldNotLoadPage": "یہ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
-    "leaveFlowStepOf": "مرحلہ {current} از {total}"
+    "leaveFlowStepOf": "مرحلہ {current} از {total}",
+    "sharedTasksLinkExpired": "یہ شیئر کیے گئے کام نہیں ملے، یا لنک کی میعاد ختم ہو گئی ہے۔",
+    "sharedTasksUnknownSender": "کوئی"
 }

@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
@@ -398,7 +399,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           contentPadding: EdgeInsets.zero,
           secondary: InkWell(
             onTap: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UserPeoplePage()));
+              routeToPage(context, const UserPeoplePage());
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),

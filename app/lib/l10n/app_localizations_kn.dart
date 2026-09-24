@@ -10662,4 +10662,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'ಹಂತ $current / $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'ಈ ಹಂಚಿಕೊಂಡ ಕಾರ್ಯಗಳು ಸಿಗಲಿಲ್ಲ, ಅಥವಾ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿದಿದೆ.';
+
+  @override
+  String get sharedTasksUnknownSender => 'ಯಾರೋ';
 }

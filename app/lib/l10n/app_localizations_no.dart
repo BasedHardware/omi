@@ -10628,4 +10628,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Trinn $current av $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Disse delte oppgavene ble ikke funnet, eller lenken har utløpt.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Noen';
 }

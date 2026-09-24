@@ -10677,4 +10677,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'దశ $current / $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'ఈ షేర్ చేసిన పనులు కనుగొనబడలేదు, లేదా లింక్ గడువు ముగిసింది.';
+
+  @override
+  String get sharedTasksUnknownSender => 'ఎవరో';
 }

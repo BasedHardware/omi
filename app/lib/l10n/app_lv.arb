@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Ierīce: {deviceName}",
     "keepSubscription": "Paturēt abonementu",
     "couldNotLoadPage": "Neizdevās ielādēt lapu. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
-    "leaveFlowStepOf": "{current}. solis no {total}"
+    "leaveFlowStepOf": "{current}. solis no {total}",
+    "sharedTasksLinkExpired": "Šie kopīgotie uzdevumi netika atrasti vai saitei ir beidzies derīgums.",
+    "sharedTasksUnknownSender": "Kāds"
 }

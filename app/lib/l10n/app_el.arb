@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Συσκευή: {deviceName}",
     "keepSubscription": "Διατήρηση συνδρομής",
     "couldNotLoadPage": "Δεν ήταν δυνατή η φόρτωση της σελίδας. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
-    "leaveFlowStepOf": "Βήμα {current} από {total}"
+    "leaveFlowStepOf": "Βήμα {current} από {total}",
+    "sharedTasksLinkExpired": "Αυτές οι κοινόχρηστες εργασίες δεν βρέθηκαν ή ο σύνδεσμος έχει λήξει.",
+    "sharedTasksUnknownSender": "Κάποιος"
 }

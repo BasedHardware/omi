@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "Naprava: {deviceName}",
     "keepSubscription": "Obdrži naročnino",
     "couldNotLoadPage": "Strani ni bilo mogoče naložiti. Preverite povezavo in poskusite znova.",
-    "leaveFlowStepOf": "Korak {current} od {total}"
+    "leaveFlowStepOf": "Korak {current} od {total}",
+    "sharedTasksLinkExpired": "Teh deljenih nalog ni bilo mogoče najti ali pa je povezava potekla.",
+    "sharedTasksUnknownSender": "Nekdo"
 }

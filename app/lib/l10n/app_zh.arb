@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "设备：{deviceName}",
     "keepSubscription": "保留订阅",
     "couldNotLoadPage": "无法加载此页面。请检查网络连接后重试。",
-    "leaveFlowStepOf": "第 {current} 步，共 {total} 步"
+    "leaveFlowStepOf": "第 {current} 步，共 {total} 步",
+    "sharedTasksLinkExpired": "未找到这些共享任务，或链接已过期。",
+    "sharedTasksUnknownSender": "某人"
 }

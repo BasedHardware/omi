@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "デバイス: {deviceName}",
     "keepSubscription": "サブスクリプションを継続",
     "couldNotLoadPage": "このページを読み込めませんでした。接続を確認して、もう一度お試しください。",
-    "leaveFlowStepOf": "ステップ {current}/{total}"
+    "leaveFlowStepOf": "ステップ {current}/{total}",
+    "sharedTasksLinkExpired": "共有されたタスクが見つからないか、リンクの有効期限が切れています。",
+    "sharedTasksUnknownSender": "誰か"
 }

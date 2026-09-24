@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "Device: {deviceName}",
     "keepSubscription": "Panatilihin ang Subscription",
     "couldNotLoadPage": "Hindi ma-load ang pahinang ito. Suriin ang iyong koneksyon at subukang muli.",
-    "leaveFlowStepOf": "Hakbang {current} ng {total}"
+    "leaveFlowStepOf": "Hakbang {current} ng {total}",
+    "sharedTasksLinkExpired": "Hindi nahanap ang mga ibinahaging task na ito, o nag-expire na ang link.",
+    "sharedTasksUnknownSender": "Isang tao"
 }

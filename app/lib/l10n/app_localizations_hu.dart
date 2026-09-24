@@ -10669,4 +10669,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return '$current. lépés / $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Ezek a megosztott feladatok nem találhatók, vagy a link lejárt.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Valaki';
 }

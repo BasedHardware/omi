@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
+import 'package:omi/ui/omi_routes.dart';
 
 /// Formats [dateTime] with a pattern string. Legacy: a pattern fixes the order and the 12/24-hour
 /// clock for every locale. New code uses `OmiDateFormat.of(context)` (docs/ux-contract.md §7); the
@@ -16,12 +15,14 @@ String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
   return DateFormat(format, locale).format(dateTime);
 }
 
+/// Pushes [page] with the platform route ([omiPageRoute]: Cupertino with the iOS back swipe on
+/// iOS, Material elsewhere). With [replace], it becomes the only route.
 Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   if (!context.mounted) {
     return Future.value();
   }
 
-  var route = Platform.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
+  final route = omiPageRoute<dynamic>(builder: (c) => page);
   if (replace) {
     return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);
   }

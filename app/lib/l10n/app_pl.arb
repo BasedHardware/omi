@@ -3411,5 +3411,7 @@
     "firmwareFlashTarget": "Urządzenie: {deviceName}",
     "keepSubscription": "Zachowaj subskrypcję",
     "couldNotLoadPage": "Nie udało się wczytać strony. Sprawdź połączenie i spróbuj ponownie.",
-    "leaveFlowStepOf": "Krok {current} z {total}"
+    "leaveFlowStepOf": "Krok {current} z {total}",
+    "sharedTasksLinkExpired": "Nie znaleziono tych udostępnionych zadań lub link wygasł.",
+    "sharedTasksUnknownSender": "Ktoś"
 }

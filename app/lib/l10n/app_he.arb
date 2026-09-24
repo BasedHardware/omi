@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "מכשיר: {deviceName}",
     "keepSubscription": "השארת המינוי",
     "couldNotLoadPage": "לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.",
-    "leaveFlowStepOf": "שלב {current} מתוך {total}"
+    "leaveFlowStepOf": "שלב {current} מתוך {total}",
+    "sharedTasksLinkExpired": "המשימות המשותפות האלה לא נמצאו או שתוקף הקישור פג.",
+    "sharedTasksUnknownSender": "מישהו"
 }

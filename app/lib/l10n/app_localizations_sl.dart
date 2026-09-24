@@ -10661,4 +10661,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Korak $current od $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Teh deljenih nalog ni bilo mogoče najti ali pa je povezava potekla.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Nekdo';
 }

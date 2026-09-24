@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Seade: {deviceName}",
     "keepSubscription": "Jäta tellimus alles",
     "couldNotLoadPage": "Lehte ei õnnestunud laadida. Kontrolli ühendust ja proovi uuesti.",
-    "leaveFlowStepOf": "Samm {current}/{total}"
+    "leaveFlowStepOf": "Samm {current}/{total}",
+    "sharedTasksLinkExpired": "Neid jagatud ülesandeid ei leitud või link on aegunud.",
+    "sharedTasksUnknownSender": "Keegi"
 }

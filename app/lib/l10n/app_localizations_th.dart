@@ -10567,4 +10567,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'ขั้นตอนที่ $current จาก $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'ไม่พบงานที่แชร์เหล่านี้ หรือลิงก์หมดอายุแล้ว';
+
+  @override
+  String get sharedTasksUnknownSender => 'บางคน';
 }

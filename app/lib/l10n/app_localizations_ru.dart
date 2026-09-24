@@ -10667,4 +10667,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Шаг $current из $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Эти общие задачи не найдены, или срок действия ссылки истёк.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Кто-то';
 }

@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Dispositivo: {deviceName}",
     "keepSubscription": "Mantieni abbonamento",
     "couldNotLoadPage": "Impossibile caricare la pagina. Controlla la connessione e riprova.",
-    "leaveFlowStepOf": "Passaggio {current} di {total}"
+    "leaveFlowStepOf": "Passaggio {current} di {total}",
+    "sharedTasksLinkExpired": "Queste attività condivise non sono state trovate o il link è scaduto.",
+    "sharedTasksUnknownSender": "Qualcuno"
 }

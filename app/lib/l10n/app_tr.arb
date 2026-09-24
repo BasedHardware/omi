@@ -3411,5 +3411,7 @@
     "firmwareFlashTarget": "Cihaz: {deviceName}",
     "keepSubscription": "Aboneliği Koru",
     "couldNotLoadPage": "Bu sayfa yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
-    "leaveFlowStepOf": "Adım {current}/{total}"
+    "leaveFlowStepOf": "Adım {current}/{total}",
+    "sharedTasksLinkExpired": "Bu paylaşılan görevler bulunamadı veya bağlantının süresi doldu.",
+    "sharedTasksUnknownSender": "Birisi"
 }

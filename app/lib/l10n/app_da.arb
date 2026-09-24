@@ -3418,5 +3418,7 @@
     "firmwareFlashTarget": "Enhed: {deviceName}",
     "keepSubscription": "Behold abonnement",
     "couldNotLoadPage": "Siden kunne ikke indlæses. Tjek din forbindelse, og prøv igen.",
-    "leaveFlowStepOf": "Trin {current} af {total}"
+    "leaveFlowStepOf": "Trin {current} af {total}",
+    "sharedTasksLinkExpired": "Disse delte opgaver blev ikke fundet, eller linket er udløbet.",
+    "sharedTasksUnknownSender": "Nogen"
 }

@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Enhet: {deviceName}",
     "keepSubscription": "Behold abonnementet",
     "couldNotLoadPage": "Kunne ikke laste inn siden. Sjekk tilkoblingen og prøv igjen.",
-    "leaveFlowStepOf": "Trinn {current} av {total}"
+    "leaveFlowStepOf": "Trinn {current} av {total}",
+    "sharedTasksLinkExpired": "Disse delte oppgavene ble ikke funnet, eller lenken har utløpt.",
+    "sharedTasksUnknownSender": "Noen"
 }

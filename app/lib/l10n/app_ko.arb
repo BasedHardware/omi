@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "기기: {deviceName}",
     "keepSubscription": "구독 유지",
     "couldNotLoadPage": "이 페이지를 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.",
-    "leaveFlowStepOf": "{current}/{total}단계"
+    "leaveFlowStepOf": "{current}/{total}단계",
+    "sharedTasksLinkExpired": "공유된 작업을 찾을 수 없거나 링크가 만료되었습니다.",
+    "sharedTasksUnknownSender": "누군가"
 }

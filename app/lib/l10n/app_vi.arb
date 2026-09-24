@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Thiết bị: {deviceName}",
     "keepSubscription": "Giữ gói đăng ký",
     "couldNotLoadPage": "Không thể tải trang này. Hãy kiểm tra kết nối và thử lại.",
-    "leaveFlowStepOf": "Bước {current}/{total}"
+    "leaveFlowStepOf": "Bước {current}/{total}",
+    "sharedTasksLinkExpired": "Không tìm thấy các nhiệm vụ được chia sẻ này hoặc liên kết đã hết hạn.",
+    "sharedTasksUnknownSender": "Ai đó"
 }

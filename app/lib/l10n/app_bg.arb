@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Устройство: {deviceName}",
     "keepSubscription": "Запази абонамента",
     "couldNotLoadPage": "Страницата не можа да се зареди. Проверете връзката си и опитайте отново.",
-    "leaveFlowStepOf": "Стъпка {current} от {total}"
+    "leaveFlowStepOf": "Стъпка {current} от {total}",
+    "sharedTasksLinkExpired": "Тези споделени задачи не са намерени или връзката е изтекла.",
+    "sharedTasksUnknownSender": "Някой"
 }

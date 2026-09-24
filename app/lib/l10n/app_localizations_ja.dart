@@ -10453,4 +10453,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'ステップ $current/$total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => '共有されたタスクが見つからないか、リンクの有効期限が切れています。';
+
+  @override
+  String get sharedTasksUnknownSender => '誰か';
 }

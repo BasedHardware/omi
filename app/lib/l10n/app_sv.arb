@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Enhet: {deviceName}",
     "keepSubscription": "Behåll prenumerationen",
     "couldNotLoadPage": "Sidan kunde inte läsas in. Kontrollera anslutningen och försök igen.",
-    "leaveFlowStepOf": "Steg {current} av {total}"
+    "leaveFlowStepOf": "Steg {current} av {total}",
+    "sharedTasksLinkExpired": "De här delade uppgifterna hittades inte, eller så har länken gått ut.",
+    "sharedTasksUnknownSender": "Någon"
 }

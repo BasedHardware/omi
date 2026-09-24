@@ -10619,4 +10619,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Krok $current z $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Tieto zdieľané úlohy sa nenašli alebo platnosť odkazu vypršala.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Niekto';
 }

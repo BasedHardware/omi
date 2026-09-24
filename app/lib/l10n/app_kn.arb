@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "ಸಾಧನ: {deviceName}",
     "keepSubscription": "ಚಂದಾದಾರಿಕೆ ಉಳಿಸಿಕೊಳ್ಳಿ",
     "couldNotLoadPage": "ಈ ಪುಟವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "leaveFlowStepOf": "ಹಂತ {current} / {total}"
+    "leaveFlowStepOf": "ಹಂತ {current} / {total}",
+    "sharedTasksLinkExpired": "ಈ ಹಂಚಿಕೊಂಡ ಕಾರ್ಯಗಳು ಸಿಗಲಿಲ್ಲ, ಅಥವಾ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿದಿದೆ.",
+    "sharedTasksUnknownSender": "ಯಾರೋ"
 }

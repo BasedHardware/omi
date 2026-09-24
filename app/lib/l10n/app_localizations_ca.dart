@@ -10688,4 +10688,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Pas $current de $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'No s\'han trobat aquestes tasques compartides o l\'enllaç ha caducat.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Algú';
 }

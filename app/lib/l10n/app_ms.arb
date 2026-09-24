@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Peranti: {deviceName}",
     "keepSubscription": "Kekalkan Langganan",
     "couldNotLoadPage": "Tidak dapat memuatkan halaman ini. Semak sambungan anda dan cuba lagi.",
-    "leaveFlowStepOf": "Langkah {current} daripada {total}"
+    "leaveFlowStepOf": "Langkah {current} daripada {total}",
+    "sharedTasksLinkExpired": "Tugas kongsi ini tidak ditemui atau pautan telah tamat tempoh.",
+    "sharedTasksUnknownSender": "Seseorang"
 }

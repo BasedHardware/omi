@@ -10457,4 +10457,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return '$current/$total단계';
   }
+
+  @override
+  String get sharedTasksLinkExpired => '공유된 작업을 찾을 수 없거나 링크가 만료되었습니다.';
+
+  @override
+  String get sharedTasksUnknownSender => '누군가';
 }

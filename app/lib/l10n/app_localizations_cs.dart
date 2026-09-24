@@ -10627,4 +10627,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Krok $current z $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Tyto sdílené úkoly nebyly nalezeny nebo platnost odkazu vypršela.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Někdo';
 }

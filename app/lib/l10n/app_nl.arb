@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Apparaat: {deviceName}",
     "keepSubscription": "Abonnement behouden",
     "couldNotLoadPage": "Deze pagina kon niet worden geladen. Controleer je verbinding en probeer het opnieuw.",
-    "leaveFlowStepOf": "Stap {current} van {total}"
+    "leaveFlowStepOf": "Stap {current} van {total}",
+    "sharedTasksLinkExpired": "Deze gedeelde taken zijn niet gevonden of de link is verlopen.",
+    "sharedTasksUnknownSender": "Iemand"
 }

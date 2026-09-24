@@ -3472,5 +3472,7 @@
     "firmwareFlashTarget": "Eszköz: {deviceName}",
     "keepSubscription": "Előfizetés megtartása",
     "couldNotLoadPage": "Az oldal nem tölthető be. Ellenőrizd a kapcsolatot, és próbáld újra.",
-    "leaveFlowStepOf": "{current}. lépés / {total}"
+    "leaveFlowStepOf": "{current}. lépés / {total}",
+    "sharedTasksLinkExpired": "Ezek a megosztott feladatok nem találhatók, vagy a link lejárt.",
+    "sharedTasksUnknownSender": "Valaki"
 }

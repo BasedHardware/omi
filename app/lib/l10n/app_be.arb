@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "Прылада: {deviceName}",
     "keepSubscription": "Захаваць падпіску",
     "couldNotLoadPage": "Не ўдалося загрузіць старонку. Праверце падключэнне і паспрабуйце яшчэ раз.",
-    "leaveFlowStepOf": "Крок {current} з {total}"
+    "leaveFlowStepOf": "Крок {current} з {total}",
+    "sharedTasksLinkExpired": "Гэтыя агульныя задачы не знойдзены або спасылка састарэла.",
+    "sharedTasksUnknownSender": "Нехта"
 }

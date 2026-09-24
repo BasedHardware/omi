@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "ডিভাইস: {deviceName}",
     "keepSubscription": "সাবস্ক্রিপশন রাখুন",
     "couldNotLoadPage": "এই পৃষ্ঠাটি লোড করা যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
-    "leaveFlowStepOf": "ধাপ {current}/{total}"
+    "leaveFlowStepOf": "ধাপ {current}/{total}",
+    "sharedTasksLinkExpired": "এই শেয়ার করা কাজগুলো পাওয়া যায়নি বা লিঙ্কের মেয়াদ শেষ হয়েছে।",
+    "sharedTasksUnknownSender": "কেউ একজন"
 }

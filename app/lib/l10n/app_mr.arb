@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "डिव्हाइस: {deviceName}",
     "keepSubscription": "सदस्यता ठेवा",
     "couldNotLoadPage": "हे पृष्ठ लोड करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
-    "leaveFlowStepOf": "पायरी {current} / {total}"
+    "leaveFlowStepOf": "पायरी {current} / {total}",
+    "sharedTasksLinkExpired": "ही शेअर केलेली कार्ये सापडली नाहीत किंवा लिंकची मुदत संपली आहे.",
+    "sharedTasksUnknownSender": "कोणीतरी"
 }

@@ -10623,4 +10623,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Samm $current/$total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Neid jagatud ülesandeid ei leitud või link on aegunud.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Keegi';
 }

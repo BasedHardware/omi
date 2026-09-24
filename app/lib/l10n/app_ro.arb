@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Dispozitiv: {deviceName}",
     "keepSubscription": "Păstrează abonamentul",
     "couldNotLoadPage": "Pagina nu a putut fi încărcată. Verifică conexiunea și încearcă din nou.",
-    "leaveFlowStepOf": "Pasul {current} din {total}"
+    "leaveFlowStepOf": "Pasul {current} din {total}",
+    "sharedTasksLinkExpired": "Aceste sarcini partajate nu au fost găsite sau linkul a expirat.",
+    "sharedTasksUnknownSender": "Cineva"
 }

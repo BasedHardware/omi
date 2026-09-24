@@ -10649,4 +10649,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Крок $current з $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Ці спільні завдання не знайдено, або термін дії посилання минув.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Хтось';
 }

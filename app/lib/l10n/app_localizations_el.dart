@@ -10700,4 +10700,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Βήμα $current από $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Αυτές οι κοινόχρηστες εργασίες δεν βρέθηκαν ή ο σύνδεσμος έχει λήξει.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Κάποιος';
 }

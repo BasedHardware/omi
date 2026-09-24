@@ -3411,5 +3411,7 @@
     "firmwareFlashTarget": "Dispositivo: {deviceName}",
     "keepSubscription": "Manter assinatura",
     "couldNotLoadPage": "Não foi possível carregar esta página. Verifique sua conexão e tente novamente.",
-    "leaveFlowStepOf": "Etapa {current} de {total}"
+    "leaveFlowStepOf": "Etapa {current} de {total}",
+    "sharedTasksLinkExpired": "Estas tarefas partilhadas não foram encontradas ou o link expirou.",
+    "sharedTasksUnknownSender": "Alguém"
 }

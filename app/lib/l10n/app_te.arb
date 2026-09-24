@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "పరికరం: {deviceName}",
     "keepSubscription": "సబ్‌స్క్రిప్షన్ ఉంచండి",
     "couldNotLoadPage": "ఈ పేజీని లోడ్ చేయలేకపోయాం. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
-    "leaveFlowStepOf": "దశ {current} / {total}"
+    "leaveFlowStepOf": "దశ {current} / {total}",
+    "sharedTasksLinkExpired": "ఈ షేర్ చేసిన పనులు కనుగొనబడలేదు, లేదా లింక్ గడువు ముగిసింది.",
+    "sharedTasksUnknownSender": "ఎవరో"
 }

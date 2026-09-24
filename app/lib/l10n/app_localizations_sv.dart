@@ -10635,4 +10635,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Steg $current av $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'De här delade uppgifterna hittades inte, eller så har länken gått ut.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Någon';
 }

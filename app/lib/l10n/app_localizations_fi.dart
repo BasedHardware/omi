@@ -10630,4 +10630,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Vaihe $current/$total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Näitä jaettuja tehtäviä ei löytynyt tai linkki on vanhentunut.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Joku';
 }

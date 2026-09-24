@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "Uređaj: {deviceName}",
     "keepSubscription": "Zadrži pretplatu",
     "couldNotLoadPage": "Stranicu nije moguće učitati. Provjerite vezu i pokušajte ponovno.",
-    "leaveFlowStepOf": "Korak {current} od {total}"
+    "leaveFlowStepOf": "Korak {current} od {total}",
+    "sharedTasksLinkExpired": "Ovi zajednički zadaci nisu pronađeni ili je poveznica istekla.",
+    "sharedTasksUnknownSender": "Netko"
 }

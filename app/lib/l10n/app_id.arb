@@ -3411,5 +3411,7 @@
     "firmwareFlashTarget": "Perangkat: {deviceName}",
     "keepSubscription": "Pertahankan Langganan",
     "couldNotLoadPage": "Tidak dapat memuat halaman ini. Periksa koneksi Anda dan coba lagi.",
-    "leaveFlowStepOf": "Langkah {current} dari {total}"
+    "leaveFlowStepOf": "Langkah {current} dari {total}",
+    "sharedTasksLinkExpired": "Tugas bersama ini tidak ditemukan atau tautannya sudah kedaluwarsa.",
+    "sharedTasksUnknownSender": "Seseorang"
 }

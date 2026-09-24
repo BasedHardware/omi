@@ -19448,6 +19448,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Step {current} of {total}'**
   String leaveFlowStepOf(int current, int total);
+
+  /// Toast when a shared-tasks link cannot be opened
+  ///
+  /// In en, this message translates to:
+  /// **'These shared tasks weren\'t found, or the link has expired.'**
+  String get sharedTasksLinkExpired;
+
+  /// Sender name when a shared-tasks link has no sender name
+  ///
+  /// In en, this message translates to:
+  /// **'Someone'**
+  String get sharedTasksUnknownSender;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "อุปกรณ์: {deviceName}",
     "keepSubscription": "คงการสมัครสมาชิกไว้",
     "couldNotLoadPage": "โหลดหน้านี้ไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง",
-    "leaveFlowStepOf": "ขั้นตอนที่ {current} จาก {total}"
+    "leaveFlowStepOf": "ขั้นตอนที่ {current} จาก {total}",
+    "sharedTasksLinkExpired": "ไม่พบงานที่แชร์เหล่านี้ หรือลิงก์หมดอายุแล้ว",
+    "sharedTasksUnknownSender": "บางคน"
 }

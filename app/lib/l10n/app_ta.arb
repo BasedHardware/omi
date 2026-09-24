@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "சாதனம்: {deviceName}",
     "keepSubscription": "சந்தாவை வைத்திருக்கவும்",
     "couldNotLoadPage": "இந்தப் பக்கத்தை ஏற்ற முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.",
-    "leaveFlowStepOf": "படி {current} / {total}"
+    "leaveFlowStepOf": "படி {current} / {total}",
+    "sharedTasksLinkExpired": "இந்தப் பகிரப்பட்ட பணிகள் கிடைக்கவில்லை, அல்லது இணைப்பு காலாவதியாகிவிட்டது.",
+    "sharedTasksUnknownSender": "ஒருவர்"
 }

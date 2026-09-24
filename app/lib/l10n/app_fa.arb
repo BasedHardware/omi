@@ -10948,5 +10948,7 @@
     "firmwareFlashTarget": "دستگاه: {deviceName}",
     "keepSubscription": "حفظ اشتراک",
     "couldNotLoadPage": "این صفحه بارگیری نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.",
-    "leaveFlowStepOf": "مرحله {current} از {total}"
+    "leaveFlowStepOf": "مرحله {current} از {total}",
+    "sharedTasksLinkExpired": "این وظایف اشتراکی پیدا نشدند یا لینک منقضی شده است.",
+    "sharedTasksUnknownSender": "کسی"
 }

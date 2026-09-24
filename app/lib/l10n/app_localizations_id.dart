@@ -10639,4 +10639,10 @@ class AppLocalizationsId extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Langkah $current dari $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Tugas bersama ini tidak ditemukan atau tautannya sudah kedaluwarsa.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Seseorang';
 }

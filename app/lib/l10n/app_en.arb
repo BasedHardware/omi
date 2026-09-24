@@ -12498,5 +12498,13 @@
                 "type": "int"
             }
         }
+    },
+    "sharedTasksLinkExpired": "These shared tasks weren't found, or the link has expired.",
+    "@sharedTasksLinkExpired": {
+        "description": "Toast when a shared-tasks link cannot be opened"
+    },
+    "sharedTasksUnknownSender": "Someone",
+    "@sharedTasksUnknownSender": {
+        "description": "Sender name when a shared-tasks link has no sender name"
     }
 }

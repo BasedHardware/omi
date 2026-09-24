@@ -10677,4 +10677,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Pasul $current din $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Aceste sarcini partajate nu au fost găsite sau linkul a expirat.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Cineva';
 }

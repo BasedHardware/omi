@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "Пристрій: {deviceName}",
     "keepSubscription": "Зберегти підписку",
     "couldNotLoadPage": "Не вдалося завантажити сторінку. Перевірте з'єднання та спробуйте ще раз.",
-    "leaveFlowStepOf": "Крок {current} з {total}"
+    "leaveFlowStepOf": "Крок {current} з {total}",
+    "sharedTasksLinkExpired": "Ці спільні завдання не знайдено, або термін дії посилання минув.",
+    "sharedTasksUnknownSender": "Хтось"
 }

@@ -10435,4 +10435,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return '第 $current 步，共 $total 步';
   }
+
+  @override
+  String get sharedTasksLinkExpired => '未找到这些共享任务，或链接已过期。';
+
+  @override
+  String get sharedTasksUnknownSender => '某人';
 }

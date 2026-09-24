@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_routes.dart';
 import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -1191,13 +1192,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             setFirmwareUpdateInProgress(true);
             if (_isOmiGlassDevice) {
               navigator.push(
-                MaterialPageRoute(
+                omiPageRoute(
                   builder: (context) =>
                       OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
                 ),
               );
             } else {
-              navigator.push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
+              navigator.push(omiPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
             }
           },
           onCancel: () {

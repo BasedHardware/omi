@@ -10660,4 +10660,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Krok $current z $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Nie znaleziono tych udostępnionych zadań lub link wygasł.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Ktoś';
 }

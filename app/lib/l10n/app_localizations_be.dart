@@ -10659,4 +10659,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String leaveFlowStepOf(int current, int total) {
     return 'Крок $current з $total';
   }
+
+  @override
+  String get sharedTasksLinkExpired => 'Гэтыя агульныя задачы не знойдзены або спасылка састарэла.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Нехта';
 }

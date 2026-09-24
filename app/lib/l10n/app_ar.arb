@@ -3376,5 +3376,7 @@
     "firmwareFlashTarget": "الجهاز: {deviceName}",
     "keepSubscription": "الإبقاء على الاشتراك",
     "couldNotLoadPage": "تعذّر تحميل هذه الصفحة. تحقّق من اتصالك وحاول مرة أخرى.",
-    "leaveFlowStepOf": "الخطوة {current} من {total}"
+    "leaveFlowStepOf": "الخطوة {current} من {total}",
+    "sharedTasksLinkExpired": "لم يتم العثور على هذه المهام المشتركة أو انتهت صلاحية الرابط.",
+    "sharedTasksUnknownSender": "شخص ما"
 }
