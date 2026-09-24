@@ -1,3 +1,0 @@
-{
-  "change": "Made navigation, closing, deleting and copying work the same way across the app: Back returns to where you came from, Esc steps back one layer, every delete can be undone or asks first, and copy actions confirm"
-}
