@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/openapi.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
@@ -553,9 +554,7 @@ Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String
   );
   if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
   try {
-    final body = jsonDecode(response.body);
-    final status = body is Map ? body['status'] : null;
-    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
+    return wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
   } catch (_) {
     return CaptureGroupSeparationResult.separated;
   }
