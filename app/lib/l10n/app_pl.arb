@@ -3536,10 +3536,9 @@
     "conversationDeveloperTools": "Narzędzia deweloperskie w rozmowach",
     "conversationDeveloperToolsDescription": "Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy",
     "participantsSummary": "{name} + {count, plural, =1{1 inna osoba} few{{count} inne osoby} many{{count} innych osób} other{{count} innych osób}}",
-    "planDeprecationMessage": "Twój plan Unlimited jest wycofywany. Przejdź na plan Operator — te same świetne funkcje za $49/mies. Twój obecny plan będzie nadal działać w międzyczasie.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Nagrywanie i transkrypcja",
+    "notificationsAndDisplay": "Powiadomienia i wyświetlanie",
+    "helpAndAbout": "Pomoc i informacje",
     "speakerTagPromptTitle": "Pomóż Omi rozpoznawać głosy",
     "speakerTagPromptSubtitle": "Szybkie sprawdzenie głosów z ostatnich dwóch dni",
     "speakerTagPromptIsThisYou": "Czy to Ty?",

@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "כלי מפתחים בשיחות",
     "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה",
     "participantsSummary": "{name} + {count, plural, =1{1 נוסף} few{{count} נוספים} many{{count} נוספים} other{{count} נוספים}}",
-    "planDeprecationMessage": "תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "הקלטה ותמלול",
+    "notificationsAndDisplay": "התראות ותצוגה",
+    "helpAndAbout": "עזרה ואודות",
     "speakerTagPromptTitle": "עזרו ל-Omi לזהות קולות",
     "speakerTagPromptSubtitle": "בדיקה מהירה של קולות מהיומיים האחרונים",
     "speakerTagPromptIsThisYou": "זה אתה?",

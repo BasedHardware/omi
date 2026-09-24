@@ -3536,10 +3536,9 @@
     "conversationDeveloperTools": "Инструменты разработчика в разговорах",
     "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора",
     "participantsSummary": "{name} + {count, plural, =1{ещё 1} few{ещё {count}} many{ещё {count}} other{ещё {count}}}",
-    "planDeprecationMessage": "Ваш план Unlimited прекращается. Перейдите на план Operator — те же отличные функции за $49/мес. Ваш текущий план продолжит работать тем временем.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Запись и расшифровка",
+    "notificationsAndDisplay": "Уведомления и отображение",
+    "helpAndAbout": "Помощь и о программе",
     "speakerTagPromptTitle": "Помогите Omi узнавать голоса",
     "speakerTagPromptSubtitle": "Быстрая проверка голосов за последние два дня",
     "speakerTagPromptIsThisYou": "Это вы?",

@@ -3536,10 +3536,9 @@
     "conversationDeveloperTools": "Konuşmalarda geliştirici araçları",
     "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster",
     "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} few{{count} kişi daha} many{{count} kişi daha} other{{count} kişi daha}}",
-    "planDeprecationMessage": "Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler $49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Kayıt ve Transkripsiyon",
+    "notificationsAndDisplay": "Bildirimler ve Görünüm",
+    "helpAndAbout": "Yardım ve Hakkında",
     "speakerTagPromptTitle": "Omi'nin sesleri tanımasına yardım edin",
     "speakerTagPromptSubtitle": "Son iki günün seslerine hızlı bir bakış",
     "speakerTagPromptIsThisYou": "Bu siz misiniz?",

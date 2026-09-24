@@ -3597,10 +3597,9 @@
     "conversationDeveloperTools": "Fejlesztői eszközök a beszélgetésekben",
     "conversationDeveloperToolsDescription": "A beszélgetés menüjében jelenjen meg a Beszélgetésazonosító másolása és a Prompt tesztelése",
     "participantsSummary": "{name} + {count, plural, =1{1 másik} few{{count} másik} many{{count} másik} other{{count} másik}}",
-    "planDeprecationMessage": "Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók $49/hó áron. A jelenlegi csomagja addig is tovább működik.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Felvétel és átírás",
+    "notificationsAndDisplay": "Értesítések és megjelenítés",
+    "helpAndAbout": "Súgó és névjegy",
     "speakerTagPromptTitle": "Segíts az Ominak felismerni a hangokat",
     "speakerTagPromptSubtitle": "Gyors ellenőrzés az elmúlt két nap hangjairól",
     "speakerTagPromptIsThisYou": "Ez te vagy?",

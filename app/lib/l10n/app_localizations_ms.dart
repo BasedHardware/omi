@@ -11110,8 +11110,13 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada \$49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.';
+  String get recordingAndTranscription => 'Rakaman & Transkripsi';
+
+  @override
+  String get notificationsAndDisplay => 'Pemberitahuan & Paparan';
+
+  @override
+  String get helpAndAbout => 'Bantuan & Perihal';
 
   @override
   String get speakerTagPromptTitle => 'Bantu Omi mengenal pasti suara';

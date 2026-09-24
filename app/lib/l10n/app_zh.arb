@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "对话中的开发者工具",
     "conversationDeveloperToolsDescription": "在对话菜单中显示“复制对话 ID”和“测试提示词”",
     "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}",
-    "planDeprecationMessage": "您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 $49。您当前的套餐在此期间将继续可用。",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "录音与转录",
+    "notificationsAndDisplay": "通知与显示",
+    "helpAndAbout": "帮助与关于",
     "speakerTagPromptTitle": "帮助 Omi 识别声音",
     "speakerTagPromptSubtitle": "快速确认最近两天的声音",
     "speakerTagPromptIsThisYou": "这是你吗？",

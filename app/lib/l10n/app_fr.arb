@@ -3536,10 +3536,9 @@
     "conversationDeveloperTools": "Outils de développement dans les conversations",
     "conversationDeveloperToolsDescription": "Afficher Copier l'ID de la conversation et Tester le prompt dans le menu d'une conversation",
     "participantsSummary": "{name} + {count, plural, =1{1 autre} few{{count} autres} many{{count} autres} other{{count} autres}}",
-    "planDeprecationMessage": "Votre plan Unlimited est en cours de retrait. Passez au plan Operator — les mêmes fonctionnalités à $49/mois. Votre plan actuel continuera de fonctionner en attendant.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Enregistrement et transcription",
+    "notificationsAndDisplay": "Notifications et affichage",
+    "helpAndAbout": "Aide et à propos",
     "speakerTagPromptTitle": "Aidez Omi à reconnaître les voix",
     "speakerTagPromptSubtitle": "Une vérification rapide des voix des deux derniers jours",
     "speakerTagPromptIsThisYou": "Est-ce vous ?",

@@ -11068,8 +11068,13 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til \$49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.';
+  String get recordingAndTranscription => 'Optagelse og transskription';
+
+  @override
+  String get notificationsAndDisplay => 'Notifikationer og visning';
+
+  @override
+  String get helpAndAbout => 'Hjælp og om';
 
   @override
   String get speakerTagPromptTitle => 'Hjælp Omi med at genkende stemmer';

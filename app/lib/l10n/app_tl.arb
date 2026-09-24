@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "Mga developer tool sa mga usapan",
     "conversationDeveloperToolsDescription": "Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan",
     "participantsSummary": "{name} + {count, plural, =1{1 iba pa} few{{count} iba pa} many{{count} iba pa} other{{count} iba pa}}",
-    "planDeprecationMessage": "Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa $49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Pagre-record at Transcription",
+    "notificationsAndDisplay": "Mga Notipikasyon at Display",
+    "helpAndAbout": "Tulong at Tungkol",
     "speakerTagPromptTitle": "Tulungan ang Omi na makilala ang mga boses",
     "speakerTagPromptSubtitle": "Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw",
     "speakerTagPromptIsThisYou": "Ikaw ba ito?",

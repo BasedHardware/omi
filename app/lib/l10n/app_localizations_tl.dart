@@ -11179,8 +11179,13 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa \$49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.';
+  String get recordingAndTranscription => 'Pagre-record at Transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Mga Notipikasyon at Display';
+
+  @override
+  String get helpAndAbout => 'Tulong at Tungkol';
 
   @override
   String get speakerTagPromptTitle => 'Tulungan ang Omi na makilala ang mga boses';

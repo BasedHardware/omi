@@ -11157,8 +11157,13 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் \$49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.';
+  String get recordingAndTranscription => 'பதிவு மற்றும் எழுத்துப்படியாக்கம்';
+
+  @override
+  String get notificationsAndDisplay => 'அறிவிப்புகள் மற்றும் காட்சி';
+
+  @override
+  String get helpAndAbout => 'உதவி மற்றும் பற்றி';
 
   @override
   String get speakerTagPromptTitle => 'குரல்களை அடையாளம் காண Omi-க்கு உதவுங்கள்';

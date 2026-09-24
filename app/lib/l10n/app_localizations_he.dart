@@ -10992,8 +10992,13 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-\$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.';
+  String get recordingAndTranscription => 'הקלטה ותמלול';
+
+  @override
+  String get notificationsAndDisplay => 'התראות ותצוגה';
+
+  @override
+  String get helpAndAbout => 'עזרה ואודות';
 
   @override
   String get speakerTagPromptTitle => 'עזרו ל-Omi לזהות קולות';

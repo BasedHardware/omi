@@ -236,6 +236,23 @@ def with_belief_model_env(payload: str) -> str:
     )
 
 
+def with_screen_frame_egress_env(payload: str) -> str:
+    """Meeting-note screenshot egress is provisioned on the dev Cloud Run `backend` only.
+
+    The adjudication and read routes run there; the gate in
+    utils/screen_frames/availability.py needs the flag, the bucket, and the signer.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_wake_word_adjudication_env(
@@ -256,6 +273,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
+    payload = with_screen_frame_egress_env(payload)
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),

@@ -11094,8 +11094,13 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited planınız kullanımdan kaldırılıyor. Operator planına geçin — aynı harika özellikler \$49/ay. Mevcut planınız bu süre zarfında çalışmaya devam edecek.';
+  String get recordingAndTranscription => 'Kayıt ve Transkripsiyon';
+
+  @override
+  String get notificationsAndDisplay => 'Bildirimler ve Görünüm';
+
+  @override
+  String get helpAndAbout => 'Yardım ve Hakkında';
 
   @override
   String get speakerTagPromptTitle => 'Omi\'nin sesleri tanımasına yardım edin';

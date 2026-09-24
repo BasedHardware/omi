@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "సంభాషణల్లో డెవలపర్ సాధనాలు",
     "conversationDeveloperToolsDescription": "సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు",
     "participantsSummary": "{name} + {count, plural, =1{1 ఇతరులు} few{{count} ఇతరులు} many{{count} ఇతరులు} other{{count} ఇతరులు}}",
-    "planDeprecationMessage": "మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు $49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "రికార్డింగ్ & ట్రాన్‌స్క్రిప్షన్",
+    "notificationsAndDisplay": "నోటిఫికేషన్‌లు & ప్రదర్శన",
+    "helpAndAbout": "సహాయం & గురించి",
     "speakerTagPromptTitle": "గొంతులను గుర్తించడంలో Omi కి సహాయం చేయండి",
     "speakerTagPromptSubtitle": "గత రెండు రోజుల గొంతులను త్వరగా పరిశీలించండి",
     "speakerTagPromptIsThisYou": "ఇది మీరేనా?",

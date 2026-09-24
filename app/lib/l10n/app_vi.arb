@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Công cụ nhà phát triển trong cuộc trò chuyện",
     "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện",
     "participantsSummary": "{name} + {count, plural, =1{1 người khác} few{{count} người khác} many{{count} người khác} other{{count} người khác}}",
-    "planDeprecationMessage": "Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá $49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Ghi âm & Phiên âm",
+    "notificationsAndDisplay": "Thông báo & Hiển thị",
+    "helpAndAbout": "Trợ giúp & Giới thiệu",
     "speakerTagPromptTitle": "Giúp Omi nhận ra giọng nói",
     "speakerTagPromptSubtitle": "Kiểm tra nhanh các giọng nói trong hai ngày qua",
     "speakerTagPromptIsThisYou": "Đây có phải là bạn không?",

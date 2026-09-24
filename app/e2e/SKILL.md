@@ -169,52 +169,37 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
     │   └── Reviews, capabilities, install/enable, Chat button → Chat
     └── Top-bar "+" on this slot → Add App / Add MCP Server
 
-Settings sheet (settings_drawer.dart) — rows in order
-├── Profile (profile.dart)
-│   ├── Name → Change name dialog
-│   ├── Email (read-only)
-│   ├── Language → Language Settings (language_settings_page.dart)
-│   ├── Custom Vocabulary (custom_vocabulary_page.dart)
-│   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart)
-│   ├── Identifying Others (people.dart)
-│   ├── Payment Methods (payments/payments_page.dart)
-│   ├── Conversation Display (conversation_display_settings.dart)
-│   ├── Data Privacy (data_privacy_page.dart)
-│   └── Delete Account (delete_account.dart)
-├── Notifications (notifications_settings_page.dart)
-│   ├── Frequency slider (0-5)
-│   ├── Daily Summary toggle + time picker
-│   └── Daily Reflection toggle
-├── Plan & Usage (usage_page.dart) (only in some subscription states)
-├── Offline Sync (sync_page.dart)
-│   ├── Local storage, recordings list
-│   ├── Fast transfer settings
-│   └── Private cloud sync
-├── Device Settings (device_settings.dart) (only when a device is connected)
-│   ├── Device info (name, ID, firmware, SD card)
-│   ├── LED brightness slider, mic gain slider
-│   └── Double tap action picker
-├── Integrations (integrations_page.dart) — BETA; also opens from conversation detail
-│   └── Google Calendar, Gmail, Apple Health
-├── Permissions (permissions_page.dart) — Microphone, Bluetooth, Location, Background Activity
-├── Memories (memories/page.dart) — not a bottom-nav tab; reached here or via /memories, /facts deep links
-│   ├── Search bar, "This device" filter chip
-│   ├── FAB (bottom-right) → New Memory sheet (memory_dialog.dart) — the "Create new memory" text row
-│   │   is NOT tappable, only the FAB is; field/button ValueKeys `memory_content_field` / `memory_save_button` (PR #9484)
-│   ├── Memory item → Quick edit sheet (memory_edit_sheet.dart)
-│   ├── Graph → Memory Graph (memory_graph_page.dart)
-│   └── Management → Category management sheet
-├── Feedback/Bug → feedback.omi.me (Intercom platforms only)
-├── Help Center → help.omi.me (Intercom platforms only)
-├── Developer Settings (developer.dart)
-│   ├── Custom STT provider config
-│   ├── API key management
-│   └── MCP API keys
-├── What's New → Changelog sheet
-├── Get Omi for Mac → App Store link
-├── Referral Program (referral_page.dart) — NEW
-└── Sign Out → Confirmation dialog
-(Settings search reaches a few extra destinations not in the visible list, e.g. Background Mode on Android.)
+Settings sheet (settings_drawer.dart) — search + close header, then Account and seven groups.
+Every top-level row has a ValueKey (`settings_account`, `settings_group_<group>`); each page has a
+Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings_row_<SettingsDestination>`
+(plus `settings_row_voiceResponseMode`, `settings_row_transcribeLater`, `settings_row_backgroundMode`,
+`settings_row_name`, `settings_row_email`, `settings_row_userId`, `settings_row_version`).
+├── Account [settings_account] — shows the name, email as subtitle → Account page (profile.dart, ProfilePage)
+│   ├── Name → Change name dialog; Email (read-only)
+│   ├── Plan & Usage (usage_page.dart) — "Pro" value when paid
+│   ├── Referral Program (referral_page.dart) — NEW; User ID (tap copies)
+│   └── Sign Out → Confirmation dialog; Delete Account (delete_account.dart)
+├── Device [settings_group_device] → settings_groups.dart
+│   ├── Device Settings (device_settings.dart) (only when a device is connected)
+│   ├── Offline Sync (sync_page.dart / auto_sync_page.dart)
+│   └── Phone Calls (phone_call_settings_page.dart)
+├── Recording & Transcription [settings_group_recording] → settings_groups.dart
+│   ├── Transcription (transcription_settings_page.dart) — provider value; Language; Custom Vocabulary
+│   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart); Identifying Others (people.dart)
+│   ├── Voice Response (picker sheet); Conversation Timeout (picker)
+│   └── Recording (BETA): Transcribe Later switch; Background Mode switch (Android only)
+├── Notifications & Display [settings_group_notifications] → settings_groups.dart
+│   └── Notifications (notifications_settings_page.dart); Home Screen; Conversation Display
+├── Integrations [settings_group_integrations] (integrations_page.dart) — BETA; also opens from conversation detail
+├── Data & Privacy [settings_group_privacy] → settings_groups.dart
+│   ├── Data Protection (data_privacy_page.dart); Memories (memories/page.dart); Permissions (permissions_page.dart)
+│   └── Export All Data (spinner while running); Import Data (import_history_page.dart)
+├── Help & About [settings_group_help] → settings_groups.dart
+│   ├── Feedback/Bug → feedback.omi.me; Help Center → help.omi.me (Intercom platforms only)
+│   ├── What's New → Changelog sheet
+│   └── Version + copy button (iOS/Android)
+└── Developer Settings [settings_group_developer] (developer.dart)
+(Settings search finds every row above and opens the page that holds it.)
 
 Transcription Settings (transcription_settings_page.dart) — not in settings drawer; reached from
 Plan & Usage, Developer Settings, or the Plans sheet
@@ -262,12 +247,13 @@ Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #1
 
 **Settings gear:**
 - Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
-- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Profile,
-  Notifications, Offline Sync, Permissions, Memories, Developer Settings, …, Sign Out)
+- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Account,
+  Device, Recording & Transcription, Notifications & Display, Integrations, Data & Privacy, Help & About,
+  Developer Settings)
 
 **Settings rows:**
 - `gesture` widgets with `bounds.width > 300`
-- Position-based: Profile is y=150-200, Developer Settings is y=400-520 after scrolling
+- Prefer the ValueKeys above (`settings_account`, `settings_group_*`, `settings_row_*`) over positions
 
 **Switch toggles:**
 - Type `switch` in snapshots

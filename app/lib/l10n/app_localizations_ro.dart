@@ -11133,8 +11133,13 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la \$49/lună. Planul dvs. actual va continua să funcționeze între timp.';
+  String get recordingAndTranscription => 'Înregistrare și transcriere';
+
+  @override
+  String get notificationsAndDisplay => 'Notificări și afișare';
+
+  @override
+  String get helpAndAbout => 'Ajutor și despre';
 
   @override
   String get speakerTagPromptTitle => 'Ajută-l pe Omi să recunoască vocile';

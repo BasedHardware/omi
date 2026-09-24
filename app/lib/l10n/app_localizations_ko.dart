@@ -10904,8 +10904,13 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
+  String get recordingAndTranscription => '녹음 및 음성 변환';
+
+  @override
+  String get notificationsAndDisplay => '알림 및 표시';
+
+  @override
+  String get helpAndAbout => '도움말 및 정보';
 
   @override
   String get speakerTagPromptTitle => 'Omi가 목소리를 알아보도록 도와주세요';

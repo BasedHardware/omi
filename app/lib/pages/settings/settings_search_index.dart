@@ -5,7 +5,14 @@ import 'package:omi/l10n/app_localizations.dart';
 /// `openSettingsDestination` (settings_destinations.dart) routes every value; its switch is
 /// exhaustive, so adding a destination without a route does not compile.
 enum SettingsDestination {
+  /// The Account page (`ProfilePage`, titled Account).
   profile,
+  // The group pages the Settings sheet opens (settings_groups.dart).
+  deviceGroup,
+  recordingGroup,
+  notificationsGroup,
+  privacyGroup,
+  helpGroup,
   notifications,
   planAndUsage,
   offlineSync,
@@ -56,7 +63,7 @@ class SettingsSearchScope {
 /// page that holds (or is) that row. `test/unit/settings_search_index_test.dart` checks both, so an
 /// entry cannot outlive its row.
 class SettingsSearchEntry {
-  const SettingsSearchEntry(this.key, this.title, this.destination, this.rowFile, {this.visible});
+  const SettingsSearchEntry(this.key, this.title, this.destination, this.rowFile, {this.visible, this.aliases});
 
   /// The l10n key of the row's title.
   final String key;
@@ -68,10 +75,15 @@ class SettingsSearchEntry {
 
   /// Null means always visible.
   final bool Function(SettingsSearchScope scope)? visible;
+
+  /// Other words people search for this row by (for example the name a row had before a rename).
+  /// A query that matches an alias finds the row; the result still shows [title].
+  final List<String> Function(AppLocalizations l10n)? aliases;
 }
 
 const _drawer = 'lib/pages/settings/settings_drawer.dart';
-const _profile = 'lib/pages/settings/profile.dart';
+const _account = 'lib/pages/settings/profile.dart';
+const _groups = 'lib/pages/settings/settings_groups.dart';
 const _notifications = 'lib/pages/settings/notifications_settings_page.dart';
 const _device = 'lib/pages/settings/device_settings.dart';
 const _deviceInfo = 'lib/pages/settings/device/device_info_groups.dart';
@@ -83,50 +95,73 @@ bool _whenDeviceConnected(SettingsSearchScope s) => s.deviceConnected;
 bool _whenSupportLinks(SettingsSearchScope s) => s.supportLinks;
 bool _whenAndroid(SettingsSearchScope s) => s.android;
 
-/// Every searchable Settings row, in the order Settings shows them.
+/// Every searchable Settings row, in the order Settings shows them: the sheet's rows, each group
+/// page's rows followed by the group's own title (so a search for "Transcription" lists the
+/// Transcription row before the group that holds it), then the rows inside other pages.
 final List<SettingsSearchEntry> settingsSearchEntries = [
-  // Settings (top level)
-  SettingsSearchEntry('profile', (l) => l.profile, SettingsDestination.profile, _drawer),
-  SettingsSearchEntry('notifications', (l) => l.notifications, SettingsDestination.notifications, _drawer),
-  SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _drawer),
-  SettingsSearchEntry('deviceSettings', (l) => l.deviceSettings, SettingsDestination.device, _drawer,
-      visible: _whenDeviceConnected),
-  SettingsSearchEntry('transcription', (l) => l.transcription, SettingsDestination.transcription, _drawer),
-  SettingsSearchEntry(
-      'conversationDisplay', (l) => l.conversationDisplay, SettingsDestination.conversationDisplay, _drawer),
-  SettingsSearchEntry(
-      'conversationTimeout', (l) => l.conversationTimeout, SettingsDestination.conversationTimeout, _drawer),
-  SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _drawer),
-  SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _drawer),
-  SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _drawer),
-  SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _drawer),
-  SettingsSearchEntry('exportAllData', (l) => l.exportAllData, SettingsDestination.exportData, _drawer),
-  SettingsSearchEntry('importData', (l) => l.importData, SettingsDestination.importData, _drawer),
-  SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
-  SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _drawer),
-  SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _drawer,
-      visible: _whenSupportLinks),
-  SettingsSearchEntry('helpCenter', (l) => l.helpCenter, SettingsDestination.helpCenter, _drawer,
-      visible: _whenSupportLinks),
-  SettingsSearchEntry('whatsNew', (l) => l.whatsNew, SettingsDestination.whatsNew, _drawer),
-  SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
-  SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
-  SettingsSearchEntry('signOut', (l) => l.signOut, SettingsDestination.signOut, _drawer),
+  // Account (the sheet's first row, then the Account page)
+  // The Account row was called Profile until 2026-09; people still search for it by that name.
+  SettingsSearchEntry('account', (l) => l.account, SettingsDestination.profile, _drawer, aliases: (l) => [l.profile]),
+  SettingsSearchEntry('name', (l) => l.name, SettingsDestination.profile, _account),
+  SettingsSearchEntry('email', (l) => l.email, SettingsDestination.profile, _account),
+  SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _account),
+  SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _account),
+  SettingsSearchEntry('userId', (l) => l.userId, SettingsDestination.profile, _account),
+  SettingsSearchEntry('signOut', (l) => l.signOut, SettingsDestination.signOut, _account),
+  SettingsSearchEntry('deleteAccountTitle', (l) => l.deleteAccountTitle, SettingsDestination.deleteAccount, _account),
 
-  // Profile
-  SettingsSearchEntry('name', (l) => l.name, SettingsDestination.profile, _profile),
-  SettingsSearchEntry('email', (l) => l.email, SettingsDestination.profile, _profile),
-  SettingsSearchEntry('language', (l) => l.language, SettingsDestination.language, _profile),
-  SettingsSearchEntry('customVocabulary', (l) => l.customVocabulary, SettingsDestination.customVocabulary, _profile),
-  SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _profile),
-  SettingsSearchEntry('speechProfile', (l) => l.speechProfile, SettingsDestination.voiceProfile, _profile),
-  SettingsSearchEntry('identifyingOthers', (l) => l.identifyingOthers, SettingsDestination.people, _profile),
-  SettingsSearchEntry('voiceResponseMode', (l) => l.voiceResponseMode, SettingsDestination.profile, _profile),
-  SettingsSearchEntry('backgroundModeTitle', (l) => l.backgroundModeTitle, SettingsDestination.profile, _profile,
+  // Device group
+  SettingsSearchEntry('deviceSettings', (l) => l.deviceSettings, SettingsDestination.device, _groups,
+      visible: _whenDeviceConnected),
+  SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
+  SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups),
+  SettingsSearchEntry('device', (l) => l.device, SettingsDestination.deviceGroup, _drawer),
+
+  // Recording & Transcription group
+  SettingsSearchEntry('transcription', (l) => l.transcription, SettingsDestination.transcription, _groups),
+  SettingsSearchEntry('language', (l) => l.language, SettingsDestination.language, _groups),
+  SettingsSearchEntry('customVocabulary', (l) => l.customVocabulary, SettingsDestination.customVocabulary, _groups),
+  SettingsSearchEntry('speechProfile', (l) => l.speechProfile, SettingsDestination.voiceProfile, _groups),
+  SettingsSearchEntry('identifyingOthers', (l) => l.identifyingOthers, SettingsDestination.people, _groups),
+  SettingsSearchEntry('voiceResponseMode', (l) => l.voiceResponseMode, SettingsDestination.recordingGroup, _groups),
+  SettingsSearchEntry(
+      'conversationTimeout', (l) => l.conversationTimeout, SettingsDestination.conversationTimeout, _groups),
+  SettingsSearchEntry(
+      'transcribeLaterTitle', (l) => l.transcribeLaterTitle, SettingsDestination.recordingGroup, _groups),
+  SettingsSearchEntry('backgroundModeTitle', (l) => l.backgroundModeTitle, SettingsDestination.recordingGroup, _groups,
       visible: _whenAndroid),
-  SettingsSearchEntry('transcribeLaterTitle', (l) => l.transcribeLaterTitle, SettingsDestination.profile, _profile),
-  SettingsSearchEntry('userId', (l) => l.userId, SettingsDestination.profile, _profile),
-  SettingsSearchEntry('deleteAccountTitle', (l) => l.deleteAccountTitle, SettingsDestination.deleteAccount, _profile),
+  SettingsSearchEntry(
+      'recordingAndTranscription', (l) => l.recordingAndTranscription, SettingsDestination.recordingGroup, _drawer),
+
+  // Notifications & Display group
+  SettingsSearchEntry('notifications', (l) => l.notifications, SettingsDestination.notifications, _groups),
+  SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _groups),
+  SettingsSearchEntry(
+      'conversationDisplay', (l) => l.conversationDisplay, SettingsDestination.conversationDisplay, _groups),
+  SettingsSearchEntry(
+      'notificationsAndDisplay', (l) => l.notificationsAndDisplay, SettingsDestination.notificationsGroup, _drawer),
+
+  // Integrations (opens the Integrations page directly)
+  SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
+
+  // Privacy & Data group
+  SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),
+  SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _groups),
+  SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
+  SettingsSearchEntry('exportAllData', (l) => l.exportAllData, SettingsDestination.exportData, _groups),
+  SettingsSearchEntry('importData', (l) => l.importData, SettingsDestination.importData, _groups),
+  SettingsSearchEntry('dataAndPrivacy', (l) => l.dataAndPrivacy, SettingsDestination.privacyGroup, _drawer),
+
+  // Help & About group
+  SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _groups,
+      visible: _whenSupportLinks),
+  SettingsSearchEntry('helpCenter', (l) => l.helpCenter, SettingsDestination.helpCenter, _groups,
+      visible: _whenSupportLinks),
+  SettingsSearchEntry('whatsNew', (l) => l.whatsNew, SettingsDestination.whatsNew, _groups),
+  SettingsSearchEntry('helpAndAbout', (l) => l.helpAndAbout, SettingsDestination.helpGroup, _drawer),
+
+  // Developer Settings (opens the page directly)
+  SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
 
   // Notifications
   SettingsSearchEntry(
@@ -184,7 +219,8 @@ List<SettingsSearchEntry> searchSettings(AppLocalizations l10n, String query, Se
   for (final entry in settingsSearchEntries) {
     if (entry.visible != null && !entry.visible!(scope)) continue;
     final title = entry.title(l10n);
-    if (!title.toLowerCase().contains(q)) continue;
+    final aliases = entry.aliases?.call(l10n) ?? const <String>[];
+    if (!title.toLowerCase().contains(q) && !aliases.any((a) => a.toLowerCase().contains(q))) continue;
     // Two rows with the same visible title and destination are one result.
     if (!seen.add('$title|${entry.destination.name}')) continue;
     results.add(entry);

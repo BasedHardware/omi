@@ -11116,8 +11116,13 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor \$49/maand. Uw huidige abonnement blijft in de tussentijd werken.';
+  String get recordingAndTranscription => 'Opname en transcriptie';
+
+  @override
+  String get notificationsAndDisplay => 'Meldingen en weergave';
+
+  @override
+  String get helpAndAbout => 'Help en over';
 
   @override
   String get speakerTagPromptTitle => 'Help Omi stemmen te herkennen';

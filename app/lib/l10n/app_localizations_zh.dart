@@ -10881,7 +10881,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
+  String get recordingAndTranscription => '录音与转录';
+
+  @override
+  String get notificationsAndDisplay => '通知与显示';
+
+  @override
+  String get helpAndAbout => '帮助与关于';
 
   @override
   String get speakerTagPromptTitle => '帮助 Omi 识别声音';

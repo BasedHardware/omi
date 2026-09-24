@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು",
     "conversationDeveloperToolsDescription": "ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ",
     "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}",
-    "planDeprecationMessage": "ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ. Operator ಯೋಜನೆಗೆ ಬದಲಾಯಿಸಿ — ಅದೇ ಅದ್ಭುತ ವೈಶಿಷ್ಟ್ಯಗಳು $49/ತಿಂಗಳಿಗೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆ ಈ ಮಧ್ಯೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಪ್ರತಿಲಿಪಿ",
+    "notificationsAndDisplay": "ಅಧಿಸೂಚನೆಗಳು ಮತ್ತು ಪ್ರದರ್ಶನ",
+    "helpAndAbout": "ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ",
     "speakerTagPromptTitle": "ಧ್ವನಿಗಳನ್ನು ಗುರುತಿಸಲು Omi ಗೆ ಸಹಾಯ ಮಾಡಿ",
     "speakerTagPromptSubtitle": "ಕಳೆದ ಎರಡು ದಿನಗಳ ಧ್ವನಿಗಳ ತ್ವರಿತ ಪರಿಶೀಲನೆ",
     "speakerTagPromptIsThisYou": "ಇದು ನೀವೇನಾ?",

@@ -11116,8 +11116,13 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ. Operator ಯೋಜನೆಗೆ ಬದಲಾಯಿಸಿ — ಅದೇ ಅದ್ಭುತ ವೈಶಿಷ್ಟ್ಯಗಳು \$49/ತಿಂಗಳಿಗೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆ ಈ ಮಧ್ಯೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.';
+  String get recordingAndTranscription => 'ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಪ್ರತಿಲಿಪಿ';
+
+  @override
+  String get notificationsAndDisplay => 'ಅಧಿಸೂಚನೆಗಳು ಮತ್ತು ಪ್ರದರ್ಶನ';
+
+  @override
+  String get helpAndAbout => 'ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ';
 
   @override
   String get speakerTagPromptTitle => 'ಧ್ವನಿಗಳನ್ನು ಗುರುತಿಸಲು Omi ಗೆ ಸಹಾಯ ಮಾಡಿ';

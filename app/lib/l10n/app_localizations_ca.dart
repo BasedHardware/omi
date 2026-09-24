@@ -11145,8 +11145,13 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'El vostre pla Unlimited s\'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a \$49/mes. El vostre pla actual continuarà funcionant mentrestant.';
+  String get recordingAndTranscription => 'Enregistrament i transcripció';
+
+  @override
+  String get notificationsAndDisplay => 'Notificacions i visualització';
+
+  @override
+  String get helpAndAbout => 'Ajuda i informació';
 
   @override
   String get speakerTagPromptTitle => 'Ajuda l’Omi a reconèixer veus';

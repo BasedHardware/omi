@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Alat pembangun dalam perbualan",
     "conversationDeveloperToolsDescription": "Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan",
     "participantsSummary": "{name} + {count, plural, =1{1 lagi} few{{count} lagi} many{{count} lagi} other{{count} lagi}}",
-    "planDeprecationMessage": "Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada $49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Rakaman & Transkripsi",
+    "notificationsAndDisplay": "Pemberitahuan & Paparan",
+    "helpAndAbout": "Bantuan & Perihal",
     "speakerTagPromptTitle": "Bantu Omi mengenal pasti suara",
     "speakerTagPromptSubtitle": "Semakan pantas suara dari dua hari lepas",
     "speakerTagPromptIsThisYou": "Adakah ini anda?",

@@ -11079,8 +11079,13 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
+  String get recordingAndTranscription => 'Nahrávání a přepis';
+
+  @override
+  String get notificationsAndDisplay => 'Oznámení a zobrazení';
+
+  @override
+  String get helpAndAbout => 'Nápověda a o aplikaci';
 
   @override
   String get speakerTagPromptTitle => 'Pomozte Omi rozpoznávat hlasy';

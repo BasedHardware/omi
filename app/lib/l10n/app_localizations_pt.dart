@@ -11096,8 +11096,13 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Seu plano Unlimited está sendo descontinuado. Mude para o plano Operator — os mesmos ótimos recursos por \$49/mês. Seu plano atual continuará funcionando enquanto isso.';
+  String get recordingAndTranscription => 'Gravação e transcrição';
+
+  @override
+  String get notificationsAndDisplay => 'Notificações e exibição';
+
+  @override
+  String get helpAndAbout => 'Ajuda e sobre';
 
   @override
   String get speakerTagPromptTitle => 'Ajude o Omi a reconhecer vozes';

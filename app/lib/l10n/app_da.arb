@@ -3543,10 +3543,9 @@
     "conversationDeveloperTools": "Udviklerværktøjer i samtaler",
     "conversationDeveloperToolsDescription": "Vis Kopiér samtale-id og Test prompt i samtalens menu",
     "participantsSummary": "{name} + {count, plural, =1{1 anden} few{{count} andre} many{{count} andre} other{{count} andre}}",
-    "planDeprecationMessage": "Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til $49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Optagelse og transskription",
+    "notificationsAndDisplay": "Notifikationer og visning",
+    "helpAndAbout": "Hjælp og om",
     "speakerTagPromptTitle": "Hjælp Omi med at genkende stemmer",
     "speakerTagPromptSubtitle": "Et hurtigt tjek af stemmer fra de sidste to dage",
     "speakerTagPromptIsThisYou": "Er det dig?",

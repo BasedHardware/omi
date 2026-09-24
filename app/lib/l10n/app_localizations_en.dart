@@ -11071,8 +11071,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.';
+  String get recordingAndTranscription => 'Recording & Transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Notifications & Display';
+
+  @override
+  String get helpAndAbout => 'Help & About';
 
   @override
   String get speakerTagPromptTitle => 'Help Omi recognize voices';

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -299,7 +300,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         const SizedBox(height: 12),
         OmiPermissionRow(
           key: const Key('introduction_microphone_permission'),
-          icon: Icons.mic_none,
+          leading: const FaIcon(FontAwesomeIcons.microphone),
           title: context.l10n.microphone,
           reason: context.l10n.microphoneAccessDescription,
           status: _micStatus,

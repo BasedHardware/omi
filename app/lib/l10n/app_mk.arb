@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "Алатки за програмери во разговорите",
     "conversationDeveloperToolsDescription": "Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот",
     "participantsSummary": "{name} + {count, plural, =1{уште 1} few{уште {count}} many{уште {count}} other{уште {count}}}",
-    "planDeprecationMessage": "Вашиот Unlimited план се укинува. Преминете на Operator план — истите одлични функции за $49/мес. Вашиот тековен план ќе продолжи да работи во меѓувреме.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Снимање и транскрипција",
+    "notificationsAndDisplay": "Известувања и приказ",
+    "helpAndAbout": "Помош и за апликацијата",
     "speakerTagPromptTitle": "Помогнете му на Omi да препознава гласови",
     "speakerTagPromptSubtitle": "Брза проверка на гласовите од последните два дена",
     "speakerTagPromptIsThisYou": "Дали ова сте вие?",

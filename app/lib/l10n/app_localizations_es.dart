@@ -11112,8 +11112,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Su plan Unlimited está siendo retirado. Cambie al plan Operator — las mismas excelentes funciones a \$49/mes. Su plan actual seguirá funcionando mientras tanto.';
+  String get recordingAndTranscription => 'Grabación y transcripción';
+
+  @override
+  String get notificationsAndDisplay => 'Notificaciones y visualización';
+
+  @override
+  String get helpAndAbout => 'Ayuda e información';
 
   @override
   String get speakerTagPromptTitle => 'Ayuda a Omi a reconocer voces';

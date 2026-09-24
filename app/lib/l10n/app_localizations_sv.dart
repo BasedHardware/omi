@@ -11091,8 +11091,13 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för \$49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.';
+  String get recordingAndTranscription => 'Inspelning och transkription';
+
+  @override
+  String get notificationsAndDisplay => 'Aviseringar och visning';
+
+  @override
+  String get helpAndAbout => 'Hjälp och om';
 
   @override
   String get speakerTagPromptTitle => 'Hjälp Omi att känna igen röster';

@@ -266,7 +266,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         OmiButton(
           key: const Key('firmware_update_try_again'),
           label: context.l10n.tryAgain,
-          icon: Icons.refresh,
+          leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
           expand: true,
           onPressed: () {
             clearFirmwareFailure();
@@ -416,7 +416,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 : otaUpdateSteps.isEmpty
                     ? context.l10n.installUpdate
                     : context.l10n.updateNow,
-            icon: Icons.download_rounded,
+            leading: const FaIcon(FontAwesomeIcons.download),
             expand: true,
             onPressed: batteryTooLow ? null : _startUpdate,
           ),
@@ -427,7 +427,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           const SizedBox(height: OmiSpacing.sm),
           OmiButton.secondary(
             label: context.l10n.updateGuide,
-            icon: Icons.help_outline,
+            leading: const FaIcon(FontAwesomeIcons.circleQuestion),
             expand: true,
             onPressed: () => IntercomManager.instance.displayFirmwareUpdateArticle(),
           ),

@@ -11101,8 +11101,13 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už \$49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.';
+  String get recordingAndTranscription => 'Įrašymas ir transkripcija';
+
+  @override
+  String get notificationsAndDisplay => 'Pranešimai ir rodinys';
+
+  @override
+  String get helpAndAbout => 'Pagalba ir apie';
 
   @override
   String get speakerTagPromptTitle => 'Padėkite Omi atpažinti balsus';

@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "เครื่องมือนักพัฒนาในบทสนทนา",
     "conversationDeveloperToolsDescription": "แสดง คัดลอก ID บทสนทนา และ ทดสอบพรอมต์ ในเมนูของบทสนทนา",
     "participantsSummary": "{name} + {count, plural, =1{1คน} few{{count}คน} many{{count}คน} other{{count}คน}}",
-    "planDeprecationMessage": "แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา $49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "การบันทึกและการถอดเสียง",
+    "notificationsAndDisplay": "การแจ้งเตือนและการแสดงผล",
+    "helpAndAbout": "ความช่วยเหลือและเกี่ยวกับ",
     "speakerTagPromptTitle": "ช่วย Omi จดจำเสียง",
     "speakerTagPromptSubtitle": "ตรวจสอบเสียงจากสองวันที่ผ่านมาแบบรวดเร็ว",
     "speakerTagPromptIsThisYou": "นี่คือคุณใช่ไหม?",

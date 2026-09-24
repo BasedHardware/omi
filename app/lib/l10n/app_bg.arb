@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Инструменти за разработчици в разговорите",
     "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора",
     "participantsSummary": "{name} + {count, plural, =1{1 друг} few{{count} други} many{{count} други} other{{count} други}}",
-    "planDeprecationMessage": "Вашият план Unlimited се прекратява. Преминете към план Operator — същите страхотни функции за $49/мес. Текущият ви план ще продължи да работи междувременно.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Запис и транскрипция",
+    "notificationsAndDisplay": "Известия и показване",
+    "helpAndAbout": "Помощ и информация",
     "speakerTagPromptTitle": "Помогнете на Omi да разпознава гласове",
     "speakerTagPromptSubtitle": "Бърза проверка на гласовете от последните два дни",
     "speakerTagPromptIsThisYou": "Това вие ли сте?",

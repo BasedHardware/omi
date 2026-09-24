@@ -11103,8 +11103,13 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Ваш план Unlimited припиняється. Перейдіть на план Operator — ті самі чудові функції за \$49/міс. Ваш поточний план продовжить працювати тим часом.';
+  String get recordingAndTranscription => 'Запис і транскрипція';
+
+  @override
+  String get notificationsAndDisplay => 'Сповіщення і відображення';
+
+  @override
+  String get helpAndAbout => 'Допомога і про програму';
 
   @override
   String get speakerTagPromptTitle => 'Допоможіть Omi розпізнавати голоси';

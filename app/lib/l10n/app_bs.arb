@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "Alati za programere u razgovorima",
     "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora",
     "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}",
-    "planDeprecationMessage": "Vaš Unlimited plan se ukida. Pređite na Operator plan — iste odlične funkcije za $49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Snimanje i prepis",
+    "notificationsAndDisplay": "Obaveštenja i prikaz",
+    "helpAndAbout": "Pomoć i o aplikaciji",
     "speakerTagPromptTitle": "Pomozite Omi da prepoznaje glasove",
     "speakerTagPromptSubtitle": "Brza provjera glasova iz posljednja dva dana",
     "speakerTagPromptIsThisYou": "Jeste li ovo vi?",

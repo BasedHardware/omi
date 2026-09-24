@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Vývojárske nástroje v konverzáciách",
     "conversationDeveloperToolsDescription": "Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie",
     "participantsSummary": "{name} + {count, plural, =1{1 ďalší} few{{count} ďalší} many{{count} ďalších} other{{count} ďalších}}",
-    "planDeprecationMessage": "Váš plán Unlimited sa ruší. Prejdite na plán Operator — rovnaké skvelé funkcie za $49/mes. Váš súčasný plán bude zatiaľ naďalej fungovať.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Nahrávanie a prepis",
+    "notificationsAndDisplay": "Upozornenia a zobrazenie",
+    "helpAndAbout": "Pomoc a o aplikácii",
     "speakerTagPromptTitle": "Pomôžte Omi rozpoznávať hlasy",
     "speakerTagPromptSubtitle": "Rýchla kontrola hlasov z posledných dvoch dní",
     "speakerTagPromptIsThisYou": "Ste to vy?",

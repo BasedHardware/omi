@@ -11174,8 +11174,13 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Ihr Unlimited-Plan wird eingestellt. Wechseln Sie zum Operator-Plan — dieselben großartigen Funktionen für \$49/Monat. Ihr aktueller Plan funktioniert in der Zwischenzeit weiterhin.';
+  String get recordingAndTranscription => 'Aufnahme & Transkription';
+
+  @override
+  String get notificationsAndDisplay => 'Benachrichtigungen & Anzeige';
+
+  @override
+  String get helpAndAbout => 'Hilfe & Info';
 
   @override
   String get speakerTagPromptTitle => 'Hilf Omi, Stimmen zu erkennen';

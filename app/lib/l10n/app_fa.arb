@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "ابزارهای توسعه‌دهنده در گفتگوها",
     "conversationDeveloperToolsDescription": "نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو",
     "participantsSummary": "{name} + {count, plural, =1{1 نفر دیگر} few{{count} نفر دیگر} many{{count} نفر دیگر} other{{count} نفر دیگر}}",
-    "planDeprecationMessage": "طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با $49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "ضبط و رونویسی",
+    "notificationsAndDisplay": "اطلاع‌رسانی‌ها و نمایش",
+    "helpAndAbout": "راهنما و درباره",
     "speakerTagPromptTitle": "به Omi در شناختن صداها کمک کنید",
     "speakerTagPromptSubtitle": "بررسی سریع صداهای دو روز گذشته",
     "speakerTagPromptIsThisYou": "این شما هستید؟",

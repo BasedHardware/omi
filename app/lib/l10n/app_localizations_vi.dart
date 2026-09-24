@@ -11076,8 +11076,13 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá \$49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.';
+  String get recordingAndTranscription => 'Ghi âm & Phiên âm';
+
+  @override
+  String get notificationsAndDisplay => 'Thông báo & Hiển thị';
+
+  @override
+  String get helpAndAbout => 'Trợ giúp & Giới thiệu';
 
   @override
   String get speakerTagPromptTitle => 'Giúp Omi nhận ra giọng nói';

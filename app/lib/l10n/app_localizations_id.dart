@@ -11091,8 +11091,13 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga \$49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.';
+  String get recordingAndTranscription => 'Perekaman & Transkripsi';
+
+  @override
+  String get notificationsAndDisplay => 'Notifikasi & Tampilan';
+
+  @override
+  String get helpAndAbout => 'Bantuan & Tentang';
 
   @override
   String get speakerTagPromptTitle => 'Bantu Omi mengenali suara';

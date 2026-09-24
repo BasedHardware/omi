@@ -3536,10 +3536,9 @@
     "conversationDeveloperTools": "Ferramentas de programador nas conversas",
     "conversationDeveloperToolsDescription": "Mostrar Copiar ID da conversa e Testar prompt no menu da conversa",
     "participantsSummary": "{name} + {count, plural, =1{1 outro} few{{count} outros} many{{count} outros} other{{count} outros}}",
-    "planDeprecationMessage": "Seu plano Unlimited está sendo descontinuado. Mude para o plano Operator — os mesmos ótimos recursos por $49/mês. Seu plano atual continuará funcionando enquanto isso.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Gravação e transcrição",
+    "notificationsAndDisplay": "Notificações e exibição",
+    "helpAndAbout": "Ajuda e sobre",
     "speakerTagPromptTitle": "Ajude o Omi a reconhecer vozes",
     "speakerTagPromptSubtitle": "Uma checagem rápida das vozes dos últimos dois dias",
     "speakerTagPromptIsThisYou": "É você?",

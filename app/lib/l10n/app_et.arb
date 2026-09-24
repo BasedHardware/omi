@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Arendaja tööriistad vestlustes",
     "conversationDeveloperToolsDescription": "Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa",
     "participantsSummary": "{name} + {count, plural, =1{1 teine} few{{count} teist} many{{count} teist} other{{count} teist}}",
-    "planDeprecationMessage": "Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga $49/kuus. Teie praegune plaan jätkab vahepeal tööd.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Salvestamine ja transkriptsioon",
+    "notificationsAndDisplay": "Teavitused ja kuva",
+    "helpAndAbout": "Abi ja teave",
     "speakerTagPromptTitle": "Aita Omil hääli ära tunda",
     "speakerTagPromptSubtitle": "Kiire ülevaade viimase kahe päeva häältest",
     "speakerTagPromptIsThisYou": "Kas see oled sina?",

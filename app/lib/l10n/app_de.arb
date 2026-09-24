@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Entwicklertools in Gesprächen",
     "conversationDeveloperToolsDescription": "„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen",
     "participantsSummary": "{name} + {count, plural, =1{1 weitere Person} few{{count} weitere} many{{count} weitere} other{{count} weitere}}",
-    "planDeprecationMessage": "Ihr Unlimited-Plan wird eingestellt. Wechseln Sie zum Operator-Plan — dieselben großartigen Funktionen für $49/Monat. Ihr aktueller Plan funktioniert in der Zwischenzeit weiterhin.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Aufnahme & Transkription",
+    "notificationsAndDisplay": "Benachrichtigungen & Anzeige",
+    "helpAndAbout": "Hilfe & Info",
     "speakerTagPromptTitle": "Hilf Omi, Stimmen zu erkennen",
     "speakerTagPromptSubtitle": "Ein kurzer Check der Stimmen der letzten zwei Tage",
     "speakerTagPromptIsThisYou": "Bist du das?",

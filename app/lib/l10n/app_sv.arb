@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Utvecklarverktyg i samtal",
     "conversationDeveloperToolsDescription": "Visa Kopiera samtals-ID och Testa prompt i samtalets meny",
     "participantsSummary": "{name} + {count, plural, =1{1 annan} few{{count} andra} many{{count} andra} other{{count} andra}}",
-    "planDeprecationMessage": "Ditt Unlimited-abonnemang fasas ut. Byt till Operator-abonnemanget — samma fantastiska funktioner för $49/mån. Ditt nuvarande abonnemang kommer att fortsätta fungera under tiden.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Inspelning och transkription",
+    "notificationsAndDisplay": "Aviseringar och visning",
+    "helpAndAbout": "Hjälp och om",
     "speakerTagPromptTitle": "Hjälp Omi att känna igen röster",
     "speakerTagPromptSubtitle": "En snabb koll på röster från de senaste två dagarna",
     "speakerTagPromptIsThisYou": "Är det här du?",

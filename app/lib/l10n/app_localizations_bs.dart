@@ -11112,8 +11112,13 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Vaš Unlimited plan se ukida. Pređite na Operator plan — iste odlične funkcije za \$49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.';
+  String get recordingAndTranscription => 'Snimanje i prepis';
+
+  @override
+  String get notificationsAndDisplay => 'Obaveštenja i prikaz';
+
+  @override
+  String get helpAndAbout => 'Pomoć i o aplikaciji';
 
   @override
   String get speakerTagPromptTitle => 'Pomozite Omi da prepoznaje glasove';

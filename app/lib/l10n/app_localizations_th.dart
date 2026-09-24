@@ -11017,8 +11017,13 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา \$49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้';
+  String get recordingAndTranscription => 'การบันทึกและการถอดเสียง';
+
+  @override
+  String get notificationsAndDisplay => 'การแจ้งเตือนและการแสดงผล';
+
+  @override
+  String get helpAndAbout => 'ความช่วยเหลือและเกี่ยวกับ';
 
   @override
   String get speakerTagPromptTitle => 'ช่วย Omi จดจำเสียง';

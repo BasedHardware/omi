@@ -10900,8 +10900,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
+  String get recordingAndTranscription => '録音と文字起こし';
+
+  @override
+  String get notificationsAndDisplay => '通知と表示';
+
+  @override
+  String get helpAndAbout => 'ヘルプとアプリについて';
 
   @override
   String get speakerTagPromptTitle => 'Omiが声を聞き分けられるようにしましょう';

@@ -20193,11 +20193,23 @@ abstract class AppLocalizations {
   /// **'{name} + {count, plural, =1{1 other} few{{count} others} many{{count} others} other{{count} others}}'**
   String participantsSummary(String name, int count);
 
-  /// Deprecation notice for legacy Unlimited subscribers
+  /// Settings group: transcription, language, voice and capture settings
   ///
   /// In en, this message translates to:
-  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
-  String get planDeprecationMessage;
+  /// **'Recording & Transcription'**
+  String get recordingAndTranscription;
+
+  /// Settings group: notifications, home screen and conversation display
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications & Display'**
+  String get notificationsAndDisplay;
+
+  /// Settings group: feedback, help center, what's new and the app version
+  ///
+  /// In en, this message translates to:
+  /// **'Help & About'**
+  String get helpAndAbout;
 
   /// Card title asking the user to label speakers from recent conversations
   ///

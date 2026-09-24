@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Ontwikkelaarstools in gesprekken",
     "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek",
     "participantsSummary": "{name} + {count, plural, =1{1 ander} few{{count} anderen} many{{count} anderen} other{{count} anderen}}",
-    "planDeprecationMessage": "Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor $49/maand. Uw huidige abonnement blijft in de tussentijd werken.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Opname en transcriptie",
+    "notificationsAndDisplay": "Meldingen en weergave",
+    "helpAndAbout": "Help en over",
     "speakerTagPromptTitle": "Help Omi stemmen te herkennen",
     "speakerTagPromptSubtitle": "Een snelle check van stemmen uit de afgelopen twee dagen",
     "speakerTagPromptIsThisYou": "Ben jij dit?",

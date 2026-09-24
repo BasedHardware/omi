@@ -13125,9 +13125,17 @@
             }
         }
     },
-    "planDeprecationMessage": "Your Unlimited plan is being retired. Switch to the Operator plan — same great features at $49/mo. Your current plan will continue to work in the meantime.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
+    "recordingAndTranscription": "Recording & Transcription",
+    "@recordingAndTranscription": {
+        "description": "Settings group: transcription, language, voice and capture settings"
+    },
+    "notificationsAndDisplay": "Notifications & Display",
+    "@notificationsAndDisplay": {
+        "description": "Settings group: notifications, home screen and conversation display"
+    },
+    "helpAndAbout": "Help & About",
+    "@helpAndAbout": {
+        "description": "Settings group: feedback, help center, what's new and the app version"
     },
     "speakerTagPromptTitle": "Help Omi recognize voices",
     "@speakerTagPromptTitle": {

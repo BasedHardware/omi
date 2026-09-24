@@ -11091,8 +11091,13 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये \$49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.';
+  String get recordingAndTranscription => 'रेकॉर्डिंग आणि प्रतिलेखन';
+
+  @override
+  String get notificationsAndDisplay => 'सूचना आणि प्रदर्शन';
+
+  @override
+  String get helpAndAbout => 'मदत आणि माहिती';
 
   @override
   String get speakerTagPromptTitle => 'Omi ला आवाज ओळखायला मदत करा';

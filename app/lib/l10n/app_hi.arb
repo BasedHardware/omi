@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "बातचीत में डेवलपर टूल",
     "conversationDeveloperToolsDescription": "बातचीत के मेनू में बातचीत आईडी कॉपी करें और प्रॉम्प्ट टेस्ट करें दिखाएँ",
     "participantsSummary": "{name} + {count, plural, =1{1 अन्य} few{{count} अन्य} many{{count} अन्य} other{{count} अन्य}}",
-    "planDeprecationMessage": "आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ $49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "रिकॉर्डिंग और प्रतिलेखन",
+    "notificationsAndDisplay": "सूचनाएं और डिस्प्ले",
+    "helpAndAbout": "सहायता और जानकारी",
     "speakerTagPromptTitle": "Omi को आवाज़ें पहचानने में मदद करें",
     "speakerTagPromptSubtitle": "पिछले दो दिनों की आवाज़ों की एक झटपट जाँच",
     "speakerTagPromptIsThisYou": "क्या यह आप हैं?",

@@ -11014,8 +11014,13 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر \$49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.';
+  String get recordingAndTranscription => 'التسجيل والنسخ';
+
+  @override
+  String get notificationsAndDisplay => 'الإشعارات والعرض';
+
+  @override
+  String get helpAndAbout => 'المساعدة وحول التطبيق';
 
   @override
   String get speakerTagPromptTitle => 'ساعد Omi على التعرّف على الأصوات';

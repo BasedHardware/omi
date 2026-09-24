@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Kehittäjätyökalut keskusteluissa",
     "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa",
     "participantsSummary": "{name} + {count, plural, =1{1 muu} few{{count} muuta} many{{count} muuta} other{{count} muuta}}",
-    "planDeprecationMessage": "Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan $49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Tallennus ja litterointi",
+    "notificationsAndDisplay": "Ilmoitukset ja näyttö",
+    "helpAndAbout": "Ohje ja tietoja",
     "speakerTagPromptTitle": "Auta Omia tunnistamaan äänet",
     "speakerTagPromptSubtitle": "Nopea tarkistus kahden viime päivän äänistä",
     "speakerTagPromptIsThisYou": "Oletko tämä sinä?",

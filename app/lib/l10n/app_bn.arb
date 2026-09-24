@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "কথোপকথনে ডেভেলপার টুল",
     "conversationDeveloperToolsDescription": "কথোপকথনের মেনুতে কথোপকথন আইডি কপি ও প্রম্পট পরীক্ষা দেখান",
     "participantsSummary": "{name} + {count, plural, =1{আরও ১ জন} few{আরও {count} জন} many{আরও {count} জন} other{আরও {count} জন}}",
-    "planDeprecationMessage": "আপনার Unlimited প্ল্যান বন্ধ হচ্ছে। Operator প্ল্যানে স্যুইচ করুন — একই দুর্দান্ত ফিচার $49/মাসে। আপনার বর্তমান প্ল্যান এর মধ্যে কাজ করতে থাকবে।",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "রেকর্ডিং ও ট্রান্সক্রিপশন",
+    "notificationsAndDisplay": "বিজ্ঞপ্তি ও প্রদর্শন",
+    "helpAndAbout": "সাহায্য ও সম্পর্কে",
     "speakerTagPromptTitle": "Omi-কে কণ্ঠস্বর চিনতে সাহায্য করুন",
     "speakerTagPromptSubtitle": "গত দুই দিনের কণ্ঠস্বরের একটি দ্রুত যাচাই",
     "speakerTagPromptIsThisYou": "এটা কি আপনি?",

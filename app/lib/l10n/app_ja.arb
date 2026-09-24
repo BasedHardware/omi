@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "会話の開発者ツール",
     "conversationDeveloperToolsDescription": "会話のメニューに「会話IDをコピー」と「プロンプトをテスト」を表示",
     "participantsSummary": "{name} + {count, plural, =1{1人} few{{count}人} many{{count}人} other{{count}人}}",
-    "planDeprecationMessage": "Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "録音と文字起こし",
+    "notificationsAndDisplay": "通知と表示",
+    "helpAndAbout": "ヘルプとアプリについて",
     "speakerTagPromptTitle": "Omiが声を聞き分けられるようにしましょう",
     "speakerTagPromptSubtitle": "過去2日間の声をさっと確認",
     "speakerTagPromptIsThisYou": "これはあなたですか？",

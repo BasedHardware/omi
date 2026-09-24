@@ -11085,8 +11085,13 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Unlimited-tilauksesi poistetaan käytöstä. Vaihda Operator-tilaukseen — samat loistavat ominaisuudet hintaan \$49/kk. Nykyinen tilauksesi jatkaa toimintaansa sillä välin.';
+  String get recordingAndTranscription => 'Tallennus ja litterointi';
+
+  @override
+  String get notificationsAndDisplay => 'Ilmoitukset ja näyttö';
+
+  @override
+  String get helpAndAbout => 'Ohje ja tietoja';
 
   @override
   String get speakerTagPromptTitle => 'Auta Omia tunnistamaan äänet';

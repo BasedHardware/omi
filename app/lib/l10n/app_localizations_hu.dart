@@ -11125,8 +11125,13 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók \$49/hó áron. A jelenlegi csomagja addig is tovább működik.';
+  String get recordingAndTranscription => 'Felvétel és átírás';
+
+  @override
+  String get notificationsAndDisplay => 'Értesítések és megjelenítés';
+
+  @override
+  String get helpAndAbout => 'Súgó és névjegy';
 
   @override
   String get speakerTagPromptTitle => 'Segíts az Ominak felismerni a hangokat';

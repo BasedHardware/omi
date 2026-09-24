@@ -11079,8 +11079,13 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با \$49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.';
+  String get recordingAndTranscription => 'ضبط و رونویسی';
+
+  @override
+  String get notificationsAndDisplay => 'اطلاع‌رسانی‌ها و نمایش';
+
+  @override
+  String get helpAndAbout => 'راهنما و درباره';
 
   @override
   String get speakerTagPromptTitle => 'به Omi در شناختن صداها کمک کنید';

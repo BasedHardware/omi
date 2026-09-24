@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Εργαλεία προγραμματιστή στις συνομιλίες",
     "conversationDeveloperToolsDescription": "Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας",
     "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} few{ακόμη {count}} many{ακόμη {count}} other{ακόμη {count}}}",
-    "planDeprecationMessage": "Το πλάνο Unlimited σας καταργείται. Μεταβείτε στο πλάνο Operator — ίδιες εξαιρετικές λειτουργίες στα $49/μήνα. Το τρέχον πλάνο σας θα συνεχίσει να λειτουργεί στο μεταξύ.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Εγγραφή & απομαγνητοφώνηση",
+    "notificationsAndDisplay": "Ειδοποιήσεις & εμφάνιση",
+    "helpAndAbout": "Βοήθεια & σχετικά",
     "speakerTagPromptTitle": "Βοηθήστε το Omi να αναγνωρίζει φωνές",
     "speakerTagPromptSubtitle": "Γρήγορος έλεγχος φωνών από τις δύο τελευταίες ημέρες",
     "speakerTagPromptIsThisYou": "Είστε εσείς;",

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/message_provider.dart';
@@ -66,7 +67,8 @@ class ChatComposerSideButton extends StatelessWidget {
 /// The round 38 pt button inside the composer pill (mic, send-while-recording), in a 44 pt target.
 ///
 /// A disabled button is visibly disabled: a dark fill and a dimmed glyph instead of the white
-/// "ready" fill.
+/// "ready" fill. The glyph is a widget (FontAwesome `arrowUp` / `microphone`, like the side
+/// button's `plus`), 16 pt and tinted through [IconTheme].
 class ChatComposerRoundButton extends StatelessWidget {
   const ChatComposerRoundButton({
     super.key,
@@ -76,7 +78,7 @@ class ChatComposerRoundButton extends StatelessWidget {
     this.buttonKey,
   });
 
-  final IconData icon;
+  final Widget icon;
   final String label;
   final VoidCallback? onPressed;
 
@@ -109,7 +111,10 @@ class ChatComposerRoundButton extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: ExcludeSemantics(
-                  child: Icon(icon, size: 18, color: enabled ? OmiColors.onAccent : OmiColors.textDisabled),
+                  child: IconTheme.merge(
+                    data: IconThemeData(size: 16, color: enabled ? OmiColors.onAccent : OmiColors.textDisabled),
+                    child: Center(child: icon),
+                  ),
                 ),
               ),
             ),
@@ -205,7 +210,7 @@ class _RemoveFileButton extends StatelessWidget {
                 height: 20,
                 margin: const EdgeInsets.all(OmiSpacing.xxs),
                 decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: const Icon(Icons.close, size: 12, color: OmiColors.onAccent),
+                child: const Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
               ),
             ),
           ),

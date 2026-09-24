@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
@@ -55,6 +56,18 @@ void main() {
     expect(find.text('Open Settings'), findsNothing);
     await tester.tap(find.text('Allow'));
     expect(allowed, 1);
+  });
+
+  testWidgets('a FontAwesome leading glyph stands in for the Material icon', (tester) async {
+    await tester.pumpWidget(_app(OmiPermissionRow(
+      leading: const FaIcon(FontAwesomeIcons.solidBell),
+      title: 'Notifications',
+      reason: 'So Omi can remind you.',
+      status: OmiPermissionStatus.askable,
+      onAllow: () {},
+    )));
+    expect(find.byType(FaIcon), findsOneWidget);
+    expect(tester.getSize(find.byType(FaIcon)).height, 22);
   });
 
   testWidgets('a granted permission shows Allowed and no action', (tester) async {

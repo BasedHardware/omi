@@ -3501,10 +3501,9 @@
     "conversationDeveloperTools": "Kūrėjo įrankiai pokalbiuose",
     "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“",
     "participantsSummary": "{name} + {count, plural, =1{dar 1} few{dar {count}} many{dar {count}} other{dar {count}}}",
-    "planDeprecationMessage": "Jūsų Unlimited planas nutraukiamas. Pereikite prie Operator plano — tos pačios puikios funkcijos už $49/mėn. Jūsų dabartinis planas tuo tarpu veiks toliau.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "Įrašymas ir transkripcija",
+    "notificationsAndDisplay": "Pranešimai ir rodinys",
+    "helpAndAbout": "Pagalba ir apie",
     "speakerTagPromptTitle": "Padėkite Omi atpažinti balsus",
     "speakerTagPromptSubtitle": "Greita paskutinių dviejų dienų balsų patikra",
     "speakerTagPromptIsThisYou": "Ar tai jūs?",

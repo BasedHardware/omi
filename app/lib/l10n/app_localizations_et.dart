@@ -11079,8 +11079,13 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga \$49/kuus. Teie praegune plaan jätkab vahepeal tööd.';
+  String get recordingAndTranscription => 'Salvestamine ja transkriptsioon';
+
+  @override
+  String get notificationsAndDisplay => 'Teavitused ja kuva';
+
+  @override
+  String get helpAndAbout => 'Abi ja teave';
 
   @override
   String get speakerTagPromptTitle => 'Aita Omil hääli ära tunda';

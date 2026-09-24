@@ -11097,8 +11097,13 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Ваш Unlimited план се укида. Пређите на Operator план — исте одличне функције за \$49/мес. Ваш тренутни план ће наставити да ради у међувремену.';
+  String get recordingAndTranscription => 'Снимање и препис';
+
+  @override
+  String get notificationsAndDisplay => 'Обавештења и приказ';
+
+  @override
+  String get helpAndAbout => 'Помоћ и о апликацији';
 
   @override
   String get speakerTagPromptTitle => 'Помозите Omi-ју да препознаје гласове';

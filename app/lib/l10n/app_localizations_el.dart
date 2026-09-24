@@ -11158,8 +11158,13 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Το πλάνο Unlimited σας καταργείται. Μεταβείτε στο πλάνο Operator — ίδιες εξαιρετικές λειτουργίες στα \$49/μήνα. Το τρέχον πλάνο σας θα συνεχίσει να λειτουργεί στο μεταξύ.';
+  String get recordingAndTranscription => 'Εγγραφή & απομαγνητοφώνηση';
+
+  @override
+  String get notificationsAndDisplay => 'Ειδοποιήσεις & εμφάνιση';
+
+  @override
+  String get helpAndAbout => 'Βοήθεια & σχετικά';
 
   @override
   String get speakerTagPromptTitle => 'Βοηθήστε το Omi να αναγνωρίζει φωνές';

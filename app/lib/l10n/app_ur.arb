@@ -11073,10 +11073,9 @@
     "conversationDeveloperTools": "گفتگو میں ڈویلپر ٹولز",
     "conversationDeveloperToolsDescription": "گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں",
     "participantsSummary": "{name} + {count, plural, =1{1 دیگر} few{{count} دیگر} many{{count} دیگر} other{{count} دیگر}}",
-    "planDeprecationMessage": "آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز $49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
-    },
+    "recordingAndTranscription": "ریکارڈنگ اور ٹرانسکرپشن",
+    "notificationsAndDisplay": "اطلاعات اور ڈسپلے",
+    "helpAndAbout": "مدد اور تعارف",
     "speakerTagPromptTitle": "Omi کو آوازیں پہچاننے میں مدد کریں",
     "speakerTagPromptSubtitle": "پچھلے دو دنوں کی آوازوں کا فوری جائزہ",
     "speakerTagPromptIsThisYou": "کیا یہ آپ ہیں؟",

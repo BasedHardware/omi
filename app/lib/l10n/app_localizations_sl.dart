@@ -11114,8 +11114,13 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'Vaš načrt Unlimited se ukinja. Preklopite na načrt Operator — enake odlične funkcije za \$49/mesec. Vaš trenutni načrt bo medtem še naprej deloval.';
+  String get recordingAndTranscription => 'Snemanje in transkripcija';
+
+  @override
+  String get notificationsAndDisplay => 'Obvestila in prikaz';
+
+  @override
+  String get helpAndAbout => 'Pomoč in o aplikaciji';
 
   @override
   String get speakerTagPromptTitle => 'Pomagajte Omiju prepoznavati glasove';

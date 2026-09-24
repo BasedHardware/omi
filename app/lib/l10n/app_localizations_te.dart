@@ -11130,8 +11130,13 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get planDeprecationMessage =>
-      'మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు \$49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.';
+  String get recordingAndTranscription => 'రికార్డింగ్ & ట్రాన్‌స్క్రిప్షన్';
+
+  @override
+  String get notificationsAndDisplay => 'నోటిఫికేషన్‌లు & ప్రదర్శన';
+
+  @override
+  String get helpAndAbout => 'సహాయం & గురించి';
 
   @override
   String get speakerTagPromptTitle => 'గొంతులను గుర్తించడంలో Omi కి సహాయం చేయండి';
