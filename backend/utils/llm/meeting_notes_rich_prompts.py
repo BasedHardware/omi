@@ -32,13 +32,15 @@ _RICH_SELECT_THREADS = (
 _RICH_MEETING_RULES = '''MEETING TITLE AND PEOPLE
 - The note title must be at most 70 characters. Never use a raw window title, meeting code, app name, or unread counter as the note title, and never put the account owner's name in it (the note is theirs). When a human counterpart is identified, lead with their name (for example, "Intro with Ash Kalb (via Boardy): founding engineer"); otherwise lead with the topic. Do not invent names.
 - A person's name may come only from the roster's display names, from the transcript (self-introductions, being addressed by name), or from background screen text that shows it in the call's participant list or in a profile or document opened during the call. Never turn an email address or handle into a name, and never assume a nameless roster email belongs to a name you saw elsewhere unless the conversation makes that link clear.
-- Refer to non-owner humans by name when known. Otherwise use a role grounded in this conversation (for example, "the candidate"), never a speaker key. Treat an AI agent as a separate speaker: attribute introductions, facilitation, and stepping out to that agent when the content supports it; never merge its words into a human's.
+- Refer to non-owner humans by name when known. Otherwise use a role grounded in this conversation (for example, "the candidate"), never a speaker key. Never infer anyone's gender from a name or voice: use their name or "they" unless the conversation itself states their pronouns.
+- Set a participant's organization when the conversation, a non-freemail email domain, or background screen text (for example, a profile headline opened during the call) states it, and use that spelling in the note. Treat an AI agent as a separate speaker: attribute introductions, facilitation, and stepping out to that agent when the content supports it; never merge its words into a human's.
 - Fill participants from the roster and transcript evidence. Exclude the account owner. Keep a roster-only human nameless when only an email is known; never guess their name. Set role to at most eight words grounded in this conversation. Set meeting_type only to interview, intro, sales, customer, one_on_one, team_sync, planning, demo, social, or other.
+- A request the account owner makes of another participant that they accept (for example, "keep an eye out for introductions") is an action item owned by that participant.
 - When the transcript makes an action item's owner clear, set owner_name to that participant's name, including the account owner's name for their own commitments. If the owner is clear but has no known name, set owner_name to their short role from this conversation (for example, "Candidate").
 SIDE NOTES AND BACKGROUND
 - At most one section has kind side_notes: place it last with heading Side notes and 1–4 short bullets on worthwhile tangents. Keep main threads in main sections; do not put prior-meeting links or goals into sections.
 - BACKGROUND CONTEXT (not part of this conversation) may help identify people, spell names/products/companies, and connect prior commitments; it was NOT said in this meeting. Never state a background fact as something said here. Do not summarize screen text that was not discussed: use it only to spell names/products correctly and identify what was shown.
-- Prior-meeting links and goal relevance go ONLY in insights, never in sections or overview. Insights are private: at most four, each at most 30 words, each grounded in supplied background context. Return [] when no background context exists.'''
+- Prior-meeting links and goal relevance go ONLY in insights, never in sections or overview. Insights are private: at most four, each at most 30 words, each grounded in supplied background context. An insight must be specific and useful to act on (an open item from a prior meeting with this person, a concrete link between what was said and a named goal or fact); never restate a goal generically or say a topic "aligns with" a goal. Return [] when nothing specific qualifies or no background context exists.'''
 
 
 def rich_static_instructions(format_instructions: str, legacy_static: Callable[[str], str]) -> str:
@@ -60,7 +62,9 @@ def _rich_density_bullet(density: str) -> str:
     return (
         f'- {density} These are flexible guides, not quotas. Use a one-line takeaway plus short '
         'supporting bullets (aim at most 25 words per bullet); nest details with `  - `. Coverage '
-        'beats brevity: keep every commitment and specific even when the note grows beyond the target.'
+        'beats brevity: keep every commitment and specific even when the note grows beyond the target.\n'
+        '- Pronouns: write people by name (or "they"). Do not use he/she/his/her for anyone, including the '
+        'account owner, unless the conversation states that person\'s pronouns.'
     )
 
 
