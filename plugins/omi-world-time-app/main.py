@@ -8,6 +8,7 @@ Requires zero external authentication or API keys.
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import date as dt_date, datetime, time as dt_time, timedelta, timezone
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -29,6 +30,9 @@ GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 SOLAR_URL = "https://api.sunrise-sunset.org/json"
 REQUEST_TIMEOUT_SECONDS = 15.0
 USER_AGENT = "omi-world-time-app/1.0 (https://omi.me)"
+
+logger = logging.getLogger("omi-world-time-app")
+
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +403,8 @@ async def get_current_time(request: GetCurrentTimeRequest) -> ChatToolResponse:
         )
         return ChatToolResponse(result=result_text)
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to get time for '{request.location}': {exc}")
+        logger.error("Failed to get time for '%s': %s", request.location, exc)
+        return ChatToolResponse(error=f"Failed to get time for '{request.location}'. Please check the location and try again.")
 
 
 @app.post("/tools/calculate_time_difference", response_model=ChatToolResponse, response_model_exclude_none=True)
@@ -456,8 +461,14 @@ async def calculate_time_difference(request: CalculateTimeDifferenceRequest) -> 
         )
         return ChatToolResponse(result=result_text)
     except Exception as exc:
+        logger.error(
+            "Failed to calculate time difference between '%s' and '%s': %s",
+            request.source_location,
+            request.target_location,
+            exc,
+        )
         return ChatToolResponse(
-            error=f"Failed to calculate time difference between '{request.source_location}' and '{request.target_location}': {exc}"
+            error=f"Failed to calculate time difference between '{request.source_location}' and '{request.target_location}'. Please check the locations and try again."
         )
 
 
@@ -519,7 +530,8 @@ async def get_solar_times(request: GetSolarTimesRequest) -> ChatToolResponse:
         )
         return ChatToolResponse(result=result_text)
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to get solar times for '{request.location}': {exc}")
+        logger.error("Failed to get solar times for '%s': %s", request.location, exc)
+        return ChatToolResponse(error=f"Failed to get solar times for '{request.location}'. Please check the location and try again.")
 
 
 # ---------------------------------------------------------------------------

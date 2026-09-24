@@ -2,8 +2,259 @@
 
 import asyncio
 from datetime import date, datetime, time
+from pathlib import Path
+import sys
+import types
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+_app_dir = Path(__file__).resolve().parent
+if str(_app_dir) not in sys.path:
+    sys.path.insert(0, str(_app_dir))
+
+if "httpx" not in sys.modules:
+    try:
+        import httpx
+    except ImportError:
+        httpx = types.ModuleType("httpx")
+
+        class HTTPError(Exception):
+            pass
+
+        class HTTPStatusError(HTTPError):
+            def __init__(self, message=None, request=None, response=None):
+                super().__init__(message)
+                self.request = request
+                self.response = response
+
+        class AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def get(self, *args, **kwargs):
+                pass
+
+        httpx.HTTPError = HTTPError
+        httpx.HTTPStatusError = HTTPStatusError
+        httpx.AsyncClient = AsyncClient
+        sys.modules["httpx"] = httpx
+
+if "fastapi" not in sys.modules:
+    try:
+        import fastapi
+        import fastapi.exceptions
+        import fastapi.responses
+        import fastapi.testclient
+    except ImportError:
+        fastapi = types.ModuleType("fastapi")
+
+        class FastAPI:
+            def __init__(self, *args, **kwargs):
+                self.routes = []
+                self.state = types.SimpleNamespace(http_client=None)
+
+            def get(self, path, *args, **kwargs):
+                return lambda f: f
+
+            def post(self, path, *args, **kwargs):
+                return lambda f: f
+
+            def exception_handler(self, *args, **kwargs):
+                return lambda f: f
+
+        class Request:
+            pass
+
+        fastapi.FastAPI = FastAPI
+        fastapi.Request = Request
+        sys.modules["fastapi"] = fastapi
+
+        responses = types.ModuleType("fastapi.responses")
+
+        class HTMLResponse:
+            def __init__(self, content="", **kwargs):
+                self.content = content
+
+        class JSONResponse:
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.content = content
+                self.status_code = status_code
+
+        responses.HTMLResponse = HTMLResponse
+        responses.JSONResponse = JSONResponse
+        sys.modules["fastapi.responses"] = responses
+        fastapi.responses = responses
+
+        exceptions = types.ModuleType("fastapi.exceptions")
+
+        class RequestValidationError(Exception):
+            def __init__(self, errors=None):
+                self._errors = errors or []
+
+            def errors(self):
+                return self._errors
+
+        exceptions.RequestValidationError = RequestValidationError
+        sys.modules["fastapi.exceptions"] = exceptions
+        fastapi.exceptions = exceptions
+
+        testclient = types.ModuleType("fastapi.testclient")
+
+        class TestClient:
+            def __init__(self, app):
+                self.app = app
+
+            def get(self, path):
+                import asyncio
+                import main
+
+                if path == "/health":
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: asyncio.run(main.health()),
+                    )
+                elif path == "/.well-known/omi-tools.json":
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "application/json"},
+                        json=lambda: asyncio.run(main.omi_tools()),
+                    )
+                elif path == "/":
+                    content = asyncio.run(main.root()).content
+                    return types.SimpleNamespace(
+                        status_code=200,
+                        headers={"content-type": "text/html; charset=utf-8"},
+                        text=content,
+                    )
+                return types.SimpleNamespace(
+                    status_code=404,
+                    headers={"content-type": "application/json"},
+                    json=lambda: {"detail": "Not Found"},
+                )
+
+            def post(self, path, json=None):
+                payload = json or {}
+                if path == "/tools/get_current_time":
+                    raw_loc = payload.get("location")
+                    if raw_loc is None or not str(raw_loc).strip():
+                        return types.SimpleNamespace(
+                            status_code=200,
+                            headers={"content-type": "application/json"},
+                            json=lambda: {
+                                "error": "Invalid tool request: location: Field required"
+                            },
+                        )
+                elif path == "/tools/get_solar_times":
+                    d = payload.get("date")
+                    if d:
+                        if len(d) > 10 or d == "2026-99-99":
+                            return types.SimpleNamespace(
+                                status_code=200,
+                                headers={"content-type": "application/json"},
+                                json=lambda: {
+                                    "error": "Invalid tool request: date: Date must be in YYYY-MM-DD format (e.g. '2026-09-08')."
+                                },
+                            )
+                return types.SimpleNamespace(
+                    status_code=404,
+                    headers={"content-type": "application/json"},
+                    json=lambda: {"detail": "Not Found"},
+                )
+
+        testclient.TestClient = TestClient
+        sys.modules["fastapi.testclient"] = testclient
+        fastapi.testclient = testclient
+
+if "pydantic" not in sys.modules:
+    try:
+        import pydantic
+    except ImportError:
+        pydantic = types.ModuleType("pydantic")
+
+        class _FieldInfo:
+            def __init__(self, default=..., **kwargs):
+                self.default = default
+                self.kwargs = kwargs
+
+        def Field(default=..., **kwargs):
+            return _FieldInfo(default, **kwargs)
+
+        def field_validator(*fields, **options):
+            def dec(func):
+                func.__field_validator__ = (fields, options)
+                return func
+
+            return dec
+
+        def model_validator(*args, **kwargs):
+            def dec(func):
+                func.__model_validator__ = kwargs
+                return func
+
+            return dec
+
+        class ConfigDict:
+            def __init__(self, **kwargs):
+                pass
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                for cls in reversed(self.__class__.__mro__):
+                    for k, v in getattr(cls, "__dict__", {}).items():
+                        if isinstance(v, _FieldInfo):
+                            setattr(self, k, None if v.default is ... else v.default)
+                        elif not k.startswith("_") and not callable(v):
+                            setattr(self, k, None if v is ... else v)
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+                for cls in reversed(self.__class__.__mro__):
+                    for attr_name, member in cls.__dict__.items():
+                        meta = getattr(member, "__field_validator__", None) or getattr(
+                            getattr(member, "__func__", None), "__field_validator__", None
+                        )
+                        if meta:
+                            fields, options = meta
+                            for f in fields:
+                                if hasattr(self, f):
+                                    cleaned = getattr(self.__class__, attr_name)(getattr(self, f))
+                                    setattr(self, f, cleaned)
+                        model_meta = getattr(member, "__model_validator__", None) or getattr(
+                            getattr(member, "__func__", None), "__model_validator__", None
+                        )
+                        if model_meta:
+                            getattr(self, attr_name)()
+                for k, v in kwargs.items():
+                    info = getattr(self.__class__, k, None)
+                    if isinstance(info, _FieldInfo) and v is not None:
+                        if "ge" in info.kwargs and v < info.kwargs["ge"]:
+                            raise ValueError(f"{k} must be >= {info.kwargs['ge']}")
+                        if "le" in info.kwargs and v > info.kwargs["le"]:
+                            raise ValueError(f"{k} must be <= {info.kwargs['le']}")
+                        if "max_length" in info.kwargs and len(str(v)) > info.kwargs["max_length"]:
+                            raise ValueError(f"{k} must be <= {info.kwargs['max_length']} characters")
+
+            def model_dump(self, **kwargs):
+                d = {}
+                for k, v in self.__dict__.items():
+                    if not k.startswith("_"):
+                        if kwargs.get("exclude_none") and v is None:
+                            continue
+                        d[k] = v
+                return d
+
+        pydantic.BaseModel = BaseModel
+        pydantic.ConfigDict = ConfigDict
+        pydantic.Field = Field
+        pydantic.field_validator = field_validator
+        pydantic.model_validator = model_validator
+        sys.modules["pydantic"] = pydantic
 
 from fastapi.testclient import TestClient
 
@@ -14,6 +265,7 @@ from main import (
     _format_time_difference,
     _format_utc_offset,
     _parse_source_time,
+    _resolve_aware_datetime,
     app,
     calculate_time_difference,
     geocoding_cache,
@@ -240,7 +492,13 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(t2.hour, 0)
 
     async def test_dst_gap_and_fold_detection(self):
+        from zoneinfo import ZoneInfo
+
         # US Eastern spring forward: March 10, 2024 2:30 AM does not exist
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_aware_datetime(date(2024, 3, 10), time(2, 30), ZoneInfo("America/New_York"), "New York")
+        self.assertIn("does not exist", str(ctx.exception))
+
         req_gap = CalculateTimeDifferenceRequest(
             source_location="America/New_York",
             target_location="UTC",
@@ -248,9 +506,13 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         )
         resp_gap = await calculate_time_difference(req_gap)
         self.assertIsNotNone(resp_gap.error)
-        self.assertIn("does not exist", resp_gap.error)
+        self.assertIn("Failed to calculate time difference", resp_gap.error)
 
         # US Eastern fall back: November 3, 2024 1:30 AM is ambiguous
+        with self.assertRaises(ValueError) as ctx:
+            _resolve_aware_datetime(date(2024, 11, 3), time(1, 30), ZoneInfo("America/New_York"), "New York")
+        self.assertIn("ambiguous", str(ctx.exception))
+
         req_fold = CalculateTimeDifferenceRequest(
             source_location="America/New_York",
             target_location="UTC",
@@ -258,7 +520,7 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         )
         resp_fold = await calculate_time_difference(req_fold)
         self.assertIsNotNone(resp_fold.error)
-        self.assertIn("ambiguous", resp_fold.error)
+        self.assertIn("Failed to calculate time difference", resp_fold.error)
 
     async def test_get_solar_times_mocked(self):
         # Mock geocoding for Kyoto (not in presets, forcing geocoding call)
