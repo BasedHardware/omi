@@ -13,7 +13,6 @@ import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/task_delete_undo.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/ui/components/omi_edit_sheet.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';

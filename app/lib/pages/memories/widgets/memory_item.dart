@@ -18,7 +18,6 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/ui/components/omi_row_menu.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
-import 'package:omi/ui/components/omi_edit_sheet.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 

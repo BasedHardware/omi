@@ -24,7 +24,6 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
