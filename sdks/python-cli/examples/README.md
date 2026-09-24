@@ -16,7 +16,7 @@
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
   calendar: JSON export to an iCalendar (.ics) file.
-* [`action_items_ics.md`](action_items_ics.md) — put open action items with due
+* [`action_items_ics.md`](action_items_ics.md) ([`action_items_to_ics.py`](action_items_to_ics.py)) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML

@@ -15,7 +15,7 @@ omi --json action-item list --open --limit 500 > action_items.json
 Check that the command succeeded before converting the file. This is one page;
 to retrieve more, increase `--offset` by 500 and use a different filename.
 
-Save the following as `action_items_to_ics.py`:
+Save the following as `action_items_to_ics.py` (or run the bundled [`action_items_to_ics.py`](action_items_to_ics.py) directly):
 
 ```python
 import json
