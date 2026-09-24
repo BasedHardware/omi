@@ -1,11 +1,10 @@
-# 👓 ApexGlass: Solana Pay & Crypto Settlement for Omi AI Wearables
+# 👓 ApexGlass: Solana Pay & Optical QR Settlement Helper for Omi AI Wearables
 
 [![Omi Plugin](https://img.shields.io/badge/BasedHardware-Omi_Plugin-purple.svg)](https://github.com/BasedHardware/omi)
 [![Solana Pay](https://img.shields.io/badge/Solana-Pay_v1.0-14F195.svg)](https://solanapay.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Tests: Passing](https://img.shields.io/badge/Tests-100%25_Passing-brightgreen.svg)]()
 
-Autonomous cryptocurrency and Solana Pay settlement engine for **BasedHardware Omi** AI smart necklaces and smart glasses (`omiGlass`).
+Zero-custody Solana Pay optical QR parsing, audio prompt synthesis, and on-chain transaction verification plugin for **BasedHardware Omi** AI smart necklaces and smart glasses (`omiGlass`).
 
 ---
 
@@ -17,19 +16,22 @@ sequenceDiagram
     actor User as 👤 Wearer (Omi Glasses)
     participant Glass as 👓 Omi Camera / Mic
     participant App as ⚡ ApexGlass Plugin (FastAPI)
+    participant Wallet as 📱 Mobile Wallet (Phantom/Solflare)
     participant RPC as 🌐 Solana Cluster (Mainnet/Devnet)
     participant Merch as 🏪 Merchant POS / Terminal
 
     Merch->>Glass: Displays Solana Pay QR Code
-    Glass->>App: Sends captured URI / frame data
-    App->>App: Decodes recipient, amount, SPL token & memo
-    App-->>Glass: Returns TTS Dialogue ("Pay 4.5 USDC to Coffee Shop. Say 'Confirm' to approve.")
-    Glass->>User: Speaks voice confirmation prompt
-    User->>Glass: "Confirm payment"
-    Glass->>App: Dispatches signed transaction
-    App->>RPC: Broadcasts & verifies confirmation on-chain
-    RPC-->>App: Confirms finality (< 400ms)
-    App-->>Glass: "Payment confirmed! Receipt #12 recorded."
+    Glass->>App: Sends captured URI (solana:...)
+    App->>App: Validates & parses recipient, amount, SPL token & memo
+    App-->>Glass: Returns TTS Dialogue ("Pay 4.5 USDC to Coffee Roasters. Open wallet to approve.")
+    Glass->>User: Speaks advisory voice prompt
+    User->>Wallet: Approves & signs transaction in mobile wallet
+    Wallet->>RPC: Broadcasts signed transaction
+    RPC-->>Wallet: Returns transaction signature
+    Glass->>App: /tools/verify_transaction_signature(signature)
+    App->>RPC: getSignatureStatuses RPC query
+    RPC-->>App: Confirmed / Finalized status
+    App-->>Glass: Returns confirmed status & explorer URL
 ```
 
 ---
@@ -67,7 +69,7 @@ Open **`http://localhost:8080/`** to access the **ApexGlass Visual Studio** feat
 
 ## 🧪 Test Verification
 
-Run the automated test suite verifying 100% test coverage:
+Run the test suite:
 
 ```bash
 # Run unit tests
@@ -83,4 +85,5 @@ python smoke_test.py
 
 * **Zero Private Key Exposure**: The plugin operates strictly as a read-only parser and payment request synthesizer. It never touches, stores, or requests user private keys or seed phrases.
 * **Base58 Cryptographic Bounds**: Every address and signature is validated against Solana base58 character constraints before dispatching RPC calls.
-* **Malformed Input Protection**: Strict sanitization of optical scan noise, negative amounts, and invalid protocols.
+* **Strict Network Validation**: Rejects unrecognized network parameters outside `mainnet` and `devnet` with clear error responses.
+* **Malformed Input Protection**: Strict sanitization of optical scan noise, negative amounts, control characters, and invalid protocols.
