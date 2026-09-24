@@ -52,5 +52,10 @@ async def require_whoop_tools_auth(
         raise HTTPException(status_code=503, detail="Tool authentication not configured")
 
     presented = _extract_presented_token(request, whoop_tools_token)
-    if not presented or not hmac.compare_digest(presented, secret):
+    # Compare on UTF-8 bytes: hmac.compare_digest raises TypeError on
+    # non-ASCII str, so a hostile Authorization header would otherwise
+    # surface as a 500 instead of a clean 401.
+    if not presented or not hmac.compare_digest(
+        presented.encode("utf-8"), secret.encode("utf-8")
+    ):
         raise HTTPException(status_code=401, detail="Unauthorized")
