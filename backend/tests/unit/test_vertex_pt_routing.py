@@ -9,6 +9,7 @@ import pytest
 
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.model_config import (
+    LUNA_MODEL,
     FEATURE_PT_OVERFLOW_ORIGIN,
     OVERFLOW_ORIGIN_OPTION,
     get_model,
@@ -312,7 +313,7 @@ def test_non_gemini_models_that_merely_contain_the_substrings_stay_routable():
     """Perplexity `sonar-pro` is not a Gemini Pro SKU; containment must not
     reach outside the Google model family."""
     assert not ptr.is_prohibited_company_paid_model('sonar-pro')
-    assert not ptr.is_prohibited_company_paid_model('gpt-6-luna')
+    assert not ptr.is_prohibited_company_paid_model(LUNA_MODEL)
 
 
 # --- Origin price ceiling --------------------------------------------------

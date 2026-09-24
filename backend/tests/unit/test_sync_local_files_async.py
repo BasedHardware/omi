@@ -18,6 +18,11 @@ and fair-use metering helpers rather than through Firestore directly: acquiring/
 v1 backfill slot, reserving backfill speech, recording speech ms, reading rolling speech
 totals, and recording Deepgram usage ms. The v2 handler already offloads the backfill slot
 calls the same way; these checks extend the guard to the v1 handler's copies.
+
+A third wave offloads blocking file I/O, CPU-intensive audio decoding, and temporary file
+cleanups: retrieving uploaded file paths (shutil.copyfileobj disk writes), decoding Opus
+files to WAV (libopus frame decoding and wave writes), and _cleanup_files (synchronous
+unlinks across normal exit, budget exhaustion, and the finally block).
 """
 
 import ast
@@ -41,6 +46,9 @@ _BLOCKING_GATES = frozenset(
         "record_speech_ms",
         "get_rolling_speech_ms",
         "record_dg_usage_ms",
+        "retrieve_file_paths",
+        "decode_files_to_wav",
+        "_cleanup_files",
     }
 )
 
@@ -113,3 +121,6 @@ class TestSyncLocalFilesOffload:
         assert offloaded["record_speech_ms"] == "db_executor"
         assert offloaded["get_rolling_speech_ms"] == "db_executor"
         assert offloaded["record_dg_usage_ms"] == "db_executor"
+        assert offloaded["retrieve_file_paths"] == "sync_executor"
+        assert offloaded["decode_files_to_wav"] == "sync_executor"
+        assert offloaded["_cleanup_files"] == "sync_executor"

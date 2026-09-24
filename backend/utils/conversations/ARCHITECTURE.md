@@ -34,7 +34,7 @@ and background processing.
   stdlib-only rules in `relevance_rules.py`, then the `conv_discard` model for
   the ambiguous middle; a calendar overlap overrides any discard. The outcome
   is stored as `relevance_decision` (server-only, outside the wire model) and
-  counted in `conversation_relevance_decision_total`.
+  counted in `omi_conversation_relevance_decision_total`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by

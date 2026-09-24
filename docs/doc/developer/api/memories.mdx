@@ -151,6 +151,18 @@ must not be treated as a key or scope error.
     | `visibility` | string | No | `public` or `private` (default: `private`) |
     | `tags` | array | No | List of tags |
   </Accordion>
+  <Accordion title="Duplicates and retries" icon="rotate" defaultOpen={true}>
+    A memory is identified by its text. Sending text the user already has returns that memory unchanged, with the same `id`, so a create is safe to retry without any extra header.
+
+    | Request | Result |
+    |---------|--------|
+    | Text the user does not have yet | A new memory |
+    | Text the user already has | `200` with the existing memory; nothing new is stored |
+    | Same text with different `category`, `visibility`, or `tags` | `200` with the existing memory as stored; the new fields are **not** applied |
+    | Same text after the memory was deleted | A new memory with a new `id` |
+
+    Matching ignores leading and trailing whitespace and is case-sensitive. To change a memory you already created, use [Update Memory](#update-memory) with its `id`.
+  </Accordion>
 </AccordionGroup>
 
 <Tabs>
@@ -238,6 +250,8 @@ must not be treated as a key or scope error.
     | `memories` | array | **Yes** | List of memory objects (max 25) |
 
     Each memory object accepts the same fields as the single create endpoint.
+
+    Items follow the same duplicate rule: text the user already has returns the existing memory at that position, so retrying a batch never stores anything twice. `created_count` is the number of memories returned, including existing ones.
   </Accordion>
 </AccordionGroup>
 

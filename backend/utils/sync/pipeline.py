@@ -29,6 +29,7 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
+from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -840,7 +841,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     embedding_list = users_db.get_user_speaker_embedding(uid)
     if embedding_list:
         user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': 'User'}
+        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': get_user_name(uid)}
 
     # Load all people with speaker embeddings
     people = users_db.get_people(uid)

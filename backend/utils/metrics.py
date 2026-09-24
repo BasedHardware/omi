@@ -242,7 +242,8 @@ CONVERSATION_RELEVANCE_LABELS = {
 }
 
 CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
-    'conversation_relevance_decision_total',
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_conversation_relevance_decision_total',
     (
         'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
         'bounded reason (a rule id, model_keep/model_discard/model_error, a policy trigger, '
@@ -633,6 +634,15 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
         'sum() across job=backend-listen-metrics.'
     ),
     ['transcription_source', 'client_platform', 'app_build'],
+)
+
+# Wall seconds of live /v4/listen sessions by who could have watched them in real
+# time (routers/listen/realtime_demand.py). The input for routing background
+# capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
+    'omi_listen_realtime_demand_seconds_total',
+    'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',
+    ['transcription_source', 'client_platform', 'realtime_demand'],
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(

@@ -8,6 +8,8 @@ so tests are fully reproducible.
 
 import json
 
+from utils.llm.model_config import LUNA_MODEL
+
 # Deterministic LLM responses — these are returned for every LLM call
 DEFAULT_STRUCTURED_RESPONSE = {
     "title": "Test Conversation Title",
@@ -44,7 +46,7 @@ def make_openai_chat_response(content: str = None) -> dict:
     return {
         "id": "chatcmpl-fake-e2e-test",
         "object": "chat.completion",
-        "model": "gpt-6-luna",
+        "model": LUNA_MODEL,
         "choices": [
             {
                 "index": 0,
