@@ -47,7 +47,7 @@ python sdks/python-cli/examples/goals_to_ics.py goals_0.json goals_200.json okrs
 |:---|:---|:---|
 | `SOURCE ...` | One or more JSON files, or `-` for stdin | *(required)* |
 | `DESTINATION` | Destination path for the `.ics` file | *(required)* |
-| `--format` | Component format: `todo` (VTODO), `event` (VEVENT), or `both` | `todo` |
+| `--format` | Component format: `todo` (VTODO), `event` (VEVENT), or `both` (#18594) | `todo` |
 | `--calendar-name` | Calendar display name (`X-WR-CALNAME`) | `"Omi Goals"` |
 | `-f`, `--force` | Overwrite destination file if it already exists | `False` |
 
