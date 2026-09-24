@@ -221,6 +221,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                                     title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
                                     subtitle: Text(
                                       l10n.voiceRecognitionStatus(person.voiceReadiness),
@@ -236,13 +237,13 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                   ),
                                   if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
                                     Padding(
-                                      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                                      padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           for (final (j, sample) in person.speechSamples!.indexed)
                                             _SampleRow(
-                                              title: j == 0 ? l10n.speechProfile : l10n.sampleNumber(j),
+                                              title: l10n.sampleNumber(j + 1),
                                               transcript: person.speechSampleTranscripts != null &&
                                                       j < person.speechSampleTranscripts!.length
                                                   ? person.speechSampleTranscripts![j]

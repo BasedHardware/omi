@@ -79,8 +79,6 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = provider.prompts.length;
-    final current = (provider.index + 1).clamp(1, total);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -105,14 +103,6 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
-        if (!provider.finished && total > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 4, left: 8),
-            child: Text(
-              context.l10n.speakerTagPromptProgress(current, total),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            ),
-          ),
         IconButton(
           key: const Key('speaker_tag_prompt_close'),
           visualDensity: VisualDensity.compact,
@@ -167,9 +157,17 @@ class _Question extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 14),
-        Text(
-          _question(context, prompt),
-          style: OmiType.headline,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(child: Text(_question(context, prompt), style: OmiType.headline)),
+            if (provider.prompts.length > 1)
+              Text(
+                context.l10n.speakerTagPromptProgress(provider.index + 1, provider.prompts.length),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+          ],
         ),
         const SizedBox(height: 10),
         _Answers(provider: provider, prompt: prompt),
@@ -341,14 +339,18 @@ class _AnswerChip extends StatelessWidget {
         ? FilledButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
-            minimumSize: const Size(0, 40),
+            minimumSize: const Size(0, 44),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            shape: const StadiumBorder(),
           )
         : OutlinedButton.styleFrom(
             foregroundColor: Colors.white,
             side: const BorderSide(color: OmiColors.border),
-            minimumSize: const Size(0, 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            minimumSize: const Size(0, 44),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            shape: const StadiumBorder(),
           );
     final child = icon == null
         ? Text(label)

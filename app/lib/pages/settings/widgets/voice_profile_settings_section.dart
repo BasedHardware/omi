@@ -33,6 +33,7 @@ class _VoiceProfileSettingsSectionState extends State<VoiceProfileSettingsSectio
           children: [
             SwitchListTile(
               key: const Key('voice_settings_ask_to_tag_switch'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               title: Text(context.l10n.voiceSettingsAskToTag),
               subtitle: Text(context.l10n.voiceSettingsAskToTagSubtitle),
               value: provider.speakerTagPromptsEnabled,
@@ -40,6 +41,7 @@ class _VoiceProfileSettingsSectionState extends State<VoiceProfileSettingsSectio
             ),
             SwitchListTile(
               key: const Key('voice_settings_save_others_switch'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               title: Text(context.l10n.speakerTagPromptSaveVoicesTitle),
               subtitle: Text(context.l10n.voiceSettingsSaveOthersSubtitle),
               value: provider.saveOtherVoiceProfiles,
