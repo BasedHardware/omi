@@ -94,6 +94,22 @@ class TestConversationsToDigest(unittest.TestCase):
         digest = generate_digest(duplicated)
         self.assertIn("1 conversations", digest)
 
+    def test_daily_activity_real_duration(self):
+        digest = generate_digest(SAMPLE_CONVERSATIONS)
+        # 2026-09-20: 1h 30m (90m) + 15m = 1h 45m
+        self.assertIn("| **2026-09-20** | 2 | ~1h 45m |", digest)
+        # 2026-09-19: 45m = 45m 00s
+        self.assertIn("| **2026-09-19** | 1 | ~45m 00s |", digest)
+
+    def test_deduplication_returns_deduped_count(self):
+        duplicated = [SAMPLE_CONVERSATIONS[0], SAMPLE_CONVERSATIONS[0]]
+        json_file = self.dir_path / "dup.json"
+        json_file.write_text(json.dumps(duplicated), encoding="utf-8")
+        out_digest = self.dir_path / "dup.md"
+
+        count = convert_paths_to_digest([json_file], out_digest)
+        self.assertEqual(count, 1)
+
     def test_convert_to_file(self):
         json_file = self.dir_path / "conversations.json"
         json_file.write_text(json.dumps(SAMPLE_CONVERSATIONS), encoding="utf-8")
@@ -104,6 +120,46 @@ class TestConversationsToDigest(unittest.TestCase):
         self.assertTrue(out_digest.exists())
         content = out_digest.read_text(encoding="utf-8")
         self.assertIn("Conversation Digest", content)
+
+    def test_overwrite_refusal_and_force(self):
+        json_file = self.dir_path / "conversations.json"
+        json_file.write_text(json.dumps(SAMPLE_CONVERSATIONS), encoding="utf-8")
+        out_digest = self.dir_path / "digest.md"
+
+        # First write creates the file
+        convert_paths_to_digest([json_file], out_digest)
+        self.assertTrue(out_digest.exists())
+
+        # Second write without force must raise FileExistsError
+        with self.assertRaises(FileExistsError):
+            convert_paths_to_digest([json_file], out_digest, force=False)
+
+        # Overwrite with force=True must succeed
+        count = convert_paths_to_digest([json_file], out_digest, force=True)
+        self.assertEqual(count, 3)
+
+    def test_wrapped_conversations_envelope(self):
+        envelope = {"conversations": SAMPLE_CONVERSATIONS}
+        json_file = self.dir_path / "envelope.json"
+        json_file.write_text(json.dumps(envelope), encoding="utf-8")
+        out_digest = self.dir_path / "env_digest.md"
+
+        count = convert_paths_to_digest([json_file], out_digest)
+        self.assertEqual(count, 3)
+        self.assertTrue(out_digest.exists())
+
+    def test_stdin_input(self):
+        import io
+        import sys
+        old_stdin = sys.stdin
+        try:
+            sys.stdin = io.StringIO(json.dumps(SAMPLE_CONVERSATIONS))
+            out_digest = self.dir_path / "stdin_digest.md"
+            count = convert_paths_to_digest(["-"], out_digest)
+            self.assertEqual(count, 3)
+            self.assertTrue(out_digest.exists())
+        finally:
+            sys.stdin = old_stdin
 
     def test_missing_id_raises_value_error(self):
         invalid = [{"title": "No ID here"}]

@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -94,6 +94,7 @@ def generate_digest(conversations: Sequence[Dict[str, Any]], title: str = "Conve
         return f"# {title}\n\nNo conversations found.\n"
 
     by_date: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    by_date_duration: Dict[str, float] = defaultdict(float)
     by_category: Dict[str, int] = defaultdict(int)
     sessions_with_duration: List[Tuple[float, Dict[str, Any]]] = []
 
@@ -117,6 +118,7 @@ def generate_digest(conversations: Sequence[Dict[str, Any]], title: str = "Conve
             duration = 1800.0  # 30 min default
 
         total_duration_secs += duration
+        by_date_duration[date_key] += duration
         sessions_with_duration.append((duration, conv))
 
     total_count = len(deduped)
@@ -136,8 +138,8 @@ def generate_digest(conversations: Sequence[Dict[str, Any]], title: str = "Conve
 
     for d in sorted(by_date.keys(), reverse=True):
         count = len(by_date[d])
-        day_time = count * 30  # approx 30m each
-        lines.append(f"| **{d}** | {count} | ~{day_time}m |")
+        day_time_str = format_duration(by_date_duration[d])
+        lines.append(f"| **{d}** | {count} | ~{day_time_str} |")
 
     lines.extend([
         "",
@@ -173,6 +175,7 @@ def generate_digest(conversations: Sequence[Dict[str, Any]], title: str = "Conve
 def convert_paths_to_digest(
     sources: Sequence[str | Path],
     output_dest: Optional[str | Path] = None,
+    force: bool = False,
 ) -> int:
     """Convert conversation JSON exports into a Markdown digest."""
     all_conversations: List[Dict[str, Any]] = []
@@ -190,12 +193,16 @@ def convert_paths_to_digest(
 
     if output_dest and str(output_dest) != "-":
         out_path = Path(output_dest)
+        if out_path.exists() and not force:
+            raise FileExistsError(
+                f"Refusing to overwrite existing {out_path}; use --force to overwrite"
+            )
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(digest_content, encoding="utf-8")
     else:
         sys.stdout.write(digest_content)
 
-    return len(all_conversations)
+    return len({str(c.get("id")) for c in all_conversations if c.get("id")})
 
 
 def main() -> None:
@@ -213,10 +220,16 @@ def main() -> None:
         default="-",
         help="Destination Markdown file (defaults to stdout)",
     )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Overwrite existing output file without confirmation",
+    )
     args = parser.parse_args()
 
     try:
-        count = convert_paths_to_digest(args.inputs, args.output)
+        count = convert_paths_to_digest(args.inputs, args.output, force=args.force)
         if args.output != "-":
             print(f"Exported digest for {count} conversation(s) to {args.output}", file=sys.stderr)
     except Exception as exc:

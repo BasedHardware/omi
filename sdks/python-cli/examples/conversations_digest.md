@@ -19,6 +19,8 @@ accepts several files and counts each conversation ID once.
 
 Save the following as `conversations_digest.py` (or run the bundled [`conversations_to_digest.py`](conversations_to_digest.py) directly):
 
+> Note: The bundled `conversations_to_digest.py` script takes input files first with `-o/--output` (and optional `-f/--force` to overwrite), summarizing daily buckets in UTC.
+
 ```python
 import json
 import sys
@@ -165,4 +167,4 @@ counted in "Skipped", and one without an end time (or an end before the start)
 counts as 0 h but still counts as a conversation. Categories and titles come
 from the `structured` object the API returns, so no transcript text is read or
 written. The script refuses to overwrite an existing digest, so use one file
-per period. Treat the file as private data.
+per period (or pass `--force` to the bundled script). Treat the file as private data.
