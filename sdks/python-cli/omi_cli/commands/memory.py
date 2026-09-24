@@ -93,6 +93,27 @@ def get_memory(
             offset += page_size
 
 
+def _validate_content(content: str) -> str:
+    """Validate content length against backend boundary, then strip whitespace."""
+    if len(content) > 500:
+        raise UsageError(
+            message="Content too long",
+            detail=f"Memory content cannot exceed 500 characters (got {len(content)}).",
+        )
+    cleaned = content.strip()
+    if not cleaned:
+        raise UsageError(message="Invalid content", detail="Memory content cannot be empty or whitespace.")
+    return cleaned
+
+
+def _validate_tags(tags: list[str]) -> list[str]:
+    """Validate and strip tags, rejecting any empty/whitespace tags."""
+    cleaned_tags = [t.strip() for t in tags]
+    if any(not t for t in cleaned_tags):
+        raise UsageError(message="Invalid tag", detail="Tags cannot be empty or whitespace.")
+    return cleaned_tags
+
+
 @app.command("create", help="Create a new memory.")
 def create_memory(
     typer_ctx: typer.Context,
@@ -102,17 +123,8 @@ def create_memory(
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    cleaned_content = content.strip()
-    if not cleaned_content:
-        raise UsageError(message="Invalid content", detail="Memory content cannot be empty or whitespace.")
-    if len(cleaned_content) > 500:
-        raise UsageError(
-            message="Content too long",
-            detail=f"Memory content cannot exceed 500 characters (got {len(cleaned_content)}).",
-        )
-    cleaned_tags = [t.strip() for t in tag]
-    if any(not t for t in cleaned_tags):
-        raise UsageError(message="Invalid tag", detail="Tags cannot be empty or whitespace.")
+    cleaned_content = _validate_content(content)
+    cleaned_tags = _validate_tags(tag)
 
     body: dict[str, object] = {"content": cleaned_content, "visibility": visibility.value, "tags": cleaned_tags}
     if category is not None:
@@ -135,24 +147,13 @@ def update_memory(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if content is not None:
-        cleaned_content = content.strip()
-        if not cleaned_content:
-            raise UsageError(message="Invalid content", detail="Memory content cannot be empty or whitespace.")
-        if len(cleaned_content) > 500:
-            raise UsageError(
-                message="Content too long",
-                detail=f"Memory content cannot exceed 500 characters (got {len(cleaned_content)}).",
-            )
-        body["content"] = cleaned_content
+        body["content"] = _validate_content(content)
     if category is not None:
         body["category"] = category.value
     if visibility is not None:
         body["visibility"] = visibility.value
     if tag is not None:
-        cleaned_tags = [t.strip() for t in tag]
-        if any(not t for t in cleaned_tags):
-            raise UsageError(message="Invalid tag", detail="Tags cannot be empty or whitespace.")
-        body["tags"] = cleaned_tags
+        body["tags"] = _validate_tags(tag)
     if not body:
         raise UsageError(
             message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."

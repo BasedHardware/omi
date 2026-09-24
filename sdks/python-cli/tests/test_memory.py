@@ -156,7 +156,7 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     assert "[draft] literal [/bold] :warning:" in result.stdout
 
 
-@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501])
+@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501, ("a" * 500) + "   "])
 def test_memory_create_rejects_empty_or_oversized_content(authed_profile, cli_runner, bad_content: str) -> None:
     result = cli_runner.invoke(app, ["memory", "create", bad_content])
     assert result.exit_code == 1
@@ -170,7 +170,7 @@ def test_memory_create_rejects_empty_tag(authed_profile, cli_runner, bad_tag: st
     assert "Invalid tag" in result.output
 
 
-@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501])
+@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501, ("a" * 500) + "   "])
 def test_memory_update_rejects_empty_or_oversized_content(authed_profile, cli_runner, bad_content: str) -> None:
     result = cli_runner.invoke(app, ["memory", "update", "m1", "--content", bad_content])
     assert result.exit_code == 1
