@@ -49,7 +49,7 @@ void main() {
     });
 
     test('lerp returns original theme if other is null or different type', () {
-       final theme = AppTheme(
+      final theme = AppTheme(
         title: const TextStyle(fontSize: 10),
         subtitle: const TextStyle(fontSize: 10),
         body: const TextStyle(fontSize: 10),
