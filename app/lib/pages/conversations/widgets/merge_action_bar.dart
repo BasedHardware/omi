@@ -98,7 +98,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                       ),
                       OmiIconButton(
                         key: const Key('selection_bar_delete'),
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(Icons.delete_outline_rounded),
                         label: context.l10n.delete,
                         isDestructive: true,
                         onPressed: count > 0 ? () => confirmAndDeleteSelectedConversations(context) : null,

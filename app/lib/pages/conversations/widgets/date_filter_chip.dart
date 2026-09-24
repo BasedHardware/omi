@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
@@ -36,7 +37,8 @@ class ConversationDateFilterChip extends StatelessWidget {
         alignment: AlignmentDirectional.centerStart,
         child: InputChip(
           key: const Key('conversation_date_filter_chip'),
-          avatar: const Icon(Icons.calendar_today_rounded, size: 16, color: OmiColors.textSecondary),
+          // The header's date-filter button draws the same glyph.
+          avatar: const FaIcon(FontAwesomeIcons.calendarDay, size: 14, color: OmiColors.textSecondary),
           label: Text(label, style: OmiType.footnote),
           tooltip: l10n.filterByDate,
           backgroundColor: OmiColors.surface1,
