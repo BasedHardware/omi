@@ -258,7 +258,9 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
     if not conversation_id or not conversation.get('jit_first_open'):
         return
     try:
-        token = first_open_obligations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
+        token = first_open_obligations_db.claim_authorized_first_open_work(
+            uid, conversation_id, conversation.get("source")
+        )
     except Exception as error:
         logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
         return
