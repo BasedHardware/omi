@@ -26,7 +26,12 @@ from typing import Any, Dict, List
 def extract_conversations(content: str, source_label: str = "<input>") -> List[Dict[str, Any]]:
     """Parse JSON and extract list of conversation items."""
     raw = content.lstrip("\ufeff")
-    items = json.loads(raw)
+    if not raw.strip():
+        raise ValueError(f"{source_label}: empty JSON input")
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{source_label}: invalid JSON ({exc.msg} at line {exc.lineno} column {exc.colno})") from exc
 
     if isinstance(items, dict):
         for key in ("conversations", "items", "data"):
@@ -56,7 +61,8 @@ def render_html_book(conversations: List[Dict[str, Any]], book_title: str = "Omi
         raw_date = str(conv.get("started_at") or conv.get("created_at") or "")
         date_str = raw_date[:10] if len(raw_date) >= 10 else "Undated"
 
-        ch_anchor = f"chapter_{re.sub(r'\\W+', '_', cid)}"
+        safe_id = re.sub(r"\W+", "_", cid).strip("_") or f"conv_{idx}"
+        ch_anchor = f"chapter_{safe_id}"
 
         sidebar_items.append(
             f'<li class="nav-item" data-title="{html.escape(title.lower())}">'
@@ -217,14 +223,18 @@ def main() -> None:
         sys.exit(1)
 
     all_conversations: List[Dict[str, Any]] = []
-    for src in args.inputs:
-        if str(src) == "-":
-            content = sys.stdin.read()
-            all_conversations.extend(extract_conversations(content, "<stdin>"))
-        else:
-            p = Path(src)
-            content = p.read_text(encoding="utf-8")
-            all_conversations.extend(extract_conversations(content, str(p)))
+    try:
+        for src in args.inputs:
+            if str(src) == "-":
+                content = sys.stdin.read()
+                all_conversations.extend(extract_conversations(content, "<stdin>"))
+            else:
+                p = Path(src)
+                content = p.read_text(encoding="utf-8")
+                all_conversations.extend(extract_conversations(content, str(p)))
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     book_html = render_html_book(all_conversations, book_title=args.title)
 
