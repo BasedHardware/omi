@@ -301,4 +301,3 @@ export function registerScreenSynthHandlers(): void {
     recordRun(run.lastRunAt, run.lastCount)
   )
 }
-
