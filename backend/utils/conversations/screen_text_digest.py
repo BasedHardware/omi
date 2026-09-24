@@ -44,7 +44,7 @@ def _fragments(ocr: str) -> list[str]:
     return [part.strip() for part in _FRAGMENT_SPLIT.split(ocr) if len(part.strip()) >= _MIN_FRAGMENT]
 
 
-def digest_screen_rows(rows: Iterable[Mapping[str, Any]], budget: int) -> str:
+def digest_screen_rows(rows: Iterable[Any], budget: int) -> str:
     """Return distinct window titles first, then OCR with frame-repeated chrome removed."""
     materialized = [row for row in rows if isinstance(row, Mapping)]
     if not materialized or budget <= 0:
