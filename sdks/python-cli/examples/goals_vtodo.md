@@ -28,13 +28,13 @@ Generated VTODO task feed with 12 goal(s) at goals_tasks.ics
 
 ## How to Import
 
-- **Apple Reminders (macOS/iOS)**: Double-click or drag `goals_tasks.ics` onto Apple Reminders. It imports each goal as a checklist item with due dates and descriptions.
+- **Apple Reminders (macOS/iOS)**: Double-click or drag `goals_tasks.ics` onto Apple Reminders. It imports each goal as a task item with progress and descriptions.
 - **CalDAV / Nextcloud Tasks**: Import via web UI or sync client into your tasks calendar.
-- **OmniFocus / Things 3**: Drag and drop the `.ics` file directly into your inbox.
+- **OmniFocus / Things 3**: Drag and drop the `.ics` file into your inbox.
 
 ## Features
 
-- **Progress Tracking**: Preserves percentage completion (`PERCENT-COMPLETE:50`).
-- **Standard Status**: Maps goals to `NEEDS-ACTION`, `IN-PROCESS`, or `COMPLETED`.
-- **Target Due Dates**: Formats target dates into standard UTC `DUE` timestamps.
+- **Accurate Progress Tracking**: Computes `PERCENT-COMPLETE` dynamically from `current_value` and `target_value` (clamped 0–100%, with full support for boolean goals).
+- **RFC 5545 Status Mapping**: Maps Omi goal statuses (`achieved`, `focused`, `abandoned`) cleanly to standard statuses (`COMPLETED`, `IN-PROCESS`, `CANCELLED`, or `NEEDS-ACTION`).
+- **Contextual Descriptions**: Injects goal type, current/target metrics, and unit metadata into the `DESCRIPTION` field.
 - **Pure Standard Library**: Zero external dependencies required.

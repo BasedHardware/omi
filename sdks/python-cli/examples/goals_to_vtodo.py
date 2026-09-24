@@ -25,7 +25,12 @@ from typing import Any, Dict, List
 def extract_goals(content: str, source_label: str = "<input>") -> List[Dict[str, Any]]:
     """Parse JSON and extract list of goal items."""
     raw = content.lstrip("\ufeff")
-    items = json.loads(raw)
+    if not raw.strip():
+        raise ValueError(f"{source_label}: empty JSON input")
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{source_label}: invalid JSON ({exc.msg} at line {exc.lineno} column {exc.colno})") from exc
 
     if isinstance(items, dict):
         for key in ("goals", "items", "data"):
@@ -89,22 +94,52 @@ def generate_vcalendar(goals: List[Dict[str, Any]], cal_name: str = "Omi Goals &
     for goal in goals:
         gid = str(goal.get("id"))
         title = str(goal.get("title") or goal.get("name") or f"Goal {gid}").strip()
-        desc = str(goal.get("description") or "").strip()
+        goal_type = str(goal.get("goal_type") or "").strip()
+        unit = str(goal.get("unit") or "").strip()
+        raw_status = str(goal.get("status") or "").strip().lower()
+        curr_val = goal.get("current_value")
+        target_val = goal.get("target_value")
 
-        # Progress & Status
-        progress = int(goal.get("progress") or 0)
-        progress = max(0, min(100, progress))
-        completed = goal.get("completed") is True or progress >= 100
+        # Derive progress & status from real Omi goal fields
+        progress = 0
+        if goal_type == "boolean":
+            if curr_val in (True, 1, "1", "true", "True") or raw_status == "achieved":
+                progress = 100
+        else:
+            try:
+                if curr_val is not None and target_val is not None:
+                    c_num = float(curr_val)
+                    t_num = float(target_val)
+                    if t_num > 0:
+                        progress = max(0, min(100, int(round((c_num / t_num) * 100))))
+                    elif raw_status == "achieved":
+                        progress = 100
+            except (ValueError, TypeError):
+                if raw_status == "achieved":
+                    progress = 100
 
-        if completed:
+        if raw_status == "achieved" or progress >= 100:
             status = "COMPLETED"
             progress = 100
-        elif progress > 0:
+        elif raw_status == "abandoned":
+            status = "CANCELLED"
+        elif progress > 0 or raw_status == "focused":
             status = "IN-PROCESS"
         else:
             status = "NEEDS-ACTION"
 
-        due_stamp = format_dt(goal.get("target_date") or goal.get("due_date"))
+        # Build descriptive context from real fields
+        desc_parts = []
+        if goal_type:
+            desc_parts.append(f"Type: {goal_type}")
+        if curr_val is not None and target_val is not None:
+            u_str = f" {unit}" if unit else ""
+            desc_parts.append(f"Progress: {curr_val} / {target_val}{u_str}")
+        elif unit:
+            desc_parts.append(f"Unit: {unit}")
+        if raw_status:
+            desc_parts.append(f"Omi status: {raw_status}")
+        desc = " | ".join(desc_parts)
 
         lines.append("BEGIN:VTODO")
         lines.append(f"UID:goal-{gid}@omi.me")
@@ -114,10 +149,15 @@ def generate_vcalendar(goals: List[Dict[str, Any]], cal_name: str = "Omi Goals &
             lines.append(f"DESCRIPTION:{escape_ics(desc)}")
         lines.append(f"PERCENT-COMPLETE:{progress}")
         lines.append(f"STATUS:{status}")
-        if due_stamp:
-            lines.append(f"DUE:{due_stamp}")
-        if completed:
-            lines.append(f"COMPLETED:{now_stamp}")
+
+        created_stamp = format_dt(goal.get("created_at"))
+        if created_stamp:
+            lines.append(f"CREATED:{created_stamp}")
+
+        if status == "COMPLETED":
+            completed_stamp = format_dt(goal.get("updated_at")) or now_stamp
+            lines.append(f"COMPLETED:{completed_stamp}")
+
         lines.append("END:VTODO")
 
     lines.append("END:VCALENDAR")
@@ -147,14 +187,18 @@ def main() -> None:
         sys.exit(1)
 
     all_goals: List[Dict[str, Any]] = []
-    for src in args.inputs:
-        if str(src) == "-":
-            content = sys.stdin.read()
-            all_goals.extend(extract_goals(content, "<stdin>"))
-        else:
-            p = Path(src)
-            content = p.read_text(encoding="utf-8")
-            all_goals.extend(extract_goals(content, str(p)))
+    try:
+        for src in args.inputs:
+            if str(src) == "-":
+                content = sys.stdin.read()
+                all_goals.extend(extract_goals(content, "<stdin>"))
+            else:
+                p = Path(src)
+                content = p.read_text(encoding="utf-8")
+                all_goals.extend(extract_goals(content, str(p)))
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     ics_output = generate_vcalendar(all_goals, args.cal_name)
 
