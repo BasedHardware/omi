@@ -11504,7 +11504,74 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getActionItemsV1McpActionItemsGet(client: OmiApiClient, completed: Bool? = nil, dueStartDate: String? = nil, dueEndDate: String? = nil, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func mcpSseGetV1McpGet(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func mcpStreamableHttpV1McpPost(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil, accept: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    if let accept { req.setValue(String(accept), forHTTPHeaderField: "Accept") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func mcpDeleteSessionV1McpDelete(client: OmiApiClient, mcpSessionId: String? = nil, authorization: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func getActionItemsV1McpActionItemsGet(client: OmiApiClient, completed: Bool? = nil, dueStartDate: String? = nil, dueEndDate: String? = nil, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, updatedSince: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/action-items"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11524,6 +11591,12 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11656,7 +11729,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getChatMessagesV1McpChatGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func getChatMessagesV1McpChatGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/chat"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11667,6 +11740,9 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11684,7 +11760,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func getConversationsV1McpConversationsGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, categories: String? = nil, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func getConversationsV1McpConversationsGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, categories: String? = nil, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, updatedSince: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/conversations"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11704,6 +11780,12 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11773,7 +11855,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getDailySummariesV1McpDailySummariesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, startDate: String? = nil, endDate: String? = nil) async throws -> [[String: OmiAnyCodable]] {
+  public static func getDailySummariesV1McpDailySummariesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, startDate: String? = nil, endDate: String? = nil, cursor: String? = nil) async throws -> [[String: OmiAnyCodable]] {
     let _path = "/v1/mcp/daily-summaries"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11790,6 +11872,9 @@ public enum OmiAPI {
     }
     if let endDate {
       queryItems.append(URLQueryItem(name: "end_date", value: String(endDate)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11894,7 +11979,7 @@ public enum OmiAPI {
     return
   }
 
-  public static func getMemoriesV1McpMemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, categories: String? = nil, sort: String? = nil, reviewed: Bool? = nil, manuallyAdded: Bool? = nil, updatedAfter: String? = nil, includeActivity: Bool? = nil, includeSensitive: Bool? = nil) async throws -> [OmiAnyCodable] {
+  public static func getMemoriesV1McpMemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, categories: String? = nil, sort: String? = nil, reviewed: Bool? = nil, manuallyAdded: Bool? = nil, updatedAfter: String? = nil, updatedSince: String? = nil, includeActivity: Bool? = nil, includeSensitive: Bool? = nil, cursor: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/memories"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11921,11 +12006,17 @@ public enum OmiAPI {
     if let updatedAfter {
       queryItems.append(URLQueryItem(name: "updated_after", value: String(updatedAfter)))
     }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
+    }
     if let includeActivity {
       queryItems.append(URLQueryItem(name: "include_activity", value: String(includeActivity)))
     }
     if let includeSensitive {
       queryItems.append(URLQueryItem(name: "include_sensitive", value: String(includeSensitive)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12114,7 +12205,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getScreenActivityV1McpScreenActivityGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, app: String? = nil, summary: Bool? = nil, limit: Int? = nil) async throws -> OmiAnyCodable {
+  public static func getScreenActivityV1McpScreenActivityGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, app: String? = nil, summary: Bool? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/screen-activity"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -12134,6 +12225,9 @@ public enum OmiAPI {
     }
     if let limit {
       queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -17274,5 +17368,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 451 Swift client methods generated.
+  // Total: 454 Swift client methods generated.
 }
