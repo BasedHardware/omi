@@ -385,7 +385,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     );
   }
 
-  Widget _buildVersionItem({required FaIconData icon, required String label, required String version, Color? chipColor}) {
+  Widget _buildVersionItem(
+      {required FaIconData icon, required String label, required String version, Color? chipColor}) {
     return Padding(
       padding: const EdgeInsets.all(OmiSpacing.md),
       child: Row(
@@ -549,7 +550,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                       SizedBox(
                         width: 120,
                         height: 120,
-                        child: CircularProgressIndicator( // omi-ux-allow: raw-spinner -- progress ring (determinate once the device reports)
+                        child: CircularProgressIndicator(
+                          // omi-ux-allow: raw-spinner -- progress ring (determinate once the device reports)
                           value: _progress > 0 ? _progress / 100 : null,
                           strokeWidth: 8,
                           backgroundColor: OmiColors.surface2,

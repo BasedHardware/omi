@@ -14,7 +14,6 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -201,6 +200,8 @@ class _DevicePill extends StatelessWidget {
     return Semantics(
       button: true,
       label: semanticsLabel,
+      // excludeSemantics drops the GestureDetector's own tap action, so the node carries it.
+      onTap: onTap,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -278,7 +279,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     // conversations-list batch card, so skip the capturing page (same as BLE batch).
     if (captureProvider.isPhoneMicBatchRecording) {
       if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
-        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+        OmiFeedback.info(context, context.l10n.phoneMicOfflineFallbackMessage);
       }
       return;
     }
@@ -299,6 +300,10 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
           button: true,
           label: isRecording ? l10n.stopRecording : l10n.startRecording,
           enabled: !isInitialising,
+          // The child's gestures are excluded below, so the actions (tap, and long-press for the
+          // record options) are declared here where assistive tech can reach them.
+          onTap: isInitialising ? null : () => _startRecording(context),
+          onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
           onLongPressHint: canShowOptions ? l10n.moreOptions : null,
           excludeSemantics: true,
           child: GestureDetector(
