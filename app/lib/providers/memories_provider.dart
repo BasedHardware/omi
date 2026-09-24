@@ -1384,11 +1384,9 @@ class MemoriesProvider extends ChangeNotifier {
     await _finalizeDeletion();
   }
 
-  /// Restores the pending deletion. With [id], only if that memory is still the pending one: a stale
-  /// toast's Undo must not restore a newer delete.
+  /// Restores the pending deletion; with [id], only if still pending (a stale toast must not restore).
   Future<bool> restoreLastDeletedMemory({String? id}) async {
-    if (_lastDeletedMemory == null) return false;
-    if (id != null && _lastDeletedMemory!.id != id) return false;
+    if (_lastDeletedMemory == null || (id != null && _lastDeletedMemory!.id != id)) return false;
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
