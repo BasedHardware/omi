@@ -545,20 +545,9 @@ enum CaptureGroupSeparationResult { separated, unchanged, failed }
 /// several devices) it belongs to. Sticky on the server: the recording is never
 /// regrouped with the members it left. `unchanged` means it was not grouped.
 Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String conversationId) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/capture-group/separate',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
-  try {
-    final body = jsonDecode(response.body);
-    final status = body is Map ? body['status'] : null;
-    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
-  } catch (_) {
-    return CaptureGroupSeparationResult.separated;
-  }
+  final result = await AppClient().separateConversationFromCaptureGroup(conversationId: conversationId);
+  if (result == null) return CaptureGroupSeparationResult.failed;
+  return result.status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
 }
 
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
