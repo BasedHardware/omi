@@ -107,7 +107,8 @@ def create_memory(
         body["category"] = category.value
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
+    mem_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Memory created: [bold]{mem_id}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 

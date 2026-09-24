@@ -114,7 +114,8 @@ def create_action_item(
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    created_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Action item created: [bold]{created_id}[/bold]")
     ctx.renderer.emit(result)
 
 

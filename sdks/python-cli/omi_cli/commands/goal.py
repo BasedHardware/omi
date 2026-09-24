@@ -130,7 +130,8 @@ def create_goal(
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
-    ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
+    goal_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Goal created: [bold]{goal_id}[/bold]")
     ctx.renderer.emit(result)
 
 

@@ -101,3 +101,47 @@ def test_local_task_markup_id_renders_literally(
     assert route.call_count == 1
     assert "MarkupError" not in result.stderr
     assert MARKUP_ID in result.stderr
+
+
+CREATE_CASES = [
+    ("memory", "/v1/dev/user/memories", ["create", "sample memory"], {"id": MARKUP_ID}),
+    ("goal", "/v1/dev/user/goals", ["create", "sample goal"], {"id": MARKUP_ID}),
+    ("action-item", "/v1/dev/user/action-items", ["create", "sample task"], {"id": MARKUP_ID}),
+    (
+        "conversation",
+        "/v1/dev/user/conversations",
+        ["create", "--text", "sample talk"],
+        {"id": MARKUP_ID, "status": "queued"},
+    ),
+]
+
+
+@pytest.mark.parametrize("command,collection,args,response_json", CREATE_CASES)
+def test_create_markup_id_renders_literally(
+    command, collection, args, response_json, authed_profile, respx_mock, cli_runner, monkeypatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    route = respx_mock.post(collection).respond(json=response_json)
+    result = cli_runner.invoke(app, ["--no-color", command, *args])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
+
+
+def test_conversation_from_segments_markup_id_renders_literally(
+    tmp_path, authed_profile, respx_mock, cli_runner, monkeypatch
+) -> None:
+    monkeypatch.setenv("COLUMNS", "1000")
+    segments_file = tmp_path / "segments.json"
+    segments_file.write_text('{"transcript_segments": [{"text": "hi"}]}', encoding="utf-8")
+    route = respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": MARKUP_ID, "status": "queued"}
+    )
+    result = cli_runner.invoke(app, ["--no-color", "conversation", "from-segments", str(segments_file)])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr
