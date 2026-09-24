@@ -155,7 +155,9 @@ def linear_graphql_request(
         errors = result.get("errors")
         if errors:
             print(f"Linear GraphQL error: {errors}")
-            return {"error": "Linear GraphQL request failed"}
+            if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                return {"error": errors[0].get("message", "GraphQL error")}
+            return {"error": "GraphQL error"}
         
         return result.get("data", {})
     except requests.RequestException as e:
@@ -442,7 +444,7 @@ async def home(request: Request, uid: Optional[str] = None):
         "user_profile": user_profile,
         "teams": teams,
         "default_team": default_team,
-        "oauth_url": f"/auth/linear?uid={uid}"
+        "oauth_url": f"/auth/linear?uid={urllib.parse.quote(uid, safe='')}"
     })
 
 
@@ -516,7 +518,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
     )
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -537,7 +539,7 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 async def disconnect_linear(uid: str):
     """Disconnect Linear account."""
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================
@@ -664,8 +666,7 @@ async def tool_create_issue(request: Request):
         result = linear_graphql_request(uid, mutation, variables)
         
         if "error" in result:
-            print(f"Error creating issue: {result['error']}")
-            return ChatToolResponse(error="Failed to create issue")
+            return ChatToolResponse(error=f"Failed to create issue: {result['error']}")
         
         issue_data = result.get("issueCreate", {})
         if not issue_data.get("success"):
@@ -763,8 +764,7 @@ async def tool_list_my_issues(request: Request):
         result = linear_graphql_request(uid, query, {"first": limit, "filter": filter_obj})
         
         if "error" in result:
-            print(f"Error getting issues: {result['error']}")
-            return ChatToolResponse(error="Failed to get issues")
+            return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
         
         issues = result.get("issues", {}).get("nodes", [])
         
@@ -863,8 +863,7 @@ async def tool_list_recent_issues(request: Request):
         result = linear_graphql_request(uid, query, variables)
         
         if "error" in result:
-            print(f"Error getting issues: {result['error']}")
-            return ChatToolResponse(error="Failed to get issues")
+            return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
         
         issues = result.get("issues", {}).get("nodes", [])
         
@@ -922,8 +921,7 @@ async def tool_update_issue_status(request: Request):
         result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
-            print(f"Error finding issue: {result['error']}")
-            return ChatToolResponse(error="Failed to find issue")
+            return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
         
         issue = result.get("issue")
         if not issue:
@@ -975,8 +973,7 @@ async def tool_update_issue_status(request: Request):
         })
         
         if "error" in result:
-            print(f"Error updating issue: {result['error']}")
-            return ChatToolResponse(error="Failed to update issue")
+            return ChatToolResponse(error=f"Failed to update issue: {result['error']}")
         
         update_data = result.get("issueUpdate", {})
         if not update_data.get("success"):
@@ -1069,8 +1066,7 @@ async def tool_search_issues(request: Request):
             })
             
             if "error" in result:
-                print(f"Error searching issues: {result['error']}")
-            return ChatToolResponse(error="Search failed")
+                return ChatToolResponse(error=f"Search failed: {result['error']}")
             
             issues = result.get("issues", {}).get("nodes", [])
         else:
@@ -1125,8 +1121,7 @@ async def tool_get_issue(request: Request):
         result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
-            print(f"Error getting issue: {result['error']}")
-            return ChatToolResponse(error="Failed to get issue")
+            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
         
         issue = result.get("issue")
         if not issue:
@@ -1208,8 +1203,7 @@ async def tool_add_comment(request: Request):
         result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
-            print(f"Error finding issue: {result['error']}")
-            return ChatToolResponse(error="Failed to find issue")
+            return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
         
         issue = result.get("issue")
         if not issue:
@@ -1237,8 +1231,7 @@ async def tool_add_comment(request: Request):
         })
         
         if "error" in result:
-            print(f"Error adding comment: {result['error']}")
-            return ChatToolResponse(error="Failed to add comment")
+            return ChatToolResponse(error=f"Failed to add comment: {result['error']}")
         
         comment_data = result.get("commentCreate", {})
         if not comment_data.get("success"):
