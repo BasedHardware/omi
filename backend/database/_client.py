@@ -331,6 +331,7 @@ def run_transactional(client: Any, transactional_callable: Any, *args: Any, atte
             if attempt >= attempts or not is_expired_transaction_error(error):
                 raise
             logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+    raise RuntimeError("Unreachable: run_transactional loop exhausted without return or raise")
 
 
 class _LazyFirestoreClient:
