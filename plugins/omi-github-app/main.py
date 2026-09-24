@@ -551,14 +551,11 @@ async def tool_create_issue(request: Request):
             log(f"SUCCESS: Issue #{issue_number} created")
             return ChatToolResponse(result="\n".join(result_parts))
         else:
-            error = result.get("error", "Unknown error") if result else "Failed"
-            log(f"ERROR: {error}")
-            return ChatToolResponse(error=f"Failed to create issue: {error}")
+            log("ERROR: Failed to create issue")
+            return ChatToolResponse(error="Failed to create issue.")
 
     except Exception as e:
-        import traceback
-        log(f"EXCEPTION: {e}")
-        log(traceback.format_exc())
+        log(f"EXCEPTION: {type(e).__name__}")
         return ChatToolResponse(error="Failed to create issue due to an internal error.")
 
 
@@ -717,7 +714,8 @@ async def tool_get_issue(request: Request):
         if result.get("error"):
             if result.get("status") == 404:
                 return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
-            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
+            log(f"ERROR: Failed to get issue #{issue_number}")
+            return ChatToolResponse(error="Failed to get issue.")
 
         issue = result["issue"]
 
@@ -854,11 +852,11 @@ async def tool_add_comment(request: Request):
                 result=f"**Comment Added**\n\nAdded comment to issue #{issue_number} in {repo_full_name}"
             )
         else:
-            error = result.get("error", "Unknown error") if result else "Failed"
-            return ChatToolResponse(error=f"Failed to add comment: {error}")
+            log(f"ERROR: Failed to add comment to #{issue_number}")
+            return ChatToolResponse(error="Failed to add comment.")
 
     except Exception as e:
-        log(f"Error adding comment: {e}")
+        log(f"Error adding comment: {type(e).__name__}")
         return ChatToolResponse(error="Failed to add comment due to an internal error.")
 
 

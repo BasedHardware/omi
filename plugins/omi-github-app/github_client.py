@@ -227,7 +227,8 @@ class GitHubClient:
             message = response.json().get("message")
         except Exception:
             message = None
-        return message or getattr(response, "text", "") or "Unknown error"
+        status = getattr(response, "status_code", "error")
+        return message or f"HTTP {status}"
 
     def list_issues(
         self,
@@ -308,8 +309,8 @@ class GitHubClient:
             return {"issues": issues}
 
         except Exception as e:
-            print(f"[ERROR] Error listing issues: {e}")
-            return {"error": f"Failed to list issues: {e}", "status": None}
+            print(f"[ERROR] Error listing issues: {type(e).__name__}")
+            return {"error": "Failed to list issues", "status": None}
 
     def get_issue(
         self,
@@ -367,8 +368,8 @@ class GitHubClient:
                 }
 
         except Exception as e:
-            print(f"[ERROR] Error getting issue: {e}")
-            return {"error": f"Failed to get issue: {e}", "status": None}
+            print(f"[ERROR] Error getting issue: {type(e).__name__}")
+            return {"error": "Failed to get issue", "status": None}
 
     def add_issue_comment(
         self,
