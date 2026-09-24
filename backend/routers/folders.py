@@ -72,7 +72,9 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    update_data = request.model_dump(exclude_unset=True)
+    update_data = {
+        k: v for k, v in request.model_dump(exclude_unset=True).items() if v is not None or k == 'description'
+    }
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)
 

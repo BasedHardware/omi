@@ -47,6 +47,9 @@ class _FakeDocRef:
     def get(self):
         return _FakeSnapshot(self.id, self._store.get(self.id), reference=self)
 
+    def set(self, values):
+        self._store[self.id] = dict(values)
+
     def update(self, values):
         if self.id not in self._store:
             raise NotFound(f"404 No document to update: {self.id}")
@@ -198,3 +201,60 @@ def test_delete_folder_still_moves_conversations_to_the_default_folder():
 
     assert conversations['conv-1']['folder_id'] == 'other'
     assert folders_store['other']['conversation_count'] == 1
+
+
+def test_delete_default_folder_excludes_self_and_unfiles_conversations():
+    conversations = {'conv-1': {'folder_id': 'legacy-other', 'discarded': False}}
+    folders_store = {
+        'legacy-other': {'is_default': True, 'is_system': False, 'conversation_count': 1, 'order': 0},
+        'work': {'is_default': False, 'is_system': True, 'conversation_count': 0, 'order': 1},
+    }
+
+    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+        assert folders.delete_folder('u1', 'legacy-other') is True
+
+    assert 'legacy-other' not in folders_store
+    assert conversations['conv-1']['folder_id'] is None
+
+
+def test_create_folder_tolerates_null_order_in_existing_folder():
+    conversations = {}
+    folders_store = {
+        'corrupted': {'name': 'Corrupted', 'order': None},
+    }
+
+    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+        created = folders.create_folder('u1', name='New Folder')
+
+    assert created['order'] == 1
+    assert folders_store[created['id']]['order'] == 1
+
+
+def test_update_folder_db_ignores_null_non_nullable_fields_and_allows_null_description():
+    conversations = {}
+    folders_store = {
+        'f1': {
+            'id': 'f1',
+            'name': 'Work',
+            'description': 'Meetings',
+            'color': '#3B82F6',
+            'icon': '💼',
+            'order': 2,
+        }
+    }
+
+    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+        assert (
+            folders.update_folder(
+                'u1',
+                'f1',
+                {'name': None, 'color': None, 'icon': None, 'order': None, 'description': None},
+            )
+            is True
+        )
+
+    assert folders_store['f1']['name'] == 'Work'
+    assert folders_store['f1']['color'] == '#3B82F6'
+    assert folders_store['f1']['icon'] == '💼'
+    assert folders_store['f1']['order'] == 2
+    assert folders_store['f1']['description'] is None
