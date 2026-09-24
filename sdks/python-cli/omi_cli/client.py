@@ -49,8 +49,17 @@ MAX_RETRY_AFTER_SECONDS = 60.0
 # ``backend/utils/rate_limit_config.py``).
 KNOWN_RATE_LIMIT_POLICIES = {
     "dev:conversations": "25/hr",
+    "dev:conversations_read": "60/hr",
+    "dev:conversations_from_segments": "30/hr",
     "dev:memories": "120/hr",
+    "dev:memories_read": "120/hr",
+    "dev:memories_write_burst": "30/min",
     "dev:memories_batch": "15/hr",
+    "dev:action_items_read": "120/hr",
+    "dev:action_items_write": "120/hr",
+    "dev:goals_read": "120/hr",
+    "dev:goals_write": "120/hr",
+    "dev:ask": "25/hr",
 }
 
 
@@ -199,7 +208,7 @@ class OmiClient:
         policy = _detect_rate_limit_policy(detail)
         # Server errors and rate limit errors get the richer formatters below.
         if response.status_code == 429:
-            policy_label = KNOWN_RATE_LIMIT_POLICIES.get(policy, policy) if policy else None
+            policy_label = KNOWN_RATE_LIMIT_POLICIES.get(policy) if policy else None
             label = f"{policy} ({policy_label})" if policy_label else policy
             return RateLimitError(
                 message="Rate limited" if not label else f"Rate limited: {label}",
