@@ -227,26 +227,26 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
-  }) : externalActions = externalActions ?? const NoopCaptureExternalActions(),
-       _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
-       _inProgressConversationLoader = inProgressConversationLoader,
-       _audioCodecLoader = audioCodecLoader,
-       _microphonePermissionRequester = microphonePermissionRequester,
-       _phoneMicBatchRecorder = phoneMicBatchRecorder,
-       _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
-       _speakerHaptic = speakerHaptic,
-       _walServiceOverride = walService,
-       _phoneMicRecorderOverride = phoneMicRecorder,
-       _phoneMicBatchSupportedOverride = phoneMicBatchSupported,
-       _connectivity = connectivity ?? CaptureConnectivityBoundary.production(),
-       _authOverride = authBoundary,
-       _nowOverride = now,
-       _schedulingOverride = scheduling,
-       _bleListeners = bleListeners,
-       _openSocketOverride = openSocket,
-       _sessionOwner = sessionOwner,
-       _processInProgressConversationOverride = processInProgressConversation,
-       _preferences = preferences ?? SharedPreferencesUtil() {
+  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+        _inProgressConversationLoader = inProgressConversationLoader,
+        _audioCodecLoader = audioCodecLoader,
+        _microphonePermissionRequester = microphonePermissionRequester,
+        _phoneMicBatchRecorder = phoneMicBatchRecorder,
+        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
+        _speakerHaptic = speakerHaptic,
+        _walServiceOverride = walService,
+        _phoneMicRecorderOverride = phoneMicRecorder,
+        _phoneMicBatchSupportedOverride = phoneMicBatchSupported,
+        _connectivity = connectivity ?? CaptureConnectivityBoundary.production(),
+        _authOverride = authBoundary,
+        _nowOverride = now,
+        _schedulingOverride = scheduling,
+        _bleListeners = bleListeners,
+        _openSocketOverride = openSocket,
+        _sessionOwner = sessionOwner,
+        _processInProgressConversationOverride = processInProgressConversation,
+        _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
@@ -942,15 +942,15 @@ class CaptureController extends ChangeNotifier
           geolocation: geolocation ?? _sessionGeolocation,
         ) ??
         ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          clientConversationId: clientConversationId,
-          customSttConfig: customSttConfig,
-          geolocation: geolocation ?? _sessionGeolocation,
-        );
+              codec: codec,
+              sampleRate: sampleRate,
+              language: language,
+              force: force,
+              source: source,
+              clientConversationId: clientConversationId,
+              customSttConfig: customSttConfig,
+              geolocation: geolocation ?? _sessionGeolocation,
+            );
   }
 
   Future<void> _connectTranscriptionSocket({
@@ -1257,24 +1257,20 @@ class CaptureController extends ChangeNotifier
               _isProcessingButtonEvent = true;
               if (isPaused) {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-                resumeDeviceRecording()
-                    .then((_) {
-                      _isProcessingButtonEvent = false;
-                    })
-                    .catchError((e) {
-                      Logger.debug("Error resuming device recording: $e");
-                      _isProcessingButtonEvent = false;
-                    });
+                resumeDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error resuming device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
               } else {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-                pauseDeviceRecording()
-                    .then((_) {
-                      _isProcessingButtonEvent = false;
-                    })
-                    .catchError((e) {
-                      Logger.debug("Error pausing device recording: $e");
-                      _isProcessingButtonEvent = false;
-                    });
+                pauseDeviceRecording().then((_) {
+                  _isProcessingButtonEvent = false;
+                }).catchError((e) {
+                  Logger.debug("Error pausing device recording: $e");
+                  _isProcessingButtonEvent = false;
+                });
               }
             } else if (doubleTapAction == 2) {
               // Star ongoing conversation (doesn't end it)
@@ -1382,24 +1378,20 @@ class CaptureController extends ChangeNotifier
         _isProcessingButtonEvent = true;
         if (isPaused) {
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-          resumeDeviceRecording()
-              .then((_) {
-                _isProcessingButtonEvent = false;
-              })
-              .catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+          resumeDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error resuming device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
         } else {
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-          pauseDeviceRecording()
-              .then((_) {
-                _isProcessingButtonEvent = false;
-              })
-              .catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+          pauseDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error pausing device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
         }
       } else if (doubleTapAction == 2) {
         // Star ongoing conversation (doesn't end it)
@@ -1500,8 +1492,7 @@ class CaptureController extends ChangeNotifier
 
         // Local storage syncs. In batch mode the native layer owns writing the
         // .bin files, so the Dart WAL writer must stay off to avoid double-writes.
-        var checkWalSupported =
-            !_preferences.batchModeEnabled &&
+        var checkWalSupported = !_preferences.batchModeEnabled &&
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || _preferences.unlimitedLocalStorageEnabled);
@@ -2387,8 +2378,7 @@ class CaptureController extends ChangeNotifier
 
   bool get _shouldReconnectTranscriptionSocket {
     final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !isPaused;
-    final activePhoneOrSystemCapture =
-        recordingState == RecordingState.record ||
+    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
     return activeDeviceCapture || activePhoneOrSystemCapture;
@@ -2978,12 +2968,8 @@ class CaptureController extends ChangeNotifier
     try {
       final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
       if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
-      );
+      final saved = await externalActions.assignSpeaker(conversationId, targets, finalPersonId,
+          speakerId: applyToSpeaker ? speakerId : null);
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
       if (applyToSpeaker) {
@@ -2999,15 +2985,13 @@ class CaptureController extends ChangeNotifier
       }
       _segmentsPhotosVersion++;
       if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(
-          jsonEncode({
-            'type': 'speaker_assigned',
-            'speaker_id': speakerId,
-            'person_id': finalPersonId,
-            'person_name': personName,
-            'segment_ids': targets,
-          }),
-        );
+        _socket?.send(jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': targets,
+        }));
       }
       suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
       return true;

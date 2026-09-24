@@ -63,7 +63,7 @@ dependencies:
   # UIScene lifecycle and crashes on launch (EXC_BREAKPOINT), taking every alphabetically
   # later plugin down with it since GeneratedPluginRegistrant registers synchronously.
   # 2.x's rewritten registration doesn't touch window at all. See #11568.
-  flutter_contacts: ^2.1.0
+  flutter_contacts: ^2.3.1
   intl_country_data:
     git:
       url: https://github.com/mdmohsin7/intl_country_data.git

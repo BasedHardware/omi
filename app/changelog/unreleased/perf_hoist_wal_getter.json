@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "detail": "Internal loop optimization in capture audio frame loop."
+}
