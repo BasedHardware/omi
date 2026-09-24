@@ -169,11 +169,9 @@ def load_action_items(sources: List[str]) -> List[Dict[str, Any]]:
 
         data = json.loads(raw)
         if isinstance(data, dict):
-            items = (
-                data.get("action_items")
-                or data.get("items")
-                or data.get("data")
-                or [data]
+            items = next(
+                (v for v in (data.get(k) for k in ("action_items", "items", "data")) if isinstance(v, list)),
+                [data],
             )
         elif isinstance(data, list):
             items = data

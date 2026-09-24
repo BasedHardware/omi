@@ -107,6 +107,15 @@ class TestActionItemsToHtml(unittest.TestCase):
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0]["id"], "task_1")
 
+    def test_empty_action_items_wrapper(self):
+        """Empty action_items array yields empty list without falling back to [data]."""
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "empty.json"
+            f.write_text(json.dumps({"action_items": []}), encoding="utf-8")
+
+            items = load_action_items([str(f)])
+            self.assertEqual(items, [])
+
     def test_error_handling(self):
         """Invalid files or items without IDs raise ValueError."""
         with tempfile.TemporaryDirectory() as td:
