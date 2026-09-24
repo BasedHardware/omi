@@ -13,6 +13,7 @@ uses ``stub_modules`` + ``load_module_fresh``, so nothing leaks to ``sys.modules
 after the module's tests finish.
 """
 
+import importlib
 import io
 import os
 import re
@@ -913,17 +914,22 @@ def _make_transcript_segment(speaker_id, start, end, text='hello', seg_id=None):
 class TestBuildPersonEmbeddingsCache:
     """Verify build_person_embeddings_cache loads user + people embeddings."""
 
-    @patch('utils.sync.pipeline.users_db')
-    def test_loads_user_embedding(self, mock_users_db):
-        from utils.sync.pipeline import build_person_embeddings_cache
+    def test_loads_user_embedding(self, monkeypatch):
+        pipeline = importlib.import_module('utils.sync.pipeline')
+        mock_users_db = MagicMock()
+        monkeypatch.setattr(pipeline, 'users_db', mock_users_db)
+
+        resolved_name = MagicMock(return_value='David')
+        monkeypatch.setattr(pipeline, 'get_user_name', resolved_name)
 
         mock_users_db.get_user_speaker_embedding.return_value = [0.1] * 512
         mock_users_db.get_people.return_value = []
 
-        cache = build_person_embeddings_cache('uid1')
+        cache = pipeline.build_person_embeddings_cache('uid1')
 
         assert 'user' in cache
-        assert cache['user']['name'] == 'User'
+        assert cache['user']['name'] == 'David'
+        resolved_name.assert_called_once_with('uid1')
         assert cache['user']['embedding'].shape == (1, 512)
 
     @patch('utils.sync.pipeline.users_db')

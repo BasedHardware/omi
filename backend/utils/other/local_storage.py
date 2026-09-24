@@ -1,12 +1,13 @@
-"""Filesystem storage adapter used only by the owned local dev harness."""
+"""GCS client construction, plus the filesystem storage adapter used only by the owned local dev harness."""
 
 from __future__ import annotations
 
 import json
 import os
 import shutil
+import threading
 from pathlib import Path, PurePosixPath
-from typing import Iterable
+from typing import Any, Iterable
 from urllib.parse import quote
 
 from google.cloud import storage
@@ -178,6 +179,16 @@ class LocalStorageClient:
         return self.bucket(name)
 
 
+def storage_client_project() -> str:
+    """Project for a keyless GCS client: the customer-data pin, then the host project."""
+    return (
+        os.environ.get('OMI_CUSTOMER_DATA_PROJECT')
+        or os.environ.get('GOOGLE_CLOUD_PROJECT')
+        or os.environ.get('FIREBASE_PROJECT_ID')
+        or ''
+    ).strip()
+
+
 def create_storage_client():
     local_client = LocalStorageClient.from_env()
     if local_client is not None:
@@ -186,8 +197,41 @@ def create_storage_client():
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
         return storage.Client(credentials=credentials)
-    project = (os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('FIREBASE_PROJECT_ID') or '').strip()
+    project = storage_client_project()
     return storage.Client(project=project) if project else storage.Client()
+
+
+_signing_token_lock = threading.Lock()
+
+
+def iam_signing_kwargs(client: Any) -> dict[str, str]:
+    """Signer arguments that let ``Blob.generate_signed_url`` work on a keyless identity.
+
+    A JSON key signs V4 URLs locally. An attached Cloud Run service account or a
+    GKE Workload Identity holds only an access token, and ``generate_signed_url``
+    raises unless it is handed ``service_account_email`` + ``access_token``, in
+    which case it signs through IAM ``signBlob`` (the identity needs
+    ``iam.serviceAccounts.signBlob`` on itself). Returns ``{}`` whenever the
+    credentials can already sign, or are not real Google credentials (local
+    harness, test fakes), so the key path and fakes are unchanged.
+    """
+    credentials = getattr(client, '_credentials', None)
+    from google.auth import credentials as google_auth_credentials
+
+    if not isinstance(credentials, google_auth_credentials.Credentials):
+        return {}
+    if isinstance(credentials, google_auth_credentials.Signing):
+        return {}
+    from google.auth.transport import requests as google_auth_requests
+
+    with _signing_token_lock:
+        if not credentials.valid:
+            credentials.refresh(google_auth_requests.Request())
+        token = credentials.token
+    email = getattr(credentials, 'service_account_email', None)
+    if not token or not isinstance(email, str) or '@' not in email:
+        return {}
+    return {'service_account_email': email, 'access_token': token}
 
 
 def local_public_url(bucket_name: str | None, blob_name: str) -> str | None:

@@ -35,8 +35,11 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: false
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) replacing the prod nik-164
+  # JSON key; OMI_CUSTOMER_DATA_PROJECT pins the customer project.
+  annotations:
+    iam.gke.io/gcp-service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -336,11 +339,8 @@ env:
     value: "price_1TN7jo1F8wnoWYvw6Xu1zAtC"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware-dev"
   - name: METRICS_SECRET

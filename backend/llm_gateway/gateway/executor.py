@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -248,6 +249,12 @@ async def execute_embedding(
             last_error = error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 raise error
+            await _pause_before_provider_429_retry(
+                failure=exc,
+                retry_ordinal=retry_ordinal,
+                max_attempts=max_attempts,
+                deadline_monotonic=deadline_monotonic,
+            )
             continue
         if attempt_trace is not None:
             attempt_trace.record(
@@ -350,6 +357,63 @@ RETRYABLE_PROVIDER_FAILURE_CLASSES = frozenset(
         FailureClass.PROVIDER_5XX_OMI_PAID,
     }
 )
+
+# Jittered backoff for provider 429s. The per-sleep ceiling is 60s; the route
+# request timeout remains the total latency budget, so interactive lanes cannot
+# stall past the deadline they already had. Flex lanes already carry a longer
+# request timeout (up to 900s) and need no separate retry-config field.
+PROVIDER_429_BACKOFF_BASE_SECONDS = 2.0
+PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
+
+
+async def sleep_for_provider_retry(seconds: float) -> None:
+    """Injectable pause between accounted provider retries."""
+    await asyncio.sleep(seconds)
+
+
+def provider_429_backoff_seconds(
+    *,
+    attempt: int,
+    retry_after_seconds: float | None,
+    remaining_budget_seconds: float,
+    random_uniform: Callable[[float, float], float] | None = None,
+) -> float:
+    """Delay before the next attempt after a provider 429.
+
+    ``attempt`` is the failed attempt's 1-based ordinal. A seconds-form
+    Retry-After wins when present. Otherwise the delay is
+    ``base * 2**(attempt-1) + jitter`` with jitter uniform in ``[0, base/2]``.
+    The result is capped at 60s and at the remaining route timeout.
+    """
+    if remaining_budget_seconds <= 0:
+        return 0.0
+    if retry_after_seconds is not None and retry_after_seconds >= 0:
+        delay = float(retry_after_seconds)
+    else:
+        exponent = min(max(attempt, 1) - 1, 16)
+        draw = random.uniform if random_uniform is None else random_uniform
+        jitter = draw(0.0, PROVIDER_429_BACKOFF_BASE_SECONDS / 2.0)
+        delay = PROVIDER_429_BACKOFF_BASE_SECONDS * (2**exponent) + jitter
+    return max(0.0, min(delay, PROVIDER_429_BACKOFF_CAP_SECONDS, remaining_budget_seconds))
+
+
+async def _pause_before_provider_429_retry(
+    *,
+    failure: ProviderFailure,
+    retry_ordinal: int,
+    max_attempts: int,
+    deadline_monotonic: float,
+) -> None:
+    """Sleep only when this 429 will be retried. The attempt is already recorded."""
+    if failure.failure_class != FailureClass.PROVIDER_429_OMI_PAID or retry_ordinal >= max_attempts:
+        return
+    delay = provider_429_backoff_seconds(
+        attempt=retry_ordinal,
+        retry_after_seconds=failure.retry_after_seconds,
+        remaining_budget_seconds=deadline_monotonic - monotonic(),
+    )
+    if delay > 0:
+        await sleep_for_provider_retry(delay)
 
 
 async def _execute_route(
@@ -694,6 +758,12 @@ async def _attempt_provider(
                 return None, error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
+            await _pause_before_provider_429_retry(
+                failure=exc,
+                retry_ordinal=retry_ordinal,
+                max_attempts=max_attempts,
+                deadline_monotonic=deadline_monotonic,
+            )
         except asyncio.CancelledError:
             await settle_jit_attempt(
                 reservation,

@@ -636,6 +636,15 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     ['transcription_source', 'client_platform', 'app_build'],
 )
 
+# Wall seconds of live /v4/listen sessions by who could have watched them in real
+# time (routers/listen/realtime_demand.py). The input for routing background
+# capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
+    'omi_listen_realtime_demand_seconds_total',
+    'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',
+    ['transcription_source', 'client_platform', 'realtime_demand'],
+)
+
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
