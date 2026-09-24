@@ -118,6 +118,10 @@ AUDITED_PUBLIC_PREFIXES = (
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'POST',
+        '/v1/conversations/upload-audio',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
         '/v1/conversations/shared/chat',
     ): 'Trusted frontend service OIDC route; it is not a browser or Developer API surface.',
     (

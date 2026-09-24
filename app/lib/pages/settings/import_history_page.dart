@@ -13,8 +13,10 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:provider/provider.dart';
 
 /// Renders an import job's creation timestamp for its history row.
 ///
@@ -230,7 +232,110 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
+          SnackBar(
+              content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
+        );
+      }
+    }
+  }
+
+  Future<void> _startAudioImport() async {
+    try {
+      if (!mounted) return;
+      final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
+      PlatformManager.instance.analytics.importStarted(source: 'audio_file');
+      setState(() => _isUploading = true);
+
+      Logger.debug('Opening file picker for Audio...');
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg', 'flac'],
+      );
+
+      if (result == null || result.files.isEmpty) {
+        Logger.debug('User cancelled audio file picker');
+        if (mounted) {
+          setState(() => _isUploading = false);
+        }
+        return;
+      }
+
+      final filePath = result.files.single.path;
+      if (filePath == null) {
+        if (mounted) {
+          setState(() => _isUploading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotAccessFile), backgroundColor: Colors.red.shade700),
+          );
+        }
+        return;
+      }
+
+      final file = File(filePath);
+      final conversation = await convoProvider.importAudioFile(file);
+
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+
+      if (conversation != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Imported "${conversation.structured.title.isNotEmpty ? conversation.structured.title : 'Audio conversation'}"',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(convoProvider.audioImportError ?? context.l10n.failedToStartImport)),
+                ],
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      }
+    } on PlatformException catch (e) {
+      Logger.debug('FilePicker PlatformException: ${e.code} - ${e.message}');
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.importErrorOpeningFilePicker(e.message ?? '')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      Logger.debug('Audio import error: $e');
+      Logger.debug('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
         );
       }
     }
@@ -323,6 +428,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   Widget _buildImportSourceCard({
     required String name,
     required String logoPath,
+    Widget? iconWidget,
     required String description,
     required bool isAvailable,
     required VoidCallback onTap,
@@ -340,23 +446,29 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         child: Row(
           children: [
             // Logo
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                logoPath,
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.device_unknown, color: Colors.grey),
-                  );
-                },
+            if (iconWidget != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: iconWidget,
+              )
+            else
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  logoPath,
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.device_unknown, color: Colors.grey),
+                    );
+                  },
+                ),
               ),
-            ),
             const SizedBox(width: 16),
             // Text content
             Expanded(
@@ -431,6 +543,20 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           description: context.l10n.selectZipFileToImport,
           isAvailable: true,
           onTap: _isUploading ? () {} : _startLimitlessImport,
+        ),
+        _buildImportSourceCard(
+          name: 'Audio Files',
+          logoPath: '',
+          iconWidget: Container(
+            width: 48,
+            height: 48,
+            decoration:
+                BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.audio_file, color: Colors.white, size: 26),
+          ),
+          description: 'Import MP3, M4A, WAV, AAC, OGG or FLAC (Plaud, Voice Memos, etc.)',
+          isAvailable: true,
+          onTap: _isUploading ? () {} : _startAudioImport,
         ),
         // Coming soon placeholder
         Container(

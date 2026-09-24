@@ -527,6 +527,7 @@ class CreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    imported: bool = False
     # Capture provenance carried through the normal processing write. Keeping
     # this on the create model prevents ID-less uploads from assigning role
     # only after process_conversation has already persisted the row.

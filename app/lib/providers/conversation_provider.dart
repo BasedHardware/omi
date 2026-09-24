@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -8,12 +9,19 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
+
+typedef AudioConversationUploader = Future<CreateConversationResponse?> Function(
+  File audioFile, {
+  String? language,
+  UploadProgressCallback? onUploadProgress,
+});
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
@@ -71,6 +79,20 @@ class ConversationProvider extends ChangeNotifier {
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
+  bool isImportingAudio = false;
+  double audioImportProgress = 0.0;
+  String? audioImportError;
+
+  static const Set<String> supportedAudioExtensions = {
+    'mp3',
+    'm4a',
+    'wav',
+    'aac',
+    'ogg',
+    'flac',
+  };
+  static const int maxAudioImportBytes = 200 * 1000 * 1000; // 200MB
+
   bool showDiscardedConversations = false;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
@@ -175,6 +197,11 @@ class ConversationProvider extends ChangeNotifier {
   @visibleForTesting
   Future<bool> Function(String conversationId)? conversationDeleteFetcherOverride;
 
+  final AudioConversationUploader _audioUploader;
+
+  @visibleForTesting
+  AudioConversationUploader? audioUploaderOverride;
+
   ConversationProvider({
     ConversationListFetcher? conversationListFetcher,
     ConversationLifecycleFetcher? conversationLifecycleFetcher,
@@ -183,6 +210,7 @@ class ConversationProvider extends ChangeNotifier {
     ConversationSearchResultFetcher? conversationSearchResultFetcher,
     bool Function()? isSignedIn,
     ConversationApi? conversationApi,
+    AudioConversationUploader? audioUploader,
   })  : _conversationListFetcher = conversationListFetcher,
         _conversationLifecycleFetcher = conversationLifecycleFetcher ??
             (conversationApi == null
@@ -210,7 +238,8 @@ class ConversationProvider extends ChangeNotifier {
                     );
                   }),
         _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
-        _conversationApi = conversationApi {
+        _conversationApi = conversationApi,
+        _audioUploader = audioUploader ?? uploadAudioConversation {
     _setupMergeListener();
     _loadSettings();
   }
@@ -1389,6 +1418,76 @@ class ConversationProvider extends ChangeNotifier {
       addConversation(conversation);
     } else {
       updateConversation(conversation, idx);
+    }
+  }
+
+  Future<ServerConversation?> importAudioFile(
+    File file, {
+    String? language,
+  }) async {
+    final filename = file.path.split(Platform.pathSeparator).last;
+    final dotIndex = filename.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == filename.length - 1) {
+      audioImportError = 'File has no extension';
+      notifyListeners();
+      return null;
+    }
+    final ext = filename.substring(dotIndex + 1).toLowerCase();
+    if (!supportedAudioExtensions.contains(ext)) {
+      audioImportError = 'Unsupported audio format: .$ext. Supported: ${supportedAudioExtensions.join(', ')}';
+      notifyListeners();
+      return null;
+    }
+
+    final fileSize = await file.length();
+    if (fileSize == 0) {
+      audioImportError = 'File is empty';
+      notifyListeners();
+      return null;
+    }
+    if (fileSize > maxAudioImportBytes) {
+      audioImportError = 'File exceeds maximum size of 200MB';
+      notifyListeners();
+      return null;
+    }
+
+    isImportingAudio = true;
+    audioImportProgress = 0.0;
+    audioImportError = null;
+    notifyListeners();
+
+    try {
+      final uploader = audioUploaderOverride ?? _audioUploader;
+      final response = await uploader(
+        file,
+        language: language,
+        onUploadProgress: (sent, total, speed) {
+          if (total > 0) {
+            audioImportProgress = (sent / total).clamp(0.0, 1.0);
+            notifyListeners();
+          }
+        },
+      );
+
+      if (response != null && response.conversation != null) {
+        final conversation = response.conversation!;
+        upsertConversation(conversation);
+        isImportingAudio = false;
+        audioImportProgress = 1.0;
+        notifyListeners();
+        return conversation;
+      } else {
+        audioImportError = 'Failed to process audio conversation';
+        isImportingAudio = false;
+        notifyListeners();
+        return null;
+      }
+    } catch (e) {
+      Logger.error('Error importing audio file: $e');
+      audioImportError = 'Error importing audio file: $e';
+      isImportingAudio = false;
+      notifyListeners();
+      return null;
     }
   }
 
