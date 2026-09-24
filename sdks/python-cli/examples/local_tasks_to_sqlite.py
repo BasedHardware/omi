@@ -88,7 +88,7 @@ def normalize_task_record(item: Dict[str, Any], idx: int) -> Tuple[str, str, str
     task_id = str(item.get("id") or item.get("task_id") or f"task_{idx}").strip()
     title = str(item.get("title") or item.get("description") or "Untitled Task").strip()
     desc = str(item.get("description") or "").strip()
-    
+
     # Handle completed boolean
     comp_val = item.get("completed")
     if isinstance(comp_val, bool):
