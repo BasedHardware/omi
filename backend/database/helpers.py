@@ -222,10 +222,10 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
 
             if isinstance(result, dict):
                 return _process(result)
-            elif isinstance(result, list):
+            if isinstance(result, list):
                 items: List[Any] = cast(List[Any], result)
                 return [_process(item) for item in items]
-            elif isinstance(result, tuple):
+            if isinstance(result, tuple):
                 # Handle functions that return a tuple, e.g., (data, doc_id)
                 elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
                 processed_elements: List[Any] = []
@@ -294,10 +294,10 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
 
             if isinstance(result, dict):
                 return _fetch_and_attach_photos(result)
-            elif isinstance(result, list):
+            if isinstance(result, list):
                 items: List[Any] = cast(List[Any], result)
                 return [_fetch_and_attach_photos(item) for item in items]
-            elif isinstance(result, tuple):
+            if isinstance(result, tuple):
                 elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
                 processed_elements: List[Any] = []
                 for element in elements:
