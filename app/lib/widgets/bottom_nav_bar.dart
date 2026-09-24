@@ -10,6 +10,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Height of the gradient that fades page content out above the tab row. It is
 /// paint only: nothing in it is tappable.
+/// The tab bar's two-bubbles glyph (FontAwesome `comments`, regular weight). Ask Omi uses the same
+/// glyph everywhere it appears, so the button and the tab read as one family.
+const FaIconData kAskOmiGlyph = FontAwesomeIcons.comments;
+
 const double kBottomNavFadeHeight = 20;
 
 /// Height of the tab row, which sits directly on top of the system inset the
@@ -101,8 +105,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
             child: Row(
               children: [
                 _buildTab(context, selectedIndex, 0, FontAwesomeIcons.house, 'Home', context.l10n.home),
-                _buildTab(
-                    context, selectedIndex, 1, FontAwesomeIcons.comments, 'Conversations', context.l10n.conversations),
+                _buildTab(context, selectedIndex, 1, kAskOmiGlyph, 'Conversations', context.l10n.conversations),
                 _buildTab(context, selectedIndex, 2, FontAwesomeIcons.listCheck, 'Tasks', context.l10n.tasks),
                 _buildTab(context, selectedIndex, 3, FontAwesomeIcons.puzzlePiece, 'Apps', context.l10n.apps),
               ],
