@@ -804,7 +804,9 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
         and isinstance(tool['function'].get('name'), str)
     ]
 
-class _RequestValidationError(ValueError): pass
+
+class _RequestValidationError(ValueError):
+    pass
 
 
 def _request(
@@ -1813,7 +1815,10 @@ async def _chat_completions_unobserved(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=(str(exc) if isinstance(exc, _RequestValidationError) else "Invalid request parameters.")) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(str(exc) if isinstance(exc, _RequestValidationError) else "Invalid request parameters."),
+        ) from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
