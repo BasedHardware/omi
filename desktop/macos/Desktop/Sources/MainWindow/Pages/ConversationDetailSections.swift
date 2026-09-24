@@ -9,13 +9,17 @@ import SwiftUI
 
 /// Action items extracted from the conversation. Nothing here is a task until the reader says so
 /// (I1): each row carries its own "Add to Tasks", and that gesture is the only promotion path.
+/// The row (`ConversationActionItemRow`) shows its controls on hover or focus, and keeps a task
+/// state the reader must see (adding, added, failed, linked) on screen.
 struct ConversationActionItemsSection: View {
   let conversation: ServerConversation
   var onOpenLinkedTask: ((String) -> Void)?
 
-  /// Descriptions the reader has added from this summary, and those in flight.
+  /// Items the reader has added from this summary, those in flight, and those whose last attempt
+  /// failed (offered again as "Try Again").
   @State private var addedActionItemIDs: Set<String> = []
   @State private var addingActionItemIDs: Set<String> = []
+  @State private var failedActionItemIDs: Set<String> = []
 
   private var activeItems: [ActionItem] {
     conversation.structured.actionItems.filter { !$0.deleted }
@@ -36,79 +40,60 @@ struct ConversationActionItemsSection: View {
         }
         .glassCard(cornerRadius: PageGlass.rowRadius)
       }
+      // `conversation_detail_prompt prompt=add_task index=N` presses item N's task control.
+      .onReceive(
+        NotificationCenter.default.publisher(for: .desktopAutomationConversationPromptRequested)
+      ) { notification in
+        guard notification.userInfo?["conversationId"] as? String == conversation.id,
+          notification.userInfo?["prompt"] as? String == "add_task",
+          let index = notification.userInfo?["index"] as? Int, activeItems.indices.contains(index)
+        else { return }
+        let item = activeItems[index]
+        let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
+        if let linkedTaskID { onOpenLinkedTask?(linkedTaskID) } else { addActionItemToTasks(item) }
+      }
     }
   }
 
   private func row(_ item: ActionItem) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(item.completed ? Ink.listeningGreen : Ink.secondary)
-        .frame(width: 16)
-
-      Text(item.description)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-        .strikethrough(item.completed, color: Ink.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-
-      if let taskID = item.targetTaskID, let onOpenLinkedTask {
-        Button {
-          onOpenLinkedTask(taskID)
-        } label: {
-          DetailQuietButtonLabel(title: "Open linked task", systemImage: "checklist")
+    let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
+      item.sourceSegmentIDs, segments: conversation.transcriptSegments)
+    let linkedTaskID = onOpenLinkedTask == nil ? nil : item.targetTaskID
+    return ConversationActionItemRow(
+      item: item,
+      taskState: taskState(for: item, linkedTaskID: linkedTaskID),
+      transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
+      onTaskAction: {
+        if let linkedTaskID {
+          onOpenLinkedTask?(linkedTaskID)
+        } else {
+          addActionItemToTasks(item)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("chat-first-capture-task-\(taskID)")
-        .help("Open the task linked to this action item")
-      } else {
-        addToTasksButton(for: item)
-      }
-
-      let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
-        item.sourceSegmentIDs, segments: conversation.transcriptSegments)
-      Button {
+      },
+      onOpenTranscript: {
         ConversationDetailAutomationState.shared.requestOpen(
           conversationId: conversation.id,
           showTranscript: true,
           transcriptSegmentIds: sourceIDs
         )
-      } label: {
-        DetailQuietButtonLabel(title: sourceIDs.isEmpty ? "Transcript" : "Source", systemImage: "text.quote")
       }
-      .buttonStyle(.plain)
-      .help(sourceIDs.isEmpty ? "Open the full transcript" : "Show where this was said")
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
+    )
   }
 
-  @ViewBuilder
-  private func addToTasksButton(for item: ActionItem) -> some View {
-    let isAdded = addedActionItemIDs.contains(item.id)
-    let isAdding = addingActionItemIDs.contains(item.id)
-
-    Button {
-      addActionItemToTasks(item)
-    } label: {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: isAdded ? "checkmark" : "plus")
-        Text(isAdded ? "Added" : "Add to Tasks")
-      }
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isAdded ? Ink.listeningGreen : Ink.secondary)
-    }
-    .buttonStyle(.plain)
-    .disabled(isAdded || isAdding)
-    .opacity(isAdding ? 0.5 : 1)
-    .accessibilityIdentifier("action-item-add-to-tasks")
-    .help(isAdded ? "Already in your tasks" : "Add this to your tasks")
+  private func taskState(for item: ActionItem, linkedTaskID: String?) -> ActionItemTaskState {
+    if linkedTaskID != nil { return .linked }
+    if addedActionItemIDs.contains(item.id) { return .added }
+    if addingActionItemIDs.contains(item.id) { return .adding }
+    if failedActionItemIDs.contains(item.id) { return .failed }
+    return .idle
   }
 
+  /// Explicit, per-item promotion of a summary action item into the task list.
+  /// This gesture is the only way an extracted item becomes a task.
   private func addActionItemToTasks(_ item: ActionItem) {
     guard !addedActionItemIDs.contains(item.id), !addingActionItemIDs.contains(item.id) else { return }
     addingActionItemIDs.insert(item.id)
+    failedActionItemIDs.remove(item.id)
     Task { @MainActor in
       let created = await TasksStore.shared.createTask(
         description: item.description,
@@ -118,6 +103,8 @@ struct ConversationActionItemsSection: View {
       addingActionItemIDs.remove(item.id)
       if created != nil {
         addedActionItemIDs.insert(item.id)
+      } else {
+        failedActionItemIDs.insert(item.id)
       }
     }
   }
@@ -323,7 +310,7 @@ struct SuggestedAppCard: View {
               .frame(width: 56, height: 56)
 
             ProgressView()
-              .scaleEffect(0.7)
+              .controlSize(.small)
               .tint(Ink.surface)
           }
         }
