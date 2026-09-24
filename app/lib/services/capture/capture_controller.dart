@@ -1502,8 +1502,9 @@ class CaptureController extends ChangeNotifier
         // Process bytes through audio source and feed to WAL
         final frames = _activeSource?.processBytes(snapshot) ?? [];
         if (_isWalSupported) {
+          final phoneSync = _wal.getSyncs().phone;
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            phoneSync.onFrameCaptured(frame);
           }
         }
 
@@ -1518,8 +1519,9 @@ class CaptureController extends ChangeNotifier
 
           // Mark frames as synced
           if (_isWalSupported) {
+            final phoneSync = _wal.getSyncs().phone;
             for (final frame in frames) {
-              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              phoneSync.markFrameSynced(frame.syncKey);
             }
           }
         }
@@ -2091,13 +2093,14 @@ class CaptureController extends ChangeNotifier
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
+          final phoneSync = _wal.getSyncs().phone;
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            phoneSync.onFrameCaptured(frame);
 
             if (_socket?.state == SocketServiceState.connected) {
               _socket?.send(frame.payload);
               _recordingTelemetry.observeSent(frame.payload.length);
-              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              phoneSync.markFrameSynced(frame.syncKey);
             }
           }
         },
@@ -2162,12 +2165,13 @@ class CaptureController extends ChangeNotifier
     // Flush remaining phone mic WAL buffer before stopping
     if (_phoneMicWalActive) {
       final flushed = _activeSource?.flush() ?? [];
+      final phoneSync = _wal.getSyncs().phone;
       for (final frame in flushed) {
-        _wal.getSyncs().phone.onFrameCaptured(frame);
+        phoneSync.onFrameCaptured(frame);
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(frame.payload);
           _recordingTelemetry.observeSent(frame.payload.length);
-          _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+          phoneSync.markFrameSynced(frame.syncKey);
         }
       }
       _phoneMicWalActive = false;
