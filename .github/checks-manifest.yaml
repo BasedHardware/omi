@@ -890,6 +890,11 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
+  - id: trivia-quiz-app-tests
+    command: ["python3", "plugins/omi-trivia-quiz-app/test_main.py"]
+    triggers: ["plugins/omi-trivia-quiz-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open Trivia & quiz plugin must provide question retrieval, category listings, and rate-limit buffering with hermetic unit tests"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

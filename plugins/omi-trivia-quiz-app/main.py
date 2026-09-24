@@ -348,7 +348,8 @@ async def get_trivia_question(request: GetTriviaQuestionRequest) -> ChatToolResp
             _store_cached_questions(pool_key, results[1:])
         return ChatToolResponse(result=result_str)
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to fetch trivia question: {exc}")
+        logger.error("Failed to fetch trivia question: %s", exc)
+        return ChatToolResponse(error="Failed to fetch trivia question. Please try again.")
 
 
 @app.post("/tools/get_true_false_quiz", response_model=ChatToolResponse, response_model_exclude_none=True)
@@ -403,7 +404,8 @@ async def get_true_false_quiz(request: QuickTrueFalseQuizRequest) -> ChatToolRes
             _store_cached_questions(pool_key, results[1:])
         return ChatToolResponse(result=result_str)
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to fetch True/False quiz: {exc}")
+        logger.error("Failed to fetch True/False quiz: %s", exc)
+        return ChatToolResponse(error="Failed to fetch True/False quiz. Please try again.")
 
 
 @app.post("/tools/list_trivia_categories", response_model=ChatToolResponse, response_model_exclude_none=True)
