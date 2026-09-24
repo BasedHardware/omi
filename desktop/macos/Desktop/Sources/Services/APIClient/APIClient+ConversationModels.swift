@@ -144,6 +144,78 @@ struct CaptureConversationAudio: Codable, Equatable {
   }
 }
 
+/// Conversations from different capture surfaces (desktop, pendant, phone) that
+/// recorded one event. Server-authored only after the captures are shown to
+/// share speech; `id` is the event identity and survives a change of primary.
+struct ServerCaptureGroup: Codable, Equatable {
+  struct Member: Codable, Equatable {
+    let id: String
+    let source: ConversationSource
+    let startedAt: Date?
+    let finishedAt: Date?
+  }
+
+  let id: String
+  let primaryId: String
+  let revision: Int
+  let members: [Member]
+
+  init(id: String, primaryId: String, revision: Int, members: [Member]) {
+    self.id = id
+    self.primaryId = primaryId
+    self.revision = revision
+    self.members = members
+  }
+
+  init(_ wire: OmiAPI.CaptureGroup) {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let fallback = ISO8601DateFormatter()
+    let date = { (raw: String?) in raw.flatMap { formatter.date(from: $0) ?? fallback.date(from: $0) } }
+    id = wire.id
+    primaryId = wire.primaryId
+    revision = wire.revision ?? 1
+    members = (wire.members ?? []).map {
+      Member(
+        id: $0.id, source: $0.source.flatMap(ConversationSource.init(rawValue:)) ?? .unknown,
+        startedAt: date($0.startedAt), finishedAt: date($0.finishedAt))
+    }
+  }
+}
+
+/// One list row per capture group, built only from rows the client has loaded.
+///
+/// Every member stays in the loaded list (paging offsets count server rows), so
+/// a member whose group has no other loaded member is shown as itself: grouping
+/// can hide a duplicate, never a conversation.
+enum CaptureGroupPresentation {
+  static func collapse(_ conversations: [ServerConversation]) -> [ServerConversation] {
+    let representatives = representativeIds(conversations)
+    return conversations.filter { conversation in
+      guard let group = conversation.captureGroup, let representative = representatives[group.id] else {
+        return true
+      }
+      return representative == conversation.id
+    }
+  }
+
+  /// Group id → the member shown for it, for groups with at least two loaded members.
+  private static func representativeIds(_ conversations: [ServerConversation]) -> [String: String] {
+    var loaded: [String: [ServerConversation]] = [:]
+    for conversation in conversations {
+      if let groupId = conversation.captureGroup?.id {
+        loaded[groupId, default: []].append(conversation)
+      }
+    }
+    var result: [String: String] = [:]
+    for (groupId, members) in loaded where members.count > 1 {
+      let primary = members.first { $0.id == $0.captureGroup?.primaryId }
+      result[groupId] = (primary ?? members[0]).id
+    }
+    return result
+  }
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
@@ -156,6 +228,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
       && lhs.localSummary == rhs.localSummary
+      && lhs.captureGroup == rhs.captureGroup
   }
 
   let id: String
@@ -193,6 +266,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
   // cleared once enriched on first open (get_conversation_by_id).
   let deferred: Bool
+  /// Cross-surface event membership; nil for a conversation captured by one surface.
+  var captureGroup: ServerCaptureGroup?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -256,6 +331,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
     deferred = wire.deferred ?? false
+    captureGroup = wire.captureGroup.map(ServerCaptureGroup.init)
   }
 
   // Date helpers shared with Event/Structured adapters.
@@ -305,7 +381,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     folderId: String?,
     inputDeviceName: String?,
     deferred: Bool = false,
-    localSummary: ConversationLocalSummary? = nil
+    localSummary: ConversationLocalSummary? = nil,
+    captureGroup: ServerCaptureGroup? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -331,6 +408,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
     self.deferred = deferred
+    self.captureGroup = captureGroup
   }
 
   /// Returns the title from structured data, or a fallback.
