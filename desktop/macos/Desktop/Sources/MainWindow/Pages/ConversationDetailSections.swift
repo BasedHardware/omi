@@ -298,7 +298,7 @@ struct SuggestedAppCard: View {
               .frame(width: 56, height: 56)
 
             ProgressView()
-              .scaleEffect(0.7)
+              .controlSize(.small)
               .tint(Ink.surface)
           }
         }
