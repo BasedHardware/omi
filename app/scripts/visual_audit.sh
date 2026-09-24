@@ -8,9 +8,10 @@
 #
 # Each revision is checked out in a temporary detached worktree under $OMI_WORKTREES (default:
 # the system temp dir), prepared like CI (generated files, pub get, build_runner), and removed on
-# exit. The scenarios and harness come from THIS checkout's app/integration_test/visual_audit/,
-# copied over both sides, so both are captured by the same registry. A scenario must therefore
-# compile against both revisions.
+# exit. The harness and scenarios come from THIS checkout's app/integration_test/visual_audit/,
+# copied over both sides. A revision older than a compat suite's UNTIL commit is captured with
+# that suite (compat/<name>/), which pumps the equivalent pages under the same ids; a scenario that
+# only one side has shows as "did not exist" in the gallery.
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +19,7 @@ repo_root="$(git -C "$app_dir" rev-parse --show-toplevel)"
 tool_dir="$app_dir/integration_test/visual_audit"
 
 usage() { sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+list_ids() { grep -h -A1 "AuditScenario(" "$1"/*.dart | sed -n "s/^ *id: '\(.*\)',$/\1/p"; }
 
 base='' head='' only='' out=''
 while (($#)); do
@@ -27,7 +29,10 @@ while (($#)); do
     --only) only="${2:?--only needs comma-separated ids}"; shift 2 ;;
     --out) out="${2:?--out needs a directory}"; shift 2 ;;
     --list)
-      grep -h -A1 "AuditScenario(" "$tool_dir"/scenarios/*.dart | sed -n "s/^ *id: '\(.*\)',$/\1/p"
+      list_ids "$tool_dir/scenarios"
+      for suite in "$tool_dir"/compat/*/; do
+        [[ -d "$suite/scenarios" ]] && list_ids "$suite/scenarios" | sed "s|\$|  (compat/$(basename "$suite"))|"
+      done
       exit 0 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
@@ -35,7 +40,7 @@ while (($#)); do
 done
 [[ -n "$head" ]] || { usage >&2; exit 2; }
 if [[ -n "$only" ]]; then
-  known="$("${BASH_SOURCE[0]}" --list)"
+  known="$("${BASH_SOURCE[0]}" --list | awk '{print $1}')"
   for id in ${only//,/ }; do
     grep -qx "$id" <<<"$known" || { echo "Unknown scenario id: $id (see --list)" >&2; exit 2; }
   done
@@ -77,9 +82,24 @@ prepare() {
   )
 }
 
+# suite_for SHA: the compat suite for a revision older than its UNTIL commit (the earliest such
+# UNTIL wins), else "current".
+suite_for() {
+  local sha="$1" best='' best_time='' until until_sha t
+  for dir in "$snapshot"/visual_audit/compat/*/; do
+    [[ -f "$dir/UNTIL" ]] || continue
+    until="$(tr -d '[:space:]' < "$dir/UNTIL")"
+    until_sha="$(git -C "$repo_root" rev-parse --verify "$until^{commit}")"
+    git -C "$repo_root" merge-base --is-ancestor "$until_sha" "$sha" && continue
+    t="$(git -C "$repo_root" log -1 --format=%ct "$until_sha")"
+    if [[ -z "$best" || "$t" -lt "$best_time" ]]; then best="$(basename "$dir")"; best_time="$t"; fi
+  done
+  echo "${best:-current}"
+}
+
 # checkout SIDE REV: sets app_of_SIDE to the app dir that will be captured, and records the revision.
 checkout() {
-  local side="$1" rev="$2" sha app
+  local side="$1" rev="$2" sha app suite=current
   mkdir -p "$out/$side"
   if [[ "$rev" == WORKTREE ]]; then
     app="$app_dir"
@@ -93,10 +113,15 @@ checkout() {
     app="$wt/app"
     rm -rf "$app/integration_test/visual_audit"
     cp -R "$snapshot/visual_audit" "$app/integration_test/visual_audit"
+    suite="$(suite_for "$sha")"
+    if [[ "$suite" != current ]]; then
+      printf "// Written by app/scripts/visual_audit.sh for %s.\nexport 'compat/%s/registry.dart';\n" "$sha" "$suite" \
+        > "$app/integration_test/visual_audit/suite.dart"
+    fi
   fi
-  printf '{"rev": "%s", "sha": "%s"}\n' "$rev" "$sha" > "$out/$side/source.json"
+  printf '{"rev": "%s", "sha": "%s", "suite": "%s"}\n' "$rev" "$sha" "${suite:-current}" > "$out/$side/source.json"
   printf -v "app_of_$side" '%s' "$app"
-  echo "[$side] $rev = $sha"
+  echo "[$side] $rev = $sha (suite: ${suite:-current})"
 }
 
 # capture SIDE: writes $out/SIDE/{*.png,frames.json,scenarios.json,capture.log}. A failing

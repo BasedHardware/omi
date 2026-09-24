@@ -5,6 +5,9 @@
 //   * integration_test/visual_audit/capture_test.dart writes 2x PNGs (OMI_AUDIT_OUTPUT is set);
 //   * test/visual_audit/visual_audit_smoke_test.dart renders every scenario and writes nothing,
 //     so a scenario that stops compiling or throws fails the ordinary app test suite.
+//
+// This file is copied over older revisions (see compat/README.md), so it imports nothing from the
+// app beyond what every supported revision has: the theme and providers come from the suite.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -18,11 +21,25 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/ui/ui.dart';
 
 import '../journeys/support/fixture_backend.dart';
 import '../journeys/support/hermetic_boot.dart';
-import 'fakes.dart';
+
+/// The scenarios for one family of app revisions, with the theme and default providers they pump
+/// into. `registry.dart` is the suite for current main; `compat/<name>/registry.dart` holds the
+/// equivalent pages for older revisions, under the same ids where an equivalent exists.
+class AuditSuite {
+  const AuditSuite({required this.name, required this.scenarios, required this.providers, required this.theme});
+
+  final String name;
+  final List<AuditScenario> scenarios;
+
+  /// A provider for every type a registered page reads; a scenario's own providers win.
+  final List<SingleChildWidget> Function() providers;
+
+  /// The app's theme at this family of revisions.
+  final ThemeData Function() theme;
+}
 
 /// One registered screen state. [id] names its PNGs (`<id>.png`, or `<id>-<step>.png` for a
 /// scenario that captures several steps) and is what `--only` selects.
@@ -108,7 +125,7 @@ Directory? _materialFontsDir() {
 
 /// The per-scenario handle a scenario's [AuditScenario.run] drives.
 class AuditRun {
-  AuditRun._(this.tester, this.scenario, this.server, this._shots, this._write);
+  AuditRun._(this.tester, this.scenario, this.server, this._suite, this._shots, this._write);
 
   final WidgetTester tester;
   final AuditScenario scenario;
@@ -116,6 +133,7 @@ class AuditRun {
   /// The loopback fixture backend (hermetic boot), already started and signed in.
   final JourneyFixtureBackend server;
   final List<Map<String, Object?>> _shots;
+  final AuditSuite _suite;
   final bool _write;
 
   /// Pumps [page] inside the production theme and localizations, with a broad inert provider
@@ -124,7 +142,7 @@ class AuditRun {
     tester.view.physicalSize = auditViewport;
     tester.view.devicePixelRatio = 1;
     await tester.pumpWidget(MultiProvider(
-      providers: [...defaultAuditProviders(), ...providers],
+      providers: [..._suite.providers(), ...providers],
       child: RepaintBoundary(
         key: _surface,
         child: MaterialApp(
@@ -132,8 +150,8 @@ class AuditRun {
           navigatorKey: globalNavigatorKey,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
-          // The production theme (lib/ui/omi_theme.dart); Android font metrics (Roboto).
-          theme: buildOmiTheme(),
+          // The app's own theme at this revision; Android font metrics (Roboto).
+          theme: _suite.theme(),
           home: scaffold ? Scaffold(body: page) : page,
         ),
       ),
@@ -229,7 +247,8 @@ Directory? _outputDir;
 
 /// Registers one test per scenario. With [output] set, writes `<id>*.png` and `frames.json` there;
 /// without it (the smoke test), renders every scenario and writes nothing.
-void runAuditScenarios(List<AuditScenario> scenarios, {Directory? output}) {
+void runAuditScenarios(AuditSuite suite, {List<AuditScenario>? only, Directory? output}) {
+  final scenarios = only ?? suite.scenarios;
   final frames = <Map<String, Object?>>[];
   setUpAll(() async {
     HttpOverrides.global = LoopbackOnly();
@@ -243,7 +262,7 @@ void runAuditScenarios(List<AuditScenario> scenarios, {Directory? output}) {
       final server = await tester.runAsync(() => JourneyHermeticBoot.start(extraPrefs: scenario.prefs));
       addTearDown(() => server!.stop());
       final shots = <Map<String, Object?>>[];
-      await scenario.run(AuditRun._(tester, scenario, server!, shots, output != null));
+      await scenario.run(AuditRun._(tester, scenario, server!, suite, shots, output != null));
       // Unwind the page's animations and timers in the test body: flutter_test checks for pending
       // timers before tearDowns run, and 16 s of fake time outlasts the pooled HTTP client's 15 s
       // idle timer. A live binding would wait in real time and does not check timers.
