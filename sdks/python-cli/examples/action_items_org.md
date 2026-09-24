@@ -81,7 +81,7 @@ def items_from(source):
         )
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing action items")
-    
+
     parsed_items = []
     for item in items:
         if not isinstance(item, dict):
@@ -89,7 +89,7 @@ def items_from(source):
         item_id = item.get("id")
         if item_id is None or str(item_id).strip() == "":
             raise ValueError(f"{source}: action item is missing an id")
-        
+
         description = item.get("description") or item.get("title") or "Untitled Action Item"
         completed = bool(item.get("completed"))
         due_at = parse_iso_stamp(item.get("due_at"))
@@ -123,13 +123,13 @@ def convert_to_org(items, title="Omi Action Items"):
         status_kw = "DONE" if item["completed"] else "TODO"
         desc_headline = item["description"].splitlines()[0] if item["description"] else "Untitled Task"
         lines.append(f"* {status_kw} {desc_headline}")
-        
+
         meta_line = []
         if item["completed"] and item["completed_at"]:
             meta_line.append(f"CLOSED: {format_org_timestamp(item['completed_at'], active=False)}")
         if item["due_at"]:
             meta_line.append(f"DEADLINE: {format_org_timestamp(item['due_at'], active=True)}")
-        
+
         if meta_line:
             lines.append("  " + " ".join(meta_line))
 
@@ -158,7 +158,7 @@ def export(target_file, sources):
             if item["id"] not in seen_ids:
                 seen_ids.add(item["id"])
                 all_items.append(item)
-    
+
     org_content = convert_to_org(all_items)
     Path(target_file).write_text(org_content, encoding="utf-8")
     return len(all_items)

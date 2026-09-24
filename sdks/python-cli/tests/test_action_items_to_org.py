@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
-from action_items_to_org import export, convert_to_org, items_from
+from action_items_to_org import export, convert_to_org, items_from, escape_org_text
 
 
 class TestActionItemsToOrg(unittest.TestCase):
@@ -48,6 +48,13 @@ class TestActionItemsToOrg(unittest.TestCase):
             self.assertIn("* DONE Verify zero-defect quality gate", content)
             self.assertIn("CLOSED: [2026-09-24 Thu 05:10]", content)
             self.assertIn(":ID: task_2", content)
+
+    def test_escape_org_text_priority_cookies(self):
+        raw_text = "Task with [#A] high priority and [#B] medium priority"
+        escaped = escape_org_text(raw_text)
+        self.assertIn("[\u200b#A]", escaped)
+        self.assertIn("[\u200b#B]", escaped)
+        self.assertNotIn("[#A]", escaped)
 
 
 if __name__ == "__main__":
