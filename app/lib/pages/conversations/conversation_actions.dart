@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -230,10 +231,11 @@ Future<ConversationRowAction?> showConversationActionsSheet(
     title: title.isEmpty ? l10n.untitledConversation : title,
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
-      Widget row(ConversationRowAction action, IconData icon, String label, {bool destructive = false}) {
+      // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.
+      Widget row(ConversationRowAction action, FaIconData icon, String label, {bool destructive = false}) {
         return OmiSettingsRow(
           key: ValueKey('conversation_action_${action.name}'),
-          leading: Icon(icon),
+          leading: FaIcon(icon, size: 18),
           title: label,
           showChevron: false,
           isDestructive: destructive,
@@ -244,20 +246,20 @@ Future<ConversationRowAction?> showConversationActionsSheet(
       return SingleChildScrollView(
         child: OmiSettingsGroup(
           children: [
-            row(ConversationRowAction.open, Icons.open_in_full_rounded, l10n.open),
+            row(ConversationRowAction.open, FontAwesomeIcons.upRightAndDownLeftFromCenter, l10n.open),
             row(
               ConversationRowAction.star,
-              conversation.starred ? Icons.star_rounded : Icons.star_outline_rounded,
+              conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
               conversation.starred ? l10n.unstarConversation : l10n.starConversation,
             ),
-            row(ConversationRowAction.move, Icons.folder_outlined, l10n.moveToFolder),
-            row(ConversationRowAction.share, Icons.ios_share_rounded, l10n.share),
+            row(ConversationRowAction.move, FontAwesomeIcons.folder, l10n.moveToFolder),
+            row(ConversationRowAction.share, FontAwesomeIcons.arrowUpFromBracket, l10n.share),
             if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
-              row(ConversationRowAction.recordings, Icons.layers_outlined, l10n.recordings),
-              row(ConversationRowAction.separate, Icons.call_split_rounded, l10n.captureRecordingSeparate),
+              row(ConversationRowAction.recordings, FontAwesomeIcons.layerGroup, l10n.recordings),
+              row(ConversationRowAction.separate, FontAwesomeIcons.codeBranch, l10n.captureRecordingSeparate),
             ],
-            if (canSelect) row(ConversationRowAction.select, Icons.check_circle_outline_rounded, l10n.selectOption),
-            row(ConversationRowAction.delete, Icons.delete_outline, l10n.delete, destructive: true),
+            if (canSelect) row(ConversationRowAction.select, FontAwesomeIcons.circleCheck, l10n.selectOption),
+            row(ConversationRowAction.delete, FontAwesomeIcons.trashCan, l10n.delete, destructive: true),
           ],
         ),
       );
