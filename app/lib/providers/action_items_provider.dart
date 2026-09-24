@@ -96,6 +96,9 @@ class ActionItemsProvider extends ChangeNotifier {
   // IDs of action items that have been optimistically deleted but whose server
   // delete may still be in flight. Guarded against re-insertion by fetch/load.
   final Set<String> _pendingDeletionIds = {};
+  final Set<String> _pendingCompletionIds = {};
+  // Each active read remembers completion changes made while it was in flight.
+  final Set<Map<String, bool>> _completionChangesDuringFetches = {};
 
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
   // from every list, not yet deleted on the server.
@@ -114,6 +117,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
+  bool isUpdatingActionItemState(String id) => _pendingCompletionIds.contains(id);
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
   bool get showCompletedView => _showCompletedView;
@@ -318,9 +322,49 @@ class ActionItemsProvider extends ChangeNotifier {
     DateTime? dueEndDate,
     void Function(ApiResult<ActionItemsResponse> typed)? onTyped,
   }) async {
-    final typedApi = _actionItemsApi;
-    if (typedApi != null) {
-      final typed = await typedApi.list(
+    final completionChanges = <String, bool>{
+      for (final item in _actionItems.followedBy(_homeDayItems))
+        if (_pendingCompletionIds.contains(item.id)) item.id: item.completed,
+    };
+    _completionChangesDuringFetches.add(completionChanges);
+
+    ActionItemsResponse preserveCompletionChanges(ActionItemsResponse response) => completionChanges.isEmpty
+        ? response
+        : ActionItemsResponse(
+            actionItems: response.actionItems
+                .map((item) => completionChanges.containsKey(item.id)
+                    ? item.copyWith(completed: completionChanges[item.id])
+                    : item)
+                .toList(),
+            hasMore: response.hasMore,
+            truncated: response.truncated,
+          );
+
+    try {
+      final typedApi = _actionItemsApi;
+      if (typedApi != null) {
+        final typed = await typedApi.list(
+          limit: limit,
+          offset: offset,
+          completed: completed,
+          conversationId: conversationId,
+          startDate: startDate,
+          endDate: endDate,
+          dueStartDate: dueStartDate,
+          dueEndDate: dueEndDate,
+        );
+        final reconciled = switch (typed) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(preserveCompletionChanges(data), rejectedRows: rejectedRows),
+          ApiFailure() => typed,
+        };
+        onTyped?.call(reconciled);
+        return switch (reconciled) {
+          ApiSuccess(:final data) => data,
+          ApiFailure() => null,
+        };
+      }
+      final response = await _getActionItems(
         limit: limit,
         offset: offset,
         completed: completed,
@@ -330,22 +374,10 @@ class ActionItemsProvider extends ChangeNotifier {
         dueStartDate: dueStartDate,
         dueEndDate: dueEndDate,
       );
-      onTyped?.call(typed);
-      return switch (typed) {
-        ApiSuccess(:final data) => data,
-        ApiFailure() => null,
-      };
+      return response == null ? null : preserveCompletionChanges(response);
+    } finally {
+      _completionChangesDuringFetches.remove(completionChanges);
     }
-    return _getActionItems(
-      limit: limit,
-      offset: offset,
-      completed: completed,
-      conversationId: conversationId,
-      startDate: startDate,
-      endDate: endDate,
-      dueStartDate: dueStartDate,
-      dueEndDate: dueEndDate,
-    );
   }
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
@@ -450,6 +482,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+    if (!_pendingCompletionIds.add(item.id)) return false;
+    final previousState =
+        _actionItems.followedBy(_homeDayItems).firstWhere((row) => row.id == item.id, orElse: () => item).completed;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
       surface: ProductSurface.tasks,
@@ -464,8 +499,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final success = await _updateActionItemRequest(item.id, completed: newState);
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
-        notifyListeners();
+        _findAndUpdateItemState(item.id, previousState);
         Logger.debug('Failed to update action item state on server');
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
@@ -485,11 +519,13 @@ class ActionItemsProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      _findAndUpdateItemState(item.id, !newState);
-      notifyListeners();
+      _findAndUpdateItemState(item.id, previousState);
       Logger.debug('Error updating action item state: $e');
       attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
       return false;
+    } finally {
+      _pendingCompletionIds.remove(item.id);
+      if (hasListeners) notifyListeners();
     }
   }
 
@@ -903,6 +939,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
+    for (final changes in _completionChangesDuringFetches) {
+      changes[itemId] = newState;
+    }
     ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {

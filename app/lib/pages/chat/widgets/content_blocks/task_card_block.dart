@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/chat_content_block.dart';
+import 'package:omi/pages/action_items/action_item_completion.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -25,7 +26,6 @@ class TaskCardBlock extends StatefulWidget {
 }
 
 class _TaskCardBlockState extends State<TaskCardBlock> {
-  bool _isToggling = false;
   bool _hydrated = false;
 
   @override
@@ -43,16 +43,6 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
       if (item.id == widget.block.taskId || item.taskId == widget.block.taskId) return item;
     }
     return null;
-  }
-
-  Future<void> _toggle(ActionItemsProvider provider, ActionItemWithMetadata item) async {
-    if (_isToggling) return;
-    setState(() => _isToggling = true);
-    try {
-      await provider.updateActionItemState(item, !item.completed);
-    } finally {
-      if (mounted) setState(() => _isToggling = false);
-    }
   }
 
   @override
@@ -92,7 +82,9 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
                   OmiIconButton(
                     key: Key('chat-block-taskCard-${widget.block.id}-toggle'),
                     label: item.completed ? l10n.markIncomplete : l10n.markComplete,
-                    onPressed: _isToggling ? null : () => _toggle(provider, item),
+                    onPressed: provider.isUpdatingActionItemState(item.id)
+                        ? null
+                        : () => setActionItemCompleted(this.context, provider, item, !item.completed),
                     color: item.completed ? OmiColors.success : OmiColors.textSecondary,
                     icon: Icon(item.completed ? Icons.check_circle : Icons.circle_outlined, size: 20),
                   ),
