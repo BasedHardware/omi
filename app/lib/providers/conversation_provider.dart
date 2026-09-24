@@ -1438,9 +1438,11 @@ class ConversationProvider extends ChangeNotifier {
   Map<String, ServerConversation> memoriesToDelete = {};
   final Map<String, Timer> _pendingDeleteTimers = {};
 
-  /// How long a deleted conversation stays restorable. Outlasts the 5 s Undo toast
-  /// (`OmiFeedbackTiming.undo`); the toast commits early via [commitPendingDelete] when it closes.
-  static const pendingDeleteWindow = Duration(seconds: 6);
+  /// How long a deleted conversation stays restorable. Well past the 5 s Undo toast
+  /// (`OmiFeedbackTiming.undo`) so a toast that starts late behind other snack bars still gets its
+  /// full time; the toast commits early via [commitPendingDelete] when it closes, so the usual
+  /// delete still reaches the server about 5 s after the swipe.
+  static const pendingDeleteWindow = Duration(seconds: 10);
 
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     if (memoriesToDelete.isEmpty) return items;

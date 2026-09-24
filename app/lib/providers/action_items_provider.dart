@@ -726,7 +726,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
     if (!success) {
       _pendingDeletionIds.remove(id);
-      _restoreDeletedItem(staged.item, staged.index == -1 ? 0 : staged.index);
+      _restoreDeletedItem(staged.item, staged.index);
       if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
         _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
         notifyListeners();

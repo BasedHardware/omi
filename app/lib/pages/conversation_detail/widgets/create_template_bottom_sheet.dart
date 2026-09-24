@@ -102,6 +102,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
       final result = await getGeneratedDescriptionAndEmoji(name, prompt);
       final description = result.description;
       final emoji = result.emoji;
+      if (!mounted) return;
 
       setState(() {
         _statusMessage = context.l10n.creatingAppIcon;
@@ -109,6 +110,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
       // Create simple emoji icon
       final iconFile = await _createEmojiIcon(emoji);
+      if (!mounted) return;
 
       setState(() {
         _statusMessage = context.l10n.creatingYourApp;

@@ -31,7 +31,7 @@ Future<void> deleteMemoryWithUndo(BuildContext context, MemoriesProvider provide
   final undone = await OmiFeedback.undo(
     context,
     context.l10n.memoryDeleted,
-    onUndo: () => provider.restoreLastDeletedMemory(),
+    onUndo: () => provider.restoreLastDeletedMemory(id: memory.id),
   );
   if (!undone) await provider.confirmPendingDeletion(id: memory.id);
 }

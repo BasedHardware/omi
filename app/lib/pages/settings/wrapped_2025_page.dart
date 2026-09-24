@@ -170,6 +170,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     });
 
     final response = await generateWrapped2025();
+    if (!mounted) return;
 
     if (response != null) {
       setState(() {

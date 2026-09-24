@@ -68,11 +68,12 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Disconnect from Todoist'));
+      await tester.tap(find.widgetWithText(OmiButton, 'Disconnect'));
       await tester.pumpAndSettle();
 
       expect(find.text('Disconnect from Todoist?'), findsOneWidget);
-      final confirm = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Disconnect'));
+      final confirm = tester.widget<TextButton>(
+          find.widgetWithText(TextButton, 'Disconnect').last); // the dialog's, above the page button
       expect(confirm.style!.foregroundColor!.resolve({}), omiDialogDangerColor);
       // The page's button must not be busy just because the confirm is showing.
       expect(find.byType(OmiSpinner), findsNothing);
@@ -82,7 +83,7 @@ void main() {
 
       expect(disconnectCalls, 0);
       expect(find.byType(OmiSpinner), findsNothing);
-      expect(find.text('Disconnect from Todoist'), findsOneWidget);
+      expect(find.widgetWithText(OmiButton, 'Disconnect'), findsOneWidget);
     });
   });
 

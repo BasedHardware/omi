@@ -134,7 +134,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
               ),
               const SizedBox(height: OmiSpacing.md),
               OmiButton.destructive(
-                label: context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
+                label: context.l10n.disconnect,
                 icon: Icons.logout,
                 // Not the future: the button spins only while the disconnect runs, not while the
                 // confirm dialog is open.
