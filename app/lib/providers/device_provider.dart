@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
@@ -20,6 +19,7 @@ import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -131,7 +131,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
+    SyncHealthWatchdog.instance.startWatchdog();
   }
+
+  /// Current sync health evaluation for the paired device (#15501).
+  SyncHealthEvaluation get syncHealth => SyncHealthWatchdog.instance.evaluateSyncHealth(triggerNotification: false);
+
+  /// Whether synchronization has stalled beyond the threshold for the paired device (#15501).
+  bool get isSyncStalled => syncHealth.isStalled;
 
   bool _isCurrent(int generation) => !_isDisposed && generation >= 0 && generation == _sessionGeneration;
 
@@ -679,6 +686,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwarePromptTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
+    SyncHealthWatchdog.instance.stopWatchdog();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -731,6 +739,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+
+    // Check sync health on disconnect to detect long-stalled states (#15501)
+    SyncHealthWatchdog.instance.evaluateSyncHealth();
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -779,6 +790,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await setisDeviceStorageSupport();
     if (!_isCurrent(generation)) return;
     setIsConnected(true);
+    SyncHealthWatchdog.instance.recordSyncActivity(source: 'device_connected');
 
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);

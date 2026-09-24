@@ -10,6 +10,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/audio_player_utils.dart';
@@ -287,6 +288,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     if (outcome == LocalUploadOutcome.started) {
       // Accepted (200 completed or 202 queued): clear any failure bookkeeping.
       _autoFailures.remove(fileName);
+      SyncHealthWatchdog.instance.recordSyncActivity(source: 'local_upload');
       if (!auto) PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
       return;
     }
