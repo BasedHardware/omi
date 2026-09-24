@@ -13,8 +13,10 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 def _fake_tool(fn=None, *args, **kwargs):
     if fn is not None and callable(fn):
         return fn
+
     def decorator(func):
         return func
+
     return decorator
 
 
@@ -23,18 +25,20 @@ class TestScreenActivityToolsSanitization(unittest.TestCase):
         tools_mock = AutoMockModule("langchain_core.tools")
         tools_mock.tool = _fake_tool
 
-        self._stub_cm = stub_modules({
-            "langchain_core": AutoMockModule("langchain_core"),
-            "langchain_core.tools": tools_mock,
-            "langchain_core.runnables": AutoMockModule("langchain_core.runnables"),
-            "database": AutoMockModule("database"),
-            "database.screen_activity": AutoMockModule("database.screen_activity"),
-            "database.vector_db": AutoMockModule("database.vector_db"),
-            "database.notifications": AutoMockModule("database.notifications"),
-            "database._client": AutoMockModule("database._client"),
-            "utils.llm.clients": AutoMockModule("utils.llm.clients"),
-            "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
-        })
+        self._stub_cm = stub_modules(
+            {
+                "langchain_core": AutoMockModule("langchain_core"),
+                "langchain_core.tools": tools_mock,
+                "langchain_core.runnables": AutoMockModule("langchain_core.runnables"),
+                "database": AutoMockModule("database"),
+                "database.screen_activity": AutoMockModule("database.screen_activity"),
+                "database.vector_db": AutoMockModule("database.vector_db"),
+                "database.notifications": AutoMockModule("database.notifications"),
+                "database._client": AutoMockModule("database._client"),
+                "utils.llm.clients": AutoMockModule("utils.llm.clients"),
+                "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
+            }
+        )
         self._stub_cm.__enter__()
         tools_path = str(Path(backend_dir) / "utils" / "retrieval" / "tools" / "screen_activity_tools.py")
         self.screen_tools = load_module_fresh("utils.retrieval.tools.screen_activity_tools", tools_path)
@@ -54,6 +58,7 @@ class TestScreenActivityToolsSanitization(unittest.TestCase):
 
     def test_get_screen_activity_tool_db_exception_sanitized(self):
         import database.screen_activity as screen_activity_db
+
         screen_activity_db.get_screen_activity_summary = MagicMock(
             side_effect=RuntimeError("Firestore connection refused: internal_secret_key=xyz")
         )
