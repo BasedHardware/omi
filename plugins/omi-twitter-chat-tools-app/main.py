@@ -1154,7 +1154,7 @@ async def twitter_callback(
             )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.status_code}: {response.text}")
+            log(f"Token exchange failed: {response.status_code}")
             return HTMLResponse(content="Token exchange failed", status_code=400)
 
         token_response = response.json()
