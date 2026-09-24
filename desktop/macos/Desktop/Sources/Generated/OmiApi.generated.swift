@@ -3127,6 +3127,23 @@ public enum OmiAPI {
   }
 
 
+  public struct Insight: Codable {
+    public let kind: String
+    public let text: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      kind = try c.decode(String.self, forKey: .kind)
+      text = try c.decode(String.self, forKey: .text)
+    }
+
+    public init(kind: String, text: String) {
+      self.kind = kind
+      self.text = text
+    }
+  }
+
+
   public struct InterventionCreate: Codable {
     public let dedupeKey: String
     public let evidenceRefs: [EvidenceRef]?
@@ -3923,6 +3940,44 @@ public enum OmiAPI {
   }
 
 
+  public struct Participant: Codable {
+    public let email: String?
+    public let isAiAgent: Bool?
+    public let name: String?
+    public let organization: String?
+    public let role: String?
+    public let source: String
+
+    private enum CodingKeys: String, CodingKey {
+      case email
+      case isAiAgent = "is_ai_agent"
+      case name
+      case organization
+      case role
+      case source
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      email = try c.decodeIfPresent(String.self, forKey: .email)
+      isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
+      name = try c.decodeIfPresent(String.self, forKey: .name)
+      organization = try c.decodeIfPresent(String.self, forKey: .organization)
+      role = try c.decodeIfPresent(String.self, forKey: .role)
+      source = try c.decode(String.self, forKey: .source)
+    }
+
+    public init(email: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+      self.email = email
+      self.isAiAgent = isAiAgent
+      self.name = name
+      self.organization = organization
+      self.role = role
+      self.source = source
+    }
+  }
+
+
   public struct PluginResult: Codable {
     public let content: String
     public let pluginId: String?
@@ -4269,11 +4324,13 @@ public enum OmiAPI {
   public struct Section: Codable {
     public let bodyMarkdown: String
     public let heading: String
+    public let kind: String?
     public let sourceSegmentIds: [String]?
 
     private enum CodingKeys: String, CodingKey {
       case bodyMarkdown = "body_markdown"
       case heading
+      case kind
       case sourceSegmentIds = "source_segment_ids"
     }
 
@@ -4281,12 +4338,14 @@ public enum OmiAPI {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       bodyMarkdown = try c.decode(String.self, forKey: .bodyMarkdown)
       heading = try c.decode(String.self, forKey: .heading)
+      kind = try c.decodeIfPresent(String.self, forKey: .kind)
       sourceSegmentIds = try c.decodeIfPresent([String].self, forKey: .sourceSegmentIds)
     }
 
-    public init(bodyMarkdown: String, heading: String, sourceSegmentIds: [String]? = nil) {
+    public init(bodyMarkdown: String, heading: String, kind: String? = nil, sourceSegmentIds: [String]? = nil) {
       self.bodyMarkdown = bodyMarkdown
       self.heading = heading
+      self.kind = kind
       self.sourceSegmentIds = sourceSegmentIds
     }
   }
@@ -4357,7 +4416,10 @@ public enum OmiAPI {
     public let category: CategoryEnum?
     public let emoji: String?
     public let events: [Event]?
+    public let insights: [Insight]?
+    public let meetingType: String?
     public let overview: String?
+    public let participants: [Participant]?
     public let sections: [Section]?
     public let title: String?
 
@@ -4366,7 +4428,10 @@ public enum OmiAPI {
       case category
       case emoji
       case events
+      case insights
+      case meetingType = "meeting_type"
       case overview
+      case participants
       case sections
       case title
     }
@@ -4377,17 +4442,23 @@ public enum OmiAPI {
       category = try c.decodeIfPresent(CategoryEnum.self, forKey: .category)
       emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
       events = try c.decodeIfPresent([Event].self, forKey: .events)
+      insights = try c.decodeIfPresent([Insight].self, forKey: .insights)
+      meetingType = try c.decodeIfPresent(String.self, forKey: .meetingType)
       overview = try c.decodeIfPresent(String.self, forKey: .overview)
+      participants = try c.decodeIfPresent([Participant].self, forKey: .participants)
       sections = try c.decodeIfPresent([Section].self, forKey: .sections)
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, overview: String? = nil, sections: [Section]? = nil, title: String? = nil) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, overview: String? = nil, participants: [Participant]? = nil, sections: [Section]? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
       self.events = events
+      self.insights = insights
+      self.meetingType = meetingType
       self.overview = overview
+      self.participants = participants
       self.sections = sections
       self.title = title
     }
