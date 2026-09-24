@@ -10873,6 +10873,8 @@ class AppLocalizationsZh extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count人',
+      many: '$count人',
+      few: '$count人',
       one: '1人',
     );
     return '$name + $_temp0';

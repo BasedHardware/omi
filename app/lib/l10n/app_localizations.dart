@@ -20190,7 +20190,7 @@ abstract class AppLocalizations {
   /// Conversation header people chip: the first named participant and how many others took part, e.g. 'David + 3 others'
   ///
   /// In en, this message translates to:
-  /// **'{name} + {count, plural, =1{1 other} other{{count} others}}'**
+  /// **'{name} + {count, plural, =1{1 other} few{{count} others} many{{count} others} other{{count} others}}'**
   String participantsSummary(String name, int count);
 }
 

@@ -11068,6 +11068,8 @@ class AppLocalizationsVi extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count người khác',
+      many: '$count người khác',
+      few: '$count người khác',
       one: '1 người khác',
     );
     return '$name + $_temp0';

@@ -11063,6 +11063,8 @@ class AppLocalizationsEn extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count others',
+      many: '$count others',
+      few: '$count others',
       one: '1 other',
     );
     return '$name + $_temp0';

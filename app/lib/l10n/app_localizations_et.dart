@@ -11071,6 +11071,8 @@ class AppLocalizationsEt extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count teist',
+      many: '$count teist',
+      few: '$count teist',
       one: '1 teine',
     );
     return '$name + $_temp0';

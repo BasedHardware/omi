@@ -11083,6 +11083,8 @@ class AppLocalizationsMr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count इतर',
+      many: '$count इतर',
+      few: '$count इतर',
       one: '1 इतर',
     );
     return '$name + $_temp0';

@@ -11083,6 +11083,8 @@ class AppLocalizationsId extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count lainnya',
+      many: '$count lainnya',
+      few: '$count lainnya',
       one: '1 lainnya',
     );
     return '$name + $_temp0';

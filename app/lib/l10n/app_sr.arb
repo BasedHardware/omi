@@ -11072,5 +11072,5 @@
     "captureSourcePendant": "Привезак",
     "conversationDeveloperTools": "Алати за програмере у разговорима",
     "conversationDeveloperToolsDescription": "Прикажи „Копирај ID разговора“ и „Тестирај упит“ у менију разговора",
-    "participantsSummary": "{name} + {count, plural, =1{1 други} other{{count} других}}"
+    "participantsSummary": "{name} + {count, plural, =1{још 1} few{још {count}} many{још {count}} other{још {count}}}"
 }

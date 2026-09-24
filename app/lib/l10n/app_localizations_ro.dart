@@ -11125,6 +11125,8 @@ class AppLocalizationsRo extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count alții',
+      many: '$count alții',
+      few: '$count alții',
       one: '1 altul',
     );
     return '$name + $_temp0';

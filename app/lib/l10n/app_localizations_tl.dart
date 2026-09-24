@@ -11171,6 +11171,8 @@ class AppLocalizationsTl extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count iba pa',
+      many: '$count iba pa',
+      few: '$count iba pa',
       one: '1 iba pa',
     );
     return '$name + $_temp0';

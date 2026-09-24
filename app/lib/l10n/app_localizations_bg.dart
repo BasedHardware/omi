@@ -11116,6 +11116,8 @@ class AppLocalizationsBg extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count други',
+      many: '$count други',
+      few: '$count други',
       one: '1 друг',
     );
     return '$name + $_temp0';

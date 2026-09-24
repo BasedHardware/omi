@@ -11065,6 +11065,8 @@ class AppLocalizationsSk extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count ďalších',
+      many: '$count ďalších',
+      few: '$count ďalší',
       one: '1 ďalší',
     );
     return '$name + $_temp0';

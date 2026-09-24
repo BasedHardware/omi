@@ -3535,5 +3535,5 @@
     "captureSourcePendant": "Wisiorek",
     "conversationDeveloperTools": "Narzędzia deweloperskie w rozmowach",
     "conversationDeveloperToolsDescription": "Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy",
-    "participantsSummary": "{name} + {count, plural, =1{1 inna osoba} other{{count} inne osoby}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 inna osoba} few{{count} inne osoby} many{{count} innych osób} other{{count} innych osób}}"
 }

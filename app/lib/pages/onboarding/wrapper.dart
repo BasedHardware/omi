@@ -20,7 +20,6 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -202,11 +201,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void _goBack() {
     final previous = _previousStep;
     if (previous == null) return;
-    if (_controller!.index == kSpeechProfilePage) {
-      // Never leave while the introduction is saving; its own PopScope blocks too.
-      if (_speechStepBusy) return;
-      context.read<SpeechProfileProvider>().close();
-    }
+    // Never leave while the introduction is saving; its own PopScope blocks too.
+    if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
     OmiHaptics.selection();
     _controller!.animateTo(previous);
   }

@@ -10984,6 +10984,8 @@ class AppLocalizationsHe extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count נוספים',
+      many: '$count נוספים',
+      few: '$count נוספים',
       one: '1 נוסף',
     );
     return '$name + $_temp0';

@@ -11100,8 +11100,10 @@ class AppLocalizationsLv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count citi',
-      one: '1 cits',
+      other: 'vēl $count',
+      many: 'vēl $count',
+      few: 'vēl $count',
+      one: 'vēl 1',
     );
     return '$name + $_temp0';
   }

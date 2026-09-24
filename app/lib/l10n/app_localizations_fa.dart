@@ -11071,6 +11071,8 @@ class AppLocalizationsFa extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count نفر دیگر',
+      many: '$count نفر دیگر',
+      few: '$count نفر دیگر',
       one: '1 نفر دیگر',
     );
     return '$name + $_temp0';

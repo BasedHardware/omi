@@ -3500,5 +3500,5 @@
     "captureSourcePendant": "Hanger",
     "conversationDeveloperTools": "Ontwikkelaarstools in gesprekken",
     "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek",
-    "participantsSummary": "{name} + {count, plural, =1{1 ander} other{{count} anderen}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 ander} few{{count} anderen} many{{count} anderen} other{{count} anderen}}"
 }

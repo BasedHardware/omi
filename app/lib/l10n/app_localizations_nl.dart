@@ -11108,6 +11108,8 @@ class AppLocalizationsNl extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count anderen',
+      many: '$count anderen',
+      few: '$count anderen',
       one: '1 ander',
     );
     return '$name + $_temp0';

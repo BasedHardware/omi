@@ -11084,6 +11084,8 @@ class AppLocalizationsUr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count دیگر',
+      many: '$count دیگر',
+      few: '$count دیگر',
       one: '1 دیگر',
     );
     return '$name + $_temp0';

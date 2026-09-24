@@ -3535,5 +3535,5 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Инструменты разработчика в разговорах",
     "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора",
-    "participantsSummary": "{name} + {count, plural, =1{ещё 1} other{ещё {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{ещё 1} few{ещё {count}} many{ещё {count}} other{ещё {count}}}"
 }

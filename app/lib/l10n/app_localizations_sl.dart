@@ -11105,8 +11105,10 @@ class AppLocalizationsSl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count drugih',
-      one: '1 drug',
+      other: 'še $count',
+      many: 'še $count',
+      few: 'še $count',
+      one: 'še 1',
     );
     return '$name + $_temp0';
   }

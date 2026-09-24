@@ -11072,5 +11072,5 @@
     "captureSourcePendant": "Obesek",
     "conversationDeveloperTools": "Razvijalska orodja v pogovorih",
     "conversationDeveloperToolsDescription": "Pokaži Kopiraj ID pogovora in Preizkusi poziv v meniju pogovora",
-    "participantsSummary": "{name} + {count, plural, =1{1 drug} other{{count} drugih}}"
+    "participantsSummary": "{name} + {count, plural, =1{še 1} few{še {count}} many{še {count}} other{še {count}}}"
 }

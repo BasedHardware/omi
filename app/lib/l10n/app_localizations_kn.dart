@@ -11108,6 +11108,8 @@ class AppLocalizationsKn extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count ಇತರರು',
+      many: '$count ಇತರರು',
+      few: '$count ಇತರರು',
       one: '1 ಇತರರು',
     );
     return '$name + $_temp0';

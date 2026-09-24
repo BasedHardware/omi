@@ -11117,6 +11117,8 @@ class AppLocalizationsHu extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count másik',
+      many: '$count másik',
+      few: '$count másik',
       one: '1 másik',
     );
     return '$name + $_temp0';

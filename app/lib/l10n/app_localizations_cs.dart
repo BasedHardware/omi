@@ -11071,6 +11071,8 @@ class AppLocalizationsCs extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count dalších',
+      many: '$count dalších',
+      few: '$count další',
       one: '1 další',
     );
     return '$name + $_temp0';

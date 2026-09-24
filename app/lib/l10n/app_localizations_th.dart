@@ -11009,6 +11009,8 @@ class AppLocalizationsTh extends AppLocalizations {
       count,
       locale: localeName,
       other: '$countคน',
+      many: '$countคน',
+      few: '$countคน',
       one: '1คน',
     );
     return '$name + $_temp0';

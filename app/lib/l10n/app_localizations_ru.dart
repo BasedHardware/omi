@@ -11110,6 +11110,8 @@ class AppLocalizationsRu extends AppLocalizations {
       count,
       locale: localeName,
       other: 'ещё $count',
+      many: 'ещё $count',
+      few: 'ещё $count',
       one: 'ещё 1',
     );
     return '$name + $_temp0';

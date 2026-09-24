@@ -11076,6 +11076,8 @@ class AppLocalizationsBn extends AppLocalizations {
       count,
       locale: localeName,
       other: 'আরও $count জন',
+      many: 'আরও $count জন',
+      few: 'আরও $count জন',
       one: 'আরও ১ জন',
     );
     return '$name + $_temp0';

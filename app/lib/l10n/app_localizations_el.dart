@@ -11150,6 +11150,8 @@ class AppLocalizationsEl extends AppLocalizations {
       count,
       locale: localeName,
       other: 'ακόμη $count',
+      many: 'ακόμη $count',
+      few: 'ακόμη $count',
       one: 'ακόμη 1',
     );
     return '$name + $_temp0';

@@ -11072,5 +11072,5 @@
     "captureSourcePendant": "Pendant",
     "conversationDeveloperTools": "Mga developer tool sa mga usapan",
     "conversationDeveloperToolsDescription": "Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan",
-    "participantsSummary": "{name} + {count, plural, =1{1 iba pa} other{{count} iba pa}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 iba pa} few{{count} iba pa} many{{count} iba pa} other{{count} iba pa}}"
 }

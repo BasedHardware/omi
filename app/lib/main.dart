@@ -67,7 +67,6 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -500,11 +499,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
         ),
         ListenableProvider(create: (context) => HomeProvider()),
-        ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
-          create: (context) => SpeechProfileProvider(),
-          update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-              (previous?..setProviders(device)) ?? SpeechProfileProvider(),
-        ),
         ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
           create: (context) => ConversationDetailProvider(),
           update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>

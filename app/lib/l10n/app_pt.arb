@@ -3535,5 +3535,5 @@
     "captureSourcePendant": "Pendente",
     "conversationDeveloperTools": "Ferramentas de programador nas conversas",
     "conversationDeveloperToolsDescription": "Mostrar Copiar ID da conversa e Testar prompt no menu da conversa",
-    "participantsSummary": "{name} + {count, plural, =1{1 outro} other{{count} outros}}"
+    "participantsSummary": "{name} + {count, plural, =1{1 outro} few{{count} outros} many{{count} outros} other{{count} outros}}"
 }

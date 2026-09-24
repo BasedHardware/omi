@@ -11073,6 +11073,8 @@ class AppLocalizationsNo extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count andre',
+      many: '$count andre',
+      few: '$count andre',
       one: '1 annen',
     );
     return '$name + $_temp0';

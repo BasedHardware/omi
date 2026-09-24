@@ -11072,5 +11072,5 @@
     "captureSourcePendant": "Privjesak",
     "conversationDeveloperTools": "Alati za razvojne programere u razgovorima",
     "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj upit u izborniku razgovora",
-    "participantsSummary": "{name} + {count, plural, =1{1 drugi} other{{count} drugih}}"
+    "participantsSummary": "{name} + {count, plural, =1{još 1} few{još {count}} many{još {count}} other{još {count}}}"
 }

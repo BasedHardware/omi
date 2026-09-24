@@ -10896,6 +10896,8 @@ class AppLocalizationsKo extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count명',
+      many: '$count명',
+      few: '$count명',
       one: '1명',
     );
     return '$name + $_temp0';

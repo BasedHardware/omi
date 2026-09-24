@@ -11166,6 +11166,8 @@ class AppLocalizationsDe extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count weitere',
+      many: '$count weitere',
+      few: '$count weitere',
       one: '1 weitere Person',
     );
     return '$name + $_temp0';

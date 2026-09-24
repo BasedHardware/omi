@@ -11054,6 +11054,8 @@ class AppLocalizationsHi extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count अन्य',
+      many: '$count अन्य',
+      few: '$count अन्य',
       one: '1 अन्य',
     );
     return '$name + $_temp0';

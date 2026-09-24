@@ -11006,6 +11006,8 @@ class AppLocalizationsAr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count آخرين',
+      many: '$count آخرين',
+      few: '$count آخرين',
       one: '1 آخر',
     );
     return '$name + $_temp0';

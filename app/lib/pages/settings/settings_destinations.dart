@@ -107,8 +107,6 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   }
 }
 
-/// The one Voice Profile entry point (chat-apps-settings #25): the guided voice setup when there is
-/// no voice profile yet, otherwise the Voice Profile page (listen, re-record).
 /// The one voice-profile flow: the guided introduction (#14514), where sentence starters become
 /// the voice sample, memories and a goal. Every entry point opens it, with or without an existing
 /// voice profile; the older question-based redo page is no longer reachable (see the PR notes).

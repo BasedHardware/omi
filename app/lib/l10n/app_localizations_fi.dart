@@ -11077,6 +11077,8 @@ class AppLocalizationsFi extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count muuta',
+      many: '$count muuta',
+      few: '$count muuta',
       one: '1 muu',
     );
     return '$name + $_temp0';

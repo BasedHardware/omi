@@ -11083,6 +11083,8 @@ class AppLocalizationsSv extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count andra',
+      many: '$count andra',
+      few: '$count andra',
       one: '1 annan',
     );
     return '$name + $_temp0';
