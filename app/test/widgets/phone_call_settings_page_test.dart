@@ -91,7 +91,7 @@ void main() {
           id: 'n1',
           isPrimary: true,
           phoneNumber: '+14155550100',
-          verifiedAt: DateTime.utc(2025, 1, 2).toIso8601String(),
+          verifiedAt: DateTime(2025, 1, 2, 12).toUtc().toIso8601String(), // local noon: "Jan 2" in every zone
         ),
       ],
     );
