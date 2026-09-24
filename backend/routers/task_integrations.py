@@ -465,7 +465,8 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
+        logger.error(f"Error fetching Asana workspaces for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana workspaces")
 
 
 @router.get(
@@ -519,7 +520,8 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
+        logger.error(f"Error fetching Asana projects for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch Asana projects")
 
 
 @router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
@@ -557,7 +559,8 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
+        logger.error(f"Error fetching ClickUp teams for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp teams")
 
 
 @router.get(
@@ -597,7 +600,8 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
+        logger.error(f"Error fetching ClickUp spaces for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp spaces")
 
 
 @router.get(
@@ -637,7 +641,8 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
+        logger.error(f"Error fetching ClickUp lists for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch ClickUp lists")
 
 
 # *****************************
