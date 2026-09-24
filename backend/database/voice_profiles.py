@@ -21,7 +21,7 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
-def _as_utc(value: Any) -> Optional[datetime]:
+def as_utc(value: Any) -> Optional[datetime]:
     if isinstance(value, str) and value.strip():
         try:
             value = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
@@ -72,9 +72,9 @@ def get_tag_prompt_state(uid: str, *, firestore_client: Any = None) -> Dict[str,
 
 
 def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
-    cutoff = (_as_utc(now) or datetime.now(timezone.utc)) - ANSWERED_PROMPT_RETENTION
+    cutoff = (as_utc(now) or datetime.now(timezone.utc)) - ANSWERED_PROMPT_RETENTION
     answered = state.get('answered') or {}
-    return {k: at_utc for k, at in answered.items() if (at_utc := _as_utc(at)) is not None and at_utc >= cutoff}
+    return {k: at_utc for k, at in answered.items() if (at_utc := as_utc(at)) is not None and at_utc >= cutoff}
 
 
 def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any = None) -> bool:
@@ -169,8 +169,8 @@ def add_owner_voice_confirmation(
         data = snapshot.to_dict() or {}
         current = data.get('speaker_embedding')
         base = data.get('speaker_embedding_base')
-        pooled_at = _as_utc(data.get('owner_voice_pooled_at'))
-        updated_at = _as_utc(data.get('speaker_embedding_updated_at'))
+        pooled_at = as_utc(data.get('owner_voice_pooled_at'))
+        updated_at = as_utc(data.get('speaker_embedding_updated_at'))
         if current and (pooled_at is None or (updated_at is not None and updated_at > pooled_at)):
             base = current
         now = datetime.now(timezone.utc)
