@@ -207,3 +207,25 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+def test_goal_create_rejects_inverted_scale_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "goal", "create", "read pages", "--target", "10", "--min", "20", "--max", "5"],
+    )
+    assert result.exit_code == 1
+    assert "invalid scale range" in result.stderr.lower()
+    assert "--min" in result.stderr
+    assert not respx_mock.calls
+
+
+def test_goal_update_rejects_inverted_scale_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "goal", "update", "g1", "--min", "15", "--max", "5"],
+    )
+    assert result.exit_code == 1
+    assert "invalid scale range" in result.stderr.lower()
+    assert "--min" in result.stderr
+    assert not respx_mock.calls
