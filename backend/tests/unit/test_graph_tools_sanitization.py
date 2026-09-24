@@ -13,8 +13,10 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 def _fake_tool(fn=None, *args, **kwargs):
     if fn is not None and callable(fn):
         return fn
+
     def decorator(func):
         return func
+
     return decorator
 
 
@@ -23,14 +25,16 @@ class TestGraphToolsSanitization(unittest.TestCase):
         tools_mock = AutoMockModule("langchain_core.tools")
         tools_mock.tool = _fake_tool
 
-        self._stub_cm = stub_modules({
-            "langchain_core": AutoMockModule("langchain_core"),
-            "langchain_core.tools": tools_mock,
-            "langchain_core.runnables": AutoMockModule("langchain_core.runnables"),
-            "utils.memory": AutoMockModule("utils.memory"),
-            "utils.memory.kg_graph_traversal": AutoMockModule("utils.memory.kg_graph_traversal"),
-            "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
-        })
+        self._stub_cm = stub_modules(
+            {
+                "langchain_core": AutoMockModule("langchain_core"),
+                "langchain_core.tools": tools_mock,
+                "langchain_core.runnables": AutoMockModule("langchain_core.runnables"),
+                "utils.memory": AutoMockModule("utils.memory"),
+                "utils.memory.kg_graph_traversal": AutoMockModule("utils.memory.kg_graph_traversal"),
+                "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
+            }
+        )
         self._stub_cm.__enter__()
         tools_path = str(Path(backend_dir) / "utils" / "retrieval" / "tools" / "graph_tools.py")
         self.graph_tools = load_module_fresh("utils.retrieval.tools.graph_tools", tools_path)
