@@ -10,14 +10,15 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import firebase_admin.auth
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 import database.mcp_oauth as mcp_oauth_db
+import database.mcp_token_cache as mcp_token_cache_db
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
-from utils.mcp_server.metadata import SCOPE_PERMISSION_TEXT
+from utils.mcp_server.metadata import MCP_AUTHORIZATION_SERVER_URL, SCOPE_PERMISSION_TEXT
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -68,6 +69,29 @@ def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONRe
     return JSONResponse(status_code=status_code, content={"error": error, "error_description": description})
 
 
+def _oauth_temporarily_unavailable() -> JSONResponse:
+    # RFC 6749 §5.2 temporarily_unavailable: the Redis revocation store is
+    # fail-closed, so a refresh whose replay-revoke cannot be written is a
+    # retryable 503 — never a silent skip and never a 401.
+    return JSONResponse(
+        status_code=503,
+        content={"error": "temporarily_unavailable", "error_description": "Token store is unavailable"},
+        headers={"Retry-After": "30"},
+    )
+
+
+class _AuthorizeRequestError(ValueError):
+    """Authorize-request failure that knows whether an RFC 9207 error redirect
+    is safe: only once the client AND its redirect URI are both validated may
+    the error be sent to the client's redirect URI. Unknown clients and
+    redirect mismatches always get a JSON error — never a redirect."""
+
+    def __init__(self, description: str, *, error: str = "invalid_request", redirect_allowed: bool = False):
+        super().__init__(description)
+        self.error = error
+        self.redirect_allowed = redirect_allowed
+
+
 def _effective_resource(resource: Optional[str]) -> str:
     # RFC 8707 resource indicators are optional; connector clients such as claude.ai
     # omit the parameter entirely. An omitted indicator binds the grant to the
@@ -89,27 +113,52 @@ def _validate_authorize_request(
     code_challenge_method: Optional[str],
 ) -> Tuple[Dict[str, Any], List[str]]:
     client = mcp_oauth_db.get_client(client_id)
+    client_ok = bool(client) and not client.get("disabled_at")
+    redirect_ok = client_ok and mcp_oauth_db.validate_redirect_uri(client or {}, redirect_uri)
     if response_type != "code":
-        raise ValueError("response_type must be code")
-    if not client or client.get("disabled_at"):
-        raise ValueError("Unknown OAuth client")
-    if not mcp_oauth_db.validate_redirect_uri(client, redirect_uri):
-        raise ValueError("redirect_uri is not registered for this client")
+        raise _AuthorizeRequestError(
+            "response_type must be code", error="unsupported_response_type", redirect_allowed=redirect_ok
+        )
+    if not client_ok:
+        raise _AuthorizeRequestError("Unknown OAuth client")
+    if not redirect_ok:
+        raise _AuthorizeRequestError("redirect_uri is not registered for this client")
     if not mcp_oauth_db.validate_resource(client, resource):
-        raise ValueError("Invalid resource")
+        raise _AuthorizeRequestError("Invalid resource", error="invalid_target", redirect_allowed=True)
     if not mcp_oauth_db.validate_pkce_challenge(code_challenge, code_challenge_method):
-        raise ValueError("PKCE S256 is required")
-    scopes = mcp_oauth_db.normalize_scopes(scope, client)
+        raise _AuthorizeRequestError("PKCE S256 is required", redirect_allowed=True)
+    try:
+        scopes = mcp_oauth_db.normalize_scopes(scope, client)
+    except ValueError as exc:
+        raise _AuthorizeRequestError(str(exc), error="invalid_scope", redirect_allowed=True) from exc
     return client, scopes
 
 
-def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> str:
+# Query parameters an authorization redirect always rebuilds itself; anything
+# already on the registered redirect URI under these names is replaced.
+_REDIRECT_OWNED_PARAMS = {"code", "error", "error_description", "error_uri", "iss", "state"}
+
+
+def _redirect_with_params(redirect_uri: str, params: Dict[str, str]) -> str:
     parts = urlsplit(redirect_uri)
-    params = dict(parse_qsl(parts.query, keep_blank_values=True))
-    params["code"] = code
-    if state:
-        params["state"] = state
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    for owned in _REDIRECT_OWNED_PARAMS:
+        query.pop(owned, None)
+    query.update({key: value for key, value in params.items() if value})
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> str:
+    return _redirect_with_params(
+        redirect_uri, {"code": code, "state": state or "", "iss": MCP_AUTHORIZATION_SERVER_URL}
+    )
+
+
+def _redirect_with_error(redirect_uri: str, error: str, description: str, state: Optional[str]) -> str:
+    return _redirect_with_params(
+        redirect_uri,
+        {"error": error, "error_description": description, "state": state or "", "iss": MCP_AUTHORIZATION_SERVER_URL},
+    )
 
 
 async def get_token_request_data(request: Request) -> Dict[str, Any]:
@@ -144,16 +193,27 @@ def mcp_authorize(
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
+    except _AuthorizeRequestError as e:
+        if e.redirect_allowed:
+            return RedirectResponse(_redirect_with_error(redirect_uri, e.error, str(e), state), status_code=302)
+        return _oauth_error(e.error, str(e))
     except ValueError as e:
         return _oauth_error("invalid_request", str(e))
 
     client_name = str(client.get("name") or client_id)
+    # URL-form (CIMD) clients are unverified third parties: the consent page
+    # shows the metadata document's ASCII host next to a fixed marker so a
+    # spoofed client_name cannot impersonate a registered connector.
+    unverified_client = client.get("registration_mode") == "client_id_metadata_document"
+    client_host = str(client.get("metadata_host") or "") if unverified_client else ""
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
         request,
         "mcp_oauth_authorize.html",
         {
             "client_name": client_name,
+            "client_host": client_host,
+            "unverified_client": unverified_client,
             "oauth_params": {
                 "response_type": response_type,
                 "client_id": client_id,
@@ -205,6 +265,10 @@ async def mcp_authorize_consent(
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
+        if isinstance(e, _AuthorizeRequestError):
+            if e.redirect_allowed:
+                return {"redirect_uri": _redirect_with_error(redirect_uri, e.error, str(e), state)}
+            return _oauth_error(e.error, str(e))
         if isinstance(e, ValueError):
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
@@ -286,9 +350,12 @@ async def mcp_token(request: Request):
             db_executor, mcp_oauth_db.validate_resource, client, resource
         ):
             return _oauth_error("invalid_target", "Invalid resource")
-        token_pair = await run_blocking(
-            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
-        )
+        try:
+            token_pair = await run_blocking(
+                db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
+            )
+        except mcp_token_cache_db.McpTokenStoreUnavailable:
+            return _oauth_temporarily_unavailable()
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid refresh token")
         return token_pair

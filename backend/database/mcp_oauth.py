@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import uuid
@@ -12,7 +13,10 @@ from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
 
+from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
 from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+import database.mcp_client_metadata as mcp_client_metadata
+import database.mcp_token_cache as mcp_token_cache
 from database._client import data_plane_db as db
 from database.mcp_auth_read import mcp_auth_read
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -22,25 +26,6 @@ from database.memory_app_key_grants import (
     MCP_CONSUMER,
     build_app_key_scope_grant_contract_state,
 )
-
-
-def canonical_mcp_resource_url(resource: str) -> str:
-    """Map a legacy ``/v1/mcp/sse`` resource URL onto the canonical ``/v1/mcp``."""
-    suffix = "/sse"
-    return resource[: -len(suffix)] if resource.endswith(suffix) else resource
-
-
-def legacy_mcp_resource_url(resource: str) -> str:
-    return canonical_mcp_resource_url(resource) + "/sse"
-
-
-def mcp_resource_urls_match(left: Optional[str], right: Optional[str]) -> bool:
-    """Canonical-form equality: legacy ``/sse`` and canonical audiences are the
-    same resource for issuance and validation, on either endpoint path."""
-    if left is None or right is None:
-        return left is right
-    return canonical_mcp_resource_url(left) == canonical_mcp_resource_url(right)
-
 
 PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
@@ -72,6 +57,9 @@ CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 
 class AccountDeletionAccessBlocked(RuntimeError):
     """Raised when an OAuth write loses the deletion-admission race."""
+
+
+logger = logging.getLogger(__name__)
 
 
 # --- OAuth token document contracts (Firestore write-path shapes) ------------
@@ -322,6 +310,14 @@ def _default_public_client() -> Optional[Dict[str, Any]]:
 
 
 def get_client(client_id: str) -> Optional[Dict[str, Any]]:
+    # URL-form client ids are Client ID Metadata Document URLs (CIMD). They
+    # contain '/', so they can never be Firestore document ids — resolve them
+    # through the metadata-document path before the registry lookup.
+    if mcp_client_metadata.is_url_form_client_id(client_id):
+        url_client = mcp_client_metadata.get_url_client(client_id)
+        if url_client is not None:
+            url_client["allowed_resources"] = [MCP_RESOURCE_URL]
+        return _finalize_client(url_client)
     client: Optional[Dict[str, Any]] = None
     doc = db.collection("mcp_oauth_clients").document(client_id).get()
     if doc.exists:
@@ -424,8 +420,11 @@ def validate_resource(client: Dict[str, Any], resource: str) -> bool:
 def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
     allowed = set((client or {}).get("allowed_scopes") or SUPPORTED_SCOPES).intersection(SUPPORTED_SCOPES)
     requested = [item for item in (scope or "").split(" ") if item]
-    scopes = requested or ["memories.read"]
-    if any(item not in allowed for item in scopes):
+    # An omitted scope parameter grants the intersection of the client's
+    # allowed READ scopes — write scopes are only ever granted on an explicit
+    # request the user sees on the consent screen.
+    scopes = requested or sorted(item for item in allowed if item.endswith(".read"))
+    if not scopes or any(item not in allowed for item in scopes):
         raise ValueError("Unsupported scope requested")
     return sorted(set(scopes))
 
@@ -526,8 +525,16 @@ def _ensure_oauth_memory_grant(grant: Dict[str, Any]) -> bool:
     return _create(transaction)
 
 
+def _grant_document_id(uid: str, client_id: str, resource: str) -> str:
+    # URL-form (CIMD) client ids contain '/' and are invalid Firestore document
+    # ids, so only that component is hashed; preregistered client grant ids are
+    # byte-for-byte unchanged.
+    client_component = hash_secret(client_id) if mcp_client_metadata.is_url_form_client_id(client_id) else client_id
+    return f"{uid}:{client_component}:{hash_secret(resource)[:16]}"
+
+
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
-    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
+    deterministic_grant_id = _grant_document_id(uid, client_id, resource)
     now = _now()
     ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     ref, existing, data = _grant_write(uid, client_id, resource, scopes, ref=ref, doc=ref.get(), now=now)
@@ -589,7 +596,7 @@ def create_grant_and_authorization_code_if_allowed(
     code_challenge: str,
 ) -> Tuple[Dict[str, Any], str]:
     """Atomically fence deletion admission with both OAuth consent writes."""
-    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
+    deterministic_grant_id = _grant_document_id(uid, client_id, resource)
     deletion_ref = db.collection("account_deletions").document(uid)
     grant_ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     raw_code = "omi_code_" + secrets.token_urlsafe(32)
@@ -889,13 +896,26 @@ def _validated_access_token_identity(
     }
 
 
+def _record_grant_last_used(grant_id: str) -> None:
+    db.collection("mcp_oauth_grants").document(grant_id).set({"last_used_at": _now()}, merge=True)
+
+
 def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
+    cached = mcp_token_cache.read_access_token(access_token, resource)
+    if cached is not None:
+        # A cache hit performs zero Firestore work — no token read, no memory
+        # grant, and no last_used_at write.
+        return cached
     doc = mcp_auth_read(db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)))
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
     grant_id = _nonempty_string(data, "grant_id")
     if grant_id is None:
+        return None
+    # The revocation marker is written BEFORE the Firestore revoke, so it also
+    # catches a grant whose revoke write is still in flight.
+    if mcp_token_cache.grant_revocation_marker_exists(grant_id):
         return None
     grant = get_active_grant(grant_id)
     if not grant:
@@ -904,7 +924,16 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     if identity is None:
         return None
     _ensure_oauth_memory_grant(grant)
-    db.collection("mcp_oauth_grants").document(grant_id).set({"last_used_at": _now()}, merge=True)
+    expires_at = data.get("expires_at")
+    mcp_token_cache.fill_access_token(
+        access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
+    )
+    # A revoke that landed during the Firestore reads or the fill must deny
+    # this request too — the marker is re-checked before crediting it.
+    if mcp_token_cache.grant_revocation_marker_exists(grant_id):
+        return None
+    if mcp_token_cache.claim_last_used_write(access_token):
+        _record_grant_last_used(grant_id)
     return identity
 
 
@@ -943,8 +972,13 @@ def rotate_refresh_token(
         grant.setdefault("id", data.get("grant_id"))
         if data.get("used_at") or data.get("replaced_by"):
             replay_grant_id = data.get("grant_id")
-            transaction.set(grant_ref, {"revoked_at": now, "status": "revoked", "replay_detected": True}, merge=True)
-            transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
+            # Record replay intent only. The grant and token revoke writes
+            # happen in ``revoke_grant`` AFTER its mandatory Redis marker, so
+            # a Redis outage propagates as an error and every retry of the
+            # used refresh token re-enters this branch — the token family can
+            # never end up Firestore-revoked while a cached access token
+            # survives without a marker.
+            transaction.set(ref, {"replay_detected_at": now}, merge=True)
             return None
         try:
             requested_scopes: List[str] = (
@@ -977,6 +1011,12 @@ def rotate_refresh_token(
 
 def revoke_grant(grant_id: str, replay_detected: bool = False) -> None:
     now = _now()
+    # Marker + cache purge happen BEFORE the Firestore write and are
+    # mandatory: if Redis cannot take the marker, the revoke fails closed —
+    # no success is reported while a stale cached token could be served once
+    # Redis recovers. A marker written before a later purge failure still
+    # blocks every cached entry for the grant.
+    mcp_token_cache.invalidate_grant(grant_id, marker_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS)
     db.collection("mcp_oauth_grants").document(grant_id).set(
         {"revoked_at": now, "status": "revoked", "replay_detected": replay_detected}, merge=True
     )

@@ -987,3 +987,32 @@ class TestRestDetailManualSpeakers:
         assert "manual_speaker_assignments" in captured["extra_field_paths"]
         assert "manual_speaker_assignments_compressed" in captured["extra_field_paths"]
         assert resp.json()["transcript_segments"][0]["speaker_name"] == "Alice"
+
+
+class TestRestOAuthGrantRevoke:
+    """Grant revocation fails closed: an unwritable Redis marker is a
+    retryable 503 — never a 204 for a revoke that did not happen."""
+
+    def test_revoke_returns_503_with_retry_after_when_token_store_down(self, monkeypatch, client):
+        import database.mcp_token_cache as token_cache
+
+        def boom(uid, grant_id):
+            raise token_cache.McpTokenStoreUnavailable("redis down")
+
+        monkeypatch.setattr(rest.mcp_oauth_db, "revoke_user_grant", boom)
+        client.app.dependency_overrides[rest.get_current_user_id] = lambda: UID
+        resp = client.delete("/v1/mcp/oauth/grants/grant-1")
+        assert resp.status_code == 503
+        assert resp.headers.get("Retry-After") == "60"
+
+    def test_revoke_unknown_grant_still_404(self, monkeypatch, client):
+        monkeypatch.setattr(rest.mcp_oauth_db, "revoke_user_grant", lambda uid, grant_id: False)
+        client.app.dependency_overrides[rest.get_current_user_id] = lambda: UID
+        resp = client.delete("/v1/mcp/oauth/grants/missing")
+        assert resp.status_code == 404
+
+    def test_successful_revoke_still_204(self, monkeypatch, client):
+        monkeypatch.setattr(rest.mcp_oauth_db, "revoke_user_grant", lambda uid, grant_id: True)
+        client.app.dependency_overrides[rest.get_current_user_id] = lambda: UID
+        resp = client.delete("/v1/mcp/oauth/grants/grant-1")
+        assert resp.status_code == 204

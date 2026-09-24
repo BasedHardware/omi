@@ -24,6 +24,7 @@ sets the fake env vars needed for import).
 
 import base64
 import hashlib
+from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -104,20 +105,35 @@ def test_authorize_get_with_explicit_resource_still_works(client, claude_client,
     assert response.status_code == 200
 
 
+def _error_redirect_params(response):
+    assert response.status_code == 302
+    location = response.headers["location"]
+    assert location.startswith(REDIRECT_URI)
+    return dict(parse_qsl(urlsplit(location).query))
+
+
 def test_authorize_get_still_rejects_a_wrong_explicit_resource(client, claude_client):
-    """Defaulting must not loosen validation of explicitly supplied values."""
-    response = client.get("/authorize", params=_authorize_params(resource="https://evil.example/v1/mcp/sse"))
-    body = response.json()
-    assert body["error"] == "invalid_request"
-    assert "resource" in body["error_description"].lower()
+    """Defaulting must not loosen validation of explicitly supplied values.
+    The client and redirect URI are both valid, so the failure is delivered as
+    an RFC 9207 error redirect carrying ``iss``, not a JSON error."""
+    response = client.get(
+        "/authorize",
+        params=_authorize_params(resource="https://evil.example/v1/mcp/sse"),
+        follow_redirects=False,
+    )
+    params = _error_redirect_params(response)
+    assert params["error"] == "invalid_target"
+    assert "resource" in params["error_description"].lower()
+    assert params["state"] == "opaque-state"
+    assert params["iss"] == "https://api.omi.me"
 
 
 def test_authorize_get_still_rejects_an_empty_explicit_resource(client, claude_client):
     """Present-but-empty is an invalid explicit value, not an omission to default."""
-    response = client.get("/authorize", params=_authorize_params(resource=""))
-    body = response.json()
-    assert body["error"] == "invalid_request"
-    assert "resource" in body["error_description"].lower()
+    response = client.get("/authorize", params=_authorize_params(resource=""), follow_redirects=False)
+    params = _error_redirect_params(response)
+    assert params["error"] == "invalid_target"
+    assert "resource" in params["error_description"].lower()
 
 
 def test_consent_post_without_resource_grants_against_legacy_resource(client, mcp_sse, claude_client, monkeypatch):

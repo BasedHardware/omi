@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import timedelta
 from pathlib import Path
 from types import ModuleType
@@ -16,6 +17,7 @@ os.environ['MCP_OAUTH_CHATGPT_CLIENT_ID'] = 'omi-chatgpt-prod'
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_SECRET'] = 'client-secret'
 os.environ['MCP_OAUTH_CHATGPT_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
 os.environ['MCP_OAUTH_PUBLIC_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 
 class _DocSnapshot:
@@ -104,6 +106,84 @@ class _Transaction:
         ref.set(data, merge=merge)
 
 
+class _FakeRedis:
+    """Hermetic stand-in for ``redis_db.r`` covering the string/set operations
+    the OAuth token cache and CIMD cache use. ``failing`` simulates an outage:
+    every operation raises, exercising the fail-closed paths."""
+
+    def __init__(self):
+        self.strings = {}
+        self.sets = {}
+        self.failing = False
+
+    def _check(self):
+        if self.failing:
+            raise ConnectionError("fake redis outage")
+
+    @staticmethod
+    def _live(store, key):
+        entry = store.get(key)
+        if entry is not None and entry[1] is not None and entry[1] <= time.time():
+            store.pop(key, None)
+            return None
+        return entry
+
+    def get(self, key):
+        self._check()
+        entry = self._live(self.strings, key)
+        return entry[0] if entry else None
+
+    def set(self, key, value, ex=None, nx=False, **_kwargs):
+        self._check()
+        if nx and self._live(self.strings, key) is not None:
+            return None
+        self.strings[key] = [value, (time.time() + ex) if ex else None]
+        return True
+
+    def exists(self, *keys):
+        self._check()
+        return sum(
+            1 for key in keys if self._live(self.strings, key) is not None or self._live(self.sets, key) is not None
+        )
+
+    def delete(self, *keys):
+        self._check()
+        removed = 0
+        for key in keys:
+            removed += self.strings.pop(key, None) is not None
+            removed += self.sets.pop(key, None) is not None
+        return removed
+
+    def sadd(self, key, *members):
+        self._check()
+        entry = self.sets.setdefault(key, [set(), None])
+        entry[0].update(members)
+        return len(members)
+
+    def smembers(self, key):
+        self._check()
+        entry = self._live(self.sets, key)
+        return set(entry[0]) if entry else set()
+
+    def expire(self, key, seconds):
+        self._check()
+        for store in (self.strings, self.sets):
+            entry = store.get(key)
+            if entry is not None:
+                entry[1] = time.time() + seconds
+                return True
+        return False
+
+    def ttl(self, key):
+        self._check()
+        entry = self._live(self.strings, key) or self._live(self.sets, key)
+        if entry is None:
+            return -2
+        if entry[1] is None:
+            return -1
+        return int(entry[1] - time.time())
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _mcp_oauth_module():
     """Load ``database.mcp_oauth`` fresh against a stubbed firestore chain.
@@ -139,6 +219,19 @@ def _mcp_oauth_module():
         module.db = _DB()
         globals()["mcp_oauth"] = module
         yield module
+
+
+@pytest.fixture(autouse=True)
+def _fake_redis(monkeypatch):
+    """Install the hermetic Redis stand-in for every test: the token cache and
+    CIMD cache read ``redis_db.r`` dynamically, so the patched attribute covers
+    both the fresh module's and the real cache modules' access."""
+    import database.redis_db as redis_db
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_db, "r", fake)
+    globals()["fake_redis"] = fake
+    return fake
 
 
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():

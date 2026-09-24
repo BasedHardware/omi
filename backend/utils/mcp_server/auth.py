@@ -11,6 +11,7 @@ from google.api_core import exceptions as google_api_exceptions
 
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
+import database.mcp_token_cache as mcp_token_cache_db
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
@@ -31,6 +32,9 @@ MCP_RESOURCE_URL = mcp_oauth_db.MCP_RESOURCE_URL
 # clear on their own, and MCP clients hold no session state to rebuild.
 MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS = int(os.getenv("MCP_AUTH_UNAVAILABLE_RETRY_AFTER_SECONDS", "30"))
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+# The 401 challenge advertises every read scope so a client told
+# ``invalid_token`` knows which read-only grant to re-request.
+READ_SCOPE_HINT = " ".join(sorted(scope for scope in MCP_FULL_ACCESS_SCOPES if scope.endswith(".read")))
 
 
 @dataclass
@@ -112,6 +116,9 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     except google_api_exceptions.GoogleAPIError as exc:
         logger.warning("MCP auth lookup failed against the token store: %s", exc)
         raise mcp_auth_store_unavailable_exception() from exc
+    except mcp_token_cache_db.McpTokenStoreUnavailable as exc:
+        logger.warning("MCP auth token cache is unavailable: %s", type(exc).__name__)
+        raise mcp_auth_store_unavailable_exception() from exc
 
 
 def mcp_auth_store_unavailable_exception() -> HTTPException:
@@ -182,7 +189,8 @@ def invalid_mcp_auth_exception(
             "WWW-Authenticate": (
                 f'Bearer resource_metadata="{protected_resource_metadata_url(path_kind)}", '
                 'error="invalid_token", '
-                'error_description="Valid Omi MCP OAuth bearer token required"'
+                'error_description="Valid Omi MCP OAuth bearer token required", '
+                f'scope="{READ_SCOPE_HINT}"'
             )
         },
     )

@@ -45,6 +45,7 @@ from utils.mcp_memories import (
     parse_sync_timestamp,
 )
 import database.mcp_oauth as mcp_oauth_db
+import database.mcp_token_cache as mcp_token_cache_db
 from utils.mcp_server.constants import (
     MCP_REST_CONVERSATION_MAX_CHARS,
     MCP_REST_CONVERSATION_MAX_SEGMENTS,
@@ -203,7 +204,15 @@ def get_oauth_grants(uid: str = Depends(get_current_user_id)):
 
 @router.delete("/v1/mcp/oauth/grants/{grant_id}", status_code=204, tags=["mcp"])
 def revoke_oauth_grant(grant_id: str, uid: str = Depends(get_current_user_id)):
-    if not mcp_oauth_db.revoke_user_grant(uid, grant_id):
+    try:
+        revoked = mcp_oauth_db.revoke_user_grant(uid, grant_id)
+    except mcp_token_cache_db.McpTokenStoreUnavailable as exc:
+        # Revocation fails closed when the Redis marker cannot be written —
+        # report a retryable 503, never a 204 for a revoke that did not stick.
+        raise HTTPException(
+            status_code=503, detail="OAuth token store unavailable", headers={"Retry-After": _REST_RETRY_AFTER}
+        ) from exc
+    if not revoked:
         raise HTTPException(status_code=404, detail="OAuth grant not found")
     return
 

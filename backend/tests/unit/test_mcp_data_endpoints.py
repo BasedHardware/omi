@@ -659,7 +659,10 @@ def test_authorize_redirect_builder_preserves_existing_query():
     redirect_uri = sse._redirect_with_code(
         'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
     )
-    assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+    assert redirect_uri == (
+        'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+        '&iss=https%3A%2F%2Fapi.omi.me'
+    )
 
 
 def test_authorize_request_accepts_chatgpt_public_client():
