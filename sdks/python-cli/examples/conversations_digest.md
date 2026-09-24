@@ -17,7 +17,7 @@ Check that the command succeeded before converting the file. If a page is
 full, retrieve the next one with `--offset 200` into a second file; the digest
 accepts several files and counts each conversation ID once.
 
-Save the following as `conversations_digest.py`:
+Save the following as `conversations_digest.py` (or run the bundled [`conversations_to_digest.py`](conversations_to_digest.py) directly):
 
 ```python
 import json
