@@ -158,6 +158,8 @@
     "appAccessDesc": "Následující aplikace mají přístup k vašim datům. Klepnutím na aplikaci spravujete její oprávnění.",
     "noAppsExternalAccess": "Žádné nainstalované aplikace nemají externí přístup k vašim datům.",
     "deviceName": "Název zařízení",
+    "deviceNameStoredOnPhone": "Uloženo pouze v tomto telefonu.",
+    "deviceNameStoredOnDevice": "Uloženo ve vašem Omi, takže se zobrazí na každém připojeném telefonu.",
     "deviceId": "ID zařízení",
     "firmware": "Firmware",
     "sdCardSync": "Synchronizace SD karty",

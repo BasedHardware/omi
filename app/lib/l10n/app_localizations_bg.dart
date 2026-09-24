@@ -502,6 +502,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceName => 'Име на устройство';
 
   @override
+  String get deviceNameStoredOnPhone => 'Съхранява се само на този телефон.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Запазено на вашето Omi, така че се показва на всеки свързан телефон.';
+
+  @override
   String get deviceId => 'Идентификатор на устройството';
 
   @override

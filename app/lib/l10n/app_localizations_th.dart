@@ -498,6 +498,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceName => 'ชื่ออุปกรณ์';
 
   @override
+  String get deviceNameStoredOnPhone => 'บันทึกไว้ในโทรศัพท์เครื่องนี้เท่านั้น';
+
+  @override
+  String get deviceNameStoredOnDevice => 'บันทึกไว้ใน Omi ของคุณ จึงแสดงบนโทรศัพท์ทุกเครื่องที่เชื่อมต่อ';
+
+  @override
   String get deviceId => 'ID อุปกรณ์';
 
   @override

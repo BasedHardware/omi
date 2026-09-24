@@ -501,6 +501,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deviceName => 'डिव्हाइस नाव';
 
   @override
+  String get deviceNameStoredOnPhone => 'फक्त या फोनवर जतन केले.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'तुमच्या Omi वर जतन केले, त्यामुळे जोडणाऱ्या कोणत्याही फोनवर हेच नाव दिसेल.';
+
+  @override
   String get deviceId => 'डिव्हाइस ID';
 
   @override

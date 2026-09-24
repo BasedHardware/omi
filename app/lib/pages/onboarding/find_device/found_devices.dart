@@ -384,10 +384,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                     children: [
                       Expanded(
                         child: Text(
-                          () {
-                            final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
-                            return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
-                          }(),
+                          DeviceUtils.listLabel(device, provider.visibleDeviceList),
                           textAlign: TextAlign.left,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Colors.black),

@@ -634,6 +634,8 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Pangalan ng Device",
+    "deviceNameStoredOnPhone": "Naka-save lang sa teleponong ito.",
+    "deviceNameStoredOnDevice": "Naka-save sa iyong Omi, kaya ipinapakita sa anumang teleponong kumokonekta.",
     "@deviceName": {
         "description": "Device name label"
     },

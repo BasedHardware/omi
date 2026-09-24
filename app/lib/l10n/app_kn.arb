@@ -634,6 +634,8 @@
         "description": "Empty state for app access"
     },
     "deviceName": "ಸಾಧನ ಹೆಸರು",
+    "deviceNameStoredOnPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಉಳಿಸಲಾಗಿದೆ.",
+    "deviceNameStoredOnDevice": "ನಿಮ್ಮ Omi ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಸಂಪರ್ಕಿಸುವ ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ ಇದೇ ಹೆಸರು ಕಾಣುತ್ತದೆ.",
     "@deviceName": {
         "description": "Device name label"
     },

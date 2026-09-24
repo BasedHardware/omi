@@ -634,6 +634,8 @@
         "description": "Empty state for app access"
     },
     "deviceName": "डिव्हाइस नाव",
+    "deviceNameStoredOnPhone": "फक्त या फोनवर जतन केले.",
+    "deviceNameStoredOnDevice": "तुमच्या Omi वर जतन केले, त्यामुळे जोडणाऱ्या कोणत्याही फोनवर हेच नाव दिसेल.",
     "@deviceName": {
         "description": "Device name label"
     },

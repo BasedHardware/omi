@@ -29,6 +29,7 @@ class OmiFeatures {
   static const int offlineStorage = 1 << 6;
   static const int ledDimming = 1 << 7;
   static const int micGain = 1 << 8;
+  static const int deviceNameStorage = 1 << 10;
 }
 
 abstract class IDeviceServiceSubsciption {

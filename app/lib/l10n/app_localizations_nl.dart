@@ -502,6 +502,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceName => 'Apparaatnaam';
 
   @override
+  String get deviceNameStoredOnPhone => 'Alleen op deze telefoon opgeslagen.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Opgeslagen op je Omi, dus elke telefoon die verbindt toont deze naam.';
+
+  @override
   String get deviceId => 'Apparaat-ID';
 
   @override

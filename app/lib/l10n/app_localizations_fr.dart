@@ -504,6 +504,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceName => 'Nom de l\'appareil';
 
   @override
+  String get deviceNameStoredOnPhone => 'Enregistré uniquement sur ce téléphone.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Enregistré sur votre Omi, il s\'affiche donc sur tout téléphone connecté.';
+
+  @override
   String get deviceId => 'ID de l\'appareil';
 
   @override

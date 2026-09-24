@@ -759,6 +759,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
+  Future<void> _syncStoredDeviceName(BtDevice device, int generation) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+    if (!_isCurrent(generation)) return;
+    if (connection == null || (await connection.getFeatures() & OmiFeatures.deviceNameStorage) == 0) return;
+    if (!_isCurrent(generation)) return;
+    final stored = await connection.getStoredDeviceName();
+    if (!_isCurrent(generation) || stored == null) return;
+    final prefs = SharedPreferencesUtil();
+    if (prefs.shouldPushLocalDeviceName(device.id, stored)) {
+      if (await connection.setStoredDeviceName(prefs.getDeviceCustomName(device.id)!) && _isCurrent(generation)) {
+        await prefs.markDeviceNameSynced(device.id);
+      }
+      return;
+    }
+    await prefs.adoptStoredDeviceName(device.id, stored);
+    if (!_isCurrent(generation)) return;
+    notifyListeners();
+  }
+
   void _onDeviceConnected(BtDevice device, int generation) async {
     Logger.debug('_onConnected inside: $connectedDevice');
     if (!_isCurrent(generation)) return;
@@ -808,6 +827,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
     SharedPreferencesUtil().deviceName = device.name;
+    await _syncStoredDeviceName(device, generation);
 
     // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
     // Glass unit becomes DeviceType.openglass once hasImageStream is read. Push

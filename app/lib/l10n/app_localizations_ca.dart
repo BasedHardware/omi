@@ -503,6 +503,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceName => 'Nom del dispositiu';
 
   @override
+  String get deviceNameStoredOnPhone => 'Desat només en aquest telèfon.';
+
+  @override
+  String get deviceNameStoredOnDevice => 'Desat al teu Omi, així que es mostra a qualsevol telèfon que s\'hi connecti.';
+
+  @override
   String get deviceId => 'ID del dispositiu';
 
   @override

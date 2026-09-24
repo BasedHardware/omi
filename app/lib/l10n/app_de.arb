@@ -158,6 +158,8 @@
     "appAccessDesc": "Die folgenden Apps können auf Ihre Daten zugreifen. Tippen Sie auf eine App, um deren Berechtigungen zu verwalten.",
     "noAppsExternalAccess": "Keine installierten Apps haben externen Zugriff auf Ihre Daten.",
     "deviceName": "Gerätename",
+    "deviceNameStoredOnPhone": "Nur auf diesem Telefon gespeichert.",
+    "deviceNameStoredOnDevice": "Auf deinem Omi gespeichert, daher auf jedem verbundenen Telefon sichtbar.",
     "deviceId": "Geräte-ID",
     "firmware": "Firmware",
     "sdCardSync": "SD-Karten-Synchronisierung",

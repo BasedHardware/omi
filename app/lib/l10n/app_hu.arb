@@ -158,6 +158,8 @@
     "appAccessDesc": "A következő alkalmazások férhetnek hozzá az adataidhoz. Érintsd meg az alkalmazást az engedélyek kezeléséhez.",
     "noAppsExternalAccess": "Egyik telepített alkalmazás sem rendelkezik külső hozzáféréssel az adataidhoz.",
     "deviceName": "Eszköz neve",
+    "deviceNameStoredOnPhone": "Csak ezen a telefonon tárolva.",
+    "deviceNameStoredOnDevice": "Az Omi eszközödön tárolva, így minden csatlakozó telefonon ez a név jelenik meg.",
     "deviceId": "Eszköz azonosító",
     "firmware": "Firmware",
     "sdCardSync": "SD kártya szinkronizálás",

@@ -37,6 +37,12 @@ class DeviceUtils {
     }
   }
 
+  static String listLabel(BtDevice device, List<BtDevice> visible) {
+    final name = device.displayName;
+    final sameNameCount = visible.where((d) => d.displayName == name).length;
+    return sameNameCount > 1 ? '$name (${device.getShortId()})' : name;
+  }
+
   static Version? _tryParseVersion(Object? value) {
     if (value is! String || value.isEmpty) return null;
     try {
