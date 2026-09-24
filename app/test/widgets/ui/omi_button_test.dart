@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/ui/ui.dart';
-import 'package:omi/widgets/animated_loading_button.dart';
 
 import 'ui_test_app.dart';
 
@@ -109,17 +108,13 @@ void main() {
     expect(tester.getSize(find.byType(OmiButton).last).height, greaterThanOrEqualTo(44));
   });
 
-  testWidgets('AnimatedLoadingButton keeps its API, a >=44pt target, and recovers from a throw', (tester) async {
+  testWidgets('an async action that throws clears the spinner (the old loading button spun forever)', (tester) async {
     await pumpUi(
       tester,
       Scaffold(
         body: Center(
-          child: AnimatedLoadingButton(
-            text: 'Connect',
-            width: 120,
-            height: 32,
-            color: Colors.white,
-            textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+          child: OmiButton(
+            label: 'Connect',
             onPressed: () async {
               await Future<void>.delayed(const Duration(milliseconds: 10));
               throw Exception('stripe unavailable');
@@ -128,8 +123,7 @@ void main() {
         ),
       ),
     );
-    expect(tester.getSize(find.byType(AnimatedLoadingButton)).height, greaterThanOrEqualTo(44));
-    await tester.tap(find.byType(AnimatedLoadingButton));
+    await tester.tap(find.byType(OmiButton));
     await tester.pump();
     expect(spinner(), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 20));

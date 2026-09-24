@@ -31,7 +31,7 @@ enum OmiButtonSize {
 
 /// Explicit colours for a legacy call site whose look is not yet a variant.
 ///
-/// Migration escape hatch only (used by `AnimatedLoadingButton`). New code picks a
+/// Migration escape hatch only (it served the retired `AnimatedLoadingButton`). New code picks a
 /// [OmiButtonVariant].
 @immutable
 class OmiButtonColors {
