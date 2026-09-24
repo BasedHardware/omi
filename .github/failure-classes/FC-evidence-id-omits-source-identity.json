@@ -5,7 +5,7 @@
   "canonical_prevention": "Resolve a content-derived memory id against a live identical non-rejected row before proposing evidence, reissue occupied non-conversation evidence ids deterministically from the proposed source identity while retaining the original row id when available, and bound conflict retries so concurrent identical submissions converge on one row. Preserve genuine conflicts and privacy deletion fences.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_external_memory_resend_identity.py",
-    "backend/scripts/v3_memory_resend_emulator_test.py"
+    "backend/scripts/memory_v3_resend_emulator_test.py"
   ],
   "evidence_prs": [],
   "scope_hints": [
