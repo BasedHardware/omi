@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -19,6 +20,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10014-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -874,6 +876,57 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  static const int maxDeviceNameBytes = 25;
+
+  static List<int> truncateUtf8ToBytes(String text, int maxBytes) {
+    final runes = text.runes;
+    final buffer = <int>[];
+    for (final rune in runes) {
+      final charBytes = utf8.encode(String.fromCharCode(rune));
+      if (buffer.length + charBytes.length > maxBytes) {
+        break;
+      }
+      buffer.addAll(charBytes);
+    }
+    return buffer;
+  }
+
+  @override
+  Future<void> performSetDeviceName(String name) async {
+    try {
+      final clampedBytes = truncateUtf8ToBytes(name.trim(), maxDeviceNameBytes);
+      await transport.writeCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+        clampedBytes,
+      );
+      Logger.debug('OmiDeviceConnection: Successfully set device name to "$name"');
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting device name: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String?> performGetDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(
+        settingsServiceUuid,
+        settingsDeviceNameCharacteristicUuid,
+      );
+      if (value.isNotEmpty) {
+        final name = utf8.decode(value, allowMalformed: true).trim();
+        if (name.isNotEmpty) {
+          return name;
+        }
+      }
+      return null;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting device name: $e');
       return null;
     }
   }

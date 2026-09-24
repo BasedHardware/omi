@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -448,6 +449,133 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  void _showRenameDeviceDialog(BtDevice device, DeviceProvider provider) {
+    final textController = TextEditingController(text: device.name);
+    bool isSaving = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final currentBytes = utf8.encode(textController.text.trim()).length;
+            final isTooLong = currentBytes > 25;
+
+            return OmiAlertDialog(
+              title: context.l10n.deviceName,
+              content: Material(
+                type: MaterialType.transparency,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: textController,
+                      autofocus: true,
+                      maxLength: 25,
+                      enabled: !isSaving,
+                      style: OmiType.body,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          final bytes = utf8.encode(val.trim()).length;
+                          if (bytes > 25) {
+                            errorMessage = 'Max 25 bytes ($bytes bytes, non-ASCII uses multiple bytes)';
+                          } else {
+                            errorMessage = null;
+                          }
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: device.name,
+                        hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+                        counterStyle: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                        errorText: errorMessage,
+                        errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        filled: true,
+                        fillColor: OmiColors.surface2,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
+                        border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+                        enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+                        focusedBorder: const OutlineInputBorder(
+                          borderRadius: OmiRadius.smAll,
+                          borderSide: BorderSide(color: OmiColors.textTertiary),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                OmiDialogAction(
+                  label: context.l10n.cancel,
+                  onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+                ),
+                OmiDialogAction(
+                  label: isSaving ? context.l10n.saving : context.l10n.save,
+                  isDefault: true,
+                  onPressed: (isSaving || isTooLong)
+                      ? null
+                      : () async {
+                          final newName = textController.text.trim();
+                          if (newName.isEmpty) {
+                            OmiFeedback.error(context, 'Device name cannot be empty');
+                            return;
+                          }
+
+                          final byteCount = utf8.encode(newName).length;
+                          if (byteCount > 25) {
+                            setDialogState(() {
+                              errorMessage = 'Max 25 bytes ($byteCount bytes, non-ASCII uses multiple bytes)';
+                            });
+                            return;
+                          }
+
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+                            if (connection == null) {
+                              if (dialogContext.mounted) {
+                                setDialogState(() => isSaving = false);
+                              }
+                              if (context.mounted) {
+                                OmiFeedback.error(context, 'Failed to connect to device');
+                              }
+                              return;
+                            }
+                            await connection.setDeviceName(newName);
+                            await provider.refreshDeviceInfo();
+                            final confirmedName = provider.pairedDevice?.name ?? newName;
+                            provider.pairedDevice = provider.pairedDevice?.copyWith(name: confirmedName);
+                            if (provider.connectedDevice?.id == device.id) {
+                              provider.connectedDevice = provider.connectedDevice?.copyWith(name: confirmedName);
+                            }
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            if (context.mounted) {
+                              OmiFeedback.confirm(context, '${context.l10n.deviceName}: $confirmedName');
+                            }
+                          } catch (e) {
+                            Logger.error('Failed to rename device: $e');
+                            if (dialogContext.mounted) {
+                              setDialogState(() => isSaving = false);
+                            }
+                            if (context.mounted) {
+                              OmiFeedback.error(context, 'Failed to update device name: $e');
+                            }
+                          }
+                        },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _deviceGroup(DeviceProvider provider) {
     final l10n = context.l10n;
     const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
@@ -590,6 +718,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             pairedDevice: paired,
             isDeviceConnected: connected != null,
             rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
+            onRenameDevice:
+                (paired != null && paired.type == DeviceType.omi) ? () => _showRenameDeviceDialog(paired, provider) : null,
           ),
           gap,
           _forgetGroup(provider),

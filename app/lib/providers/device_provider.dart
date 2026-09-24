@@ -314,9 +314,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future getDeviceInfo() async {
+    await _fetchDeviceInfo(force: false);
+  }
+
+  Future refreshDeviceInfo() async {
+    await _fetchDeviceInfo(force: true);
+  }
+
+  Future _fetchDeviceInfo({bool force = false}) async {
     final generation = _sessionGeneration;
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+      if (!force && pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
         if (!_isCurrent(generation)) return;
         SharedPreferencesUtil().btDevice = pairedDevice!;
         return;
@@ -325,6 +333,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
+      if (connectedDevice?.id == pairedDevice?.id && pairedDevice?.name != null) {
+        connectedDevice = connectedDevice?.copyWith(name: pairedDevice!.name);
+      }
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
       if (!_isCurrent(generation)) return;
