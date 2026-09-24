@@ -7,11 +7,9 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-
-const _cardColor = Color(0xFF1F1F25);
-const _mutedText = Color(0xFF9A9AA5);
 
 /// "Help Omi recognize voices": a small daily set of short clips from the last
 /// 48 hours. Each answer teaches Omi the owner's voice or a named person's voice.
@@ -44,7 +42,10 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
           },
           child: Container(
             key: const Key('speaker_tag_prompt_card'),
-            decoration: const BoxDecoration(color: _cardColor, borderRadius: BorderRadius.all(Radius.circular(24))),
+            decoration: const BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: BorderRadius.all(Radius.circular(OmiRadius.xl)),
+            ),
             margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
             child: Column(
@@ -58,7 +59,7 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
                 ),
                 if (provider.firstTime) ...[
                   const SizedBox(height: 12),
-                  const Divider(color: Color(0xFF35353F), height: 1),
+                  const Divider(color: OmiColors.border, height: 1),
                   const SizedBox(height: 8),
                   _SaveVoicesToggle(provider: provider),
                 ],
@@ -94,10 +95,13 @@ class _Header extends StatelessWidget {
             children: [
               Text(
                 context.l10n.speakerTagPromptTitle,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
-              Text(context.l10n.speakerTagPromptSubtitle, style: const TextStyle(color: _mutedText, fontSize: 13)),
+              Text(
+                context.l10n.speakerTagPromptSubtitle,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
             ],
           ),
         ),
@@ -106,13 +110,13 @@ class _Header extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4, left: 8),
             child: Text(
               context.l10n.speakerTagPromptProgress(current, total),
-              style: const TextStyle(color: _mutedText, fontSize: 12),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             ),
           ),
         IconButton(
           key: const Key('speaker_tag_prompt_close'),
           visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.close, color: _mutedText, size: 20),
+          icon: const Icon(Icons.close, color: OmiColors.textSecondary, size: 20),
           tooltip: context.l10n.close,
           onPressed: provider.close,
         ),
@@ -131,7 +135,7 @@ class _Finished extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(context.l10n.speakerTagPromptThanks, style: const TextStyle(color: Colors.white, fontSize: 15)),
+          child: Text(context.l10n.speakerTagPromptThanks, style: OmiType.subhead),
         ),
         TextButton(
           key: const Key('speaker_tag_prompt_done'),
@@ -159,20 +163,22 @@ class _Question extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             context.l10n.speakerTagPromptClipUnavailable,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            style: OmiType.footnote.copyWith(color: OmiColors.danger),
           ),
         ],
         const SizedBox(height: 14),
         Text(
           _question(context, prompt),
-          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+          style: OmiType.headline,
         ),
         const SizedBox(height: 10),
         _Answers(provider: provider, prompt: prompt),
         if (provider.answerFailed) ...[
           const SizedBox(height: 8),
-          Text(context.l10n.speakerTagPromptAnswerFailed,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          Text(
+            context.l10n.speakerTagPromptAnswerFailed,
+            style: OmiType.footnote.copyWith(color: OmiColors.danger),
+          ),
         ],
       ],
     );
@@ -234,7 +240,7 @@ class _ClipRow extends StatelessWidget {
                   '“${prompt.excerpt}”',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontStyle: FontStyle.italic),
+                  style: OmiType.subhead.copyWith(fontStyle: FontStyle.italic),
                 ),
               if (meta.isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -242,7 +248,7 @@ class _ClipRow extends StatelessWidget {
                   meta,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: _mutedText, fontSize: 12),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                 ),
               ],
             ],
@@ -340,7 +346,7 @@ class _AnswerChip extends StatelessWidget {
           )
         : OutlinedButton.styleFrom(
             foregroundColor: Colors.white,
-            side: const BorderSide(color: Color(0xFF4A4A55)),
+            side: const BorderSide(color: OmiColors.border),
             minimumSize: const Size(0, 40),
             padding: const EdgeInsets.symmetric(horizontal: 14),
           );
@@ -376,8 +382,8 @@ class _NameDialogState extends State<_NameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.l10n.speakerTagPromptWhoIsThis),
+    return OmiAlertDialog(
+      title: context.l10n.speakerTagPromptWhoIsThis,
       content: TextField(
         key: const Key('speaker_tag_prompt_name_field'),
         controller: _controller,
@@ -391,11 +397,12 @@ class _NameDialogState extends State<_NameDialog> {
         },
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
-        TextButton(
+        OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        OmiDialogAction(
           key: const Key('speaker_tag_prompt_name_save'),
+          label: context.l10n.save,
+          isDefault: true,
           onPressed: _valid ? () => Navigator.of(context).pop(_controller.text.trim()) : null,
-          child: Text(context.l10n.save),
         ),
       ],
     );
@@ -418,11 +425,13 @@ class _SaveVoicesToggle extends StatelessWidget {
             children: [
               Text(
                 context.l10n.speakerTagPromptSaveVoicesTitle,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 2),
-              Text(context.l10n.speakerTagPromptSaveVoicesBody,
-                  style: const TextStyle(color: _mutedText, fontSize: 12)),
+              Text(
+                context.l10n.speakerTagPromptSaveVoicesBody,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
             ],
           ),
         ),
