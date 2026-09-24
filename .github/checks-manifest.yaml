@@ -433,6 +433,26 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: mobile-changelog-tests
+    command: ["python3", ".github/scripts/test_mobile_changelog.py"]
+    triggers: [".github/scripts/mobile-changelog.py", ".github/scripts/check-mobile-changelog.py", ".github/scripts/test_mobile_changelog.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "mobile release text and deterministic app-scoped exemption contract"
+  - id: mobile-changelog-data
+    command: ["python3", ".github/scripts/mobile-changelog.py", "validate"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "repository-wide mobile changelog fragment and release schema"
+  - id: mobile-changelog-entry
+    command: ["python3", ".github/scripts/check-mobile-changelog.py", "--base", "{base}", "--head", "{head}"]
+    triggers: ["app/**"]
+    lanes: ["local", "ci"]
+    reason: "user-facing app changes require a durable mobile fragment on PR and main push"
+  - id: mobile-store-promote-contract
+    command: ["python3", "app/scripts/mobile_store_promote_test.py"]
+    triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manual public promotion requires exact already-processed build, matching release notes and roll-forward checks"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
