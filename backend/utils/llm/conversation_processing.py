@@ -35,9 +35,9 @@ from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
 from utils.llm.meeting_notes_validation import (
-    _validate_rich_meeting_notes,
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
+    validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -1384,7 +1384,7 @@ def get_conversation_notes(
     structured = response.to_structured()
     validate_structured_source_segment_ids(structured, prefix.transcript_segment_ids)
     if rich_mode:
-        _validate_rich_meeting_notes(
+        validate_rich_meeting_notes(
             structured,
             transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
             roster=roster,

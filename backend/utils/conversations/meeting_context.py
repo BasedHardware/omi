@@ -82,7 +82,7 @@ def _has_call_control(row: dict[str, Any]) -> bool:
     return _CALL_CONTROL_PATTERN.search(hay) is not None
 
 
-def _is_conferencing_row(row: dict[str, Any]) -> bool:
+def is_conferencing_row(row: dict[str, Any]) -> bool:
     if _is_messaging_call_app(str(row.get('appName') or '')):
         return True
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
@@ -224,7 +224,7 @@ def _row_identity_signal(text: str, row: Optional[dict[str, Any]] = None) -> int
 
 
 def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    conferencing = [row for row in rows if _is_conferencing_row(row)]
+    conferencing = [row for row in rows if is_conferencing_row(row)]
     if not conferencing:
         return []
     combined = [

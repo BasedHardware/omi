@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
 import database.action_items as action_items_db
@@ -25,7 +25,7 @@ import database.screen_activity as screen_activity_db
 from database._client import get_firestore_client
 from database.auth import get_user_from_uid
 from models.calendar_context import CalendarMeetingContext
-from utils.conversations.meeting_context import _is_conferencing_row, stored_meeting_window
+from utils.conversations.meeting_context import is_conferencing_row, stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 
@@ -105,7 +105,7 @@ def _render_part(lines: Iterable[str], cap: int) -> str:
     return '\n'.join(rendered)
 
 
-def render_meeting_context_pack(pack: MeetingContextPack) -> str:
+def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
     """Render the pack as the dynamic BACKGROUND CONTEXT block, <= 6000 chars."""
     if pack is None or pack.empty:
         return ''
@@ -349,11 +349,14 @@ def _gather_prior_meetings(
     if not names and not emails and not person_ids:
         return ()
     window_start = started_at - timedelta(days=PRIOR_MEETING_LOOKBACK_DAYS)
+    # The database helpers are typed as dict rows but this is a runtime trust
+    # boundary — a malformed record degrades instead of aborting the source.
+    meetings: Any = None
+    conversations: Any = None
     try:
         meetings = calendar_db.list_meetings(uid, start_date=window_start, end_date=started_at, limit=60)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('meetings', uid, exc)
-        meetings = []
     try:
         conversations = conversations_db.get_conversations_without_photos(
             uid, limit=60, start_date=window_start, end_date=started_at
@@ -419,7 +422,7 @@ def _gather_prior_meetings(
         record_id = record.get('id')
         if isinstance(record_id, str) and record_id:
             try:
-                items = action_items_db.get_action_items(uid, conversation_id=record_id, completed=False, limit=3)
+                items: Any = action_items_db.get_action_items(uid, conversation_id=record_id, completed=False, limit=3)
                 open_items = tuple(
                     item['description'].strip()
                     for item in items or []
@@ -440,24 +443,27 @@ def _gather_prior_meetings(
     return tuple(notes)
 
 
-def _gather_people_facts(roster: MeetingRoster, people: list[Mapping[str, Any]]) -> tuple[PersonFact, ...]:
+def _person_email_values(person: Mapping[str, Any]) -> set[str]:
+    """Collect email-shaped strings from whichever email fields the doc carries."""
+    emails: set[str] = set()
+    for field_name in ('email', 'emails', 'email_addresses'):
+        raw = person.get(field_name)
+        candidates = raw if isinstance(raw, (list, tuple)) else [raw]
+        for value in candidates:
+            if isinstance(value, str) and '@' in value:
+                emails.add(value.strip().casefold())
+    return emails
+
+
+def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, Any]]) -> tuple[PersonFact, ...]:
     names, emails, person_ids = _roster_identity(roster)
     facts: list[PersonFact] = []
     seen: set[str] = set()
     for person in people:
         person_id = str(person.get('id')) if person.get('id') else ''
-        name = person.get('name') if isinstance(person.get('name'), str) else ''
-        person_emails = {
-            value.strip().casefold()
-            for field_name in ('email', 'emails', 'email_addresses')
-            for raw in (
-                [person.get(field_name)]
-                if not isinstance(person.get(field_name), (list, tuple))
-                else person.get(field_name)
-            )
-            for value in ([raw] if not isinstance(raw, (list, tuple)) else raw)
-            if isinstance(value, str) and '@' in value
-        }
+        raw_name = person.get('name')
+        name = raw_name if isinstance(raw_name, str) else ''
+        person_emails = _person_email_values(person)
         matched = (
             (person_id and person_id in person_ids)
             or (name and name.strip().casefold() in names)
@@ -493,7 +499,7 @@ def _gather_people_facts(roster: MeetingRoster, people: list[Mapping[str, Any]])
 
 def _gather_goals(uid: str) -> tuple[str, ...]:
     try:
-        goals = goals_db.get_user_goals(uid, limit=5)
+        goals: Any = goals_db.get_user_goals(uid, limit=5)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('goals', uid, exc)
         return ()
@@ -516,7 +522,7 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
         # fetching memories nothing can match against.
         return ()
     try:
-        memories = memories_db.get_memories(uid, limit=40)
+        memories: Any = memories_db.get_memories(uid, limit=40)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('memories', uid, exc)
         return ()
@@ -537,7 +543,7 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
 
 
 def _screen_row_rank(row: Mapping[str, Any]) -> int:
-    if _is_conferencing_row(dict(row)):
+    if is_conferencing_row(dict(row)):
         return 0
     # Shared-screen or browser content with OCR is next most useful; a bare
     # window title ranks last.
@@ -550,7 +556,7 @@ def _gather_screen_text(uid: str, conversation: Any) -> str:
     if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
         return ''
     try:
-        rows = screen_activity_db.get_screen_activity(
+        rows: Any = screen_activity_db.get_screen_activity(
             uid, start_date=started_at, end_date=finished_at, limit=MAX_SCREEN_ROWS
         )
     except Exception as exc:  # noqa: BLE001 - best effort
@@ -596,7 +602,7 @@ def gather_meeting_context_pack(
     conversation: Any,
     roster: MeetingRoster,
     *,
-    people: Optional[list[Mapping[str, Any]]] = None,
+    people: Optional[Sequence[Mapping[str, Any]]] = None,
     include_screen_text: bool = False,
     timezone_name: Optional[str] = None,
 ) -> Optional[MeetingContextPack]:

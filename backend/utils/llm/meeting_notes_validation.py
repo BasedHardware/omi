@@ -8,7 +8,7 @@ callers and tests already import from it.
 import re
 from typing import Any, Iterable, List, Optional
 
-from models.structured import Participant, Structured
+from models.structured import Participant, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.conversations.meeting_participants import MeetingRoster
 
 
@@ -28,7 +28,7 @@ def _validate_source_segment_ids(values: Any, valid_ids: set[str]) -> list[str]:
 
 
 def validate_structured_source_segment_ids(
-    structured: Structured, transcript_segment_ids: Optional[Iterable[str]]
+    structured: Structured, transcript_segment_ids: Optional[Iterable[object]]
 ) -> Structured:
     """Drop fabricated/duplicate evidence references from any summary output.
 
@@ -89,7 +89,7 @@ def _name_in_transcript(name: str, transcript_body: str) -> bool:
     return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
 
 
-def _validate_rich_meeting_notes(
+def validate_rich_meeting_notes(
     structured: Structured,
     *,
     transcript_body: str,

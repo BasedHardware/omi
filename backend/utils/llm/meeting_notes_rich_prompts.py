@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 _LEGACY_NOTE_BODY_OPENING = (
     "- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one\n"

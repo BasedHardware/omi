@@ -322,14 +322,6 @@ def _person_org(person: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
-def _person_role(person: Mapping[str, Any]) -> Optional[str]:
-    for field in ('role', 'relationship', 'title'):
-        value = person.get(field)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
 def _resolve_person(
     name: Optional[str],
     email: Optional[str],
@@ -452,12 +444,12 @@ def normalize_meeting_participants(
     entry_source = calendar_source or str(fallback_source) or 'unknown'
     display_title = clean_display_title(title, screen_derived=screen_derived, platform=platform)
 
-    owner_email_set = {e.strip().casefold() for e in owner_emails if isinstance(e, str) and e.strip()}
+    owner_email_set = {e.strip().casefold() for e in owner_emails if e.strip()}
     owner_locals = {_email_local(e) for e in owner_email_set if '@' in e}
     owner_first = _first_token(owner_name)
     owner_known = bool(owner_first or owner_email_set)
 
-    people_list = [person for person in people if isinstance(person, Mapping)]
+    people_list = list(people)
 
     # Pass 1: classify every participant as owner / human / AI agent.
     classified: list[dict[str, Any]] = []
