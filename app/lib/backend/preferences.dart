@@ -561,10 +561,23 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // Button customization actions:
+  // 0 = End & process conversation
+  // 1 = Pause/mute recording
+  // 2 = Star ongoing conversation
+  // 3 = Ask question / voice mode
+
+  int get singleTapAction => getInt('singleTapAction', defaultValue: 3);
+
+  set singleTapAction(int value) => saveInt('singleTapAction', value);
+
+  int get doubleTapAction => getInt('doubleTapAction', defaultValue: 1);
 
   set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  int get tripleTapAction => getInt('tripleTapAction', defaultValue: 0);
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
 
   // Keep backward compatibility
   bool get doubleTapPausesMuting => doubleTapAction == 1;

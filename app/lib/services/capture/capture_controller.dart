@@ -1238,21 +1238,15 @@ class CaptureController extends ChangeNotifier
             }
           }
 
-          // double tap
-          if (buttonState == 2) {
-            Logger.debug("Double tap detected");
-
-            // Guard: ignore if already processing a button event
+          void handleAction(int action) {
             if (_isProcessingButtonEvent) {
-              Logger.debug("Double tap: already processing, ignoring");
+              Logger.debug("Button event: already processing, ignoring");
               return;
             }
 
-            int doubleTapAction = _preferences.doubleTapAction;
-
-            if (doubleTapAction == 1) {
-              // Pause/resume recording
-              Logger.debug("Double tap: toggling pause/mute");
+            if (action == 1) {
+              // Pause/resume recording (Mute/Unmute)
+              Logger.debug("Button action: toggling pause/mute");
               _isProcessingButtonEvent = true;
               if (isPaused) {
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
@@ -1271,50 +1265,58 @@ class CaptureController extends ChangeNotifier
                   _isProcessingButtonEvent = false;
                 });
               }
-            } else if (doubleTapAction == 2) {
+            } else if (action == 2) {
               // Star ongoing conversation (doesn't end it)
-              Logger.debug("Double tap: marking conversation for starring");
+              Logger.debug("Button action: marking conversation for starring");
               if (!_starOngoingConversation) {
                 markConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-                // Haptic feedback to confirm
                 HapticFeedback.mediumImpact();
               } else {
-                // Toggle off if already marked
                 unmarkConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
                 HapticFeedback.lightImpact();
               }
+            } else if (action == 3) {
+              // Toggle voice question mode (Ask Question)
+              Logger.debug("Button action: toggling voice question mode");
+              if (_voiceCommandSession == null) {
+                if (OmiVoicePlaybackService.instance.isSpeaking) {
+                  OmiVoicePlaybackService.instance.interrupt();
+                }
+                _voiceCommandSession = DateTime.now();
+                _commandBytes = [];
+                _startVoiceCommandTimeout(deviceId);
+                _playSpeakerHaptic(deviceId, 1);
+              } else {
+                _endVoiceCommandSession(deviceId);
+              }
             } else {
-              // End conversation and process (default)
-              Logger.debug("Double tap: processing conversation");
+              // End conversation and process (action == 0 or default)
+              Logger.debug("Button action: processing conversation");
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
               forceProcessingCurrentConversation();
             }
+          }
+
+          // Triple tap (buttonState == 6)
+          if (buttonState == 6) {
+            Logger.debug("Triple tap detected");
+            handleAction(_preferences.tripleTapAction);
             return;
           }
 
-          // Single tap (buttonState == 1) - toggle voice question mode
-          // Tap once to start, tap again to end
+          // Double tap (buttonState == 2)
+          if (buttonState == 2) {
+            Logger.debug("Double tap detected");
+            handleAction(_preferences.doubleTapAction);
+            return;
+          }
+
+          // Single tap (buttonState == 1)
           if (buttonState == 1) {
-            debugPrint("Single tap detected");
-            if (_voiceCommandSession == null) {
-              // Start voice question session (new toggle mode)
-              debugPrint("Starting voice question session (toggle mode)");
-              // Cut off any in-flight voice playback from a prior reply so the
-              // new recording starts clean.
-              if (OmiVoicePlaybackService.instance.isSpeaking) {
-                OmiVoicePlaybackService.instance.interrupt();
-              }
-              _voiceCommandSession = DateTime.now();
-              _commandBytes = [];
-              _startVoiceCommandTimeout(deviceId);
-              _playSpeakerHaptic(deviceId, 1);
-            } else {
-              // End on second tap
-              debugPrint("Ending voice question session (toggle mode)");
-              _endVoiceCommandSession(deviceId);
-            }
+            Logger.debug("Single tap detected");
+            handleAction(_preferences.singleTapAction);
             return;
           }
 

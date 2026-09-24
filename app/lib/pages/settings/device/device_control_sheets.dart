@@ -26,32 +26,46 @@ String _micGainDescription(BuildContext context, int level) {
   return level >= 0 && level < descriptions.length ? descriptions[level] : '';
 }
 
-/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
-/// (0 end and process, 1 mute/unmute, 2 star), or null when dismissed.
-Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current}) {
+/// Lets the reader pick what a button press on the device does. Resolves to the chosen action
+/// (0 end and process, 1 mute/unmute, 2 star, 3 ask question), or null when dismissed.
+Future<int?> showButtonActionSheet(
+  BuildContext context, {
+  required String title,
+  required int current,
+}) {
   final l10n = context.l10n;
-  final options = [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing];
+  final options = [
+    (0, l10n.endAndProcess),
+    (1, l10n.deviceOnboardingMuteUnmute),
+    (2, l10n.starOngoing),
+    (3, 'Ask Question'),
+  ];
   return showOmiSheet<int>(
     context: context,
-    title: l10n.doubleTapAction,
+    title: title,
     padding: const EdgeInsets.only(bottom: OmiSpacing.md),
     builder: (sheetContext) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < options.length; i++)
+        for (final (action, label) in options)
           Semantics(
-            selected: i == current,
+            selected: action == current,
             child: OmiSettingsRow(
-              title: options[i],
+              title: label,
               showChevron: false,
-              trailing: i == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              onTap: () => Navigator.of(sheetContext).pop(i),
+              trailing: action == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              onTap: () => Navigator.of(sheetContext).pop(action),
             ),
           ),
       ],
     ),
   );
 }
+
+/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
+/// (0 end and process, 1 mute/unmute, 2 star), or null when dismissed.
+Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current}) =>
+    showButtonActionSheet(context, title: context.l10n.doubleTapAction, current: current);
 
 /// LED brightness (0–100 %). [onChanged] fires while dragging, [onChangeEnd] when released.
 Future<void> showLedBrightnessSheet(
