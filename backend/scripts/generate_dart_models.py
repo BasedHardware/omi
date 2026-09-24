@@ -241,6 +241,7 @@ SCHEMA_GROUPS = {
             'KnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
+            'StatusResponse',
         ),
     },
     'wrapped_task_integrations': {
