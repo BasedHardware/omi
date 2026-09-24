@@ -10384,4 +10384,22 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Buat deskripsi';
+
+  @override
+  String get selectImageFileTitle => 'Pilih file gambar';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pilih gambar mini';
+
+  @override
+  String get appIdNotFoundError => 'ID Aplikasi tidak ditemukan';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest berhasil dimuat ulang';
+
+  @override
+  String get manifestRefreshFailed => 'Gagal memuat ulang manifest';
 }

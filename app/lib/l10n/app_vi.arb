@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Xóa ảnh chụp màn hình",
     "addScreenshot": "Thêm ảnh chụp màn hình",
     "aiGenRegenerateIcon": "Tạo lại biểu tượng",
-    "categoryAppCount": "{count, plural, =1{1 ứng dụng} other{{count} ứng dụng}}"
+    "categoryAppCount": "{count, plural, =1{1 ứng dụng} other{{count} ứng dụng}}",
+    "generateDescription": "Tạo mô tả",
+    "selectImageFileTitle": "Chọn tệp hình ảnh",
+    "selectThumbnailImageTitle": "Chọn hình thu nhỏ",
+    "appIdNotFoundError": "Không tìm thấy ID ứng dụng",
+    "manifestRefreshedSuccess": "Đã làm mới manifest thành công",
+    "manifestRefreshFailed": "Không thể làm mới manifest"
 }

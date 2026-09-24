@@ -10896,5 +10896,11 @@
     "removeScreenshot": "اسکرین شاٹ ہٹائیں",
     "addScreenshot": "اسکرین شاٹ شامل کریں",
     "aiGenRegenerateIcon": "آئیکن دوبارہ بنائیں",
-    "categoryAppCount": "{count, plural, =1{1 ایپ} other{{count} ایپس}}"
+    "categoryAppCount": "{count, plural, =1{1 ایپ} other{{count} ایپس}}",
+    "generateDescription": "تفصیل تیار کریں",
+    "selectImageFileTitle": "ایک تصویری فائل منتخب کریں",
+    "selectThumbnailImageTitle": "ایک تھمب نیل تصویر منتخب کریں",
+    "appIdNotFoundError": "ایپ ID نہیں ملی",
+    "manifestRefreshedSuccess": "مینی فیسٹ کامیابی سے ریفریش ہو گیا",
+    "manifestRefreshFailed": "مینی فیسٹ ریفریش کرنے میں ناکام"
 }

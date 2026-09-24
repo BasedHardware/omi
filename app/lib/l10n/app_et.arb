@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Eemalda ekraanipilt",
     "addScreenshot": "Lisa ekraanipilt",
     "aiGenRegenerateIcon": "Loo ikoon uuesti",
-    "categoryAppCount": "{count, plural, =1{1 rakendus} other{{count} rakendust}}"
+    "categoryAppCount": "{count, plural, =1{1 rakendus} other{{count} rakendust}}",
+    "generateDescription": "Genereeri kirjeldus",
+    "selectImageFileTitle": "Vali pildifail",
+    "selectThumbnailImageTitle": "Vali pisipilt",
+    "appIdNotFoundError": "Rakenduse ID-d ei leitud",
+    "manifestRefreshedSuccess": "Manifest värskendati edukalt",
+    "manifestRefreshFailed": "Manifesti värskendamine ebaõnnestus"
 }

@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Elimina la captura de pantalla",
     "addScreenshot": "Afegeix una captura de pantalla",
     "aiGenRegenerateIcon": "Torna a generar la icona",
-    "categoryAppCount": "{count, plural, =1{1 aplicació} other{{count} aplicacions}}"
+    "categoryAppCount": "{count, plural, =1{1 aplicació} other{{count} aplicacions}}",
+    "generateDescription": "Genera una descripció",
+    "selectImageFileTitle": "Selecciona un fitxer d'imatge",
+    "selectThumbnailImageTitle": "Selecciona una imatge en miniatura",
+    "appIdNotFoundError": "No s'ha trobat l'ID de l'aplicació",
+    "manifestRefreshedSuccess": "El manifest s'ha actualitzat correctament",
+    "manifestRefreshFailed": "No s'ha pogut actualitzar el manifest"
 }

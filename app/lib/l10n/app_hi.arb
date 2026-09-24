@@ -3324,5 +3324,11 @@
     "removeScreenshot": "स्क्रीनशॉट हटाएं",
     "addScreenshot": "स्क्रीनशॉट जोड़ें",
     "aiGenRegenerateIcon": "आइकन फिर से बनाएं",
-    "categoryAppCount": "{count, plural, =1{1 ऐप} other{{count} ऐप}}"
+    "categoryAppCount": "{count, plural, =1{1 ऐप} other{{count} ऐप}}",
+    "generateDescription": "विवरण जनरेट करें",
+    "selectImageFileTitle": "एक इमेज फ़ाइल चुनें",
+    "selectThumbnailImageTitle": "एक थंबनेल इमेज चुनें",
+    "appIdNotFoundError": "ऐप ID नहीं मिली",
+    "manifestRefreshedSuccess": "मैनिफ़ेस्ट सफलतापूर्वक रीफ़्रेश किया गया",
+    "manifestRefreshFailed": "मैनिफ़ेस्ट रीफ़्रेश करने में विफल"
 }

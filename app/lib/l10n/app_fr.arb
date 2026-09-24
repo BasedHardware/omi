@@ -3359,5 +3359,11 @@
     "removeScreenshot": "Retirer la capture d'écran",
     "addScreenshot": "Ajouter une capture d'écran",
     "aiGenRegenerateIcon": "Régénérer l’icône",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "generateDescription": "Générer une description",
+    "selectImageFileTitle": "Sélectionner un fichier image",
+    "selectThumbnailImageTitle": "Sélectionner une image miniature",
+    "appIdNotFoundError": "ID de l'application introuvable",
+    "manifestRefreshedSuccess": "Manifeste actualisé avec succès",
+    "manifestRefreshFailed": "Échec de l'actualisation du manifeste"
 }

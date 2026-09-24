@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Премахване на екранната снимка",
     "addScreenshot": "Добавяне на екранна снимка",
     "aiGenRegenerateIcon": "Генериране на иконата отново",
-    "categoryAppCount": "{count, plural, =1{1 приложение} other{{count} приложения}}"
+    "categoryAppCount": "{count, plural, =1{1 приложение} other{{count} приложения}}",
+    "generateDescription": "Генерирай описание",
+    "selectImageFileTitle": "Изберете файл с изображение",
+    "selectThumbnailImageTitle": "Изберете миниатюрно изображение",
+    "appIdNotFoundError": "ID на приложението не е намерено",
+    "manifestRefreshedSuccess": "Манифестът е обновен успешно",
+    "manifestRefreshFailed": "Неуспешно опресняване на манифеста"
 }

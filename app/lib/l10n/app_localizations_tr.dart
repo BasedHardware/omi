@@ -10385,4 +10385,22 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Açıklama oluştur';
+
+  @override
+  String get selectImageFileTitle => 'Bir resim dosyası seçin';
+
+  @override
+  String get selectThumbnailImageTitle => 'Bir küçük resim seçin';
+
+  @override
+  String get appIdNotFoundError => 'Uygulama Kimliği bulunamadı';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest başarıyla yenilendi';
+
+  @override
+  String get manifestRefreshFailed => 'Manifest yenilenemedi';
 }

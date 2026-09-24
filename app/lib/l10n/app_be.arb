@@ -10896,5 +10896,11 @@
     "removeScreenshot": "Выдаліць здымак экрана",
     "addScreenshot": "Дадаць здымак экрана",
     "aiGenRegenerateIcon": "Згенераваць значок нанова",
-    "categoryAppCount": "{count, plural, =1{1 дадатак} other{Дадаткаў: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 дадатак} other{Дадаткаў: {count}}}",
+    "generateDescription": "Стварыць апісанне",
+    "selectImageFileTitle": "Абраць файл выявы",
+    "selectThumbnailImageTitle": "Абраць мініяцюру",
+    "appIdNotFoundError": "ID прыбора не знойдзены",
+    "manifestRefreshedSuccess": "Маніфест паспяхова абноўлены",
+    "manifestRefreshFailed": "Не ўдалося абнавіць маніфест"
 }

@@ -10201,4 +10201,22 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => '説明を生成';
+
+  @override
+  String get selectImageFileTitle => '画像ファイルを選択';
+
+  @override
+  String get selectThumbnailImageTitle => 'サムネイル画像を選択';
+
+  @override
+  String get appIdNotFoundError => 'アプリIDが見つかりません';
+
+  @override
+  String get manifestRefreshedSuccess => 'マニフェストが正常に更新されました';
+
+  @override
+  String get manifestRefreshFailed => 'マニフェストの更新に失敗しました';
 }

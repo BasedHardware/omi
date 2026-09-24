@@ -10421,4 +10421,22 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Generează descrierea';
+
+  @override
+  String get selectImageFileTitle => 'Selectați un fișier imagine';
+
+  @override
+  String get selectThumbnailImageTitle => 'Selectați o imagine miniatură';
+
+  @override
+  String get appIdNotFoundError => 'ID-ul aplicației nu a fost găsit';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifestul a fost reîmprospătat cu succes';
+
+  @override
+  String get manifestRefreshFailed => 'Reîmprospătarea manifestului a eșuat';
 }

@@ -10384,4 +10384,22 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'تفصیل تیار کریں';
+
+  @override
+  String get selectImageFileTitle => 'ایک تصویری فائل منتخب کریں';
+
+  @override
+  String get selectThumbnailImageTitle => 'ایک تھمب نیل تصویر منتخب کریں';
+
+  @override
+  String get appIdNotFoundError => 'ایپ ID نہیں ملی';
+
+  @override
+  String get manifestRefreshedSuccess => 'مینی فیسٹ کامیابی سے ریفریش ہو گیا';
+
+  @override
+  String get manifestRefreshFailed => 'مینی فیسٹ ریفریش کرنے میں ناکام';
 }

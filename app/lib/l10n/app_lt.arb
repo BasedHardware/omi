@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Pašalinti ekrano kopiją",
     "addScreenshot": "Pridėti ekrano kopiją",
     "aiGenRegenerateIcon": "Sugeneruoti piktogramą iš naujo",
-    "categoryAppCount": "{count, plural, =1{1 programėlė} other{Programėlės: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 programėlė} other{Programėlės: {count}}}",
+    "generateDescription": "Generuoti aprašymą",
+    "selectImageFileTitle": "Pasirinkite vaizdo failą",
+    "selectThumbnailImageTitle": "Pasirinkite miniatiūrą",
+    "appIdNotFoundError": "Programos ID nerastas",
+    "manifestRefreshedSuccess": "Manifestas sėkmingai atnaujintas",
+    "manifestRefreshFailed": "Nepavyko atnaujinti manifesto"
 }

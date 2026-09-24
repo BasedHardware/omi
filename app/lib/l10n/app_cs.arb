@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Odebrat snímek obrazovky",
     "addScreenshot": "Přidat snímek obrazovky",
     "aiGenRegenerateIcon": "Znovu vygenerovat ikonu",
-    "categoryAppCount": "{count, plural, =1{1 aplikace} other{Aplikace: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 aplikace} other{Aplikace: {count}}}",
+    "generateDescription": "Vygenerovat popis",
+    "selectImageFileTitle": "Vyberte soubor obrázku",
+    "selectThumbnailImageTitle": "Vyberte miniaturu obrázku",
+    "appIdNotFoundError": "ID aplikace nebylo nalezeno",
+    "manifestRefreshedSuccess": "Manifest byl úspěšně obnoven",
+    "manifestRefreshFailed": "Nepodařilo se obnovit manifest"
 }

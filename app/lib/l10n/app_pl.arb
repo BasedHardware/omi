@@ -3359,5 +3359,11 @@
     "removeScreenshot": "Usuń zrzut ekranu",
     "addScreenshot": "Dodaj zrzut ekranu",
     "aiGenRegenerateIcon": "Wygeneruj ikonę ponownie",
-    "categoryAppCount": "{count, plural, =1{1 aplikacja} other{Aplikacje: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 aplikacja} other{Aplikacje: {count}}}",
+    "generateDescription": "Wygeneruj opis",
+    "selectImageFileTitle": "Wybierz plik obrazu",
+    "selectThumbnailImageTitle": "Wybierz miniaturę obrazu",
+    "appIdNotFoundError": "Nie znaleziono ID aplikacji",
+    "manifestRefreshedSuccess": "Manifest został pomyślnie odświeżony",
+    "manifestRefreshFailed": "Nie udało się odświeżyć manifestu"
 }

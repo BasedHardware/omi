@@ -10896,5 +10896,11 @@
     "removeScreenshot": "Alisin ang screenshot",
     "addScreenshot": "Magdagdag ng screenshot",
     "aiGenRegenerateIcon": "Gumawa muli ng icon",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} na app}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} na app}}",
+    "generateDescription": "Bumuo ng paglalarawan",
+    "selectImageFileTitle": "Pumili ng image file",
+    "selectThumbnailImageTitle": "Pumili ng thumbnail na imahe",
+    "appIdNotFoundError": "Hindi nahanap ang App ID",
+    "manifestRefreshedSuccess": "Matagumpay na na-refresh ang manifest",
+    "manifestRefreshFailed": "Nabigong i-refresh ang manifest"
 }

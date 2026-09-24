@@ -3324,5 +3324,11 @@
     "removeScreenshot": "ลบภาพหน้าจอ",
     "addScreenshot": "เพิ่มภาพหน้าจอ",
     "aiGenRegenerateIcon": "สร้างไอคอนใหม่",
-    "categoryAppCount": "{count, plural, =1{1 แอป} other{{count} แอป}}"
+    "categoryAppCount": "{count, plural, =1{1 แอป} other{{count} แอป}}",
+    "generateDescription": "สร้างคำอธิบาย",
+    "selectImageFileTitle": "เลือกไฟล์รูปภาพ",
+    "selectThumbnailImageTitle": "เลือกภาพขนาดย่อ",
+    "appIdNotFoundError": "ไม่พบ ID แอป",
+    "manifestRefreshedSuccess": "รีเฟรชไฟล์ manifest สำเร็จ",
+    "manifestRefreshFailed": "รีเฟรชไฟล์ manifest ไม่สำเร็จ"
 }

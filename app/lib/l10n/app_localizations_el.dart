@@ -10444,4 +10444,22 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Δημιουργία περιγραφής';
+
+  @override
+  String get selectImageFileTitle => 'Επιλέξτε ένα αρχείο εικόνας';
+
+  @override
+  String get selectThumbnailImageTitle => 'Επιλέξτε μια μικρογραφία εικόνας';
+
+  @override
+  String get appIdNotFoundError => 'Δεν βρέθηκε αναγνωριστικό εφαρμογής';
+
+  @override
+  String get manifestRefreshedSuccess => 'Το manifest ανανεώθηκε επιτυχώς';
+
+  @override
+  String get manifestRefreshFailed => 'Αποτυχία ανανέωσης του manifest';
 }

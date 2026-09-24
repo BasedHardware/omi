@@ -10896,5 +10896,11 @@
     "removeScreenshot": "حذف نماگرفت",
     "addScreenshot": "افزودن نماگرفت",
     "aiGenRegenerateIcon": "ساخت دوباره نماد",
-    "categoryAppCount": "{count, plural, =1{۱ اپلیکیشن} other{{count} اپلیکیشن}}"
+    "categoryAppCount": "{count, plural, =1{۱ اپلیکیشن} other{{count} اپلیکیشن}}",
+    "generateDescription": "تولید توضیح",
+    "selectImageFileTitle": "یک فایل تصویر انتخاب کنید",
+    "selectThumbnailImageTitle": "یک تصویر بندانگشتی انتخاب کنید",
+    "appIdNotFoundError": "شناسه برنامه یافت نشد",
+    "manifestRefreshedSuccess": "مانیفست با موفقیت به‌روزرسانی شد",
+    "manifestRefreshFailed": "به‌روزرسانی مانیفست ناموفق بود"
 }

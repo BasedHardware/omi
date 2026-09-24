@@ -10311,4 +10311,22 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'إنشاء وصف';
+
+  @override
+  String get selectImageFileTitle => 'اختر ملف صورة';
+
+  @override
+  String get selectThumbnailImageTitle => 'اختر صورة مصغرة';
+
+  @override
+  String get appIdNotFoundError => 'معرّف التطبيق غير موجود';
+
+  @override
+  String get manifestRefreshedSuccess => 'تم تحديث البيان بنجاح';
+
+  @override
+  String get manifestRefreshFailed => 'فشل تحديث البيان';
 }

@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Elimină captura de ecran",
     "addScreenshot": "Adaugă o captură de ecran",
     "aiGenRegenerateIcon": "Regenerează pictograma",
-    "categoryAppCount": "{count, plural, =1{1 aplicație} other{{count} aplicații}}"
+    "categoryAppCount": "{count, plural, =1{1 aplicație} other{{count} aplicații}}",
+    "generateDescription": "Generează descrierea",
+    "selectImageFileTitle": "Selectați un fișier imagine",
+    "selectThumbnailImageTitle": "Selectați o imagine miniatură",
+    "appIdNotFoundError": "ID-ul aplicației nu a fost găsit",
+    "manifestRefreshedSuccess": "Manifestul a fost reîmprospătat cu succes",
+    "manifestRefreshFailed": "Reîmprospătarea manifestului a eșuat"
 }

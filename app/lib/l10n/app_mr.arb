@@ -10896,5 +10896,11 @@
     "removeScreenshot": "स्क्रीनशॉट काढा",
     "addScreenshot": "स्क्रीनशॉट जोडा",
     "aiGenRegenerateIcon": "आयकॉन पुन्हा तयार करा",
-    "categoryAppCount": "{count, plural, =1{1 ॲप} other{{count} ॲप्स}}"
+    "categoryAppCount": "{count, plural, =1{1 ॲप} other{{count} ॲप्स}}",
+    "generateDescription": "वर्णन तयार करा",
+    "selectImageFileTitle": "इमेज फाइल निवडा",
+    "selectThumbnailImageTitle": "थंबनेल इमेज निवडा",
+    "appIdNotFoundError": "अ‍ॅप ID सापडली नाही",
+    "manifestRefreshedSuccess": "मॅनिफेस्ट यशस्वीरित्या रिफ्रेश केले",
+    "manifestRefreshFailed": "मॅनिफेस्ट रिफ्रेश करण्यात अयशस्वी"
 }

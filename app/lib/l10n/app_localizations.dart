@@ -19118,6 +19118,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 app} other{{count} apps}}'**
   String categoryAppCount(int count);
+
+  /// Tooltip of the icon button that AI-generates the app description in the submit/update app forms
+  ///
+  /// In en, this message translates to:
+  /// **'Generate description'**
+  String get generateDescription;
+
+  /// Native file-picker dialog title when choosing an app icon or thumbnail image on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select an Image File'**
+  String get selectImageFileTitle;
+
+  /// Native file-picker dialog title when choosing an app screenshot thumbnail on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select a Thumbnail Image'**
+  String get selectThumbnailImageTitle;
+
+  /// Error toast when refreshing an app's manifest without a known app id
+  ///
+  /// In en, this message translates to:
+  /// **'App ID not found'**
+  String get appIdNotFoundError;
+
+  /// Success toast after manually refreshing an MCP app's manifest
+  ///
+  /// In en, this message translates to:
+  /// **'Manifest refreshed successfully'**
+  String get manifestRefreshedSuccess;
+
+  /// Error toast when manually refreshing an MCP app's manifest fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh manifest'**
+  String get manifestRefreshFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

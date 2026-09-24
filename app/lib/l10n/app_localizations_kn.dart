@@ -10406,4 +10406,22 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'ವಿವರಣೆ ರಚಿಸಿ';
+
+  @override
+  String get selectImageFileTitle => 'ಚಿತ್ರ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get selectThumbnailImageTitle => 'ಥಂಬ್‌ನೇಲ್ ಚಿತ್ರ ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get appIdNotFoundError => 'ಅ್ಯಾಪ್ ID ಕಂಡುಬಂದಿಲ್ಲ';
+
+  @override
+  String get manifestRefreshedSuccess => 'ಮ್ಯಾನಿಫೆಸ್ಟ್ ಯಶಸ್ವಿಯಾಗಿ ರಿಫ್ರೆಶ್ ಆಗಿದೆ';
+
+  @override
+  String get manifestRefreshFailed => 'ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ';
 }

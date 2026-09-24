@@ -10377,4 +10377,22 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'বর্ণনা তৈরি করুন';
+
+  @override
+  String get selectImageFileTitle => 'একটি ছবি ফাইল নির্বাচন করুন';
+
+  @override
+  String get selectThumbnailImageTitle => 'একটি থাম্বনেইল ছবি নির্বাচন করুন';
+
+  @override
+  String get appIdNotFoundError => 'অ্যাপ আইডি পাওয়া যায়নি';
+
+  @override
+  String get manifestRefreshedSuccess => 'ম্যানিফেস্ট সফলভাবে রিফ্রেশ হয়েছে';
+
+  @override
+  String get manifestRefreshFailed => 'ম্যানিফেস্ট রিফ্রেশ করতে ব্যর্থ';
 }

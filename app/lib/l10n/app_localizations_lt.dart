@@ -10391,4 +10391,22 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Generuoti aprašymą';
+
+  @override
+  String get selectImageFileTitle => 'Pasirinkite vaizdo failą';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pasirinkite miniatiūrą';
+
+  @override
+  String get appIdNotFoundError => 'Programos ID nerastas';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifestas sėkmingai atnaujintas';
+
+  @override
+  String get manifestRefreshFailed => 'Nepavyko atnaujinti manifesto';
 }

@@ -10372,4 +10372,22 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Vygenerovat popis';
+
+  @override
+  String get selectImageFileTitle => 'Vyberte soubor obrázku';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vyberte miniaturu obrázku';
+
+  @override
+  String get appIdNotFoundError => 'ID aplikace nebylo nalezeno';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest byl úspěšně obnoven';
+
+  @override
+  String get manifestRefreshFailed => 'Nepodařilo se obnovit manifest';
 }

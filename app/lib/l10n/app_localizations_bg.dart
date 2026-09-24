@@ -10410,4 +10410,22 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Генерирай описание';
+
+  @override
+  String get selectImageFileTitle => 'Изберете файл с изображение';
+
+  @override
+  String get selectThumbnailImageTitle => 'Изберете миниатюрно изображение';
+
+  @override
+  String get appIdNotFoundError => 'ID на приложението не е намерено';
+
+  @override
+  String get manifestRefreshedSuccess => 'Манифестът е обновен успешно';
+
+  @override
+  String get manifestRefreshFailed => 'Неуспешно опресняване на манифеста';
 }

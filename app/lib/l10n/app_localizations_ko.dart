@@ -10204,4 +10204,22 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => '설명 생성';
+
+  @override
+  String get selectImageFileTitle => '이미지 파일 선택';
+
+  @override
+  String get selectThumbnailImageTitle => '썸네일 이미지 선택';
+
+  @override
+  String get appIdNotFoundError => '앱 ID를 찾을 수 없음';
+
+  @override
+  String get manifestRefreshedSuccess => '매니페스트가 성공적으로 새로 고쳐졌습니다';
+
+  @override
+  String get manifestRefreshFailed => '매니페스트 새로 고침 실패';
 }

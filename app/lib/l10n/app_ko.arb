@@ -3324,5 +3324,11 @@
     "removeScreenshot": "스크린샷 제거",
     "addScreenshot": "스크린샷 추가",
     "aiGenRegenerateIcon": "아이콘 다시 생성",
-    "categoryAppCount": "{count, plural, =1{앱 1개} other{앱 {count}개}}"
+    "categoryAppCount": "{count, plural, =1{앱 1개} other{앱 {count}개}}",
+    "generateDescription": "설명 생성",
+    "selectImageFileTitle": "이미지 파일 선택",
+    "selectThumbnailImageTitle": "썸네일 이미지 선택",
+    "appIdNotFoundError": "앱 ID를 찾을 수 없음",
+    "manifestRefreshedSuccess": "매니페스트가 성공적으로 새로 고쳐졌습니다",
+    "manifestRefreshFailed": "매니페스트 새로 고침 실패"
 }

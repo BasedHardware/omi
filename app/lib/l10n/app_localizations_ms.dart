@@ -10400,4 +10400,22 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Jana keterangan';
+
+  @override
+  String get selectImageFileTitle => 'Pilih fail imej';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pilih imej lakaran kecil';
+
+  @override
+  String get appIdNotFoundError => 'ID Aplikasi tidak ditemui';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest berjaya dimuat semula';
+
+  @override
+  String get manifestRefreshFailed => 'Gagal memuat semula manifest';
 }

@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Ta bort skärmbild",
     "addScreenshot": "Lägg till skärmbild",
     "aiGenRegenerateIcon": "Generera ikonen igen",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} appar}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} appar}}",
+    "generateDescription": "Generera beskrivning",
+    "selectImageFileTitle": "Välj en bildfil",
+    "selectThumbnailImageTitle": "Välj en miniatyrbild",
+    "appIdNotFoundError": "App-ID hittades inte",
+    "manifestRefreshedSuccess": "Manifestet har uppdaterats",
+    "manifestRefreshFailed": "Det gick inte att uppdatera manifestet"
 }

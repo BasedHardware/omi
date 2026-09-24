@@ -3324,5 +3324,11 @@
     "removeScreenshot": "スクリーンショットを削除",
     "addScreenshot": "スクリーンショットを追加",
     "aiGenRegenerateIcon": "アイコンを再生成",
-    "categoryAppCount": "{count, plural, =1{1 件のアプリ} other{{count} 件のアプリ}}"
+    "categoryAppCount": "{count, plural, =1{1 件のアプリ} other{{count} 件のアプリ}}",
+    "generateDescription": "説明を生成",
+    "selectImageFileTitle": "画像ファイルを選択",
+    "selectThumbnailImageTitle": "サムネイル画像を選択",
+    "appIdNotFoundError": "アプリIDが見つかりません",
+    "manifestRefreshedSuccess": "マニフェストが正常に更新されました",
+    "manifestRefreshFailed": "マニフェストの更新に失敗しました"
 }

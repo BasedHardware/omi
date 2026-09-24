@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Screenshot entfernen",
     "addScreenshot": "Screenshot hinzufügen",
     "aiGenRegenerateIcon": "Symbol neu generieren",
-    "categoryAppCount": "{count, plural, =1{1 App} other{{count} Apps}}"
+    "categoryAppCount": "{count, plural, =1{1 App} other{{count} Apps}}",
+    "generateDescription": "Beschreibung generieren",
+    "selectImageFileTitle": "Bilddatei auswählen",
+    "selectThumbnailImageTitle": "Vorschaubild auswählen",
+    "appIdNotFoundError": "App-ID nicht gefunden",
+    "manifestRefreshedSuccess": "Manifest erfolgreich aktualisiert",
+    "manifestRefreshFailed": "Manifest konnte nicht aktualisiert werden"
 }

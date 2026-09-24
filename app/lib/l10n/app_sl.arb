@@ -10896,5 +10896,11 @@
     "removeScreenshot": "Odstrani posnetek zaslona",
     "addScreenshot": "Dodaj posnetek zaslona",
     "aiGenRegenerateIcon": "Znova ustvari ikono",
-    "categoryAppCount": "{count, plural, =1{1 aplikacija} other{Aplikacije: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 aplikacija} other{Aplikacije: {count}}}",
+    "generateDescription": "Ustvari opis",
+    "selectImageFileTitle": "Izberite slikovno datoteko",
+    "selectThumbnailImageTitle": "Izberite sličico",
+    "appIdNotFoundError": "ID aplikacije ni bil najden",
+    "manifestRefreshedSuccess": "Manifest je bil uspešno osvežen",
+    "manifestRefreshFailed": "Osveževanje manifesta ni uspelo"
 }

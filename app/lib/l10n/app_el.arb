@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Αφαίρεση στιγμιότυπου οθόνης",
     "addScreenshot": "Προσθήκη στιγμιότυπου οθόνης",
     "aiGenRegenerateIcon": "Επαναδημιουργία εικονιδίου",
-    "categoryAppCount": "{count, plural, =1{1 εφαρμογή} other{{count} εφαρμογές}}"
+    "categoryAppCount": "{count, plural, =1{1 εφαρμογή} other{{count} εφαρμογές}}",
+    "generateDescription": "Δημιουργία περιγραφής",
+    "selectImageFileTitle": "Επιλέξτε ένα αρχείο εικόνας",
+    "selectThumbnailImageTitle": "Επιλέξτε μια μικρογραφία εικόνας",
+    "appIdNotFoundError": "Δεν βρέθηκε αναγνωριστικό εφαρμογής",
+    "manifestRefreshedSuccess": "Το manifest ανανεώθηκε επιτυχώς",
+    "manifestRefreshFailed": "Αποτυχία ανανέωσης του manifest"
 }

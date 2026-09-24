@@ -10363,4 +10363,22 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Vygenerovať popis';
+
+  @override
+  String get selectImageFileTitle => 'Vyberte súbor obrázka';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vyberte miniatúru obrázka';
+
+  @override
+  String get appIdNotFoundError => 'ID aplikácie sa nenašlo';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest bol úspešne obnovený';
+
+  @override
+  String get manifestRefreshFailed => 'Nepodarilo sa obnoviť manifest';
 }

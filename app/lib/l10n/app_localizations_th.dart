@@ -10314,4 +10314,22 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'สร้างคำอธิบาย';
+
+  @override
+  String get selectImageFileTitle => 'เลือกไฟล์รูปภาพ';
+
+  @override
+  String get selectThumbnailImageTitle => 'เลือกภาพขนาดย่อ';
+
+  @override
+  String get appIdNotFoundError => 'ไม่พบ ID แอป';
+
+  @override
+  String get manifestRefreshedSuccess => 'รีเฟรชไฟล์ manifest สำเร็จ';
+
+  @override
+  String get manifestRefreshFailed => 'รีเฟรชไฟล์ manifest ไม่สำเร็จ';
 }

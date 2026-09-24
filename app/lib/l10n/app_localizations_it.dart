@@ -10431,4 +10431,22 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Genera descrizione';
+
+  @override
+  String get selectImageFileTitle => 'Seleziona un file immagine';
+
+  @override
+  String get selectThumbnailImageTitle => 'Seleziona un\'immagine in miniatura';
+
+  @override
+  String get appIdNotFoundError => 'ID dell\'app non trovato';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest aggiornato con successo';
+
+  @override
+  String get manifestRefreshFailed => 'Impossibile aggiornare il manifest';
 }

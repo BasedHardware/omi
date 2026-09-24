@@ -10353,4 +10353,22 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'विवरण जनरेट करें';
+
+  @override
+  String get selectImageFileTitle => 'एक इमेज फ़ाइल चुनें';
+
+  @override
+  String get selectThumbnailImageTitle => 'एक थंबनेल इमेज चुनें';
+
+  @override
+  String get appIdNotFoundError => 'ऐप ID नहीं मिली';
+
+  @override
+  String get manifestRefreshedSuccess => 'मैनिफ़ेस्ट सफलतापूर्वक रीफ़्रेश किया गया';
+
+  @override
+  String get manifestRefreshFailed => 'मैनिफ़ेस्ट रीफ़्रेश करने में विफल';
 }

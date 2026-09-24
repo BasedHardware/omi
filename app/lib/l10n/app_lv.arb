@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Noņemt ekrānuzņēmumu",
     "addScreenshot": "Pievienot ekrānuzņēmumu",
     "aiGenRegenerateIcon": "Ģenerēt ikonu vēlreiz",
-    "categoryAppCount": "{count, plural, =1{1 lietotne} other{Lietotnes: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 lietotne} other{Lietotnes: {count}}}",
+    "generateDescription": "Ģenerēt aprakstu",
+    "selectImageFileTitle": "Atlasiet attēla failu",
+    "selectThumbnailImageTitle": "Atlasiet sīktēlu",
+    "appIdNotFoundError": "Lietotnes ID netika atrasts",
+    "manifestRefreshedSuccess": "Manifests veiksmīgi atsvaidzināts",
+    "manifestRefreshFailed": "Neizdevās atsvaidzināt manifestu"
 }

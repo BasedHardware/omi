@@ -10896,5 +10896,11 @@
     "removeScreenshot": "திரைப்பிடிப்பை அகற்று",
     "addScreenshot": "திரைப்பிடிப்பைச் சேர்",
     "aiGenRegenerateIcon": "ஐகானை மீண்டும் உருவாக்கு",
-    "categoryAppCount": "{count, plural, =1{1 ஆப்} other{{count} ஆப்கள்}}"
+    "categoryAppCount": "{count, plural, =1{1 ஆப்} other{{count} ஆப்கள்}}",
+    "generateDescription": "விளக்கத்தை உருவாக்கு",
+    "selectImageFileTitle": "படக் கோப்பைத் தேர்ந்தெடுக்கவும்",
+    "selectThumbnailImageTitle": "சிறு பட உருவைத் தேர்ந்தெடுக்கவும்",
+    "appIdNotFoundError": "பயன்பாடு ஐடி கிடைக்கவில்லை",
+    "manifestRefreshedSuccess": "மேனிஃபெஸ்ட் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது",
+    "manifestRefreshFailed": "மேனிஃபெஸ்டைப் புதுப்பிக்க முடியவில்லை"
 }

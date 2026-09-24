@@ -10465,4 +10465,22 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Bumuo ng paglalarawan';
+
+  @override
+  String get selectImageFileTitle => 'Pumili ng image file';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pumili ng thumbnail na imahe';
+
+  @override
+  String get appIdNotFoundError => 'Hindi nahanap ang App ID';
+
+  @override
+  String get manifestRefreshedSuccess => 'Matagumpay na na-refresh ang manifest';
+
+  @override
+  String get manifestRefreshFailed => 'Nabigong i-refresh ang manifest';
 }

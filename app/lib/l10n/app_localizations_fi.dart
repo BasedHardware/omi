@@ -10375,4 +10375,22 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Luo kuvaus';
+
+  @override
+  String get selectImageFileTitle => 'Valitse kuvatiedosto';
+
+  @override
+  String get selectThumbnailImageTitle => 'Valitse pikkukuva';
+
+  @override
+  String get appIdNotFoundError => 'Sovelluksen tunnusta ei löytynyt';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifesti päivitetty onnistuneesti';
+
+  @override
+  String get manifestRefreshFailed => 'Manifestin päivitys epäonnistui';
 }

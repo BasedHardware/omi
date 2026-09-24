@@ -3359,5 +3359,11 @@
     "removeScreenshot": "Ekran görüntüsünü kaldır",
     "addScreenshot": "Ekran görüntüsü ekle",
     "aiGenRegenerateIcon": "Simgeyi yeniden oluştur",
-    "categoryAppCount": "{count, plural, =1{1 uygulama} other{{count} uygulama}}"
+    "categoryAppCount": "{count, plural, =1{1 uygulama} other{{count} uygulama}}",
+    "generateDescription": "Açıklama oluştur",
+    "selectImageFileTitle": "Bir resim dosyası seçin",
+    "selectThumbnailImageTitle": "Bir küçük resim seçin",
+    "appIdNotFoundError": "Uygulama Kimliği bulunamadı",
+    "manifestRefreshedSuccess": "Manifest başarıyla yenilendi",
+    "manifestRefreshFailed": "Manifest yenilenemedi"
 }

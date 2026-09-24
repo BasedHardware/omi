@@ -10404,4 +10404,22 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Ustvari opis';
+
+  @override
+  String get selectImageFileTitle => 'Izberite slikovno datoteko';
+
+  @override
+  String get selectThumbnailImageTitle => 'Izberite sličico';
+
+  @override
+  String get appIdNotFoundError => 'ID aplikacije ni bil najden';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest je bil uspešno osvežen';
+
+  @override
+  String get manifestRefreshFailed => 'Osveževanje manifesta ni uspelo';
 }

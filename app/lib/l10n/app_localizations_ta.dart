@@ -10443,4 +10443,22 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'விளக்கத்தை உருவாக்கு';
+
+  @override
+  String get selectImageFileTitle => 'படக் கோப்பைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get selectThumbnailImageTitle => 'சிறு பட உருவைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get appIdNotFoundError => 'பயன்பாடு ஐடி கிடைக்கவில்லை';
+
+  @override
+  String get manifestRefreshedSuccess => 'மேனிஃபெஸ்ட் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது';
+
+  @override
+  String get manifestRefreshFailed => 'மேனிஃபெஸ்டைப் புதுப்பிக்க முடியவில்லை';
 }

@@ -12277,5 +12277,29 @@
                 "type": "int"
             }
         }
+    },
+    "generateDescription": "Generate description",
+    "@generateDescription": {
+        "description": "Tooltip of the icon button that AI-generates the app description in the submit/update app forms"
+    },
+    "selectImageFileTitle": "Select an Image File",
+    "@selectImageFileTitle": {
+        "description": "Native file-picker dialog title when choosing an app icon or thumbnail image on web"
+    },
+    "selectThumbnailImageTitle": "Select a Thumbnail Image",
+    "@selectThumbnailImageTitle": {
+        "description": "Native file-picker dialog title when choosing an app screenshot thumbnail on web"
+    },
+    "appIdNotFoundError": "App ID not found",
+    "@appIdNotFoundError": {
+        "description": "Error toast when refreshing an app's manifest without a known app id"
+    },
+    "manifestRefreshedSuccess": "Manifest refreshed successfully",
+    "@manifestRefreshedSuccess": {
+        "description": "Success toast after manually refreshing an MCP app's manifest"
+    },
+    "manifestRefreshFailed": "Failed to refresh manifest",
+    "@manifestRefreshFailed": {
+        "description": "Error toast when manually refreshing an MCP app's manifest fails"
     }
 }

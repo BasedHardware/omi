@@ -10379,4 +10379,22 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Generera beskrivning';
+
+  @override
+  String get selectImageFileTitle => 'Välj en bildfil';
+
+  @override
+  String get selectThumbnailImageTitle => 'Välj en miniatyrbild';
+
+  @override
+  String get appIdNotFoundError => 'App-ID hittades inte';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifestet har uppdaterats';
+
+  @override
+  String get manifestRefreshFailed => 'Det gick inte att uppdatera manifestet';
 }

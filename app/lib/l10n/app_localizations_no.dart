@@ -10373,4 +10373,22 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Generer beskrivelse';
+
+  @override
+  String get selectImageFileTitle => 'Velg en bildefil';
+
+  @override
+  String get selectThumbnailImageTitle => 'Velg et miniatyrbilde';
+
+  @override
+  String get appIdNotFoundError => 'Fant ikke app-ID';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest oppdatert';
+
+  @override
+  String get manifestRefreshFailed => 'Kunne ikke oppdatere manifest';
 }

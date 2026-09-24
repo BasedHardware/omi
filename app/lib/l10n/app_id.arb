@@ -3359,5 +3359,11 @@
     "removeScreenshot": "Hapus tangkapan layar",
     "addScreenshot": "Tambahkan tangkapan layar",
     "aiGenRegenerateIcon": "Buat ulang ikon",
-    "categoryAppCount": "{count, plural, =1{1 aplikasi} other{{count} aplikasi}}"
+    "categoryAppCount": "{count, plural, =1{1 aplikasi} other{{count} aplikasi}}",
+    "generateDescription": "Buat deskripsi",
+    "selectImageFileTitle": "Pilih file gambar",
+    "selectThumbnailImageTitle": "Pilih gambar mini",
+    "appIdNotFoundError": "ID Aplikasi tidak ditemukan",
+    "manifestRefreshedSuccess": "Manifest berhasil dimuat ulang",
+    "manifestRefreshFailed": "Gagal memuat ulang manifest"
 }

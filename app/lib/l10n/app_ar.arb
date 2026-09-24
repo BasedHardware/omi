@@ -3324,5 +3324,11 @@
     "removeScreenshot": "إزالة لقطة الشاشة",
     "addScreenshot": "إضافة لقطة شاشة",
     "aiGenRegenerateIcon": "إعادة إنشاء الأيقونة",
-    "categoryAppCount": "{count, plural, =1{تطبيق واحد} other{التطبيقات: {count}}}"
+    "categoryAppCount": "{count, plural, =1{تطبيق واحد} other{التطبيقات: {count}}}",
+    "generateDescription": "إنشاء وصف",
+    "selectImageFileTitle": "اختر ملف صورة",
+    "selectThumbnailImageTitle": "اختر صورة مصغرة",
+    "appIdNotFoundError": "معرّف التطبيق غير موجود",
+    "manifestRefreshedSuccess": "تم تحديث البيان بنجاح",
+    "manifestRefreshFailed": "فشل تحديث البيان"
 }

@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Poista kuvakaappaus",
     "addScreenshot": "Lisää kuvakaappaus",
     "aiGenRegenerateIcon": "Luo kuvake uudelleen",
-    "categoryAppCount": "{count, plural, =1{1 sovellus} other{{count} sovellusta}}"
+    "categoryAppCount": "{count, plural, =1{1 sovellus} other{{count} sovellusta}}",
+    "generateDescription": "Luo kuvaus",
+    "selectImageFileTitle": "Valitse kuvatiedosto",
+    "selectThumbnailImageTitle": "Valitse pikkukuva",
+    "appIdNotFoundError": "Sovelluksen tunnusta ei löytynyt",
+    "manifestRefreshedSuccess": "Manifesti päivitetty onnistuneesti",
+    "manifestRefreshFailed": "Manifestin päivitys epäonnistui"
 }

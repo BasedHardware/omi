@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Quitar captura de pantalla",
     "addScreenshot": "Añadir captura de pantalla",
     "aiGenRegenerateIcon": "Volver a generar el icono",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "generateDescription": "Generar descripción",
+    "selectImageFileTitle": "Selecciona un archivo de imagen",
+    "selectThumbnailImageTitle": "Selecciona una imagen en miniatura",
+    "appIdNotFoundError": "No se encontró el ID de la aplicación",
+    "manifestRefreshedSuccess": "Manifiesto actualizado correctamente",
+    "manifestRefreshFailed": "No se pudo actualizar el manifiesto"
 }

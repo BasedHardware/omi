@@ -10896,5 +10896,11 @@
     "removeScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ತೆಗೆದುಹಾಕಿ",
     "addScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಸೇರಿಸಿ",
     "aiGenRegenerateIcon": "ಐಕಾನ್ ಮರುರಚಿಸಿ",
-    "categoryAppCount": "{count, plural, =1{1 ಆ್ಯಪ್} other{{count} ಆ್ಯಪ್‌ಗಳು}}"
+    "categoryAppCount": "{count, plural, =1{1 ಆ್ಯಪ್} other{{count} ಆ್ಯಪ್‌ಗಳು}}",
+    "generateDescription": "ವಿವರಣೆ ರಚಿಸಿ",
+    "selectImageFileTitle": "ಚಿತ್ರ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ",
+    "selectThumbnailImageTitle": "ಥಂಬ್‌ನೇಲ್ ಚಿತ್ರ ಆಯ್ಕೆಮಾಡಿ",
+    "appIdNotFoundError": "ಅ್ಯಾಪ್ ID ಕಂಡುಬಂದಿಲ್ಲ",
+    "manifestRefreshedSuccess": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ಯಶಸ್ವಿಯಾಗಿ ರಿಫ್ರೆಶ್ ಆಗಿದೆ",
+    "manifestRefreshFailed": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ"
 }

@@ -10392,4 +10392,22 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Згенерувати опис';
+
+  @override
+  String get selectImageFileTitle => 'Виберіть файл зображення';
+
+  @override
+  String get selectThumbnailImageTitle => 'Виберіть мініатюру зображення';
+
+  @override
+  String get appIdNotFoundError => 'ID додатку не знайдено';
+
+  @override
+  String get manifestRefreshedSuccess => 'Маніфест успішно оновлено';
+
+  @override
+  String get manifestRefreshFailed => 'Не вдалося оновити маніфест';
 }

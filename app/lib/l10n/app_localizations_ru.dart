@@ -10410,4 +10410,22 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Сгенерировать описание';
+
+  @override
+  String get selectImageFileTitle => 'Выберите файл изображения';
+
+  @override
+  String get selectThumbnailImageTitle => 'Выберите миниатюру изображения';
+
+  @override
+  String get appIdNotFoundError => 'ID приложения не найден';
+
+  @override
+  String get manifestRefreshedSuccess => 'Манифест успешно обновлён';
+
+  @override
+  String get manifestRefreshFailed => 'Не удалось обновить манифест';
 }

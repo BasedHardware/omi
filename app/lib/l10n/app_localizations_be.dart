@@ -10403,4 +10403,22 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Стварыць апісанне';
+
+  @override
+  String get selectImageFileTitle => 'Абраць файл выявы';
+
+  @override
+  String get selectThumbnailImageTitle => 'Абраць мініяцюру';
+
+  @override
+  String get appIdNotFoundError => 'ID прыбора не знойдзены';
+
+  @override
+  String get manifestRefreshedSuccess => 'Маніфест паспяхова абноўлены';
+
+  @override
+  String get manifestRefreshFailed => 'Не ўдалося абнавіць маніфест';
 }

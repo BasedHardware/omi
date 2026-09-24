@@ -10896,5 +10896,11 @@
     "removeScreenshot": "הסרת צילום המסך",
     "addScreenshot": "הוספת צילום מסך",
     "aiGenRegenerateIcon": "יצירת הסמל מחדש",
-    "categoryAppCount": "{count, plural, =1{אפליקציה אחת} other{{count} אפליקציות}}"
+    "categoryAppCount": "{count, plural, =1{אפליקציה אחת} other{{count} אפליקציות}}",
+    "generateDescription": "צור תיאור",
+    "selectImageFileTitle": "בחר קובץ תמונה",
+    "selectThumbnailImageTitle": "בחר תמונה ממוזערת",
+    "appIdNotFoundError": "מזהה האפליקציה לא נמצא",
+    "manifestRefreshedSuccess": "המניפסט רוענן בהצלחה",
+    "manifestRefreshFailed": "רענון המניפסט נכשל"
 }

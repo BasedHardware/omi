@@ -10412,4 +10412,22 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Leírás generálása';
+
+  @override
+  String get selectImageFileTitle => 'Válasszon képfájlt';
+
+  @override
+  String get selectThumbnailImageTitle => 'Válasszon bélyegképet';
+
+  @override
+  String get appIdNotFoundError => 'Az alkalmazás azonosítója nem található';
+
+  @override
+  String get manifestRefreshedSuccess => 'A manifest sikeresen frissült';
+
+  @override
+  String get manifestRefreshFailed => 'A manifest frissítése sikertelen';
 }

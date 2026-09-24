@@ -10426,4 +10426,22 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Генерирај опис';
+
+  @override
+  String get selectImageFileTitle => 'Изберете датотека со слика';
+
+  @override
+  String get selectThumbnailImageTitle => 'Изберете сликичка';
+
+  @override
+  String get appIdNotFoundError => 'ID на апликацијата не е пронајден';
+
+  @override
+  String get manifestRefreshedSuccess => 'Манифестот е успешно освежен';
+
+  @override
+  String get manifestRefreshFailed => 'Неуспешно освежување на манифестот';
 }

@@ -3420,5 +3420,11 @@
     "removeScreenshot": "Képernyőkép eltávolítása",
     "addScreenshot": "Képernyőkép hozzáadása",
     "aiGenRegenerateIcon": "Ikon újragenerálása",
-    "categoryAppCount": "{count, plural, =1{1 alkalmazás} other{{count} alkalmazás}}"
+    "categoryAppCount": "{count, plural, =1{1 alkalmazás} other{{count} alkalmazás}}",
+    "generateDescription": "Leírás generálása",
+    "selectImageFileTitle": "Válasszon képfájlt",
+    "selectThumbnailImageTitle": "Válasszon bélyegképet",
+    "appIdNotFoundError": "Az alkalmazás azonosítója nem található",
+    "manifestRefreshedSuccess": "A manifest sikeresen frissült",
+    "manifestRefreshFailed": "A manifest frissítése sikertelen"
 }

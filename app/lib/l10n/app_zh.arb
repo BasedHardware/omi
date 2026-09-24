@@ -3324,5 +3324,11 @@
     "removeScreenshot": "移除截图",
     "addScreenshot": "添加截图",
     "aiGenRegenerateIcon": "重新生成图标",
-    "categoryAppCount": "{count, plural, =1{1 个应用} other{{count} 个应用}}"
+    "categoryAppCount": "{count, plural, =1{1 个应用} other{{count} 个应用}}",
+    "generateDescription": "生成描述",
+    "selectImageFileTitle": "选择图片文件",
+    "selectThumbnailImageTitle": "选择缩略图",
+    "appIdNotFoundError": "未找到应用ID",
+    "manifestRefreshedSuccess": "清单已成功刷新",
+    "manifestRefreshFailed": "刷新清单失败"
 }

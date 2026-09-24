@@ -10382,4 +10382,22 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'वर्णन तयार करा';
+
+  @override
+  String get selectImageFileTitle => 'इमेज फाइल निवडा';
+
+  @override
+  String get selectThumbnailImageTitle => 'थंबनेल इमेज निवडा';
+
+  @override
+  String get appIdNotFoundError => 'अ‍ॅप ID सापडली नाही';
+
+  @override
+  String get manifestRefreshedSuccess => 'मॅनिफेस्ट यशस्वीरित्या रिफ्रेश केले';
+
+  @override
+  String get manifestRefreshFailed => 'मॅनिफेस्ट रिफ्रेश करण्यात अयशस्वी';
 }

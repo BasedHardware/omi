@@ -10431,4 +10431,22 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Genera una descripció';
+
+  @override
+  String get selectImageFileTitle => 'Selecciona un fitxer d\'imatge';
+
+  @override
+  String get selectThumbnailImageTitle => 'Selecciona una imatge en miniatura';
+
+  @override
+  String get appIdNotFoundError => 'No s\'ha trobat l\'ID de l\'aplicació';
+
+  @override
+  String get manifestRefreshedSuccess => 'El manifest s\'ha actualitzat correctament';
+
+  @override
+  String get manifestRefreshFailed => 'No s\'ha pogut actualitzar el manifest';
 }

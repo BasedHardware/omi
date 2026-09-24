@@ -10896,5 +10896,11 @@
     "removeScreenshot": "Ukloni snimak ekrana",
     "addScreenshot": "Dodaj snimak ekrana",
     "aiGenRegenerateIcon": "Поново генериши иконицу",
-    "categoryAppCount": "{count, plural, =1{1 апликација} other{Апликације: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 апликација} other{Апликације: {count}}}",
+    "generateDescription": "Генериши опис",
+    "selectImageFileTitle": "Изаберите датотеку слике",
+    "selectThumbnailImageTitle": "Изаберите сличицу",
+    "appIdNotFoundError": "ID апликације није пронађен",
+    "manifestRefreshedSuccess": "Манифест је успешно освежен",
+    "manifestRefreshFailed": "Освежавање манифеста није успело"
 }

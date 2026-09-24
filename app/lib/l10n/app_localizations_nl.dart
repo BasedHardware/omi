@@ -10400,4 +10400,22 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Beschrijving genereren';
+
+  @override
+  String get selectImageFileTitle => 'Selecteer een afbeeldingsbestand';
+
+  @override
+  String get selectThumbnailImageTitle => 'Selecteer een miniatuurafbeelding';
+
+  @override
+  String get appIdNotFoundError => 'App-ID niet gevonden';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest succesvol vernieuwd';
+
+  @override
+  String get manifestRefreshFailed => 'Manifest vernieuwen mislukt';
 }

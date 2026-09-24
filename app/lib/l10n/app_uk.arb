@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Видалити знімок екрана",
     "addScreenshot": "Додати знімок екрана",
     "aiGenRegenerateIcon": "Згенерувати значок знову",
-    "categoryAppCount": "{count, plural, =1{1 застосунок} other{Застосунків: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 застосунок} other{Застосунків: {count}}}",
+    "generateDescription": "Згенерувати опис",
+    "selectImageFileTitle": "Виберіть файл зображення",
+    "selectThumbnailImageTitle": "Виберіть мініатюру зображення",
+    "appIdNotFoundError": "ID додатку не знайдено",
+    "manifestRefreshedSuccess": "Маніфест успішно оновлено",
+    "manifestRefreshFailed": "Не вдалося оновити маніфест"
 }

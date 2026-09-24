@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Rimuovi screenshot",
     "addScreenshot": "Aggiungi screenshot",
     "aiGenRegenerateIcon": "Rigenera icona",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} app}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} app}}",
+    "generateDescription": "Genera descrizione",
+    "selectImageFileTitle": "Seleziona un file immagine",
+    "selectThumbnailImageTitle": "Seleziona un'immagine in miniatura",
+    "appIdNotFoundError": "ID dell'app non trovato",
+    "manifestRefreshedSuccess": "Manifest aggiornato con successo",
+    "manifestRefreshFailed": "Impossibile aggiornare il manifest"
 }

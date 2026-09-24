@@ -10368,4 +10368,22 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Tạo mô tả';
+
+  @override
+  String get selectImageFileTitle => 'Chọn tệp hình ảnh';
+
+  @override
+  String get selectThumbnailImageTitle => 'Chọn hình thu nhỏ';
+
+  @override
+  String get appIdNotFoundError => 'Không tìm thấy ID ứng dụng';
+
+  @override
+  String get manifestRefreshedSuccess => 'Đã làm mới manifest thành công';
+
+  @override
+  String get manifestRefreshFailed => 'Không thể làm mới manifest';
 }

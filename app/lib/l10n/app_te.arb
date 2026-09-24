@@ -10896,5 +10896,11 @@
     "removeScreenshot": "స్క్రీన్‌షాట్‌ను తీసివేయండి",
     "addScreenshot": "స్క్రీన్‌షాట్‌ను జోడించండి",
     "aiGenRegenerateIcon": "ఐకాన్‌ను మళ్లీ రూపొందించండి",
-    "categoryAppCount": "{count, plural, =1{1 యాప్} other{{count} యాప్‌లు}}"
+    "categoryAppCount": "{count, plural, =1{1 యాప్} other{{count} యాప్‌లు}}",
+    "generateDescription": "వివరణను రూపొందించండి",
+    "selectImageFileTitle": "చిత్రం ఫైల్‌ను ఎంచుకోండి",
+    "selectThumbnailImageTitle": "థంబ్‌నెయిల్ చిత్రాన్ని ఎంచుకోండి",
+    "appIdNotFoundError": "అ్యాప్ ID కనుగొనబడలేదు",
+    "manifestRefreshedSuccess": "మానిఫెస్ట్ విజయవంతంగా రిఫ్రెష్ చేయబడింది",
+    "manifestRefreshFailed": "మానిఫెస్ట్‌ను రిఫ్రెష్ చేయడంలో విఫలమైంది"
 }

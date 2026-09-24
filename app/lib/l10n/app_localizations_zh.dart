@@ -10182,4 +10182,22 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => '生成描述';
+
+  @override
+  String get selectImageFileTitle => '选择图片文件';
+
+  @override
+  String get selectThumbnailImageTitle => '选择缩略图';
+
+  @override
+  String get appIdNotFoundError => '未找到应用ID';
+
+  @override
+  String get manifestRefreshedSuccess => '清单已成功刷新';
+
+  @override
+  String get manifestRefreshFailed => '刷新清单失败';
 }

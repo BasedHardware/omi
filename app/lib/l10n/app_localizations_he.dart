@@ -10291,4 +10291,22 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'צור תיאור';
+
+  @override
+  String get selectImageFileTitle => 'בחר קובץ תמונה';
+
+  @override
+  String get selectThumbnailImageTitle => 'בחר תמונה ממוזערת';
+
+  @override
+  String get appIdNotFoundError => 'מזהה האפליקציה לא נמצא';
+
+  @override
+  String get manifestRefreshedSuccess => 'המניפסט רוענן בהצלחה';
+
+  @override
+  String get manifestRefreshFailed => 'רענון המניפסט נכשל';
 }

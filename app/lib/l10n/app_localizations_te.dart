@@ -10421,4 +10421,22 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'వివరణను రూపొందించండి';
+
+  @override
+  String get selectImageFileTitle => 'చిత్రం ఫైల్‌ను ఎంచుకోండి';
+
+  @override
+  String get selectThumbnailImageTitle => 'థంబ్‌నెయిల్ చిత్రాన్ని ఎంచుకోండి';
+
+  @override
+  String get appIdNotFoundError => 'అ్యాప్ ID కనుగొనబడలేదు';
+
+  @override
+  String get manifestRefreshedSuccess => 'మానిఫెస్ట్ విజయవంతంగా రిఫ్రెష్ చేయబడింది';
+
+  @override
+  String get manifestRefreshFailed => 'మానిఫెస్ట్‌ను రిఫ్రెష్ చేయడంలో విఫలమైంది';
 }

@@ -3366,5 +3366,11 @@
     "removeScreenshot": "Fjern skærmbillede",
     "addScreenshot": "Tilføj skærmbillede",
     "aiGenRegenerateIcon": "Generér ikon igen",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "generateDescription": "Generer beskrivelse",
+    "selectImageFileTitle": "Vælg en billedfil",
+    "selectThumbnailImageTitle": "Vælg et miniaturebillede",
+    "appIdNotFoundError": "App-ID blev ikke fundet",
+    "manifestRefreshedSuccess": "Manifest opdateret",
+    "manifestRefreshFailed": "Kunne ikke opdatere manifest"
 }

@@ -3324,5 +3324,11 @@
     "removeScreenshot": "Screenshot verwijderen",
     "addScreenshot": "Screenshot toevoegen",
     "aiGenRegenerateIcon": "Pictogram opnieuw genereren",
-    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "generateDescription": "Beschrijving genereren",
+    "selectImageFileTitle": "Selecteer een afbeeldingsbestand",
+    "selectThumbnailImageTitle": "Selecteer een miniatuurafbeelding",
+    "appIdNotFoundError": "App-ID niet gevonden",
+    "manifestRefreshedSuccess": "Manifest succesvol vernieuwd",
+    "manifestRefreshFailed": "Manifest vernieuwen mislukt"
 }

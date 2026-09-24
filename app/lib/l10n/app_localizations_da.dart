@@ -10360,4 +10360,22 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Generer beskrivelse';
+
+  @override
+  String get selectImageFileTitle => 'Vælg en billedfil';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vælg et miniaturebillede';
+
+  @override
+  String get appIdNotFoundError => 'App-ID blev ikke fundet';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest opdateret';
+
+  @override
+  String get manifestRefreshFailed => 'Kunne ikke opdatere manifest';
 }

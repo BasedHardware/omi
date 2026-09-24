@@ -10373,4 +10373,22 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'تولید توضیح';
+
+  @override
+  String get selectImageFileTitle => 'یک فایل تصویر انتخاب کنید';
+
+  @override
+  String get selectThumbnailImageTitle => 'یک تصویر بندانگشتی انتخاب کنید';
+
+  @override
+  String get appIdNotFoundError => 'شناسه برنامه یافت نشد';
+
+  @override
+  String get manifestRefreshedSuccess => 'مانیفست با موفقیت به‌روزرسانی شد';
+
+  @override
+  String get manifestRefreshFailed => 'به‌روزرسانی مانیفست ناموفق بود';
 }

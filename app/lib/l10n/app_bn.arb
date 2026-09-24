@@ -10896,5 +10896,11 @@
     "removeScreenshot": "স্ক্রিনশট সরান",
     "addScreenshot": "স্ক্রিনশট যোগ করুন",
     "aiGenRegenerateIcon": "আইকন আবার তৈরি করুন",
-    "categoryAppCount": "{count, plural, =1{1টি অ্যাপ} other{{count}টি অ্যাপ}}"
+    "categoryAppCount": "{count, plural, =1{1টি অ্যাপ} other{{count}টি অ্যাপ}}",
+    "generateDescription": "বর্ণনা তৈরি করুন",
+    "selectImageFileTitle": "একটি ছবি ফাইল নির্বাচন করুন",
+    "selectThumbnailImageTitle": "একটি থাম্বনেইল ছবি নির্বাচন করুন",
+    "appIdNotFoundError": "অ্যাপ আইডি পাওয়া যায়নি",
+    "manifestRefreshedSuccess": "ম্যানিফেস্ট সফলভাবে রিফ্রেশ হয়েছে",
+    "manifestRefreshFailed": "ম্যানিফেস্ট রিফ্রেশ করতে ব্যর্থ"
 }

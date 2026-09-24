@@ -10367,4 +10367,22 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Genereeri kirjeldus';
+
+  @override
+  String get selectImageFileTitle => 'Vali pildifail';
+
+  @override
+  String get selectThumbnailImageTitle => 'Vali pisipilt';
+
+  @override
+  String get appIdNotFoundError => 'Rakenduse ID-d ei leitud';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifest värskendati edukalt';
+
+  @override
+  String get manifestRefreshFailed => 'Manifesti värskendamine ebaõnnestus';
 }

@@ -10397,4 +10397,22 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get generateDescription => 'Ģenerēt aprakstu';
+
+  @override
+  String get selectImageFileTitle => 'Atlasiet attēla failu';
+
+  @override
+  String get selectThumbnailImageTitle => 'Atlasiet sīktēlu';
+
+  @override
+  String get appIdNotFoundError => 'Lietotnes ID netika atrasts';
+
+  @override
+  String get manifestRefreshedSuccess => 'Manifests veiksmīgi atsvaidzināts';
+
+  @override
+  String get manifestRefreshFailed => 'Neizdevās atsvaidzināt manifestu';
 }

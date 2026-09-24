@@ -3359,5 +3359,11 @@
     "removeScreenshot": "Удалить скриншот",
     "addScreenshot": "Добавить скриншот",
     "aiGenRegenerateIcon": "Сгенерировать значок заново",
-    "categoryAppCount": "{count, plural, =1{1 приложение} other{Приложений: {count}}}"
+    "categoryAppCount": "{count, plural, =1{1 приложение} other{Приложений: {count}}}",
+    "generateDescription": "Сгенерировать описание",
+    "selectImageFileTitle": "Выберите файл изображения",
+    "selectThumbnailImageTitle": "Выберите миниатюру изображения",
+    "appIdNotFoundError": "ID приложения не найден",
+    "manifestRefreshedSuccess": "Манифест успешно обновлён",
+    "manifestRefreshFailed": "Не удалось обновить манифест"
 }
