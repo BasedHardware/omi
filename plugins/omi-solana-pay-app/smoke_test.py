@@ -49,8 +49,15 @@ def run_smoke_test():
     assert r.json().get("error") is not None
     print("  [PASS] /tools/check_solana_balance input validation guard")
 
-    print("\n✅ All Omi Solana Pay Smoke Tests Passed Successfully!")
+    # 6. Invalid Network Guard
+    r = client.post("/tools/check_solana_balance", json={"wallet_address": "FhthDcQ1UhdRetMXtEurj6YM24xiwTAZJc4WADmr9EB8", "network": "testnet"})
+    assert r.status_code == 200
+    assert "Invalid network" in r.json().get("error", "")
+    print("  [PASS] /tools/check_solana_balance network validation guard")
+
+    print("\n[ALL PASSED] All Omi Solana Pay Smoke Tests Passed Successfully!")
     return 0
 
 if __name__ == "__main__":
     sys.exit(run_smoke_test())
+
