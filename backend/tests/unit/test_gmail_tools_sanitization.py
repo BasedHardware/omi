@@ -46,8 +46,12 @@ google_utils.refresh_google_token = MagicMock()
 # Stub executors
 executors = sys.modules["utils.executors"]
 executors.db_executor = MagicMock()
+
+
 async def _fake_run_blocking(executor, fn, *args, **kwargs):
     return fn(*args, **kwargs)
+
+
 executors.run_blocking = _fake_run_blocking
 
 # Stub integration_base
@@ -91,7 +95,11 @@ def test_gmail_tools_sanitizes_api_exception():
     fake_grant = ("uid1", {"connected": True}, "test_token_secret_xyz", None)
     with (
         patch.object(gmail_tools, "run_blocking", return_value=fake_grant),
-        patch.object(gmail_tools, "retry_on_auth_async", side_effect=RuntimeError("oauth token test_token_secret_xyz invalid ssl")),
+        patch.object(
+            gmail_tools,
+            "retry_on_auth_async",
+            side_effect=RuntimeError("oauth token test_token_secret_xyz invalid ssl"),
+        ),
     ):
         res = asyncio.run(gmail_tools.get_gmail_messages_tool())
         assert res == "Unexpected error fetching Gmail messages."
