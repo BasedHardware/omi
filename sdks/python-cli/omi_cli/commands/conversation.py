@@ -147,10 +147,24 @@ def create_conversation(
             )
         text = sys.stdin.read()
 
+    cleaned_text = text.strip()
+    if not cleaned_text:
+        raise UsageError(
+            message="Empty text",
+            detail="Conversation text cannot be empty or whitespace.",
+        )
+
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
+
     body: dict[str, object] = {
-        "text": text,
+        "text": cleaned_text,
         "text_source": text_source.value,
-        "language": language,
+        "language": cleaned_lang,
     }
     if text_source_spec is not None:
         body["text_source_spec"] = text_source_spec
@@ -161,7 +175,9 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    cid = escape(str(result.get("id") or ""))
+    status = escape(str(result.get("status") or ""))
+    ctx.renderer.success(f"Conversation queued: [bold]{cid}[/bold] (status={status})")
     ctx.renderer.emit(result)
 
 
@@ -175,6 +191,12 @@ def from_segments(
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
     if segments_file.is_dir():
@@ -199,7 +221,7 @@ def from_segments(
             detail="Each segment needs at least 'text', 'start', 'end'.",
         )
 
-    body: dict[str, object] = {"transcript_segments": segments, "language": language}
+    body: dict[str, object] = {"transcript_segments": segments, "language": cleaned_lang}
     if source is not None:
         body["source"] = source
     if started_at is not None:
@@ -209,7 +231,8 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    cid = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Conversation queued: [bold]{cid}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -223,7 +246,10 @@ def update_conversation(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        cleaned_title = title.strip()
+        if not cleaned_title:
+            raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        body["title"] = cleaned_title
     if discarded is not None:
         body["discarded"] = discarded
     if not body:
