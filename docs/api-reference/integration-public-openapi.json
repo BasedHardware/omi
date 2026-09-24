@@ -157,6 +157,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "source": {
@@ -680,6 +681,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "source": {
