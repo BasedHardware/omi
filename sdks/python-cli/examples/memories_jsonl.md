@@ -76,7 +76,7 @@ def load_memories(source):
         content = sys.stdin.read()
     else:
         content = Path(source).read_text(encoding="utf-8")
-    
+
     data = json.loads(content)
     if isinstance(data, dict) and "memories" in data:
         data = data["memories"]
@@ -148,7 +148,7 @@ def convert(source, destination, mode, overwrite=False):
             continue
         if mem_id:
             seen_ids.add(mem_id)
-        
+
         record = format_record(item, mode)
         lines.append(json.dumps(record, ensure_ascii=False))
 
@@ -174,7 +174,7 @@ if __name__ == "__main__":
         count = convert(args.source, args.destination, args.format, overwrite=args.overwrite)
     except (ValueError, OSError) as exc:
         sys.exit(f"Conversion failed: {exc}")
-    
+
     print(f"Successfully converted {count} memory record{'s' if count != 1 else ''} to {args.destination} (mode: {args.format})")
 ```
 
