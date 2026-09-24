@@ -284,7 +284,16 @@ overlay:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          SCREEN_FRAME_SIGNING_SECRET:
+            secret: SCREEN_FRAME_SIGNING_SECRET
+            version: latest
         env:
+          SCREEN_FRAME_EGRESS_ENABLED:
+            value: 'true'
+            category: rollout
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
