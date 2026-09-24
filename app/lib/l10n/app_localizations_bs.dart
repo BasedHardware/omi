@@ -2147,7 +2147,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get alwaysInContext => 'Uvijek u kontekstu';
 
   @override
-  String get memoryContentHint => 'Volim da jedem sladoled...';
+  String get memoryContentHint => 'Više volim jutarnje sastanke.';
 
   @override
   String get failedToSaveMemory => 'Nije uspelo čuvanje. Molimo proverite vašu konekciju.';
@@ -10152,4 +10152,73 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Šta možeš učiniti za mene?',
+        'goal': 'Pomozi mi da postavim cilj',
+        'activity': 'Sažmi moje nedavne aktivnosti',
+        'improve': 'Kako mogu napredovati?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Sljedeće sedmice';
+
+  @override
+  String get clearSearch => 'Očisti pretragu';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Snimci ovog razgovora';
+
+  @override
+  String get captureRecordingSeparate => 'Odvoji…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Odvojiti ovaj snimak?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording će se prikazivati kao zaseban razgovor i više se neće grupisati s ovim događajem.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Odvoji';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Odvajanje nije uspjelo. Pokušajte ponovo.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Nije moguće otvoriti ovaj snimak.';
+
+  @override
+  String get captureRecordingViewing => 'Pregledate ovaj snimak';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Snimio: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Računar';
+
+  @override
+  String get renameConversation => 'Preimenuj';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Snimaka: $count',
+      one: '1 snimak',
+    );
+    return '$_temp0';
+  }
 }

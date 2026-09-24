@@ -142,3 +142,21 @@ def test_create_speakers_disabled_still_suppresses_creation():
     recorder = _Recorder()
     _run(_processor(recorder, create_speakers=False), "My name is Alice.")
     assert recorder.created == []
+
+
+@pytest.mark.parametrize('text', ["I'm Because it matters.", "My name is Googling.", "My name is Because."])
+def test_observed_mishears_never_lookup_or_create_people(text):
+    recorder = _Recorder()
+    _run(_processor(recorder), text)
+    assert recorder.created == []
+    assert recorder.lookups == []
+
+
+def test_owner_name_veto_uses_unicode_casefold(monkeypatch):
+    recorder = _Recorder()
+    monkeypatch.setattr(
+        transcripts, 'detect_speaker_introduction', lambda *a, **k: SimpleNamespace(name='STRASSE', explicit=True)
+    )
+    _run(_processor(recorder, owner_name='Straße'), 'synthetic introduction')
+    assert recorder.created == []
+    assert recorder.lookups == []

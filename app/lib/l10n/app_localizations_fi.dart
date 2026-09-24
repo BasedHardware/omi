@@ -2145,7 +2145,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get alwaysInContext => 'Aina kontekstissa';
 
   @override
-  String get memoryContentHint => 'Pidän jäätelön syömisestä...';
+  String get memoryContentHint => 'Pidän mieluiten kokoukset aamulla.';
 
   @override
   String get failedToSaveMemory => 'Tallennus epäonnistui. Tarkista yhteytesi.';
@@ -10126,4 +10126,73 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Mitä voit tehdä hyväkseni?',
+        'goal': 'Auta minua asettamaan tavoite',
+        'activity': 'Tee yhteenveto viimeaikaisista toimistani',
+        'improve': 'Miten voin kehittyä?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Ensi viikolla';
+
+  @override
+  String get clearSearch => 'Tyhjennä haku';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Tämän keskustelun tallenteet';
+
+  @override
+  String get captureRecordingSeparate => 'Erota…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Erotetaanko tämä tallenne?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording näytetään omana keskustelunaan, eikä sitä enää ryhmitellä tähän tapahtumaan.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Erota';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Erottaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tallennetta ei voitu avata.';
+
+  @override
+  String get captureRecordingViewing => 'Katselet tätä tallennetta';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Tallentanut $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Tietokone';
+
+  @override
+  String get renameConversation => 'Nimeä uudelleen';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta',
+      one: '1 tallenne',
+    );
+    return '$_temp0';
+  }
 }

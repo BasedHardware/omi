@@ -2104,7 +2104,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alwaysInContext => '始终包含在上下文中';
 
   @override
-  String get memoryContentHint => '我喜欢冰淇淋...';
+  String get memoryContentHint => '我更喜欢在上午开会。';
 
   @override
   String get failedToSaveMemory => '保存失败。';
@@ -9935,4 +9935,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '你能为我做些什么？',
+        'goal': '帮我设定一个目标',
+        'activity': '总结我最近的活动',
+        'improve': '我该如何改进？',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '下周';
+
+  @override
+  String get clearSearch => '清除搜索';
+
+  @override
+  String get captureRecordingsSheetTitle => '此对话的录音';
+
+  @override
+  String get captureRecordingSeparate => '分离…';
+
+  @override
+  String get captureRecordingSeparateTitle => '要分离此录音吗？';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording 将显示为单独的对话，并且不会再与此事件归为一组。';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '分离';
+
+  @override
+  String get captureRecordingSeparateFailed => '无法分离，请重试。';
+
+  @override
+  String get captureRecordingOpenFailed => '无法打开此录音。';
+
+  @override
+  String get captureRecordingViewing => '你正在查看此录音';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '由 $devices 录制';
+  }
+
+  @override
+  String get captureSourceDesktop => '电脑';
+
+  @override
+  String get renameConversation => '重命名';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段录音',
+      one: '1 段录音',
+    );
+    return '$_temp0';
+  }
 }

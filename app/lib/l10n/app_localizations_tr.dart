@@ -2153,7 +2153,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get alwaysInContext => 'Her zaman bağlamda';
 
   @override
-  String get memoryContentHint => 'Dondurma yemeyi severim...';
+  String get memoryContentHint => 'Sabah toplantılarını tercih ederim.';
 
   @override
   String get failedToSaveMemory => 'Kaydedilemedi. Lütfen bağlantınızı kontrol edin.';
@@ -10137,4 +10137,73 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Benim için neler yapabilirsin?',
+        'goal': 'Bir hedef belirlememe yardım et',
+        'activity': 'Son etkinliklerimi özetle',
+        'improve': 'Kendimi nasıl geliştirebilirim?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Gelecek hafta';
+
+  @override
+  String get clearSearch => 'Aramayı temizle';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Bu konuşmanın kayıtları';
+
+  @override
+  String get captureRecordingSeparate => 'Ayır…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Bu kayıt ayrılsın mı?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ayrı bir konuşma olarak görünecek ve bu etkinlikle tekrar gruplanmayacak.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Ayır';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Ayrılamadı. Tekrar deneyin.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Bu kayıt açılamadı.';
+
+  @override
+  String get captureRecordingViewing => 'Bu kaydı görüntülüyorsunuz';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Kaydeden: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Bilgisayar';
+
+  @override
+  String get renameConversation => 'Yeniden adlandır';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt',
+      one: '1 kayıt',
+    );
+    return '$_temp0';
+  }
 }

@@ -2146,7 +2146,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get alwaysInContext => 'Visada kontekste';
 
   @override
-  String get memoryContentHint => 'Mėgstu valgyti ledus...';
+  String get memoryContentHint => 'Pirmenybę teikiu rytiniams susitikimams.';
 
   @override
   String get failedToSaveMemory => 'Nepavyko išsaugoti. Patikrinkite ryšį.';
@@ -10144,4 +10144,73 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ką gali dėl manęs padaryti?',
+        'goal': 'Padėk man išsikelti tikslą',
+        'activity': 'Apibendrink mano naujausią veiklą',
+        'improve': 'Kaip galiu tobulėti?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Kitą savaitę';
+
+  @override
+  String get clearSearch => 'Išvalyti paiešką';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Šio pokalbio įrašai';
+
+  @override
+  String get captureRecordingSeparate => 'Atskirti…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Atskirti šį įrašą?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording bus rodomas kaip atskiras pokalbis ir daugiau nebus grupuojamas su šiuo įvykiu.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Atskirti';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Nepavyko atskirti. Bandykite dar kartą.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Nepavyko atidaryti šio įrašo.';
+
+  @override
+  String get captureRecordingViewing => 'Peržiūrite šį įrašą';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Įrašė $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Kompiuteris';
+
+  @override
+  String get renameConversation => 'Pervadinti';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Įrašų: $count',
+      one: '1 įrašas',
+    );
+    return '$_temp0';
+  }
 }

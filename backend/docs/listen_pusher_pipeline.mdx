@@ -213,6 +213,49 @@ or complementary speech remains independently available. `processing_conversatio
 is a lifecycle identity and the meeting receipt is a treatment verdict, so neither
 is repurposed as a cross-capture group.
 
+**Capture groups (one event, several surfaces).** A window match only proposes a
+pair. For up to six window matches per finalization, the helper re-reads the
+other capture's decrypted transcript and measures shared speech
+(`utils/conversations/shared_speech.py`). Word trigrams are compared, and
+containment is taken against the smaller transcript. Confirmation requires
+all three of these, each overridable:
+
+- at least 30 words on each side (`CROSS_DEVICE_GROUP_MIN_WORDS`);
+- at least 15 shared trigrams (`CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS`);
+- containment of at least 0.25 (`CROSS_DEVICE_GROUP_MIN_CONTAINMENT`).
+
+In production, unrelated pairs of the same user from different surfaces
+peaked at a containment of 0.13 (p99), while pairs that heard the same speech
+landed between 0.2 and 0.8. Confirmed pairs join one group through
+`database/capture_groups.py`, which is the only writer of:
+
+- `capture_group`: `id`, `primary_id`, `revision`, and `members[]` (`id`,
+  `source`, window, numeric evidence), identical on every member.
+- `capture_group_exclusions`: the conversations a person separated this one
+  from.
+
+The group `id` is minted independently of any member, so the primary (the
+longest window) can move without changing the event identity. A capture joins
+an existing group through any member. Two different groups are never bridged
+by one pair. The group is capped at 12 members. Every member is re-read inside
+the transaction, so a discard, a deletion, a separation or a window change
+fences the join.
+
+Processing writes (`upsert_conversation_with_lifecycle`,
+`persist_processing_result_with_lifecycle`) strip `capture_group`, so a stale
+in-memory conversation cannot clobber membership. Deleting a conversation
+removes it from its group first. `POST
+/v1/conversations/{id}/capture-group/separate` leaves the group stickily; a
+pair dissolves when one member leaves.
+
+Grouping is presentation metadata only. Transcripts, summaries, discard state
+and derived effects stay per capture. Clients render one row per group from
+the members they have loaded and keep every member reachable.
+`omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
+`applied`, `none` (window match without shared speech) and `conflict`. A
+failure records `duplicate_capture_check → separate_captures` and never blocks
+finalization.
+
 The candidate read is bounded to 100 rows ordered by finish time; dense histories
 or delayed finalization may exceed it. Saturation and lookup/write/config failures
 emit shared degraded fallback telemetry. Successful new links log only numeric
@@ -672,6 +715,17 @@ attempt, or a failed extraction can still lose that attempt: there is no durable
 job, lease, retry, or reconciliation worker. Reassigning the label can retry.
 Stored MANUAL decisions include concrete segment IDs and a generation; automatic
 matches and text suggestions do not create teaching receipts.
+
+Owner display names share `database.auth.get_user_name`: Firebase display name,
+Firestore `name`, then an explicit identity bullet on the first line of
+`ai_user_profile.profile_text`. Only the first name is displayed; unknown-name
+labels retain their caller defaults. Transcript prompts, chat prompts, API speaker
+labels, and live/sync owner embedding caches use this resolution. Live matching
+loads a stored owner embedding even when `speech_profile.wav` is absent; audio
+recovery still requires that file. Matching evidence and distance margins are
+unchanged. Text introductions matching the owner's first name (casefolded), or
+English stopwords including "because" and "googling", cannot mint a person.
+Existing people and stored conversation labels are not backfilled.
 
 People's `voice_readiness` is derived from stored evidence: `ready` requires
 verified v3 samples and a finite nonzero vector; `saved_sample_awaiting_embedding`

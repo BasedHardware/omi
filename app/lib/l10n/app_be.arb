@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Мне нравіцца есці мароженае...",
+    "memoryContentHint": "Я аддаю перавагу ранішнім сустрэчам.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,20 @@
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
     "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Што ты можаш зрабіць для мяне?} goal{Дапамажы мне паставіць мэту} activity{Падсумуй маю нядаўнюю дзейнасць} improve{Як я магу палепшыцца?} other{}}",
+    "nextWeek": "На наступным тыдні",
+    "clearSearch": "Ачысціць пошук",
+    "captureRecordingsSheetTitle": "Запісы гэтай размовы",
+    "captureRecordingSeparate": "Аддзяліць…",
+    "captureRecordingSeparateTitle": "Аддзяліць гэты запіс?",
+    "captureRecordingSeparateMessage": "{recording} будзе паказвацца як асобная размова і больш не будзе аб'ядноўвацца з гэтай падзеяй.",
+    "captureRecordingSeparateConfirm": "Аддзяліць",
+    "captureRecordingSeparateFailed": "Не ўдалося аддзяліць. Паспрабуйце яшчэ раз.",
+    "captureRecordingOpenFailed": "Не ўдалося адкрыць гэты запіс.",
+    "captureRecordingViewing": "Вы праглядаеце гэты запіс",
+    "captureRecordedBy": "Запісана: {devices}",
+    "captureSourceDesktop": "Камп'ютар",
+    "renameConversation": "Перайменаваць",
+    "captureRecordingsCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}"
 }

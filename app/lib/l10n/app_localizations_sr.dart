@@ -2146,7 +2146,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get alwaysInContext => 'Увек у контексту';
 
   @override
-  String get memoryContentHint => 'Волим да једем сладолед...';
+  String get memoryContentHint => 'Више волим јутарње састанке.';
 
   @override
   String get failedToSaveMemory => 'Не могу да сачувам. Молим вас проверите везу.';
@@ -10139,4 +10139,73 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Шта можеш да урадиш за мене?',
+        'goal': 'Помози ми да поставим циљ',
+        'activity': 'Сажми моје недавне активности',
+        'improve': 'Како могу да напредујем?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Следеће недеље';
+
+  @override
+  String get clearSearch => 'Обриши претрагу';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Снимци овог разговора';
+
+  @override
+  String get captureRecordingSeparate => 'Одвоји…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Одвојити овај снимак?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ће се приказивати као засебан разговор и више се неће груписати са овим догађајем.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Одвоји';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Одвајање није успело. Покушајте поново.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Није могуће отворити овај снимак.';
+
+  @override
+  String get captureRecordingViewing => 'Прегледате овај снимак';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Снимио: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Рачунар';
+
+  @override
+  String get renameConversation => 'Преименуј';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Снимака: $count',
+      one: '1 снимак',
+    );
+    return '$_temp0';
+  }
 }

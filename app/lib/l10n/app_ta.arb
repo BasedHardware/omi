@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...",
+    "memoryContentHint": "நான் காலை நேரக் கூட்டங்களை விரும்புகிறேன்.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,20 @@
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
     "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
+    "nextWeek": "அடுத்த வாரம்",
+    "clearSearch": "தேடலை அழி",
+    "captureRecordingsSheetTitle": "இந்த உரையாடலின் பதிவுகள்",
+    "captureRecordingSeparate": "பிரி…",
+    "captureRecordingSeparateTitle": "இந்தப் பதிவைப் பிரிக்கவா?",
+    "captureRecordingSeparateMessage": "{recording} தனி உரையாடலாகக் காட்டப்படும், இந்த நிகழ்வுடன் மீண்டும் குழுவாக்கப்படாது.",
+    "captureRecordingSeparateConfirm": "பிரி",
+    "captureRecordingSeparateFailed": "பிரிக்க முடியவில்லை. மீண்டும் முயலவும்.",
+    "captureRecordingOpenFailed": "இந்தப் பதிவைத் திறக்க முடியவில்லை.",
+    "captureRecordingViewing": "இந்தப் பதிவைப் பார்க்கிறீர்கள்",
+    "captureRecordedBy": "{devices} பதிவு செய்தது",
+    "captureSourceDesktop": "டெஸ்க்டாப்",
+    "renameConversation": "பெயர்மாற்று",
+    "captureRecordingsCount": "{count, plural, =1{1 பதிவு} other{{count} பதிவுகள்}}"
 }

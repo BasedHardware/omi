@@ -2145,7 +2145,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get alwaysInContext => 'همیشه در زمینه';
 
   @override
-  String get memoryContentHint => 'من دوست دارم بستنی بخورم...';
+  String get memoryContentHint => 'جلسه‌های صبح را ترجیح می‌دهم.';
 
   @override
   String get failedToSaveMemory => 'خطا در ذخیره. لطفاً اتصال خود را بررسی کنید.';
@@ -10125,4 +10125,73 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'چه کاری می‌توانی برایم انجام دهی؟',
+        'goal': 'کمکم کن هدفی تعیین کنم',
+        'activity': 'فعالیت‌های اخیرم را خلاصه کن',
+        'improve': 'چطور می‌توانم بهتر شوم؟',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'هفتهٔ آینده';
+
+  @override
+  String get clearSearch => 'پاک کردن جستجو';
+
+  @override
+  String get captureRecordingsSheetTitle => 'ضبط‌های این گفتگو';
+
+  @override
+  String get captureRecordingSeparate => 'جدا کردن…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'این ضبط جدا شود؟';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording به‌عنوان یک گفتگوی جداگانه نمایش داده می‌شود و دیگر با این رویداد گروه‌بندی نمی‌شود.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'جدا کردن';
+
+  @override
+  String get captureRecordingSeparateFailed => 'جدا کردن انجام نشد. دوباره تلاش کنید.';
+
+  @override
+  String get captureRecordingOpenFailed => 'این ضبط باز نشد.';
+
+  @override
+  String get captureRecordingViewing => 'در حال مشاهده این ضبط هستید';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'ضبط‌شده توسط $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'دسکتاپ';
+
+  @override
+  String get renameConversation => 'تغییر نام';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط',
+      one: '۱ ضبط',
+    );
+    return '$_temp0';
+  }
 }

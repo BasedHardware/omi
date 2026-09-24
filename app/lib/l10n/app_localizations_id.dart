@@ -2152,7 +2152,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get alwaysInContext => 'Selalu dalam konteks';
 
   @override
-  String get memoryContentHint => 'Saya suka makan es krim...';
+  String get memoryContentHint => 'Aku lebih suka rapat di pagi hari.';
 
   @override
   String get failedToSaveMemory => 'Gagal menyimpan. Silakan periksa koneksi Anda.';
@@ -10134,4 +10134,73 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Apa yang bisa kamu lakukan untukku?',
+        'goal': 'Bantu aku menetapkan tujuan',
+        'activity': 'Ringkas aktivitas terbaruku',
+        'improve': 'Bagaimana aku bisa menjadi lebih baik?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Minggu depan';
+
+  @override
+  String get clearSearch => 'Hapus pencarian';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Rekaman percakapan ini';
+
+  @override
+  String get captureRecordingSeparate => 'Pisahkan…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Pisahkan rekaman ini?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording akan tampil sebagai percakapan tersendiri dan tidak akan dikelompokkan lagi dengan acara ini.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Pisahkan';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Tidak dapat memisahkan. Coba lagi.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tidak dapat membuka rekaman ini.';
+
+  @override
+  String get captureRecordingViewing => 'Anda sedang melihat rekaman ini';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Direkam oleh $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Desktop';
+
+  @override
+  String get renameConversation => 'Ganti nama';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman',
+      one: '1 rekaman',
+    );
+    return '$_temp0';
+  }
 }

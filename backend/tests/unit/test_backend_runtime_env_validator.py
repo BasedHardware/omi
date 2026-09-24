@@ -1442,6 +1442,8 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1458,6 +1460,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1472,6 +1475,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1717,6 +1721,8 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1734,6 +1740,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1748,6 +1755,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1782,13 +1790,15 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
         {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
@@ -1799,12 +1809,13 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
@@ -1813,12 +1824,13 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
@@ -1835,8 +1847,8 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     assert len(errors) == 1
     assert errors[0].scope == 'cloud_run/backend'
     assert errors[0].message == (
-        "secret binding SERVICE_ACCOUNT_JSON mismatch: "
-        "expected {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'}"
+        "secret binding POSTHOG_PROJECT_API_KEY mismatch: "
+        "expected {'secret': 'POSTHOG_PROJECT_API_KEY', 'version': 'latest'}"
     )
 
 
@@ -2491,7 +2503,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert 'branches: [ "main" ]' in text
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
-    assert "id-token: 'write'" not in text
+    # Development-only lane: GitHub WIF as the dev deployer, never a JSON key.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
+    assert 'secrets.GCP_CREDENTIALS' not in text
     assert 'id: gateway-serving' in text
     assert '--lane omi:auto:memory-l2' in text
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text

@@ -2166,7 +2166,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get alwaysInContext => 'Toujours dans le contexte';
 
   @override
-  String get memoryContentHint => 'J\'aime manger des glaces...';
+  String get memoryContentHint => 'Je préfère les réunions le matin.';
 
   @override
   String get failedToSaveMemory => 'Échec de l\'enregistrement. Veuillez vérifier votre connexion.';
@@ -10211,4 +10211,73 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Que peux-tu faire pour moi ?',
+        'goal': 'Aide-moi à me fixer un objectif',
+        'activity': 'Résume mon activité récente',
+        'improve': 'Comment puis-je m’améliorer ?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'La semaine prochaine';
+
+  @override
+  String get clearSearch => 'Effacer la recherche';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Enregistrements de cette conversation';
+
+  @override
+  String get captureRecordingSeparate => 'Séparer…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Séparer cet enregistrement ?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording apparaîtra comme une conversation distincte et ne sera plus regroupé avec cet événement.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Séparer';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Impossible de séparer. Réessayez.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Impossible d\'ouvrir cet enregistrement.';
+
+  @override
+  String get captureRecordingViewing => 'Vous consultez cet enregistrement';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Enregistré par $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Ordinateur';
+
+  @override
+  String get renameConversation => 'Renommer';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements',
+      one: '1 enregistrement',
+    );
+    return '$_temp0';
+  }
 }

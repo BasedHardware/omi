@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Rad imam jesti sladoled...",
+    "memoryContentHint": "Raje imam jutranje sestanke.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,20 @@
     "updateSummaryWithNewNames": "Posodobi povzetek z novimi imeni",
     "syncStatusUnsupportedAudio": "Zvoka ni bilo mogoče prebrati — sinhronizacija ni mogoča",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Kaj lahko narediš zame?} goal{Pomagaj mi postaviti cilj} activity{Povzemi moje nedavne dejavnosti} improve{Kako lahko napredujem?} other{}}",
+    "nextWeek": "Naslednji teden",
+    "clearSearch": "Počisti iskanje",
+    "captureRecordingsSheetTitle": "Posnetki tega pogovora",
+    "captureRecordingSeparate": "Loči…",
+    "captureRecordingSeparateTitle": "Ločim ta posnetek?",
+    "captureRecordingSeparateMessage": "{recording} bo prikazan kot samostojen pogovor in ne bo več združen s tem dogodkom.",
+    "captureRecordingSeparateConfirm": "Loči",
+    "captureRecordingSeparateFailed": "Ločevanje ni uspelo. Poskusite znova.",
+    "captureRecordingOpenFailed": "Tega posnetka ni bilo mogoče odpreti.",
+    "captureRecordingViewing": "Ogledujete si ta posnetek",
+    "captureRecordedBy": "Posnel: {devices}",
+    "captureSourceDesktop": "Računalnik",
+    "renameConversation": "Preimenuj",
+    "captureRecordingsCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}"
 }

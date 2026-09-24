@@ -2122,7 +2122,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get alwaysInContext => 'हमेशा संदर्भ में';
 
   @override
-  String get memoryContentHint => 'मुझे आइसक्रीम पसंद है...';
+  String get memoryContentHint => 'मुझे सुबह की बैठकें पसंद हैं।';
 
   @override
   String get failedToSaveMemory => 'सहेजने में विफल।';
@@ -10103,4 +10103,73 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'तुम मेरे लिए क्या कर सकते हो?',
+        'goal': 'मुझे एक लक्ष्य तय करने में मदद करो',
+        'activity': 'मेरी हाल की गतिविधियों का सारांश दो',
+        'improve': 'मैं कैसे सुधार कर सकता हूँ?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'अगले सप्ताह';
+
+  @override
+  String get clearSearch => 'खोज साफ़ करें';
+
+  @override
+  String get captureRecordingsSheetTitle => 'इस बातचीत की रिकॉर्डिंग';
+
+  @override
+  String get captureRecordingSeparate => 'अलग करें…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'इस रिकॉर्डिंग को अलग करें?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording एक अलग बातचीत के रूप में दिखेगा और इस इवेंट के साथ फिर से समूहित नहीं होगा।';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'अलग करें';
+
+  @override
+  String get captureRecordingSeparateFailed => 'अलग नहीं किया जा सका। फिर से कोशिश करें।';
+
+  @override
+  String get captureRecordingOpenFailed => 'यह रिकॉर्डिंग नहीं खुल सकी।';
+
+  @override
+  String get captureRecordingViewing => 'आप यह रिकॉर्डिंग देख रहे हैं';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices द्वारा रिकॉर्ड किया गया';
+  }
+
+  @override
+  String get captureSourceDesktop => 'डेस्कटॉप';
+
+  @override
+  String get renameConversation => 'नाम बदलें';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग',
+      one: '1 रिकॉर्डिंग',
+    );
+    return '$_temp0';
+  }
 }

@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
@@ -1070,11 +1071,37 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_visibleRows(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(conversations));
+    groupedConversations = _buildGroupedByDate(_visibleRows(conversations));
+  }
+
+  /// The rows the list shows: client-side filters, then one row per recorded
+  /// event ([CaptureGroupPresentation.collapse]). A row hidden behind its
+  /// event's row leaves the merge selection, so a merge never acts on a
+  /// conversation the user can no longer see.
+  List<ServerConversation> _visibleRows(List<ServerConversation> source) {
+    final filtered = _filterOutConvos(source);
+    final shown = CaptureGroupPresentation.collapse(filtered);
+    if (shown.length != filtered.length && selectedConversationIds.isNotEmpty) {
+      final shownIds = shown.map((conversation) => conversation.id).toSet();
+      selectedConversationIds.removeWhere((id) => !shownIds.contains(id));
+      if (selectedConversationIds.isEmpty) isSelectionModeActive = false;
+    }
+    return shown;
+  }
+
+  /// A loaded conversation by id, including a recording hidden behind its
+  /// event's row (the list keeps every server row; only the display collapses).
+  ServerConversation? loadedConversationById(String id) {
+    for (final source in [conversations, searchedConversations]) {
+      for (final conversation in source) {
+        if (conversation.id == id) return conversation;
+      }
+    }
+    return null;
   }
 
   /// Buckets conversations into day-keyed groups, sorted newest-first both

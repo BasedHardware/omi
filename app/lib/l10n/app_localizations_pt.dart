@@ -2123,7 +2123,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get alwaysInContext => 'Sempre no contexto';
 
   @override
-  String get memoryContentHint => 'Eu gosto de sorvete...';
+  String get memoryContentHint => 'Prefiro reuniões pela manhã.';
 
   @override
   String get failedToSaveMemory => 'Falha ao salvar.';
@@ -10134,4 +10134,73 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'O que você pode fazer por mim?',
+        'goal': 'Ajude-me a definir uma meta',
+        'activity': 'Resuma minha atividade recente',
+        'improve': 'Como posso melhorar?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Na próxima semana';
+
+  @override
+  String get clearSearch => 'Limpar pesquisa';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Gravações desta conversa';
+
+  @override
+  String get captureRecordingSeparate => 'Separar…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Separar esta gravação?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording aparecerá como uma conversa própria e não será agrupada novamente com este evento.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Separar';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Não foi possível separar. Tente novamente.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Não foi possível abrir esta gravação.';
+
+  @override
+  String get captureRecordingViewing => 'Você está vendo esta gravação';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Gravado por $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Computador';
+
+  @override
+  String get renameConversation => 'Renomear';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações',
+      one: '1 gravação',
+    );
+    return '$_temp0';
+  }
 }

@@ -2129,7 +2129,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get alwaysInContext => 'תמיד בהקשר';
 
   @override
-  String get memoryContentHint => 'אני אוהב לאכול גלידה...';
+  String get memoryContentHint => 'אני מעדיף פגישות בבוקר.';
 
   @override
   String get failedToSaveMemory => 'שמירה נכשלה. בבקשה בדוק את החיבור שלך.';
@@ -10044,4 +10044,73 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'מה אפשר לעשות בשבילי?',
+        'goal': 'עזור לי להגדיר מטרה',
+        'activity': 'סכם את הפעילות האחרונה שלי',
+        'improve': 'איך אוכל להשתפר?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'בשבוע הבא';
+
+  @override
+  String get clearSearch => 'ניקוי החיפוש';
+
+  @override
+  String get captureRecordingsSheetTitle => 'הקלטות של השיחה הזו';
+
+  @override
+  String get captureRecordingSeparate => 'הפרד…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'להפריד את ההקלטה הזו?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording יוצג כשיחה נפרדת ולא יקובץ שוב עם האירוע הזה.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'הפרד';
+
+  @override
+  String get captureRecordingSeparateFailed => 'ההפרדה נכשלה. נסה שוב.';
+
+  @override
+  String get captureRecordingOpenFailed => 'לא ניתן לפתוח את ההקלטה הזו.';
+
+  @override
+  String get captureRecordingViewing => 'אתה צופה בהקלטה הזו';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'הוקלט על ידי $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'מחשב';
+
+  @override
+  String get renameConversation => 'שנה שם';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות',
+      one: 'הקלטה אחת',
+    );
+    return '$_temp0';
+  }
 }

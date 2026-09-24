@@ -2108,7 +2108,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
-  String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
+  String get memoryContentHint => '오전 회의를 선호해요.';
 
   @override
   String get failedToSaveMemory => '저장에 실패했습니다. 연결을 확인하세요.';
@@ -9957,4 +9957,73 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '나를 위해 무엇을 해줄 수 있어?',
+        'goal': '목표를 세우는 걸 도와줘',
+        'activity': '최근 활동을 요약해 줘',
+        'improve': '어떻게 하면 더 나아질 수 있을까?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => '다음 주';
+
+  @override
+  String get clearSearch => '검색 지우기';
+
+  @override
+  String get captureRecordingsSheetTitle => '이 대화의 녹음';
+
+  @override
+  String get captureRecordingSeparate => '분리…';
+
+  @override
+  String get captureRecordingSeparateTitle => '이 녹음을 분리할까요?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording은(는) 별도의 대화로 표시되며 이 이벤트와 다시 묶이지 않습니다.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '분리';
+
+  @override
+  String get captureRecordingSeparateFailed => '분리하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get captureRecordingOpenFailed => '이 녹음을 열 수 없습니다.';
+
+  @override
+  String get captureRecordingViewing => '이 녹음을 보고 있습니다';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices에서 녹음됨';
+  }
+
+  @override
+  String get captureSourceDesktop => '데스크톱';
+
+  @override
+  String get renameConversation => '이름 변경';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+      one: '녹음 1개',
+    );
+    return '$_temp0';
+  }
 }

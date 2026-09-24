@@ -2156,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "من دوست دارم بستنی بخورم...",
+    "memoryContentHint": "جلسه‌های صبح را ترجیح می‌دهم.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -10840,5 +10840,20 @@
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
     "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست",
     "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{چه کاری می‌توانی برایم انجام دهی؟} goal{کمکم کن هدفی تعیین کنم} activity{فعالیت‌های اخیرم را خلاصه کن} improve{چطور می‌توانم بهتر شوم؟} other{}}",
+    "nextWeek": "هفتهٔ آینده",
+    "clearSearch": "پاک کردن جستجو",
+    "captureRecordingsSheetTitle": "ضبط‌های این گفتگو",
+    "captureRecordingSeparate": "جدا کردن…",
+    "captureRecordingSeparateTitle": "این ضبط جدا شود؟",
+    "captureRecordingSeparateMessage": "{recording} به‌عنوان یک گفتگوی جداگانه نمایش داده می‌شود و دیگر با این رویداد گروه‌بندی نمی‌شود.",
+    "captureRecordingSeparateConfirm": "جدا کردن",
+    "captureRecordingSeparateFailed": "جدا کردن انجام نشد. دوباره تلاش کنید.",
+    "captureRecordingOpenFailed": "این ضبط باز نشد.",
+    "captureRecordingViewing": "در حال مشاهده این ضبط هستید",
+    "captureRecordedBy": "ضبط‌شده توسط {devices}",
+    "captureSourceDesktop": "دسکتاپ",
+    "renameConversation": "تغییر نام",
+    "captureRecordingsCount": "{count, plural, =1{۱ ضبط} other{{count} ضبط}}"
 }

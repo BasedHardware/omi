@@ -2152,7 +2152,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ';
 
   @override
-  String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
+  String get memoryContentHint => 'ನಾನು ಬೆಳಗಿನ ಸಭೆಗಳಿಗೆ ಆದ್ಯತೆ ನೀಡುತ್ತೇನೆ.';
 
   @override
   String get failedToSaveMemory => 'ಸಂಭಾಳಿಸಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ.';
@@ -10156,4 +10156,73 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'ನೀನು ನನಗಾಗಿ ಏನು ಮಾಡಬಲ್ಲೆ?',
+        'goal': 'ಗುರಿಯನ್ನು ಹೊಂದಿಸಲು ನನಗೆ ಸಹಾಯ ಮಾಡು',
+        'activity': 'ನನ್ನ ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳನ್ನು ಸಂಕ್ಷಿಪ್ತಗೊಳಿಸು',
+        'improve': 'ನಾನು ಹೇಗೆ ಸುಧಾರಿಸಬಹುದು?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'ಮುಂದಿನ ವಾರ';
+
+  @override
+  String get clearSearch => 'ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ';
+
+  @override
+  String get captureRecordingsSheetTitle => 'ಈ ಸಂಭಾಷಣೆಯ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು';
+
+  @override
+  String get captureRecordingSeparate => 'ಬೇರ್ಪಡಿಸಿ…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಬೇರ್ಪಡಿಸುವುದೇ?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ಪ್ರತ್ಯೇಕ ಸಂಭಾಷಣೆಯಾಗಿ ತೋರಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಈ ಈವೆಂಟ್‌ನೊಂದಿಗೆ ಮತ್ತೆ ಗುಂಪುಗೊಳ್ಳುವುದಿಲ್ಲ.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'ಬೇರ್ಪಡಿಸಿ';
+
+  @override
+  String get captureRecordingSeparateFailed => 'ಬೇರ್ಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get captureRecordingOpenFailed => 'ಈ ರೆಕಾರ್ಡಿಂಗ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get captureRecordingViewing => 'ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ನೋಡುತ್ತಿದ್ದೀರಿ';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices ರೆಕಾರ್ಡ್ ಮಾಡಿದೆ';
+  }
+
+  @override
+  String get captureSourceDesktop => 'ಡೆಸ್ಕ್‌ಟಾಪ್';
+
+  @override
+  String get renameConversation => 'ಮರುಹೆಸರಿಸಿ';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್',
+    );
+    return '$_temp0';
+  }
 }

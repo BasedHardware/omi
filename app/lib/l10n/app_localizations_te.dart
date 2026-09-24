@@ -2156,7 +2156,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get alwaysInContext => 'ఎల్లప్పుడూ సందర్భంలో';
 
   @override
-  String get memoryContentHint => 'నేను ice cream తినడానికి ఇష్టపడతాను...';
+  String get memoryContentHint => 'నేను ఉదయం సమావేశాలను ఇష్టపడతాను.';
 
   @override
   String get failedToSaveMemory => 'సేవ చేయడానికి విఫలమైంది. దయచేసి మీ కనెక్షన్‌ను తనిఖీ చేయండి.';
@@ -10172,4 +10172,73 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'నువ్వు నా కోసం ఏమి చేయగలవు?',
+        'goal': 'లక్ష్యాన్ని నిర్దేశించుకోవడంలో నాకు సహాయం చేయి',
+        'activity': 'నా ఇటీవలి కార్యకలాపాలను సంక్షిప్తంగా చెప్పు',
+        'improve': 'నేను ఎలా మెరుగుపడగలను?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'వచ్చే వారం';
+
+  @override
+  String get clearSearch => 'శోధనను క్లియర్ చేయండి';
+
+  @override
+  String get captureRecordingsSheetTitle => 'ఈ సంభాషణ రికార్డింగ్‌లు';
+
+  @override
+  String get captureRecordingSeparate => 'వేరు చేయి…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'ఈ రికార్డింగ్‌ను వేరు చేయాలా?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ప్రత్యేక సంభాషణగా కనిపిస్తుంది, ఈ ఈవెంట్‌తో మళ్లీ సమూహం చేయబడదు.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'వేరు చేయి';
+
+  @override
+  String get captureRecordingSeparateFailed => 'వేరు చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get captureRecordingOpenFailed => 'ఈ రికార్డింగ్‌ను తెరవలేకపోయాం.';
+
+  @override
+  String get captureRecordingViewing => 'మీరు ఈ రికార్డింగ్‌ను చూస్తున్నారు';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices రికార్డ్ చేసింది';
+  }
+
+  @override
+  String get captureSourceDesktop => 'డెస్క్‌టాప్';
+
+  @override
+  String get renameConversation => 'పేరు మార్చు';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '1 రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
 }

@@ -1335,6 +1335,7 @@ class TestAsyncCoordinatorBehavioral:
             'database',
             'database.redis_db',
             'database._client',
+            'database.auth',
             'database.conversations',
             'database.users',
             'database.user_usage',
@@ -1485,6 +1486,9 @@ class TestAsyncCoordinatorBehavioral:
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
         sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -3213,6 +3217,7 @@ class TestV2EndpointExecution:
             'database',
             'database.redis_db',
             'database._client',
+            'database.auth',
             'database.conversations',
             'database.users',
             'database.user_usage',
@@ -3361,6 +3366,9 @@ class TestV2EndpointExecution:
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
         sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

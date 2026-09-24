@@ -2135,7 +2135,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get alwaysInContext => 'อยู่ในบริบทเสมอ';
 
   @override
-  String get memoryContentHint => 'ฉันชอบกินไอศกรีม...';
+  String get memoryContentHint => 'ฉันชอบประชุมช่วงเช้า';
 
   @override
   String get failedToSaveMemory => 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ';
@@ -10067,4 +10067,73 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'คุณช่วยอะไรฉันได้บ้าง?',
+        'goal': 'ช่วยฉันตั้งเป้าหมายหน่อย',
+        'activity': 'สรุปกิจกรรมล่าสุดของฉัน',
+        'improve': 'ฉันจะพัฒนาตัวเองได้อย่างไร?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'สัปดาห์หน้า';
+
+  @override
+  String get clearSearch => 'ล้างการค้นหา';
+
+  @override
+  String get captureRecordingsSheetTitle => 'การบันทึกของบทสนทนานี้';
+
+  @override
+  String get captureRecordingSeparate => 'แยก…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'แยกการบันทึกนี้ไหม?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording จะแสดงเป็นบทสนทนาแยก และจะไม่ถูกจัดกลุ่มกับเหตุการณ์นี้อีก';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'แยก';
+
+  @override
+  String get captureRecordingSeparateFailed => 'แยกไม่สำเร็จ ลองอีกครั้ง';
+
+  @override
+  String get captureRecordingOpenFailed => 'เปิดการบันทึกนี้ไม่ได้';
+
+  @override
+  String get captureRecordingViewing => 'คุณกำลังดูการบันทึกนี้';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'บันทึกโดย $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'เดสก์ท็อป';
+
+  @override
+  String get renameConversation => 'เปลี่ยนชื่อ';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count การบันทึก',
+      one: '1 การบันทึก',
+    );
+    return '$_temp0';
+  }
 }

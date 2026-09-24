@@ -2161,7 +2161,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get alwaysInContext => 'Mindig a kontextusban';
 
   @override
-  String get memoryContentHint => 'Szeretek fagyit enni...';
+  String get memoryContentHint => 'A délelőtti megbeszéléseket részesítem előnyben.';
 
   @override
   String get failedToSaveMemory => 'Mentés sikertelen. Kérlek, ellenőrizd a kapcsolatot.';
@@ -10165,4 +10165,73 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Mit tudsz tenni értem?',
+        'goal': 'Segíts kitűzni egy célt',
+        'activity': 'Foglald össze a legutóbbi tevékenységeimet',
+        'improve': 'Hogyan fejlődhetek?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Jövő héten';
+
+  @override
+  String get clearSearch => 'Keresés törlése';
+
+  @override
+  String get captureRecordingsSheetTitle => 'A beszélgetés felvételei';
+
+  @override
+  String get captureRecordingSeparate => 'Leválasztás…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Leválasztod ezt a felvételt?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return 'A(z) $recording külön beszélgetésként jelenik meg, és többé nem kerül ehhez az eseményhez.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Leválasztás';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Nem sikerült leválasztani. Próbáld újra.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Nem sikerült megnyitni ezt a felvételt.';
+
+  @override
+  String get captureRecordingViewing => 'Ezt a felvételt nézed';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Rögzítette: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Számítógép';
+
+  @override
+  String get renameConversation => 'Átnevezés';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel',
+      one: '1 felvétel',
+    );
+    return '$_temp0';
+  }
 }

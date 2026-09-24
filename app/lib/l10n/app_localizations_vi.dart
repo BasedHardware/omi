@@ -2150,7 +2150,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get alwaysInContext => 'Luôn trong ngữ cảnh';
 
   @override
-  String get memoryContentHint => 'Tôi thích ăn kem...';
+  String get memoryContentHint => 'Tôi thích họp vào buổi sáng.';
 
   @override
   String get failedToSaveMemory => 'Không thể lưu. Vui lòng kiểm tra kết nối của bạn.';
@@ -10119,4 +10119,73 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Bạn có thể giúp gì cho tôi?',
+        'goal': 'Giúp tôi đặt mục tiêu',
+        'activity': 'Tóm tắt hoạt động gần đây của tôi',
+        'improve': 'Tôi có thể cải thiện như thế nào?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'Tuần tới';
+
+  @override
+  String get clearSearch => 'Xóa tìm kiếm';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Các bản ghi của cuộc trò chuyện này';
+
+  @override
+  String get captureRecordingSeparate => 'Tách…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Tách bản ghi này?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording sẽ hiển thị như một cuộc trò chuyện riêng và sẽ không được nhóm với sự kiện này nữa.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Tách';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Không thể tách. Hãy thử lại.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Không thể mở bản ghi này.';
+
+  @override
+  String get captureRecordingViewing => 'Bạn đang xem bản ghi này';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Được ghi bởi $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Máy tính';
+
+  @override
+  String get renameConversation => 'Đổi tên';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi',
+      one: '1 bản ghi',
+    );
+    return '$_temp0';
+  }
 }

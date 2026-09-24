@@ -12,6 +12,7 @@ import google.auth.credentials  # noqa: F401
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.structured import ActionItem, Structured
 from testing.import_isolation import stub_modules
+from utils.llm.model_config import LUNA_MODEL
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -425,9 +426,9 @@ def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatc
         routes = load_gateway_config(prod_mode=True).route_artifacts
         notes = routes['route.conv_structure.model_config.001']
         memory = routes['route.memory_l1.model_config.001']
-        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.primary.model == memory.primary.model == LUNA_MODEL
         assert notes.provider_options['reasoning_effort'] == 'low'
-        assert memory.primary.model == 'gpt-5.6-luna'
+        assert memory.primary.model == LUNA_MODEL
         assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
     else:
         assert get_model_config('conv_structure') == get_model_config('memory_l1')

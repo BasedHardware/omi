@@ -2159,7 +2159,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
-  String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
+  String get memoryContentHint => 'நான் காலை நேரக் கூட்டங்களை விரும்புகிறேன்.';
 
   @override
   String get failedToSaveMemory => 'சேமிக்க முடியவில்லை. உங்கள் இணைப்பை சரிபார்க்கவும்.';
@@ -10195,4 +10195,73 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'நீ எனக்கு என்ன செய்ய முடியும்?',
+        'goal': 'இலக்கை அமைக்க எனக்கு உதவு',
+        'activity': 'எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு',
+        'improve': 'நான் எப்படி மேம்படலாம்?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'அடுத்த வாரம்';
+
+  @override
+  String get clearSearch => 'தேடலை அழி';
+
+  @override
+  String get captureRecordingsSheetTitle => 'இந்த உரையாடலின் பதிவுகள்';
+
+  @override
+  String get captureRecordingSeparate => 'பிரி…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'இந்தப் பதிவைப் பிரிக்கவா?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording தனி உரையாடலாகக் காட்டப்படும், இந்த நிகழ்வுடன் மீண்டும் குழுவாக்கப்படாது.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'பிரி';
+
+  @override
+  String get captureRecordingSeparateFailed => 'பிரிக்க முடியவில்லை. மீண்டும் முயலவும்.';
+
+  @override
+  String get captureRecordingOpenFailed => 'இந்தப் பதிவைத் திறக்க முடியவில்லை.';
+
+  @override
+  String get captureRecordingViewing => 'இந்தப் பதிவைப் பார்க்கிறீர்கள்';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices பதிவு செய்தது';
+  }
+
+  @override
+  String get captureSourceDesktop => 'டெஸ்க்டாப்';
+
+  @override
+  String get renameConversation => 'பெயர்மாற்று';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள்',
+      one: '1 பதிவு',
+    );
+    return '$_temp0';
+  }
 }

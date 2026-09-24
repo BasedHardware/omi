@@ -2148,7 +2148,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get alwaysInContext => 'Заўсёды ў кантэксце';
 
   @override
-  String get memoryContentHint => 'Мне нравіцца есці мароженае...';
+  String get memoryContentHint => 'Я аддаю перавагу ранішнім сустрэчам.';
 
   @override
   String get failedToSaveMemory => 'Не вдалося захаваць. Калі ласка, праверыце вашу злучэнне.';
@@ -10154,4 +10154,73 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationReprocess => 'Reprocess';
+
+  @override
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Што ты можаш зрабіць для мяне?',
+        'goal': 'Дапамажы мне паставіць мэту',
+        'activity': 'Падсумуй маю нядаўнюю дзейнасць',
+        'improve': 'Як я магу палепшыцца?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get nextWeek => 'На наступным тыдні';
+
+  @override
+  String get clearSearch => 'Ачысціць пошук';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Запісы гэтай размовы';
+
+  @override
+  String get captureRecordingSeparate => 'Аддзяліць…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Аддзяліць гэты запіс?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording будзе паказвацца як асобная размова і больш не будзе аб\'ядноўвацца з гэтай падзеяй.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Аддзяліць';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Не ўдалося аддзяліць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Не ўдалося адкрыць гэты запіс.';
+
+  @override
+  String get captureRecordingViewing => 'Вы праглядаеце гэты запіс';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Запісана: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Камп\'ютар';
+
+  @override
+  String get renameConversation => 'Перайменаваць';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Запісаў: $count',
+      one: '1 запіс',
+    );
+    return '$_temp0';
+  }
 }

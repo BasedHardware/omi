@@ -54,6 +54,8 @@ SCHEMA_GROUPS = {
             'CalendarEventLink',
             'CalendarCaptureGap',
             'TranscriptMatchSnippet',
+            'CaptureGroupMember',
+            'CaptureGroup',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
