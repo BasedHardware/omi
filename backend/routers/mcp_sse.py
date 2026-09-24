@@ -184,7 +184,7 @@ def openai_apps_challenge():
 
 
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
-def mcp_authorize(
+async def mcp_authorize(
     request: Request,
     response_type: str,
     client_id: str,
@@ -196,7 +196,7 @@ def mcp_authorize(
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
-    return _oauth.mcp_authorize(
+    return await _oauth.mcp_authorize(
         request,
         response_type,
         client_id,
@@ -211,6 +211,7 @@ def mcp_authorize(
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
 async def mcp_authorize_consent(
+    request: Request,
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -231,6 +232,7 @@ async def mcp_authorize_consent(
         scope,
         code_challenge,
         code_challenge_method,
+        request=request,
     )
 
 

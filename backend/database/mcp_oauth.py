@@ -13,8 +13,10 @@ from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
 
+from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
 from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+import database.mcp_cache_integrity as mcp_cache_integrity
 import database.mcp_client_metadata as mcp_client_metadata
 import database.mcp_token_cache as mcp_token_cache
 from database._client import data_plane_db as db
@@ -313,7 +315,7 @@ def get_client(client_id: str) -> Optional[Dict[str, Any]]:
     # URL-form client ids are Client ID Metadata Document URLs (CIMD). They
     # contain '/', so they can never be Firestore document ids — resolve them
     # through the metadata-document path before the registry lookup.
-    if mcp_client_metadata.is_url_form_client_id(client_id):
+    if is_url_form_client_id(client_id):
         url_client = mcp_client_metadata.get_url_client(client_id)
         if url_client is not None:
             url_client["allowed_resources"] = [MCP_RESOURCE_URL]
@@ -529,7 +531,7 @@ def _grant_document_id(uid: str, client_id: str, resource: str) -> str:
     # URL-form (CIMD) client ids contain '/' and are invalid Firestore document
     # ids, so only that component is hashed; preregistered client grant ids are
     # byte-for-byte unchanged.
-    client_component = hash_secret(client_id) if mcp_client_metadata.is_url_form_client_id(client_id) else client_id
+    client_component = hash_secret(client_id) if is_url_form_client_id(client_id) else client_id
     return f"{uid}:{client_component}:{hash_secret(resource)[:16]}"
 
 
@@ -901,7 +903,25 @@ def _record_grant_last_used(grant_id: str) -> None:
 
 
 def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
-    cached = mcp_token_cache.read_access_token(access_token, resource)
+    if not mcp_cache_integrity.integrity_available():
+        # Unsigned cache data can never be trusted — still fail closed.
+        raise mcp_token_cache.McpTokenStoreUnavailable("MCP OAuth token cache signing secret unavailable")
+    cache_ok = True
+    try:
+        cached = mcp_token_cache.read_access_token(access_token, resource)
+    except mcp_token_cache.McpTokenStoreUnavailable:
+        # Redis outage: Firestore is authoritative, so validation degrades to
+        # the uncached path — cache read, revocation marker, last-used
+        # throttle, and the last_used_at write itself are all skipped while
+        # the Firestore grant decides (a write per validated request would be
+        # ~150k+ extra Firestore writes/day during a sustained outage).
+        # Marker-first revoke ordering shrinks the stale-accept window to
+        # Firestore commit latency but does not eliminate it: a marker written
+        # just before an in-flight Firestore revoke is unreadable during this
+        # outage, so that grant can validate briefly until the write commits.
+        cache_ok = False
+        cached = None
+        logger.warning("MCP OAuth token cache unavailable; validating against Firestore only")
     if cached is not None:
         # A cache hit performs zero Firestore work — no token read, no memory
         # grant, and no last_used_at write.
@@ -913,10 +933,15 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     grant_id = _nonempty_string(data, "grant_id")
     if grant_id is None:
         return None
-    # The revocation marker is written BEFORE the Firestore revoke, so it also
-    # catches a grant whose revoke write is still in flight.
-    if mcp_token_cache.grant_revocation_marker_exists(grant_id):
-        return None
+    if cache_ok:
+        try:
+            # The revocation marker is written BEFORE the Firestore revoke, so
+            # it also catches a grant whose revoke write is still in flight.
+            if mcp_token_cache.grant_revocation_marker_exists(grant_id):
+                return None
+        except mcp_token_cache.McpTokenStoreUnavailable:
+            cache_ok = False
+            logger.warning("MCP OAuth revocation marker unavailable; validating against Firestore only")
     grant = get_active_grant(grant_id)
     if not grant:
         return None
@@ -924,16 +949,21 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     if identity is None:
         return None
     _ensure_oauth_memory_grant(grant)
-    expires_at = data.get("expires_at")
-    mcp_token_cache.fill_access_token(
-        access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
-    )
-    # A revoke that landed during the Firestore reads or the fill must deny
-    # this request too — the marker is re-checked before crediting it.
-    if mcp_token_cache.grant_revocation_marker_exists(grant_id):
-        return None
-    if mcp_token_cache.claim_last_used_write(access_token):
-        _record_grant_last_used(grant_id)
+    if cache_ok:
+        try:
+            expires_at = data.get("expires_at")
+            mcp_token_cache.fill_access_token(
+                access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
+            )
+            # A revoke that landed during the Firestore reads or the fill must
+            # deny this request too — the marker is re-checked before crediting.
+            if mcp_token_cache.grant_revocation_marker_exists(grant_id):
+                return None
+            if mcp_token_cache.claim_last_used_write(access_token):
+                _record_grant_last_used(grant_id)
+        except mcp_token_cache.McpTokenStoreUnavailable:
+            cache_ok = False
+            logger.warning("MCP OAuth token cache became unavailable mid-validation; serving Firestore result")
     return identity
 
 

@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from google.api_core.exceptions import FailedPrecondition
+
 import database.action_item_sync as action_item_sync_db
 import database.action_items as action_items_db
 import utils.mcp_action_items as mcp_action_items
@@ -21,7 +23,7 @@ from utils.mcp_server.cursors import (
     serialize_timestamp,
     timestamp_keyset_position,
 )
-from utils.mcp_server.errors import ToolExecutionError
+from utils.mcp_server.errors import ToolExecutionError, raise_action_item_index_error
 from utils.mcp_server.helpers import parse_mcp_date
 
 
@@ -46,14 +48,17 @@ def action_items_list_page_core(
     offset = resolve_offset_cursor(arguments, kind=cursor_kind, uid=uid, filters=filters, offset=offset)
     # The backend slices its live (non-deleted) list by offset, so a limit+1
     # lookahead answers has_more exactly — a short page is the end.
-    fetched = action_items_db.get_action_items(
-        uid,
-        completed=completed,
-        due_start_date=due_start,
-        due_end_date=due_end,
-        limit=limit + 1,
-        offset=offset,
-    )
+    try:
+        fetched = action_items_db.get_action_items(
+            uid,
+            completed=completed,
+            due_start_date=due_start,
+            due_end_date=due_end,
+            limit=limit + 1,
+            offset=offset,
+        )
+    except FailedPrecondition as e:
+        raise_action_item_index_error(e)
     page, consumed, has_more = offset_page([i for i in fetched if not i.get("deleted", False)], limit)
     next_cursor = None
     if has_more:
@@ -93,6 +98,8 @@ def action_items_sync_page_core(
         )
     except ValueError as e:
         raise ToolExecutionError(str(e), code=-32602)
+    except FailedPrecondition as e:
+        raise_action_item_index_error(e)
     items: List[Dict[str, Any]] = []
     for row in rows:
         cleaned = clean_action_item(row)

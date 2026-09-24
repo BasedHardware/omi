@@ -9,8 +9,10 @@ revocation marker, so a hit is only ever as fresh as the marker.
 Revocation writes a ``mcp:oauth:revoked:{sha256(grant_id)}`` marker BEFORE the
 Firestore revoke so a validation that slipped between the marker and the
 Firestore write still fails, then deletes every cached token the grant index
-knows about. All Redis failures raise ``McpTokenStoreUnavailable`` — callers
-map it to a retryable 503, never a 401 and never a silent uncached fallback.
+knows about. All Redis failures raise ``McpTokenStoreUnavailable`` — revocation
+callers keep it fail-closed (a revoke that cannot write its marker reports no
+success), while ``validate_access_token`` degrades to the authoritative
+Firestore path when the cache, marker, or throttle store is down.
 
 Plaintext tokens are never placed in keys, values, or logs: keys are sha256
 digests of the token and grant ids. Cached identities are HMAC-signed via
@@ -34,10 +36,12 @@ _ACCESS_TOKEN_KEY_PREFIX = "mcp:oauth:at:"
 _REVOKED_GRANT_KEY_PREFIX = "mcp:oauth:revoked:"
 _GRANT_TOKENS_KEY_PREFIX = "mcp:oauth:grant_tokens:"
 _LAST_USED_KEY_PREFIX = "mcp:oauth:last_used:"
+_INTEGRITY_TAG = "at"
 
 
 class McpTokenStoreUnavailable(RuntimeError):
-    """Redis is required for fail-closed token validation and is unreachable."""
+    """A Redis cache/marker/throttle operation failed — the caller decides
+    whether its operation can safely fall back to Firestore."""
 
 
 def _redis() -> Any:
@@ -126,7 +130,7 @@ def read_access_token(access_token: str, resource: str) -> Optional[Dict[str, An
         raise McpTokenStoreUnavailable("MCP OAuth token cache unavailable") from exc
     if raw is None:
         return None
-    entry = mcp_cache_integrity.loads_verified(raw)
+    entry = mcp_cache_integrity.loads_verified(raw, _INTEGRITY_TAG)
     if not _entry_is_valid(entry, resource, now=time.time()):
         return None
     # The signed payload binds its own token hash, so a valid blob copied to
@@ -173,7 +177,9 @@ def fill_access_token(
         "expires_at": expires_at_epoch,
         "token_hash": token_hash,
     }
-    blob = mcp_cache_integrity.dumps_signed(entry)
+    if not mcp_cache_integrity.integrity_available():
+        raise McpTokenStoreUnavailable("MCP OAuth token cache signing secret unavailable")
+    blob = mcp_cache_integrity.dumps_signed(entry, _INTEGRITY_TAG)
     if blob is None:
         raise McpTokenStoreUnavailable("MCP OAuth token cache signing secret unavailable")
     client = _redis()

@@ -19,8 +19,8 @@ array bodies, status codes, and rate buckets.
 | `versions.py` | Pure compatibility constants and negotiation: supported/handshake/batch revisions, `_meta` declaration resolution, `-32020`/`-32022` errors. No I/O |
 | `registry.py` | Sole declarative `ToolSpec` for every hosted tool: name, description, input/output schemas, annotations, scope, rate bucket, analytics operation, handler |
 | `auth.py` | Resolves API-key / OAuth bearer credentials into `MCPAuthContext` + `ProductAuthorizationContext`. Scope checks live in `registry.py`/`transport.py`; product authorization is enforced inside `handlers/` |
-| `oauth.py` | OAuth authorize/token/consent endpoints: RFC 9207 `iss` on code and validated-error redirects (unknown clients/mismatched redirects get JSON only), CIMD clients resolved via `database/mcp_client_metadata.py` and shown as `Unverified third-party app` + `Client ID host`, omitted-scope defaults to allowed `*.read`; `/token` maps token-store outage to `503 temporarily_unavailable`. Grant revoke lives in `routers/mcp.py` |
-| `metadata.py` | Per-path OAuth protected-resource documents (canonical vs `/sse`) and authorization-server metadata (`client_id_metadata_document_supported`, `scopes_supported`); `server/discover` is answered in `transport.py` |
+| `oauth.py` | OAuth authorize/token/consent endpoints: RFC 9207 `iss` on code and validated-error redirects (unknown clients/mismatched redirects get JSON only), CIMD clients resolved via `database/mcp_client_metadata.py` and shown as `Unverified third-party app` + `Client ID host`, omitted-scope defaults to allowed `*.read`; URL-form client lookups run on the bounded `cimd_executor` behind a per-IP `mcp:oauth_url_client` limit and fail fast `503` when saturated; `/token` maps token-store outage to `503 temporarily_unavailable`. Grant revoke lives in `routers/mcp.py` |
+| `metadata.py` | Per-path OAuth protected-resource documents (canonical vs `/sse`) and authorization-server metadata (`client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`, `scopes_supported`); `server/discover` is answered in `transport.py` |
 | `cursors.py` | Opaque cursor tokens for list tools: ≤4 KiB before base64, `(created_at, __name__)`/`(updated_at, __name__)` keyset positions, `DatetimeWithNanoseconds` round-trip |
 | `payloads.py` | Single leaf for `_tool_result_payload`/`_complete_result` shared by transport and handlers, so the batch response budget measures the real serialized wire form (envelope + SSE frame) |
 | `errors.py` | `ToolExecutionError` → stable model-visible `isError` code mapping (JSON-RPC error envelopes are built in `transport.py`) |
@@ -59,29 +59,41 @@ array bodies, status codes, and rate buckets.
   safe generic messages, never the raw limiter detail. PostHog telemetry fails
   open.
 - `validate_access_token` is Redis-fronted (`database/mcp_token_cache.py`):
-  positive-only cache (`TTL min(60s, expiry remaining)`, HMAC-signed payloads
-  bound to their token key via `database/mcp_cache_integrity.py`), zero
-  Firestore work on hits, revocation markers + grant token index with
-  mandatory marker-first fail-closed revoke, `last_used_at` throttled on
-  validated misses only. Redis outage → `503 + Retry-After`, never `401`.
+  positive-only cache (`TTL min(60s, expiry remaining)`, payloads signed with
+  an HKDF-`mcp-cache-v1` key and `at` type tag via
+  `database/mcp_cache_integrity.py`), zero Firestore work on hits, revocation
+  markers + grant token index with mandatory marker-first fail-closed revoke,
+  `last_used_at` throttled on validated misses only. Redis outage → degrade
+  to Firestore-authoritative validation (cache/marker/throttle and the
+  `last_used_at` write all bypassed, warning logged); revocation still fails
+  closed; Firestore outage → `503 + Retry-After`, never `401`.
 
 ## Companion leaves outside this directory
 
 - `config/mcp_resource_urls.py` — canonical/legacy `/sse` audience
   equivalence shared by `database/mcp_oauth.py` and the token cache;
   cross-host resources never match.
+- `config/mcp_client_ids.py` — the pure URL-form `client_id` predicate
+  shared by `database` and `utils` without a `database → utils` edge.
 - `database/mcp_client_metadata.py` — CIMD: URL-form `client_id` documents
-  fetched with SSRF defenses (every DNS answer public, IP-pinned
-  `HTTPSConnectionPool` with hostname verification, no redirects, ≤16 KiB),
-  validated `client_id`/redirect URIs/public-client auth, sanitized
-  `client_name`, HMAC-signed Redis cache honoring `Cache-Control`
-  (`no-store`/`no-cache`/`private` bypass; `max-age` clamped to 3600).
+  fetched with SSRF defenses on dedicated bounded pools (DNS on a
+  module-local 4-worker/8-queue pool, fetch dispatched by the OAuth layer on
+  `cimd_executor`; one monotonic 3s deadline
+  across DNS/connect/iterative ~1 KiB reads; every DNS answer validated
+  against private/loopback/link-local/multicast/NAT64/6to4/Teredo/v4-mapped
+  forms, IPv4 tried first; IP-pinned TLS with hostname verification, no
+  redirects, ≤16 KiB), validated `client_id`/redirect URIs/public-client
+  auth, sanitized `client_name` (NFKC collision with registered connector
+  names suffixed by the verified host), query/fragment URLs rejected,
+  60s negative cache on failures, signed Redis cache honoring
+  `Cache-Control` (`no-store`/`no-cache`/`private` bypass; `max-age` clamped
+  to 3600).
 - `database/mcp_conversation_pages.py` — `(created_at DESC, __name__ DESC)`
   keyset card pages that skip tombstones under a bounded scan budget.
 - `database/action_item_sync.py` — the truthful `(updated_at ASC,
   __name__ ASC)` action-item sync query shared by the MCP tool and REST.
 - `docs/mcp-rest-sync.md` — REST cursor/`X-Next-Cursor` contract and the
-  `503 incremental_sync_unavailable` gates on conversations/memories.
+  `400 incremental_sync_unsupported` gates on conversations/memories.
 
 ## Non-goals
 

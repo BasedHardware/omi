@@ -50,23 +50,30 @@ With `updated_since`, the endpoint switches to an incremental feed ordered
 - Items whose documents lack `updated_at` are outside the feed (the field
   is the ordering key); they predate the sync surface.
 
-### Gated: `GET /v1/mcp/conversations`, `GET /v1/mcp/memories`
+**Watermark overlap**: `updated_at` is a timestamp, not a transaction
+sequence — a write can land between a page's read and the client's watermark
+capture while sharing (or even preceding) the last emitted value. On each
+sync pass, clients should re-read starting from
+`watermark - 60 seconds` and deduplicate received items by `id`; the
+`(updated_at, id)` keyset cursor guarantees no row inside the window is
+skipped, and the overlap covers delayed-commit visibility.
 
-Passing `updated_since` to these endpoints returns HTTP **503** with
-`Retry-After` and a detail string containing
-`incremental_sync_unavailable`:
+### Unsupported: `GET /v1/mcp/conversations`, `GET /v1/mcp/memories`
+
+Passing a valid `updated_since` to these endpoints returns HTTP **400**
+with a detail string containing `incremental_sync_unsupported` — a
+permanent capability gap, not a transient outage, so no `Retry-After` is
+sent and clients must not retry:
 
 - **Conversations**: `updated_at` is synthesized from the Firestore
   snapshot `update_time` at read time; generic writes do not persist a
   queryable `updated_at` field, so no revision-ordered index can be built.
+  Supported alternative: page the endpoint with the `X-Next-Cursor` cursor
+  (`created_at DESC, id` keyset).
 - **Memories**: the read view mixes canonical and historical records, and
   legacy documents lack `updated_at`, so a revision feed would silently
-  drop updates.
-
-These are explicit deferred follow-ups — not implemented claims. Rollout
-prerequisite for each: backfill a persisted `updated_at` on every live
-document, add the query-ready `(updated_at, __name__)` index, then flip the
-gate to the same feed shape used by action-items.
+  drop updates. Supported alternative: page the endpoint without
+  `updated_since` (sort, offset/limit, or cursor).
 
 ## Deletion semantics
 
@@ -76,10 +83,9 @@ gate to the same feed shape used by action-items.
   flows) are emitted with `deleted: true` so clients can reconcile them.
 - **Conversations / memories**: both models persist soft-delete tombstone
   rows (discarded/deleted markers), so deletes **are** recorded — but
-  their `updated_since` feeds are gated (503) pending the `updated_at`
-  backfill, and the plain list cursors already skip tombstones. Clients
-  must re-fetch or reconcile on their own cadence until the gated feeds
-  ship; no deletes are silently claimed covered today.
+  their `updated_since` feeds are unsupported (400) and the plain list
+  cursors already skip tombstones. Clients must re-fetch or reconcile on
+  their own cadence; no deletes are silently claimed covered today.
 
 ## Conversation detail bounds
 

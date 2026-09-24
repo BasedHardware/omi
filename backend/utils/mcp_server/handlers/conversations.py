@@ -112,6 +112,19 @@ def conversation_cards_page_core(
     return page, next_cursor
 
 
+def is_safe_conversation_id(raw_id: Any) -> bool:
+    """Reject ids Firestore itself refuses — ``.``, ``..``, ``__*__``
+    reserved ids and any ``/`` — before they reach a document read."""
+    return (
+        isinstance(raw_id, str)
+        and bool(raw_id)
+        and len(raw_id.encode("utf-8")) <= MCP_CONVERSATION_ID_MAX_BYTES
+        and "/" not in raw_id
+        and raw_id not in {".", ".."}
+        and not (raw_id.startswith("__") and raw_id.endswith("__"))
+    )
+
+
 def fetch_conversation_for_detail(
     uid: str,
     conversation_id: Any,
@@ -119,6 +132,8 @@ def fetch_conversation_for_detail(
     extra_field_paths: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Shared bounded detail read (card+transcript projection, no photos)."""
+    if not is_safe_conversation_id(conversation_id):
+        return None
     conversations = conversations_db.get_mcp_conversations_by_id(
         uid,
         [str(conversation_id)],
@@ -188,6 +203,8 @@ def get_conversation_by_id(
     conversation_id = arguments.get("conversation_id")
     if not conversation_id:
         raise ToolExecutionError("conversation_id is required")
+    if not is_safe_conversation_id(conversation_id):
+        raise ToolExecutionError("conversation_id is not a valid document id", code=-32602)
 
     max_segments, max_chars = _conversation_fetch_bounds(arguments)
 
@@ -258,15 +275,11 @@ def get_conversations_by_ids(
     conversation_ids: List[str] = []
     seen: set[str] = set()
     for raw_id in raw_ids:
-        if (
-            not isinstance(raw_id, str)
-            or not raw_id
-            or len(raw_id.encode("utf-8")) > MCP_CONVERSATION_ID_MAX_BYTES
-            or "/" in raw_id
-        ):
+        if not is_safe_conversation_id(raw_id):
             raise ToolExecutionError(
                 "conversation_ids entries must be valid Firestore document ids "
-                f"(non-empty, <= {MCP_CONVERSATION_ID_MAX_BYTES} UTF-8 bytes, no '/')",
+                f"(non-empty, <= {MCP_CONVERSATION_ID_MAX_BYTES} UTF-8 bytes, no '/', "
+                "not '.', '..', or a reserved '__*__' id)",
                 code=-32602,
             )
         if raw_id not in seen:

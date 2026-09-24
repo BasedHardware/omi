@@ -5,9 +5,9 @@ Pins:
   shape, equal-timestamp tie-breaks, cursor continuation, tombstone emission,
   and the ``updated_at`` watermark on every emitted row;
 - REST ``updated_since`` truthfulness: action items serve the real keyset feed
-  while conversations and memories return explicit 503
-  ``incremental_sync_unavailable`` with ``Retry-After`` instead of silently
-  dropping updates;
+  while conversations and memories return a permanent HTTP 400
+  ``incremental_sync_unsupported`` capability gate — no ``Retry-After`` —
+  instead of silently dropping updates;
 - REST list bodies stay top-level JSON arrays (the contract the desktop client
   and the ``mcp/`` stdio package decode), with pagination state only in the
   ``X-Next-Cursor`` response header;
@@ -420,23 +420,25 @@ def client(monkeypatch):
 
 
 class TestRestIncrementalSyncGates:
-    """Truthful gates where the storage model cannot serve revision queries."""
+    """Permanent capability gates where the storage model cannot serve
+    revision queries — a stable 400, never a retryable 503."""
 
-    def test_conversations_updated_since_returns_503_with_retry_after(self, client):
+    def test_conversations_updated_since_returns_400_no_retry_after(self, client):
         resp = client.get("/v1/mcp/conversations", params={"updated_since": "2026-06-01T00:00:00Z"})
-        assert resp.status_code == 503
-        assert "incremental_sync_unavailable" in resp.json()["detail"]
-        assert resp.headers.get("Retry-After") == "60"
+        assert resp.status_code == 400
+        assert "incremental_sync_unsupported" in resp.json()["detail"]
+        assert "created_at DESC, id" in resp.json()["detail"]
+        assert "Retry-After" not in resp.headers
 
     def test_conversations_naive_updated_since_returns_400(self, client):
         resp = client.get("/v1/mcp/conversations", params={"updated_since": "2026-06-01"})
         assert resp.status_code == 400
 
-    def test_memories_updated_since_returns_503_with_retry_after(self, client):
+    def test_memories_updated_since_returns_400_no_retry_after(self, client):
         resp = client.get("/v1/mcp/memories", params={"updated_since": "2026-06-01T00:00:00Z"})
-        assert resp.status_code == 503
-        assert "incremental_sync_unavailable" in resp.json()["detail"]
-        assert resp.headers.get("Retry-After") == "60"
+        assert resp.status_code == 400
+        assert "incremental_sync_unsupported" in resp.json()["detail"]
+        assert "Retry-After" not in resp.headers
 
     def test_memories_naive_updated_since_returns_400(self, client):
         resp = client.get("/v1/mcp/memories", params={"updated_since": "2026-06-01"})
@@ -1017,3 +1019,76 @@ class TestRestOAuthGrantRevoke:
         client.app.dependency_overrides[rest.get_current_user_id] = lambda: UID
         resp = client.delete("/v1/mcp/oauth/grants/grant-1")
         assert resp.status_code == 204
+
+
+class TestSyncedWriterTimestamps:
+    """Every mutation that changes a sync-visible field must move
+    ``updated_at`` — otherwise the row never passes the client's watermark
+    and the (updated_at, __name__) feed silently loses the write."""
+
+    def _fake_db(self, monkeypatch, action_items_db, docs):
+        written = []
+
+        class _Batch:
+            def update(self, ref, data):
+                written.append((ref.id, data))
+
+            def commit(self):
+                pass
+
+        items_collection = MagicMock()
+        query = MagicMock()
+        query.where.return_value = query
+        query.stream.return_value = iter(docs)
+        items_collection.where.return_value = query
+        items_collection.document.side_effect = lambda doc_id: MagicMock(id=doc_id)
+        user_doc = MagicMock()
+        user_doc.collection.return_value = items_collection
+        users = MagicMock()
+        users.document.return_value = user_doc
+        fake_db = MagicMock()
+        fake_db.collection.return_value = users
+        fake_db.batch.side_effect = _Batch
+
+        monkeypatch.setattr(action_items_db, "db", fake_db)
+        monkeypatch.setattr(action_items_db, "bump_action_items_list_version", lambda uid: None)
+        return fake_db, items_collection, written
+
+    def test_unlock_all_action_items_stamps_updated_at(self, sync_db, monkeypatch):
+        import database.action_items as action_items_db
+
+        docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
+        _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
+
+        action_items_db.unlock_all_action_items(UID)
+
+        assert [ref_id for ref_id, _ in written] == ["a0", "a1", "a2"]
+        for _, data in written:
+            assert data["is_locked"] is False
+            assert isinstance(data["updated_at"], datetime)
+
+    def test_update_action_item_stamps_updated_at(self, sync_db, monkeypatch):
+        import database.action_items as action_items_db
+
+        doc_ref = MagicMock()
+        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
+        items_collection.document.side_effect = lambda doc_id: doc_ref
+
+        assert action_items_db.update_action_item(UID, "a1", {"description": "new text"}) is True
+        data = doc_ref.update.call_args[0][0]
+        assert data["description"] == "new text"
+        assert isinstance(data["updated_at"], datetime)
+
+    def test_mark_completed_stamps_updated_at(self, sync_db, monkeypatch):
+        import database.action_items as action_items_db
+
+        doc_ref = MagicMock()
+        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
+        items_collection.document.side_effect = lambda doc_id: doc_ref
+
+        assert action_items_db.mark_action_item_completed(UID, "a1", completed=True) is True
+        data = doc_ref.update.call_args[0][0]
+        assert data["completed"] is True
+        assert isinstance(data["updated_at"], datetime)

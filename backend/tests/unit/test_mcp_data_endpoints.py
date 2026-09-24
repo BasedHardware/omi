@@ -15,7 +15,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -725,6 +725,15 @@ def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
                 sse.mcp_authorize_consent(
+                    Request(
+                        {
+                            "type": "http",
+                            "method": "POST",
+                            "path": "/authorize",
+                            "headers": [],
+                            "client": ("10.20.30.40", 4321),
+                        }
+                    ),
                     response_type='code',
                     client_id='omi-chatgpt-prod',
                     redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
@@ -1130,3 +1139,125 @@ def test_rest_allowed_empty_account_returns_empty_without_error(run_surface):
 @pytest.mark.parametrize('run_surface', _SSE_SURFACES)
 def test_sse_allowed_empty_account_returns_empty_without_error(run_surface):
     assert run_surface(_allowed_empty_result())["memories"] == []
+
+
+# --- Phase-2 corrections: id validation, status preservation, index mapping ---
+
+
+@pytest.mark.parametrize("bad_id", [".", "..", "__name__", "has/slash", "a/b/c"])
+def test_invalid_conversation_id_rejected_before_firestore(bad_id):
+    """Ids Firestore refuses never reach a document read — invalid_arguments
+    (-32602) instead of a lookup that could touch a reserved id."""
+    with patch.object(
+        sse.conversations_db, 'get_mcp_conversations_by_id', side_effect=AssertionError("firestore touched")
+    ):
+        with pytest.raises(sse.ToolExecutionError) as raised:
+            sse.execute_tool(UID, 'get_conversation_by_id', {'conversation_id': bad_id})
+    assert raised.value.code == -32602
+
+
+def test_invalid_batch_conversation_id_rejected_before_firestore():
+    with patch.object(
+        sse.conversations_db, 'get_mcp_conversations_by_id', side_effect=AssertionError("firestore touched")
+    ):
+        with pytest.raises(sse.ToolExecutionError) as raised:
+            sse.execute_tool(UID, 'get_conversations_by_ids', {'conversation_ids': ['ok-1', '../escape']})
+    assert raised.value.code == -32602
+
+
+@pytest.mark.parametrize("bad_id", ["..", "__stats__", "has/slash"])
+def test_rest_invalid_conversation_id_returns_400_without_firestore(bad_id):
+    with patch.object(
+        sse.conversations_db, 'get_mcp_conversations_by_id', side_effect=AssertionError("firestore touched")
+    ):
+        with pytest.raises(HTTPException) as raised:
+            rest.get_conversation_by_id(bad_id, uid=UID)
+    assert raised.value.status_code == 400
+
+
+@pytest.mark.parametrize("status", [404, 409, 422])
+def test_rest_tool_error_mapper_preserves_originating_http_status(status):
+    """A handler failure that began life as an HTTP error keeps its exact
+    status on the REST surface — 409/422/404 are never flattened to 500."""
+    from utils.mcp_server.errors import tool_error_from_http
+
+    exc = rest._http_error_from_tool_error(tool_error_from_http(HTTPException(status_code=status, detail="upstream")))
+    assert exc.status_code == status
+    assert "Retry-After" not in (exc.headers or {})
+
+
+@pytest.mark.parametrize("status", [404, 409, 422])
+def test_rest_delete_memory_preserves_handler_http_status(status):
+    """End to end through a real route: the shared handler's HTTP-originating
+    failure rethrows the exact status."""
+    from utils.mcp_server.errors import tool_error_from_http
+
+    write_grant = SimpleNamespace(allowed=True, status_code=200, observability={})
+
+    def boom(uid, arguments, auth_context=None):
+        raise tool_error_from_http(HTTPException(status_code=status, detail="upstream"))
+
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_write", return_value=write_grant),
+        patch.object(rest, "spec_for_tool", return_value=SimpleNamespace(handler=boom)),
+    ):
+        with pytest.raises(HTTPException) as raised:
+            rest.delete_memory("mem-1", auth_context=SimpleNamespace(uid=UID))
+    assert raised.value.status_code == status
+
+
+def test_action_item_index_building_maps_to_503_on_rest_list():
+    """A still-building Firestore index is a retryable 503 — never a 500."""
+    from google.api_core.exceptions import FailedPrecondition
+
+    with patch.object(
+        sse_action_items.action_items_db, 'get_action_items', side_effect=FailedPrecondition("index building")
+    ):
+        with pytest.raises(HTTPException) as raised:
+            rest.get_action_items(SimpleNamespace(headers={}), uid=UID)
+    assert raised.value.status_code == 503
+    assert "Retry-After" in (raised.value.headers or {})
+
+
+def test_action_item_index_building_maps_to_503_on_rest_sync():
+    from google.api_core.exceptions import FailedPrecondition
+
+    with patch.object(
+        sse_action_items.action_item_sync_db,
+        'get_action_items_sync_page',
+        side_effect=FailedPrecondition("index building"),
+    ):
+        with pytest.raises(HTTPException) as raised:
+            rest.get_action_items(SimpleNamespace(headers={}), updated_since="2026-06-01T00:00:00Z", uid=UID)
+    assert raised.value.status_code == 503
+    assert "Retry-After" in (raised.value.headers or {})
+
+
+@pytest.mark.asyncio
+async def test_action_item_index_failure_is_json_rpc_http_200():
+    """The same index failure stays an ``isError`` tool result on the MCP
+    JSON-RPC surface with the stable ``unavailable`` code."""
+    from google.api_core.exceptions import FailedPrecondition
+
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['action_items.read'])
+    request = _JsonRequest(
+        {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'get_action_items', 'arguments': {}},
+        }
+    )
+    with (
+        patch.object(sse_transport, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse_transport, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(
+            sse_action_items.action_items_db, 'get_action_items', side_effect=FailedPrecondition("index building")
+        ),
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload['result']['isError'] is True
+    assert payload['result']['structuredContent']['error']['code'] == 'unavailable'

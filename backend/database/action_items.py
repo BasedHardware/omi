@@ -1398,7 +1398,7 @@ def unlock_all_action_items(uid: str) -> None:
     docs = locked_items_query.stream()
     count = 0
     for doc in docs:
-        batch.update(doc.reference, {'is_locked': False})
+        batch.update(doc.reference, {'is_locked': False, 'updated_at': datetime.now(timezone.utc)})
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()

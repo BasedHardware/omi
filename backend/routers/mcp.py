@@ -122,22 +122,24 @@ def _parse_updated_since(value: Optional[str]) -> Optional[datetime]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-def _incremental_sync_unavailable(resource: str) -> None:
-    """Truthful gate: this resource cannot yet serve a revision-ordered feed."""
+def _incremental_sync_unsupported(resource: str, alternative: str) -> None:
+    """Permanent capability gate: this resource cannot serve a revision-ordered
+    feed at all, so the answer is a stable 400 — not a retryable 503."""
     raise HTTPException(
-        status_code=503,
+        status_code=400,
         detail=(
-            f"incremental_sync_unavailable: {resource} do not yet persist a queryable "
-            "updated_at revision field, so a partial feed would silently drop updates. "
-            "Retry after the announced backfill lands, or page the list endpoint without updated_since."
+            f"incremental_sync_unsupported: {resource} do not persist a queryable "
+            f"updated_at revision field, so updated_since cannot be served truthfully. "
+            f"Supported alternative: {alternative}."
         ),
-        headers={"Retry-After": _REST_RETRY_AFTER},
     )
 
 
 def _http_error_from_tool_error(exc: ToolExecutionError) -> HTTPException:
     """Map a shared-handler failure back to the REST status surface."""
-    if exc.analytics_authorization_denied:
+    if exc.http_status is not None:
+        status_code = exc.http_status
+    elif exc.analytics_authorization_denied:
         status_code = 403
     elif exc.analytics_rate_limited:
         status_code = 429
@@ -393,8 +395,11 @@ def get_memories(
     if _parse_updated_since(updated_since) is not None:
         # The mixed canonical+historical view cannot order on persisted
         # updated_at (legacy docs lack it), so a partial feed would silently
-        # drop updates — gate it rather than fake incremental sync.
-        _incremental_sync_unavailable("memories")
+        # drop updates — a permanent capability gap, not a transient outage.
+        _incremental_sync_unsupported(
+            "memories",
+            "page this endpoint without updated_since using sort, offset/limit, or the X-Next-Cursor cursor",
+        )
     try:
         limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
         offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)
@@ -519,8 +524,12 @@ def get_conversations(
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     if _parse_updated_since(updated_since) is not None:
         # Generic writes do not persist a queryable updated_at on conversations,
-        # so a revision-ordered feed would silently drop updates — gate it.
-        _incremental_sync_unavailable("conversations")
+        # so a revision-ordered feed would silently drop updates — a permanent
+        # capability gap, not a transient outage.
+        _incremental_sync_unsupported(
+            "conversations",
+            "page this endpoint with the opaque X-Next-Cursor cursor (created_at DESC, id keyset)",
+        )
     # Clamp pagination so a negative value cannot reach Firestore .limit()/.offset() (which
     # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
     # Mirrors the sibling MCP tool (routers/mcp_sse.py get_conversations) and every other
@@ -631,6 +640,8 @@ def get_conversation_by_id(
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
+    if not mcp_conversation_handlers.is_safe_conversation_id(conversation_id):
+        raise HTTPException(status_code=400, detail="conversation_id is not a valid document id")
     conversation = mcp_conversation_handlers.fetch_conversation_for_detail(
         uid,
         conversation_id,
@@ -755,7 +766,9 @@ class McpUpdateActionItem(BaseModel):
 
 def _action_item_http_error(exc: ToolExecutionError) -> HTTPException:
     """Map a shared action-item handler error to the released REST statuses."""
-    if exc.analytics_authorization_denied:
+    if exc.http_status is not None:
+        status_code = exc.http_status
+    elif exc.analytics_authorization_denied:
         status_code = 403
     elif exc.analytics_rate_limited:
         status_code = 429
@@ -765,6 +778,9 @@ def _action_item_http_error(exc: ToolExecutionError) -> HTTPException:
             -32000: 422,
             -32001: 404,
             -32002: 402,
+            # -32009 is the "temporarily unavailable" domain code (index still
+            # building, store outage) — it maps to a retryable 503, not a 500.
+            -32009: 503,
         }.get(exc.code, 500)
     headers = {"Retry-After": _REST_RETRY_AFTER} if status_code in (429, 503) else None
     return HTTPException(status_code=status_code, detail=exc.message, headers=headers)

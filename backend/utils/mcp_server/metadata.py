@@ -63,5 +63,8 @@ def authorization_server_document() -> Dict[str, Any]:
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": mcp_oauth_db.token_endpoint_auth_methods_supported(),
         "scopes_supported": MCP_SCOPES_SUPPORTED,
+        # RFC 9207: every authorization response (code and error redirects)
+        # carries ``iss`` — advertise it so clients enforce the binding.
+        "authorization_response_iss_parameter_supported": True,
         "client_id_metadata_document_supported": True,
     }

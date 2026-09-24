@@ -14,11 +14,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from config.mcp_client_ids import is_url_form_client_id
+import database.mcp_client_metadata as mcp_client_metadata
 import database.mcp_oauth as mcp_oauth_db
 import database.mcp_token_cache as mcp_token_cache_db
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, cimd_executor, critical_executor, db_executor, run_blocking
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.mcp_server.metadata import MCP_AUTHORIZATION_SERVER_URL, SCOPE_PERMISSION_TEXT
+from utils.other.endpoints import check_rate_limit_inline
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -77,6 +80,41 @@ def _oauth_temporarily_unavailable() -> JSONResponse:
         status_code=503,
         content={"error": "temporarily_unavailable", "error_description": "Token store is unavailable"},
         headers={"Retry-After": "30"},
+    )
+
+
+def _oauth_cimd_saturated() -> JSONResponse:
+    # The bounded CIMD pool is full: fail fast so unauthenticated URL-form
+    # client_id floods can never park shared workers on outbound fetches.
+    return JSONResponse(
+        status_code=503,
+        content={"error": "temporarily_unavailable", "error_description": "Client metadata lookups are busy"},
+        headers={"Retry-After": "30"},
+    )
+
+
+def _client_lookup_executor(client_id: Any):
+    """URL-form (CIMD) client ids fetch remote metadata: their lookups run on
+    the dedicated bounded ``cimd_executor`` — never the db or anyio pools."""
+    return cimd_executor if is_url_form_client_id(client_id) else db_executor
+
+
+def _url_form_rate_limit_key(request: Optional[Request]) -> str:
+    # Only the connection peer is trusted — never arbitrary forwarded headers.
+    host = request.client.host if request is not None and request.client else "unknown"
+    return f"ip:{host}"
+
+
+async def _enforce_url_form_rate_limit(request: Optional[Request], client_id: Any) -> None:
+    """Per-IP limiter for unauthenticated URL-form client_id lookups — each
+    one can cost a bounded outbound fetch, so the budget sits before it."""
+    if not is_url_form_client_id(client_id):
+        return
+    await run_blocking(
+        critical_executor,
+        check_rate_limit_inline,
+        _url_form_rate_limit_key(request),
+        "mcp:oauth_url_client",
     )
 
 
@@ -176,7 +214,7 @@ async def get_token_request_data(request: Request) -> Dict[str, Any]:
 _get_token_request_data = get_token_request_data
 
 
-def mcp_authorize(
+async def mcp_authorize(
     request: Request,
     response_type: str,
     client_id: str,
@@ -189,10 +227,21 @@ def mcp_authorize(
 ):
     """OAuth authorize endpoint: render the consent page after request validation."""
     resource = _effective_resource(resource)
+    await _enforce_url_form_rate_limit(request, client_id)
     try:
-        client, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        client, scopes = await run_blocking(
+            _client_lookup_executor(client_id),
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
+    except (ExecutorSaturatedError, mcp_client_metadata.McpCimdUnavailable):
+        return _oauth_cimd_saturated()
     except _AuthorizeRequestError as e:
         if e.redirect_allowed:
             return RedirectResponse(_redirect_with_error(redirect_uri, e.error, str(e), state), status_code=302)
@@ -244,11 +293,13 @@ async def mcp_authorize_consent(
     scope: Optional[str],
     code_challenge: Optional[str],
     code_challenge_method: Optional[str],
+    request: Optional[Request] = None,
 ):
     resource = _effective_resource(resource)
+    await _enforce_url_form_rate_limit(request, client_id)
     try:
         _, scopes = await run_blocking(
-            db_executor,
+            _client_lookup_executor(client_id),
             _validate_authorize_request,
             response_type,
             client_id,
@@ -264,6 +315,8 @@ async def mcp_authorize_consent(
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
+    except (ExecutorSaturatedError, mcp_client_metadata.McpCimdUnavailable):
+        return _oauth_cimd_saturated()
     except Exception as e:
         if isinstance(e, _AuthorizeRequestError):
             if e.redirect_allowed:
@@ -315,7 +368,11 @@ async def mcp_token(request: Request):
     refresh_token = request_data.get("refresh_token")
     scope = request_data.get("scope")
 
-    client = await run_blocking(db_executor, mcp_oauth_db.get_client, client_id or "")
+    await _enforce_url_form_rate_limit(request, client_id)
+    try:
+        client = await run_blocking(_client_lookup_executor(client_id), mcp_oauth_db.get_client, client_id or "")
+    except (ExecutorSaturatedError, mcp_client_metadata.McpCimdUnavailable):
+        return _oauth_cimd_saturated()
     if (
         not client
         or client.get("disabled_at")

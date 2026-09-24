@@ -76,7 +76,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 # hourly caps boosted into no-ops.
 _BOOST_EXEMPT_DEFAULT = (
     "action_items:list,action_items:list_hot_client,static_map:get,"
-    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments"
+    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
+    "mcp:oauth_url_client"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -236,6 +237,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),
     "dev:goals_write": (120, 3600),
+    # Unauthenticated URL-form (CIMD) client_id lookups on /authorize + /token:
+    # each can cost a bounded outbound metadata fetch, so the per-IP budget is
+    # per-minute and sits in front of the lookup. Boost-exempt: an event window
+    # must not widen an unauthenticated abuse surface.
+    "mcp:oauth_url_client": (30, 60),
     # MCP REST data API
     "mcp:read": (300, 3600),
     "mcp:memories_read": (120, 3600),

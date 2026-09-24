@@ -3,8 +3,9 @@ fresh-loaded ``database.mcp_oauth`` against the in-memory Firestore stand-in.
 
 Covers: positive-only caching, the 60s TTL cap, per-hit revalidation (shape,
 scopes, expiry, audience equivalence), the revocation marker and grant token
-index, the cache-fill race, ``last_used_at`` throttling, and fail-closed
-Redis/Firestore outage semantics. Redis is hermetic throughout.
+index, the cache-fill race, ``last_used_at`` throttling, and outage semantics:
+validation degrades to Firestore-only when Redis is down while revocation
+writes stay fail-closed. Redis is hermetic throughout.
 """
 
 import hashlib
@@ -19,6 +20,7 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
+import database.mcp_cache_integrity as integrity
 import database.mcp_token_cache as token_cache
 import database.redis_db as redis_db
 from utils.mcp_server import auth as mcp_auth
@@ -395,7 +397,7 @@ def test_entry_signed_with_foreign_secret_is_not_served(_fake_redis, monkeypatch
     import database.mcp_cache_integrity as integrity
 
     monkeypatch.setenv("ENCRYPTION_SECRET", "foreign-test-secret-foreign-test-secret")
-    blob = integrity.dumps_signed(_forged_entry())
+    blob = integrity.dumps_signed(_forged_entry(), "at")
     monkeypatch.setenv("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
     fake_redis.set(_at_key("omi_oat_foreign"), blob)
     assert mcp_oauth.validate_access_token("omi_oat_foreign", mcp_oauth.MCP_RESOURCE_URL) is None
@@ -419,6 +421,14 @@ def test_missing_signing_secret_fails_closed(_fake_redis, monkeypatch):
     monkeypatch.delenv("ENCRYPTION_SECRET", raising=False)
     with pytest.raises(token_cache.McpTokenStoreUnavailable):
         mcp_oauth.validate_access_token("omi_oat_whatever", mcp_oauth.MCP_RESOURCE_URL)
+
+
+def test_dumps_signed_returns_none_without_signing_secret(monkeypatch):
+    """An unsigned envelope must never be produced — no key means ``None``,
+    and callers treat that as "do not cache"."""
+    monkeypatch.delenv("ENCRYPTION_SECRET", raising=False)
+    assert integrity.dumps_signed({"a": 1}, "at") is None
+    assert integrity.dumps_signed({"a": 1}, "cimd") is None
 
 
 # --- Revocation -------------------------------------------------------------
@@ -603,12 +613,45 @@ def test_cimd_grant_document_id_is_sanitized_but_preregistered_id_unchanged(_fak
 # --- Outage semantics --------------------------------------------------------
 
 
-def test_redis_outage_fails_closed_on_hit_and_miss(_fake_redis):
+def test_redis_outage_validates_against_firestore_only(_fake_redis):
+    """Redis down is not an auth outage: cache read, revocation marker,
+    cache fill, and last_used writes are all skipped while the authoritative
+    Firestore grant decides — a valid token still validates and an unknown
+    one still misses."""
     grant, pair = _issue_token("outage-user")
     mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
     fake_redis.failing = True
-    with pytest.raises(token_cache.McpTokenStoreUnavailable):
-        mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    identity = mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    assert identity["uid"] == "outage-user"
+    assert identity["grant_id"] == grant["id"]
+    assert mcp_oauth.validate_access_token("omi_oat_nonexistent", mcp_oauth.MCP_RESOURCE_URL) is None
+
+
+def test_redis_outage_still_denies_firestore_revoked_grants(_fake_redis):
+    """Fail-open cache reads never resurrect a revoked grant: with the marker
+    unreadable, the authoritative Firestore document still denies."""
+    grant, pair = _issue_token("outage-revoked-user")
+    mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    # Marker written while Redis was up; Firestore revoke then completed and
+    # Redis died — validation must still deny off the grant document alone.
+    mcp_oauth.db.collection("mcp_oauth_grants").document(grant["id"]).set(
+        {"revoked_at": mcp_oauth._now(), "status": "revoked"}, merge=True
+    )
+    fake_redis.failing = True
+    assert mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL) is None
+
+
+def test_redis_outage_skips_last_used_writes(_fake_redis, monkeypatch):
+    """During a Redis outage last_used_at writes are skipped too — an
+    unthrottled write per validated request would add ~150k+ Firestore
+    writes/day at steady traffic."""
+    writes = []
+    monkeypatch.setattr(mcp_oauth, "_record_grant_last_used", lambda grant_id: writes.append(grant_id))
+    grant, pair = _issue_token("outage-throttle-user")
+    fake_redis.failing = True
+    mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    assert writes == []
 
 
 def test_redis_outage_maps_to_503_not_401(monkeypatch):
