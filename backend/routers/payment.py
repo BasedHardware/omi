@@ -633,7 +633,12 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             promotion_code_id=resolved_checkout_promo_id,
         )
     except stripe.error.InvalidRequestError as e:
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        logger.warning(f"Stripe rejected checkout session creation: {sanitize(str(e))}")
+        detail = (
+            str(e.user_message)
+            if hasattr(e, "user_message") and e.user_message
+            else "Invalid payment request. Please check your payment details."
+        )
         raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -812,7 +817,11 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         raise
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        detail = (
+            str(e.user_message)
+            if hasattr(e, "user_message") and e.user_message
+            else "Failed to process subscription change. Please check your payment details."
+        )
         raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
@@ -1313,7 +1322,8 @@ def create_connect_account_endpoint(
 
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error creating connect account: {e}")
+        raise HTTPException(status_code=400, detail="Failed to create Stripe Connect account. Please try again.")
 
 
 @router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
@@ -1332,7 +1342,8 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error checking connect onboarding status: {e}")
+        raise HTTPException(status_code=400, detail="Failed to check Stripe Connect onboarding status.")
 
 
 @router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
@@ -1344,7 +1355,8 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
         account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error refreshing connect account link: {e}")
+        raise HTTPException(status_code=400, detail="Failed to refresh Stripe Connect account link.")
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
@@ -1606,7 +1618,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling app subscription: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Could not cancel app subscription. Please try again.")
     except Exception as e:
         logger.error(f"Error canceling app subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")
