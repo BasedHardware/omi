@@ -70,6 +70,13 @@ def test_released_memory_surfaces_have_one_service_authority():
         if relative == "utils/retrieval/tools/preference_tools.py":
             assert "utils.memory.knowledge_ledger" in source, relative
             assert "save_fact(" in source, relative
+        elif relative == "routers/mcp.py":
+            assert "mcp_memory_handlers" in source, relative
+            assert "mcp_memory_handlers._create_one_memory(" in source, relative
+            assert '_call_tool_handler("delete_memory"' in source, relative
+            assert '_call_tool_handler("edit_memory"' in source, relative
+            handler_source = (BACKEND / "utils/mcp_server/handlers/memories.py").read_text(encoding="utf-8")
+            assert "MemoryService" in handler_source, "routers/mcp.py shared handler"
         else:
             assert "MemoryService" in source, relative
         assert not any(marker in source for marker in forbidden), relative
