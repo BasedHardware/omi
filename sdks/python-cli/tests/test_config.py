@@ -695,3 +695,25 @@ def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, c
     assert "Invalid value for 'local_token'" in result.output
     config = cfg.load()
     assert config.get_profile("default").local_token is None
+
+
+@pytest.mark.parametrize("empty_name", ["", "   ", " \t \n "])
+def test_config_profile_use_rejects_empty_name(config_path: Path, cli_runner, empty_name: str) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "use", empty_name])
+    assert result.exit_code == 1
+    assert "Invalid profile name" in result.stderr
+
+
+@pytest.mark.parametrize("empty_name", ["", "   ", " \t \n "])
+def test_config_profile_delete_rejects_empty_name(config_path: Path, cli_runner, empty_name: str) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "delete", empty_name, "--yes"])
+    assert result.exit_code == 1
+    assert "Invalid profile name" in result.stderr
+
+
+def test_config_profile_use_normalizes_whitespace(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "profile", "use", "  work  "])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["active_profile"] == "work"
+    assert cfg.load().active_profile == "work"
