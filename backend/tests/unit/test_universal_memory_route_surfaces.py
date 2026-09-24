@@ -16,7 +16,7 @@ ROUTE_FILES = (
     "routers/conversations.py",
     "routers/knowledge_graph.py",
     "routers/mcp.py",
-    "routers/mcp_sse.py",
+    "utils/mcp_server/handlers/memories.py",
     "utils/x_connector.py",
     "utils/retrieval/tool_services/memories.py",
     "utils/retrieval/tools/memory_tools.py",

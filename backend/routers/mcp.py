@@ -62,6 +62,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
 )
 import database.mcp_oauth as mcp_oauth_db
+from utils.mcp_server.registry import spec_for_tool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -671,7 +672,11 @@ def get_goals(
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
-    return goals_db.get_all_goals(uid, include_inactive=include_inactive)
+    # Shared with the hosted MCP tool of the same name; the REST response is
+    # the unwrapped list while the tool wraps it in {"goals": [...]}.
+    spec = spec_for_tool("get_goals")
+    assert spec is not None
+    return spec.handler(uid, {"include_inactive": include_inactive}, None)["goals"]
 
 
 # ---------------------------------------------------------------------------
@@ -715,7 +720,11 @@ class SimplePerson(BaseModel):
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
-    return [clean_person(p) for p in users_db.get_people(uid)]
+    # Shared with the hosted MCP tool of the same name; identical privacy
+    # cleaning via utils.mcp_data.clean_person, unwrapped to the REST list.
+    spec = spec_for_tool("get_people")
+    assert spec is not None
+    return spec.handler(uid, {}, None)["people"]
 
 
 # ---------------------------------------------------------------------------

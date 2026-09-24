@@ -3139,3 +3139,153 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+          - mcp_oauth
+        placement: handler
+        scopes:
+          - memories.read
+          - memories.write
+          - conversations.read
+          - action_items.read
+          - action_items.write
+          - goals.read
+          - chat.read
+          - screen_activity.read
+          - people.read
+      byok: not_applicable
+      rate_limit:
+        policy_name: mcp:sse
+        key_subject: uid
+        enforcement: fail_open
+        placement: inline
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: HEAD
+    path: /v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+          - mcp_oauth
+        placement: handler
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: auth
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: DELETE
+    path: /v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+          - mcp_oauth
+        placement: handler
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: auth
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /.well-known/oauth-protected-resource/v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: well_known
+      visibility: well_known
+      data_domain: auth
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: HEAD
+    path: /.well-known/oauth-protected-resource/v1/mcp
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: well_known
+      visibility: well_known
+      data_domain: auth
+      deprecation:
+        state: active
+      owner: backend

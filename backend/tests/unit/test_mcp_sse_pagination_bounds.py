@@ -77,7 +77,9 @@ def test_search_conversations_negative_limit_is_clamped(mcp):
         captured["limit"] = limit
         return []
 
-    with patch.object(mcp, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
+    from utils.mcp_server.handlers import conversations as mcp_conversations
+
+    with patch.object(mcp_conversations, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
         result = mcp.execute_tool("test-uid", "search_conversations", {"query": "hi", "limit": -5})
 
     assert result == {"conversations": []}

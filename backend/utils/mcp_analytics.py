@@ -1,24 +1,37 @@
-"""Privacy-safe product telemetry for hosted MCP tool calls.
+"""Privacy-safe product telemetry for hosted MCP tool calls and requests.
 
 ``MCP Tool Call`` is the stable PostHog event contract for the hosted
-Streamable HTTP MCP tool boundary. Its properties deliberately contain only
+Streamable HTTP MCP tool boundary, and ``MCP Request`` is the sampled
+per-POST envelope event. Their properties deliberately contain only
 closed enums and bounded numeric values. In particular, they never contain
 tool arguments, result content, OAuth/API-key credentials, user identifiers,
-client IDs, IP addresses, or exception text.
+client IDs, IP addresses, user agents, or exception text.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import os
-from typing import Any, Mapping, Optional
+import random
+from typing import Any, List, Mapping, Optional
 
 from utils.executors import postprocess_executor, submit_with_context
 from utils.integration_telemetry import emit_posthog_event
+from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
+from utils.mcp_server.registry import TOOL_SPECS
+from utils.mcp_server.versions import SUPPORTED_PROTOCOL_VERSIONS
 
 logger = logging.getLogger(__name__)
 
 MCP_TOOL_CALL = "MCP Tool Call"
+MCP_REQUEST = "MCP Request"
+MCP_ANONYMOUS_DISTINCT_ID = "mcp-anonymous"
+
+MCP_REQUEST_EVENT_SAMPLE_RATE_ENV = "MCP_REQUEST_EVENT_SAMPLE_RATE"
+MCP_TOOL_CALL_EVENT_SAMPLE_RATE_ENV = "MCP_TOOL_CALL_EVENT_SAMPLE_RATE"
+MCP_REQUEST_SAMPLE_RATE_DEFAULT = 0.05
+MCP_TOOL_CALL_SAMPLE_RATE_DEFAULT = 1.0
 
 _CHATGPT_CLIENT_IDS = frozenset(
     client_id
@@ -38,27 +51,11 @@ _CLAUDE_CLIENT_IDS = frozenset(
     if client_id
 )
 
-_TOOL_OPERATIONS = {
-    "get_user_profile": "memory_get",
-    "get_memories": "memory_list",
-    "search_memories": "memory_search",
-    "get_conversations": "conversation_list",
-    "get_conversation_by_id": "conversation_get",
-    "search_conversations": "conversation_search",
-    "get_daily_summaries": "daily_summary_list",
-    "search_x_posts": "x_post_search",
-    "get_x_posts": "x_post_list",
-    "get_action_items": "action_item_list",
-    "search_action_items": "action_item_search",
-    "get_goals": "goal_list",
-    "get_chat_messages": "chat_message_list",
-    "get_people": "people_list",
-    "get_screen_activity": "screen_activity_get",
-    # Kept here for the connector branch: once search/fetch reaches this
-    # boundary it automatically uses the same event contract.
-    "search": "memory_conversation_search",
-    "fetch": "memory_conversation_fetch",
-}
+# Registry is the single source of truth for tool names, operations, and write
+# operations; analytics never allowlists a tool the server cannot dispatch.
+_TOOL_OPERATIONS = {spec.name: spec.operation for spec in TOOL_SPECS}
+_KNOWN_TOOLS = frozenset(spec.name for spec in TOOL_SPECS)
+_WRITE_OPERATIONS = frozenset({spec.write_operation for spec in TOOL_SPECS} | {"other"})
 _RESULT_LIST_KEY_BY_TOOL = {
     "get_memories": "memories",
     "search_memories": "memories",
@@ -74,34 +71,205 @@ _RESULT_LIST_KEY_BY_TOOL = {
     "get_screen_activity": "screen_activity",
     "get_daily_summaries": "daily_summaries",
 }
-_KNOWN_TOOLS = frozenset(
+
+_MCP_CLIENT_NAMES = frozenset(
     {
-        "get_user_profile",
-        "get_memories",
-        "search_memories",
-        "create_memory",
-        "edit_memory",
-        "delete_memory",
-        "get_conversations",
-        "search_conversations",
-        "get_conversation_by_id",
-        "get_daily_summaries",
-        "search_x_posts",
-        "get_x_posts",
-        "get_action_items",
-        "search_action_items",
-        "create_action_item",
-        "complete_action_item",
-        "update_action_item",
-        "delete_action_item",
-        "get_goals",
-        "get_chat_messages",
-        "get_people",
-        "get_screen_activity",
-        "search",
-        "fetch",
+        "claude_code",
+        "claude_ai",
+        "claude_desktop",
+        "cursor",
+        "codex",
+        "chatgpt",
+        "grok_cli",
+        "python_sdk",
+        "node_sdk",
+        "other",
+        "unknown",
     }
 )
+
+_MCP_METHODS = frozenset(
+    {
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
+        "tools/call",
+        "ping",
+        "server/discover",
+        "subscriptions/listen",
+        "unknown",
+    }
+)
+
+
+def normalize_client_name(client_name: Any, user_agent: Any) -> str:
+    """Normalize clientInfo.name/User-Agent into the closed client enum."""
+    text = client_name if isinstance(client_name, str) and client_name else ""
+    if not text:
+        text = user_agent if isinstance(user_agent, str) else ""
+    text = text.lower()
+    if not text:
+        return "unknown"
+    if "claude-code" in text or "claude_code" in text:
+        return "claude_code"
+    if "claude-user" in text or "claude.ai" in text or "claude_ai" in text:
+        return "claude_ai"
+    if "claude" in text:
+        return "claude_desktop"
+    if "cursor" in text:
+        return "cursor"
+    if "codex" in text or "openai-mcp" in text:
+        return "codex"
+    if "chatgpt" in text or "openai" in text:
+        return "chatgpt"
+    if "grok" in text:
+        return "grok_cli"
+    if "python" in text or "httpx" in text or "urllib" in text or "aiohttp" in text:
+        return "python_sdk"
+    if "undici" in text or "node" in text or "bun" in text:
+        return "node_sdk"
+    return "other"
+
+
+def mcp_method_enum(method: Any) -> str:
+    return method if isinstance(method, str) and method in _MCP_METHODS else "unknown"
+
+
+def mcp_tool_enum(tool_name: Any) -> str:
+    """Tool names are allowlisted to the registry; anything else is ``unknown``."""
+    return _normalize_tool(tool_name)
+
+
+def mcp_protocol_version_enum(version: Any) -> str:
+    return version if isinstance(version, str) and version in SUPPORTED_PROTOCOL_VERSIONS else "unknown"
+
+
+_MCP_ERROR_CODES = frozenset(
+    {
+        "none",
+        "not_found",
+        "paid_plan_required",
+        "invalid_arguments",
+        "authorization_denied",
+        "rate_limited",
+        "unavailable",
+        "internal",
+        "unknown_tool",
+    }
+)
+
+
+def mcp_error_code_enum(error_code: Any) -> str:
+    return error_code if isinstance(error_code, str) and error_code in _MCP_ERROR_CODES else "internal"
+
+
+def _sample_rate(env_name: str, default: float) -> float:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    try:
+        rate = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(rate):
+        return default
+    return max(0.0, min(rate, 1.0))
+
+
+def _bounded_sample_rate(value: Any, default: float) -> float:
+    """Event property: sample rates are finite and bounded to [0, 1]."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return default
+    if not math.isfinite(value):
+        return default
+    return max(0.0, min(value, 1.0))
+
+
+def request_sample_rate() -> float:
+    return _sample_rate(MCP_REQUEST_EVENT_SAMPLE_RATE_ENV, MCP_REQUEST_SAMPLE_RATE_DEFAULT)
+
+
+def tool_call_sample_rate() -> float:
+    return _sample_rate(MCP_TOOL_CALL_EVENT_SAMPLE_RATE_ENV, MCP_TOOL_CALL_SAMPLE_RATE_DEFAULT)
+
+
+def _sampled(rate: float) -> bool:
+    if rate <= 0:
+        return False
+    if rate >= 1:
+        return True
+    return random.random() < rate
+
+
+def schedule_mcp_request(
+    *,
+    uid: Optional[str],
+    jsonrpc_methods: List[str],
+    message_count: int,
+    is_handshake: bool,
+    protocol_version: Any,
+    client_name: Any,
+    transport: Any,
+    http_status: Any,
+    path: Any,
+    duration_ms: float,
+    tool_name: Any = None,
+) -> None:
+    """Queue the sampled per-POST ``MCP Request`` event without delaying the response."""
+    rate = request_sample_rate()
+    if not _sampled(rate):
+        return
+    try:
+        submit_with_context(
+            postprocess_executor,
+            emit_mcp_request,
+            uid=uid,
+            jsonrpc_methods=jsonrpc_methods,
+            message_count=message_count,
+            is_handshake=is_handshake,
+            protocol_version=protocol_version,
+            client_name=client_name,
+            transport=transport,
+            http_status=http_status,
+            path=path,
+            duration_ms=duration_ms,
+            tool_name=tool_name,
+            sample_rate=rate,
+        )
+    except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
+        logger.warning("mcp request analytics scheduling failed error=%s", type(exc).__name__)
+
+
+def emit_mcp_request(
+    *,
+    uid: Optional[str],
+    jsonrpc_methods: List[str],
+    message_count: int,
+    is_handshake: bool,
+    protocol_version: Any,
+    client_name: Any,
+    transport: Any,
+    http_status: Any,
+    path: Any,
+    duration_ms: float,
+    tool_name: Any = None,
+    sample_rate: float = MCP_REQUEST_SAMPLE_RATE_DEFAULT,
+) -> None:
+    """Emit the per-POST envelope event using only bounded, allowlisted values."""
+    properties = {
+        "jsonrpc_methods": [mcp_method_enum(method) for method in (jsonrpc_methods or [])][:MCP_MAX_BATCH_MESSAGES],
+        "message_count": _bounded_int(message_count, maximum=100),
+        "is_handshake": bool(is_handshake),
+        "protocol_version": mcp_protocol_version_enum(protocol_version),
+        "client_name": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+        "transport": _normalize_transport(transport),
+        "http_status": _bounded_int(http_status, maximum=599),
+        "path": path if path in {"canonical", "legacy_sse"} else "other",
+        "duration_ms": _bounded_int(duration_ms, maximum=60_000),
+        "tool": mcp_tool_enum(tool_name),
+        "sample_rate": _bounded_sample_rate(sample_rate, MCP_REQUEST_SAMPLE_RATE_DEFAULT),
+    }
+    emit_posthog_event(uid or MCP_ANONYMOUS_DISTINCT_ID, MCP_REQUEST, properties)
 
 
 def schedule_mcp_tool_call(
@@ -115,8 +283,16 @@ def schedule_mcp_tool_call(
     error_category: str,
     duration_ms: float,
     result_count: int,
+    error_code: str = "none",
+    protocol_version: Any = "unknown",
+    client_name: Any = "unknown",
+    in_batch: bool = False,
+    write_operation: Any = "none",
 ) -> None:
     """Queue optional analytics without delaying or changing the MCP response."""
+    rate = tool_call_sample_rate()
+    if not _sampled(rate):
+        return
     try:
         submit_with_context(
             postprocess_executor,
@@ -128,8 +304,14 @@ def schedule_mcp_tool_call(
             outcome=outcome,
             authorization_outcome=authorization_outcome,
             error_category=error_category,
+            error_code=error_code,
             duration_ms=duration_ms,
             result_count=result_count,
+            protocol_version=protocol_version,
+            client_name=client_name,
+            in_batch=in_batch,
+            write_operation=write_operation,
+            sample_rate=rate,
         )
     except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
         logger.warning("mcp analytics scheduling failed error=%s", type(exc).__name__)
@@ -146,6 +328,12 @@ def emit_mcp_tool_call(
     error_category: str,
     duration_ms: float,
     result_count: int,
+    error_code: str = "none",
+    protocol_version: Any = "unknown",
+    client_name: Any = "unknown",
+    in_batch: bool = False,
+    write_operation: Any = "none",
+    sample_rate: float = MCP_TOOL_CALL_SAMPLE_RATE_DEFAULT,
 ) -> None:
     """Emit the shared PostHog event using only bounded, allowlisted values."""
     properties = {
@@ -164,8 +352,14 @@ def emit_mcp_tool_call(
             if error_category in {"none", "authorization_denied", "validation", "unknown_tool", "internal"}
             else "internal"
         ),
+        "error_code": mcp_error_code_enum(error_code),
         "duration_ms": _bounded_int(duration_ms, maximum=60_000),
         "result_count": _bounded_int(result_count, maximum=1_000),
+        "protocol_version": mcp_protocol_version_enum(protocol_version),
+        "client_name": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+        "in_batch": bool(in_batch),
+        "write_operation": write_operation if write_operation in _WRITE_OPERATIONS else "other",
+        "sample_rate": _bounded_sample_rate(sample_rate, MCP_TOOL_CALL_SAMPLE_RATE_DEFAULT),
     }
     # The shared helper owns the PostHog client and catches capture failures.
     emit_posthog_event(uid, MCP_TOOL_CALL, properties)

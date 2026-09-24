@@ -24,7 +24,7 @@ MEMORY_SURFACE_FILES = (
     "routers/integration.py",
     "routers/conversations.py",
     "routers/mcp.py",
-    "routers/mcp_sse.py",
+    "utils/mcp_server/handlers/memories.py",
     "utils/conversations/memories.py",
     "utils/conversations/merge_conversations.py",
     "utils/conversations/process_conversation.py",

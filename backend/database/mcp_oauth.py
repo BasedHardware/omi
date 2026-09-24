@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
 
+from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from database._client import data_plane_db as db
 from database.mcp_auth_read import mcp_auth_read
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -22,11 +23,34 @@ from database.memory_app_key_grants import (
     build_app_key_scope_grant_contract_state,
 )
 
-PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
+
+def canonical_mcp_resource_url(resource: str) -> str:
+    """Map a legacy ``/v1/mcp/sse`` resource URL onto the canonical ``/v1/mcp``."""
+    suffix = "/sse"
+    return resource[: -len(suffix)] if resource.endswith(suffix) else resource
+
+
+def legacy_mcp_resource_url(resource: str) -> str:
+    return canonical_mcp_resource_url(resource) + "/sse"
+
+
+def mcp_resource_urls_match(left: Optional[str], right: Optional[str]) -> bool:
+    """Canonical-form equality: legacy ``/sse`` and canonical audiences are the
+    same resource for issuance and validation, on either endpoint path."""
+    if left is None or right is None:
+        return left is right
+    return canonical_mcp_resource_url(left) == canonical_mcp_resource_url(right)
+
+
+PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
 # OAuth authority and its production Firestore grants.
-BETA_MCP_RESOURCE_URL = "https://api.omiapi.com/v1/mcp/sse"
-MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", PRODUCTION_MCP_RESOURCE_URL)
+BETA_MCP_RESOURCE_URL = "https://api.omiapi.com/v1/mcp"
+# Deployed environments may still pass a ``/sse``-suffixed resource URL; the
+# module always exposes the canonical form so metadata and validation stay
+# consistent regardless of config age.
+MCP_RESOURCE_URL = canonical_mcp_resource_url(os.getenv("MCP_RESOURCE_URL", PRODUCTION_MCP_RESOURCE_URL))
+MCP_LEGACY_RESOURCE_URL = legacy_mcp_resource_url(MCP_RESOURCE_URL)
 
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
 DEFAULT_CLIENT_NAME = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_NAME", "ChatGPT")
@@ -34,17 +58,7 @@ DEFAULT_CLAUDE_CLIENT_ID = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "omi-claude-p
 DEFAULT_CLAUDE_CLIENT_NAME = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_NAME", "Claude")
 DEFAULT_PUBLIC_CLIENT_ID = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_ID", "omi-mcp-public")
 DEFAULT_PUBLIC_CLIENT_NAME = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_NAME", "Omi MCP Public")
-SUPPORTED_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+SUPPORTED_SCOPES = MCP_FULL_ACCESS_SCOPES
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
@@ -280,9 +294,11 @@ def _finalize_client(client: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any
         if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
             prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
         finalized["allowed_redirect_uri_prefixes"] = prefixes
-    if client_id in PRODUCTION_CROSS_PLANE_CLIENT_IDS and MCP_RESOURCE_URL == PRODUCTION_MCP_RESOURCE_URL:
+    if client_id in PRODUCTION_CROSS_PLANE_CLIENT_IDS and mcp_resource_urls_match(
+        MCP_RESOURCE_URL, PRODUCTION_MCP_RESOURCE_URL
+    ):
         resources = _csv_values(finalized.get("allowed_resources")) or [MCP_RESOURCE_URL]
-        if BETA_MCP_RESOURCE_URL not in resources:
+        if not any(mcp_resource_urls_match(BETA_MCP_RESOURCE_URL, allowed) for allowed in resources):
             resources.append(BETA_MCP_RESOURCE_URL)
         finalized["allowed_resources"] = resources
     return finalized
@@ -402,7 +418,7 @@ def validate_redirect_uri(client: Dict[str, Any], redirect_uri: str) -> bool:
 
 
 def validate_resource(client: Dict[str, Any], resource: str) -> bool:
-    return resource in set(client.get("allowed_resources") or [])
+    return any(mcp_resource_urls_match(allowed, resource) for allowed in list(client.get("allowed_resources") or []))
 
 
 def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
@@ -638,7 +654,7 @@ def consume_authorization_code(
         if (
             data.get("client_id") != client_id
             or data.get("redirect_uri") != redirect_uri
-            or data.get("resource") != resource
+            or not mcp_resource_urls_match(data.get("resource"), resource)
         ):
             return None
         try:
@@ -678,8 +694,9 @@ def exchange_authorization_code_for_tokens(
             code_data.get("client_id") != client_id
             or code_data.get("redirect_uri") != redirect_uri
             # RFC 8707: an omitted resource indicator keeps the audience the code
-            # was bound to at consent; only an explicit value must match it.
-            or (resource is not None and code_data.get("resource") != resource)
+            # was bound to at consent; only an explicit value must match it,
+            # in canonical or legacy ``/sse`` form.
+            or (resource is not None and not mcp_resource_urls_match(code_data.get("resource"), resource))
         ):
             return None
         try:
@@ -852,7 +869,9 @@ def _validated_access_token_identity(
         or "revoked_at" not in grant
         or grant.get("revoked_at") is not None
         or (grant_expires_at is not None and not _is_unexpired(grant_expires_at, now))
-        or token_resource != resource
+        # Tokens bound to the legacy /sse audience keep working on both endpoint
+        # paths; the token and grant resources must still be the same audience.
+        or not mcp_resource_urls_match(token_resource, resource)
         or uid != grant_uid
         or client_id != grant_client_id
         or grant_id != persisted_grant_id
@@ -911,8 +930,9 @@ def rotate_refresh_token(
         if (
             data.get("client_id") != client_id
             # RFC 8707: an omitted resource indicator keeps the token family's
-            # stored audience; only an explicit value must match it.
-            or (resource is not None and data.get("resource") != resource)
+            # stored audience; only an explicit value must match it, in
+            # canonical or legacy ``/sse`` form.
+            or (resource is not None and not mcp_resource_urls_match(data.get("resource"), resource))
             or data.get("revoked_at")
             or (expires_at and expires_at <= now)
             or not grant
