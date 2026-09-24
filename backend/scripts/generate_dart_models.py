@@ -74,6 +74,7 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
+            'StatusResponse',
         ),
     },
     'messages': {
