@@ -16,7 +16,7 @@ by 200 and use a different filename. Changes to the account between requests
 can affect offset pagination; this recipe does not promise a consistent
 snapshot.
 
-Save the following as `conversations_to_csv.py`:
+Save the following as `conversations_to_csv.py` (or run the bundled [`conversations_to_csv.py`](conversations_to_csv.py) directly):
 
 ```python
 import csv
