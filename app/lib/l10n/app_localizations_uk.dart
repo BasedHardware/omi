@@ -1758,26 +1758,27 @@ class AppLocalizationsUk extends AppLocalizations {
   String get backgroundActivity => 'Фонова активність';
 
   @override
-  String get backgroundActivityDesc => 'Дозвольте Omi працювати у фоновому режимі для кращої стабільності';
+  String get backgroundActivityDesc => 'Щоб Omi продовжував запис, коли екран вимкнено або ви перемикаєте застосунки.';
 
   @override
   String get locationAccess => 'Доступ до місцезнаходження';
 
   @override
-  String get locationAccessDesc => 'Увімкніть фонове місцезнаходження для повного досвіду';
+  String get locationAccessDesc => 'Щоб Omi міг позначати, де відбувалися ваші розмови.';
 
   @override
   String get notifications => 'Сповіщення';
 
   @override
-  String get notificationsDesc => 'Увімкніть сповіщення, щоб бути в курсі';
+  String get notificationsDesc =>
+      'Щоб Omi міг надсилати підсумки розмов, нагадування про завдання та відповіді з ваших застосунків.';
 
   @override
   String get locationServiceDisabled => 'Служба визначення місцезнаходження вимкнена';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Служба визначення місцезнаходження вимкнена. Будь ласка, перейдіть до Налаштування > Конфіденційність і безпека > Служби визначення місцезнаходження та увімкніть її';
+      'Служби геолокації на цьому пристрої вимкнено. Увімкніть їх у Налаштуваннях.';
 
   @override
   String get backgroundLocationDenied => 'Відмовлено в доступі до фонового місцезнаходження';
@@ -10069,7 +10070,7 @@ class AppLocalizationsUk extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10087,7 +10088,7 @@ class AppLocalizationsUk extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10655,4 +10656,156 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Хтось';
+
+  @override
+  String get allow => 'Дозволити';
+
+  @override
+  String get permissionAllowed => 'Дозволено';
+
+  @override
+  String get permissionBlockedHint => 'Вимкнено в Налаштуваннях. Дозвольте це там, щоб користуватися.';
+
+  @override
+  String get useDifferentAccount => 'Використати інший обліковий запис';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Крок $current з $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Залиште Omi працювати у фоні 2 дні, і він почне давати корисні поради.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Не вдається знайти пристрій? Переконайтеся, що він увімкнений і поруч із телефоном, і шукайте знову.';
+
+  @override
+  String get scanAgain => 'Шукати знову';
+
+  @override
+  String get howToPair => 'Як підключити';
+
+  @override
+  String get contactSupportAction => 'Звернутися до підтримки';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName не в мережі. Натисніть його кнопку, щоб розбудити, і спробуйте знову.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Акумулятор $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Оновити прошивку OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Підключення…';
+
+  @override
+  String get recordOptionsTip => 'Порада: натисніть і утримуйте кнопку запису, щоб записати телефонний дзвінок.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Не вдалося оновити';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Оновлення не завершилося. Пристрій і далі має поточну прошивку, ним можна безпечно користуватися. Зарядіть його, тримайте поруч із телефоном і спробуйте знову.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Не вдалося завантажити оновлення, пристрій не змінено. Перевірте підключення до інтернету і спробуйте знову.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Заряд акумулятора $level%. Перед оновленням зарядіть пристрій щонайменше до 15%.';
+  }
+
+  @override
+  String get startUpdate => 'Почати оновлення';
+
+  @override
+  String get otaNotSupported => 'Цю прошивку не можна оновити через Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Не вдалося підключитися до $deviceName. Тримайте пристрій увімкненим і поруч, потім спробуйте знову.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Це оновлення зараз недоступне. Спробуйте пізніше.';
+
+  @override
+  String get otaStarting => 'Запуск оновлення…';
+
+  @override
+  String get otaStartFailed => 'Не вдалося почати оновлення. Перевірте назву й пароль Wi-Fi і спробуйте знову.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName перезапускається з новою прошивкою.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Оновлення скасовано';
+
+  @override
+  String get cancelUpdate => 'Скасувати оновлення';
+
+  @override
+  String get otaKeepNearby => 'Під час оновлення тримайте пристрій увімкненим і поруч і не закривайте застосунок.';
+
+  @override
+  String get otaWifiConnecting => 'Підключення до Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Підключено до Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Не вдалося підключитися до Wi-Fi. Перевірте назву мережі та пароль.';
+
+  @override
+  String get otaDownloadFailed => 'Не вдалося завантажити прошивку. Перевірте підключення до Wi-Fi і спробуйте знову.';
+
+  @override
+  String get otaInstallFailed => 'Не вдалося встановити. Пристрій і далі має поточну прошивку.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName оновлено, і він сам перезапуститься.';
+  }
+
+  @override
+  String get showPassword => 'Показати пароль';
+
+  @override
+  String get hidePassword => 'Приховати пароль';
+
+  @override
+  String get appNotFoundOrRemoved => 'Цей застосунок більше недоступний';
+
+  @override
+  String get startupFailedTitle => 'Не вдалося запустити Omi';
+
+  @override
+  String get startupFailedMessage =>
+      'Під час запуску Omi щось пішло не так. Перевірте з\'єднання, а потім спробуйте ще раз.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'У цій збірці Omi є проблема з конфігурацією. Це не проблема з вашим пристроєм. Зверніться до підтримки та додайте наведені нижче дані.';
+
+  @override
+  String get discardRecordingTitle => 'Скасувати запис?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Ваш голосовий зразок ще не збережено. Якщо ви вийдете зараз, він буде видалений.';
+
+  @override
+  String get keepRecording => 'Продовжити запис';
 }

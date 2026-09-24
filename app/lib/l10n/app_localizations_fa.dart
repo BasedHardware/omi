@@ -1757,26 +1757,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get backgroundActivity => 'فعالیت پس‌زمینه';
 
   @override
-  String get backgroundActivityDesc => 'اجازه دهید Omi در پس‌زمینه اجرا شود برای پایداری بهتر';
+  String get backgroundActivityDesc => 'تا Omi هنگام خاموش بودن صفحه یا تغییر برنامه همچنان ضبط کند.';
 
   @override
   String get locationAccess => 'دسترسی به مکان';
 
   @override
-  String get locationAccessDesc => 'مکان پس‌زمینه را برای تجربه کامل فعال کنید';
+  String get locationAccessDesc => 'تا Omi بتواند محل انجام گفتگوهایتان را ثبت کند.';
 
   @override
   String get notifications => 'اطلاع‌رسانی‌ها';
 
   @override
-  String get notificationsDesc => 'اطلاع‌رسانی را برای اطلاع‌رسانی فعال کنید';
+  String get notificationsDesc =>
+      'تا Omi بتواند خلاصه گفتگوها، یادآوری کارها و پاسخ‌های برنامه‌هایتان را برایتان بفرستد.';
 
   @override
   String get locationServiceDisabled => 'سرویس مکان غیرفعال است';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'سرویس مکان غیرفعال است. لطفاً به Settings > Privacy & Security > Location Services بروید و آن را فعال کنید';
+  String get locationServiceDisabledDesc => 'خدمات موقعیت‌یابی روی این دستگاه خاموش است. آن را در تنظیمات روشن کنید.';
 
   @override
   String get backgroundLocationDenied => 'دسترسی مکان پس‌زمینه رد شد';
@@ -10050,7 +10050,7 @@ class AppLocalizationsFa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10068,7 +10068,7 @@ class AppLocalizationsFa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10634,4 +10634,155 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'کسی';
+
+  @override
+  String get allow => 'اجازه دادن';
+
+  @override
+  String get permissionAllowed => 'مجاز';
+
+  @override
+  String get permissionBlockedHint => 'در تنظیمات خاموش است. برای استفاده، آن را آنجا مجاز کنید.';
+
+  @override
+  String get useDifferentAccount => 'استفاده از حساب دیگر';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'مرحله $current از $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'دستگاهتان را پیدا نمی‌کنید؟ مطمئن شوید روشن و نزدیک تلفن است، سپس دوباره جستجو کنید.';
+
+  @override
+  String get scanAgain => 'جستجوی دوباره';
+
+  @override
+  String get howToPair => 'نحوه جفت‌سازی';
+
+  @override
+  String get contactSupportAction => 'تماس با پشتیبانی';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName آفلاین است. دکمه آن را فشار دهید تا بیدار شود، سپس دوباره امتحان کنید.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'باتری $level٪';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'به‌روزرسانی میان‌افزار OmiGlass';
+
+  @override
+  String get deviceConnecting => 'در حال اتصال…';
+
+  @override
+  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، دکمه ضبط را لمس کرده و نگه دارید.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'به‌روزرسانی کامل نشد. دستگاه شما همچنان میان‌افزار فعلی را دارد و استفاده از آن امن است. آن را شارژ و نزدیک تلفن نگه دارید، سپس دوباره امتحان کنید.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'باتری $level٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۱۵٪ شارژ کنید.';
+  }
+
+  @override
+  String get startUpdate => 'شروع به‌روزرسانی';
+
+  @override
+  String get otaNotSupported => 'این میان‌افزار از طریق Wi-Fi به‌روز نمی‌شود.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'اتصال به $deviceName ممکن نشد. آن را روشن و نزدیک نگه دارید و دوباره امتحان کنید.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'این به‌روزرسانی اکنون در دسترس نیست. بعداً دوباره امتحان کنید.';
+
+  @override
+  String get otaStarting => 'در حال شروع به‌روزرسانی…';
+
+  @override
+  String get otaStartFailed => 'شروع به‌روزرسانی ممکن نشد. نام و رمز Wi-Fi را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName با میان‌افزار جدید در حال راه‌اندازی مجدد است.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'به‌روزرسانی لغو شد';
+
+  @override
+  String get cancelUpdate => 'لغو به‌روزرسانی';
+
+  @override
+  String get otaKeepNearby => 'در طول به‌روزرسانی، دستگاه را روشن و نزدیک نگه دارید و برنامه را نبندید.';
+
+  @override
+  String get otaWifiConnecting => 'در حال اتصال به Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'به Wi-Fi متصل شد';
+
+  @override
+  String get otaWifiFailed => 'اتصال به Wi-Fi ممکن نشد. نام شبکه و رمز را بررسی کنید.';
+
+  @override
+  String get otaDownloadFailed => 'دانلود میان‌افزار ناموفق بود. اتصال Wi-Fi را بررسی کنید و دوباره امتحان کنید.';
+
+  @override
+  String get otaInstallFailed => 'نصب ناموفق بود. دستگاه شما همچنان میان‌افزار فعلی را دارد.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName به‌روز شد و خودکار راه‌اندازی مجدد می‌شود.';
+  }
+
+  @override
+  String get showPassword => 'نمایش رمز عبور';
+
+  @override
+  String get hidePassword => 'پنهان کردن رمز عبور';
+
+  @override
+  String get appNotFoundOrRemoved => 'این برنامه دیگر در دسترس نیست';
+
+  @override
+  String get startupFailedTitle => 'Omi راه‌اندازی نشد';
+
+  @override
+  String get startupFailedMessage =>
+      'هنگام راه‌اندازی Omi مشکلی پیش آمد. اتصال خود را بررسی کنید، سپس دوباره تلاش کنید.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'این نسخه از Omi مشکل پیکربندی دارد. این مشکل دستگاه شما نیست. با پشتیبانی تماس بگیرید و جزئیات زیر را ضمیمه کنید.';
+
+  @override
+  String get discardRecordingTitle => 'ضبط دور انداخته شود؟';
+
+  @override
+  String get discardRecordingMessage => 'نمونه صدای شما هنوز ذخیره نشده است. اگر اکنون خارج شوید، دور انداخته می‌شود.';
+
+  @override
+  String get keepRecording => 'ادامه ضبط';
 }

@@ -1761,26 +1761,26 @@ class AppLocalizationsId extends AppLocalizations {
   String get backgroundActivity => 'Aktivitas latar belakang';
 
   @override
-  String get backgroundActivityDesc => 'Biarkan Omi berjalan di latar belakang untuk stabilitas yang lebih baik';
+  String get backgroundActivityDesc => 'Agar Omi tetap merekam saat layar mati atau Anda berpindah aplikasi.';
 
   @override
   String get locationAccess => 'Akses lokasi';
 
   @override
-  String get locationAccessDesc => 'Aktifkan lokasi latar belakang untuk pengalaman penuh';
+  String get locationAccessDesc => 'Agar Omi dapat mencatat di mana percakapan Anda terjadi.';
 
   @override
   String get notifications => 'Notifikasi';
 
   @override
-  String get notificationsDesc => 'Aktifkan notifikasi agar tetap mendapat informasi';
+  String get notificationsDesc =>
+      'Agar Omi dapat mengirimkan ringkasan percakapan, pengingat tugas, dan balasan dari aplikasi Anda.';
 
   @override
   String get locationServiceDisabled => 'Layanan Lokasi Dinonaktifkan';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Layanan Lokasi Dinonaktifkan. Silakan buka Pengaturan > Privasi & Keamanan > Layanan Lokasi dan aktifkan';
+  String get locationServiceDisabledDesc => 'Layanan Lokasi nonaktif di perangkat ini. Aktifkan di Pengaturan.';
 
   @override
   String get backgroundLocationDenied => 'Akses Lokasi Latar Belakang Ditolak';
@@ -10061,7 +10061,7 @@ class AppLocalizationsId extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10079,7 +10079,7 @@ class AppLocalizationsId extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10645,4 +10645,156 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Seseorang';
+
+  @override
+  String get allow => 'Izinkan';
+
+  @override
+  String get permissionAllowed => 'Diizinkan';
+
+  @override
+  String get permissionBlockedHint => 'Dinonaktifkan di Pengaturan. Izinkan di sana untuk menggunakannya.';
+
+  @override
+  String get useDifferentAccount => 'Gunakan Akun Lain';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Langkah $current dari $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Biarkan Omi berjalan di latar belakang selama 2 hari dan ia akan mulai memberi masukan yang berguna.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Tidak menemukan perangkat? Pastikan perangkat menyala dan dekat ponsel, lalu pindai lagi.';
+
+  @override
+  String get scanAgain => 'Pindai Lagi';
+
+  @override
+  String get howToPair => 'Cara Memasangkan';
+
+  @override
+  String get contactSupportAction => 'Hubungi Dukungan';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName sedang offline. Tekan tombolnya untuk membangunkannya, lalu coba lagi.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterai $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Perbarui Firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Menghubungkan…';
+
+  @override
+  String get recordOptionsTip => 'Tips: tekan lama tombol rekam untuk merekam panggilan telepon.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Pembaruan Gagal';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Pembaruan tidak selesai. Perangkat Anda masih memakai firmware saat ini dan aman digunakan. Pastikan terisi daya dan dekat ponsel, lalu coba lagi.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterai $level%. Isi daya perangkat minimal 15% sebelum memperbarui.';
+  }
+
+  @override
+  String get startUpdate => 'Mulai Pembaruan';
+
+  @override
+  String get otaNotSupported => 'Firmware ini tidak dapat diperbarui melalui Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Tidak dapat terhubung ke $deviceName. Biarkan tetap menyala dan dekat, lalu coba lagi.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Pembaruan ini belum tersedia saat ini. Coba lagi nanti.';
+
+  @override
+  String get otaStarting => 'Memulai pembaruan…';
+
+  @override
+  String get otaStartFailed => 'Tidak dapat memulai pembaruan. Periksa nama dan kata sandi Wi-Fi, lalu coba lagi.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName sedang dimulai ulang dengan firmware baru.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Pembaruan dibatalkan';
+
+  @override
+  String get cancelUpdate => 'Batalkan Pembaruan';
+
+  @override
+  String get otaKeepNearby => 'Selama pembaruan, biarkan perangkat menyala dan dekat, dan jangan tutup aplikasi.';
+
+  @override
+  String get otaWifiConnecting => 'Menghubungkan ke Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Terhubung ke Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Tidak dapat bergabung ke Wi-Fi. Periksa nama jaringan dan kata sandi.';
+
+  @override
+  String get otaDownloadFailed => 'Unduhan firmware gagal. Periksa koneksi Wi-Fi dan coba lagi.';
+
+  @override
+  String get otaInstallFailed => 'Instalasi gagal. Perangkat Anda masih memakai firmware saat ini.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName sudah diperbarui dan akan memulai ulang sendiri.';
+  }
+
+  @override
+  String get showPassword => 'Tampilkan kata sandi';
+
+  @override
+  String get hidePassword => 'Sembunyikan kata sandi';
+
+  @override
+  String get appNotFoundOrRemoved => 'Aplikasi ini tidak lagi tersedia';
+
+  @override
+  String get startupFailedTitle => 'Omi tidak dapat memulai';
+
+  @override
+  String get startupFailedMessage => 'Terjadi kesalahan saat Omi memulai. Periksa koneksi Anda, lalu coba lagi.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Build Omi ini memiliki masalah konfigurasi. Ini bukan masalah pada perangkat Anda. Hubungi dukungan dan sertakan detail di bawah ini.';
+
+  @override
+  String get discardRecordingTitle => 'Buang Rekaman?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Sampel suara Anda belum tersimpan. Jika Anda keluar sekarang, itu akan dibuang.';
+
+  @override
+  String get keepRecording => 'Lanjutkan Merekam';
 }

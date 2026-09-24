@@ -1665,7 +1665,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Let Omi run in the background for better stability",
+    "backgroundActivityDesc": "So Omi keeps capturing when the screen is off or you switch apps.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1673,7 +1673,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "Enable background location for the full experience",
+    "locationAccessDesc": "So Omi can note where your conversations happened.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1681,7 +1681,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "Enable notifications to stay informed",
+    "notificationsDesc": "So Omi can send you conversation summaries, task reminders and replies from your apps.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1692,7 +1692,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it",
+    "locationServiceDisabledDesc": "Location Services are off on this device. Turn them on in Settings.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -11906,7 +11906,7 @@
     "@memoryGraph": {
         "description": "Accessible name for the memories graph button"
     },
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "@voiceIntroduction": {
         "description": "Guided voice introduction copy. English source fallback pending translation review.",
         "placeholders": {
@@ -12506,5 +12506,219 @@
     "sharedTasksUnknownSender": "Someone",
     "@sharedTasksUnknownSender": {
         "description": "Sender name when a shared-tasks link has no sender name"
+    },
+    "allow": "Allow",
+    "@allow": {
+        "description": "Button that shows the system permission prompt"
+    },
+    "permissionAllowed": "Allowed",
+    "@permissionAllowed": {
+        "description": "Status shown next to a permission the user has granted"
+    },
+    "permissionBlockedHint": "Turned off in Settings. Allow it there to use this.",
+    "@permissionBlockedHint": {
+        "description": "Shown under a permission the system will no longer ask for"
+    },
+    "useDifferentAccount": "Use a Different Account",
+    "@useDifferentAccount": {
+        "description": "Consent step: signs out and returns to sign-in"
+    },
+    "onboardingStepOf": "Step {current} of {total}",
+    "@onboardingStepOf": {
+        "description": "Screen-reader label of the onboarding progress dots",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardingCompleteMessage": "Keep Omi running in the background for 2 days and it will start giving you useful feedback.",
+    "@onboardingCompleteMessage": {
+        "description": "Completion screen at the end of first-run onboarding"
+    },
+    "cantFindDeviceHint": "Can't find your device? Make sure it's turned on and close to your phone, then scan again.",
+    "@cantFindDeviceHint": {
+        "description": "Shown when no device was found after scanning for a while"
+    },
+    "scanAgain": "Scan Again",
+    "@scanAgain": {
+        "description": "Button: restart the Bluetooth device search"
+    },
+    "howToPair": "How to Pair",
+    "@howToPair": {
+        "description": "Button: opens the connection guide"
+    },
+    "contactSupportAction": "Contact Support",
+    "@contactSupportAction": {
+        "description": "Button that opens support"
+    },
+    "deviceOfflineWakeHint": "{deviceName} is offline. Press its button to wake it, then try again.",
+    "@deviceOfflineWakeHint": {
+        "description": "Tapping a saved device that is not advertising",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "batteryLevelSemantics": "Battery {level}%",
+    "@batteryLevelSemantics": {
+        "description": "Screen-reader label for a device battery level",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    },
+    "updateOmiGlassFirmware": "Update OmiGlass Firmware",
+    "@updateOmiGlassFirmware": {
+        "description": "Card on the capture screen opening the OmiGlass update"
+    },
+    "deviceConnecting": "Connecting…",
+    "@deviceConnecting": {
+        "description": "Header device pill while a paired device reconnects"
+    },
+    "recordOptionsTip": "Tip: press and hold the record button to record a phone call.",
+    "@recordOptionsTip": {
+        "description": "One-time hint after the first phone-mic recording"
+    },
+    "firmwareUpdateFailedTitle": "Update Failed",
+    "@firmwareUpdateFailedTitle": {
+        "description": "Title of the firmware update failed state"
+    },
+    "firmwareUpdateFailedMessage": "The update didn't finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.",
+    "@firmwareUpdateFailedMessage": {
+        "description": "Firmware update failed while installing"
+    },
+    "firmwareDownloadFailedMessage": "The update couldn't be downloaded, and your device wasn't changed. Check your internet connection, then try again.",
+    "@firmwareDownloadFailedMessage": {
+        "description": "Firmware download failed"
+    },
+    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 15% before updating.",
+    "@firmwareBatteryTooLow": {
+        "description": "Firmware update blocked by low battery",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    },
+    "startUpdate": "Start Update",
+    "@startUpdate": {
+        "description": "Pre-flight sheet button that starts a firmware update"
+    },
+    "otaNotSupported": "This firmware can't be updated over Wi-Fi.",
+    "@otaNotSupported": {
+        "description": "OmiGlass OTA not supported on current firmware"
+    },
+    "otaConnectFailed": "Couldn't connect to {deviceName}. Keep it on and nearby, then try again.",
+    "@otaConnectFailed": {
+        "description": "OmiGlass OTA could not reach the device",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "otaUpdateUnavailable": "This update isn't available right now. Try again later.",
+    "@otaUpdateUnavailable": {
+        "description": "OmiGlass OTA has no download URL"
+    },
+    "otaStarting": "Starting update…",
+    "@otaStarting": {
+        "description": "OmiGlass OTA starting"
+    },
+    "otaStartFailed": "Couldn't start the update. Check the Wi-Fi name and password, then try again.",
+    "@otaStartFailed": {
+        "description": "OmiGlass OTA failed to start"
+    },
+    "otaRebooting": "{deviceName} is restarting with the new firmware.",
+    "@otaRebooting": {
+        "description": "OmiGlass OTA installed, device rebooting",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "otaUpdateCancelled": "Update cancelled",
+    "@otaUpdateCancelled": {
+        "description": "Toast after cancelling an OmiGlass update"
+    },
+    "cancelUpdate": "Cancel Update",
+    "@cancelUpdate": {
+        "description": "Button that stops an OmiGlass update"
+    },
+    "otaKeepNearby": "Keep your device on and nearby during the update, and don't close the app.",
+    "@otaKeepNearby": {
+        "description": "Shown before an OmiGlass update starts"
+    },
+    "otaWifiConnecting": "Connecting to Wi-Fi…",
+    "@otaWifiConnecting": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaWifiConnected": "Connected to Wi-Fi",
+    "@otaWifiConnected": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaWifiFailed": "Couldn't join Wi-Fi. Check the network name and password.",
+    "@otaWifiFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaDownloadFailed": "The firmware download failed. Check the Wi-Fi connection and try again.",
+    "@otaDownloadFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaInstallFailed": "Installation failed. Your device is still on its current firmware.",
+    "@otaInstallFailed": {
+        "description": "OmiGlass OTA status"
+    },
+    "otaUpdatedMessage": "{deviceName} is updated and will restart on its own.",
+    "@otaUpdatedMessage": {
+        "description": "OmiGlass OTA success message",
+        "placeholders": {
+            "deviceName": {
+                "type": "String"
+            }
+        }
+    },
+    "showPassword": "Show password",
+    "@showPassword": {
+        "description": "Tooltip on the password visibility toggle"
+    },
+    "hidePassword": "Hide password",
+    "@hidePassword": {
+        "description": "Tooltip on the password visibility toggle"
+    },
+    "appNotFoundOrRemoved": "This app is no longer available",
+    "@appNotFoundOrRemoved": {
+        "description": "Toast when a link opens an app that was removed from the store"
+    },
+    "startupFailedTitle": "Omi couldn’t start",
+    "@startupFailedTitle": {
+        "description": "Title of the screen shown when the app fails to launch"
+    },
+    "startupFailedMessage": "Something went wrong while Omi was starting. Check your connection, then try again.",
+    "@startupFailedMessage": {
+        "description": "Launch failure screen, runtime failure"
+    },
+    "startupFailedConfigMessage": "This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.",
+    "@startupFailedConfigMessage": {
+        "description": "Launch failure screen, rejected build configuration"
+    },
+    "discardRecordingTitle": "Discard Recording?",
+    "@discardRecordingTitle": {
+        "description": "Dialog title when leaving the voice-sample recording mid-recording"
+    },
+    "discardRecordingMessage": "Your voice sample isn’t saved yet. If you leave now, it will be discarded.",
+    "@discardRecordingMessage": {
+        "description": "Dialog message when leaving the voice-sample recording mid-recording"
+    },
+    "keepRecording": "Keep Recording",
+    "@keepRecording": {
+        "description": "Button that dismisses the discard-recording dialog and continues"
     }
 }

@@ -3444,7 +3444,7 @@ abstract class AppLocalizations {
   /// Description for background activity permission
   ///
   /// In en, this message translates to:
-  /// **'Let Omi run in the background for better stability'**
+  /// **'So Omi keeps capturing when the screen is off or you switch apps.'**
   String get backgroundActivityDesc;
 
   /// Title for location access permission
@@ -3456,7 +3456,7 @@ abstract class AppLocalizations {
   /// Description for location access permission
   ///
   /// In en, this message translates to:
-  /// **'Enable background location for the full experience'**
+  /// **'So Omi can note where your conversations happened.'**
   String get locationAccessDesc;
 
   /// AppBar title for notifications settings page
@@ -3468,7 +3468,7 @@ abstract class AppLocalizations {
   /// Description for notifications permission
   ///
   /// In en, this message translates to:
-  /// **'Enable notifications to stay informed'**
+  /// **'So Omi can send you conversation summaries, task reminders and replies from your apps.'**
   String get notificationsDesc;
 
   /// Title for dialog when location services are off
@@ -3480,7 +3480,7 @@ abstract class AppLocalizations {
   /// Instructions to enable location services
   ///
   /// In en, this message translates to:
-  /// **'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it'**
+  /// **'Location Services are off on this device. Turn them on in Settings.'**
   String get locationServiceDisabledDesc;
 
   /// Title for dialog when background location is denied
@@ -18672,7 +18672,7 @@ abstract class AppLocalizations {
   /// Guided voice introduction copy. English source fallback pending translation review.
   ///
   /// In en, this message translates to:
-  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
+  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
   String voiceIntroduction(String part);
 
   /// Stored voice readiness only; no guarantee of a queued learning job.
@@ -19460,6 +19460,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Someone'**
   String get sharedTasksUnknownSender;
+
+  /// Button that shows the system permission prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get allow;
+
+  /// Status shown next to a permission the user has granted
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get permissionAllowed;
+
+  /// Shown under a permission the system will no longer ask for
+  ///
+  /// In en, this message translates to:
+  /// **'Turned off in Settings. Allow it there to use this.'**
+  String get permissionBlockedHint;
+
+  /// Consent step: signs out and returns to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Different Account'**
+  String get useDifferentAccount;
+
+  /// Screen-reader label of the onboarding progress dots
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String onboardingStepOf(int current, int total);
+
+  /// Completion screen at the end of first-run onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Omi running in the background for 2 days and it will start giving you useful feedback.'**
+  String get onboardingCompleteMessage;
+
+  /// Shown when no device was found after scanning for a while
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.'**
+  String get cantFindDeviceHint;
+
+  /// Button: restart the Bluetooth device search
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Again'**
+  String get scanAgain;
+
+  /// Button: opens the connection guide
+  ///
+  /// In en, this message translates to:
+  /// **'How to Pair'**
+  String get howToPair;
+
+  /// Button that opens support
+  ///
+  /// In en, this message translates to:
+  /// **'Contact Support'**
+  String get contactSupportAction;
+
+  /// Tapping a saved device that is not advertising
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is offline. Press its button to wake it, then try again.'**
+  String deviceOfflineWakeHint(String deviceName);
+
+  /// Screen-reader label for a device battery level
+  ///
+  /// In en, this message translates to:
+  /// **'Battery {level}%'**
+  String batteryLevelSemantics(int level);
+
+  /// Card on the capture screen opening the OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update OmiGlass Firmware'**
+  String get updateOmiGlassFirmware;
+
+  /// Header device pill while a paired device reconnects
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get deviceConnecting;
+
+  /// One-time hint after the first phone-mic recording
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: press and hold the record button to record a phone call.'**
+  String get recordOptionsTip;
+
+  /// Title of the firmware update failed state
+  ///
+  /// In en, this message translates to:
+  /// **'Update Failed'**
+  String get firmwareUpdateFailedTitle;
+
+  /// Firmware update failed while installing
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.'**
+  String get firmwareUpdateFailedMessage;
+
+  /// Firmware download failed
+  ///
+  /// In en, this message translates to:
+  /// **'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.'**
+  String get firmwareDownloadFailedMessage;
+
+  /// Firmware update blocked by low battery
+  ///
+  /// In en, this message translates to:
+  /// **'Battery is at {level}%. Charge your device to at least 15% before updating.'**
+  String firmwareBatteryTooLow(int level);
+
+  /// Pre-flight sheet button that starts a firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Start Update'**
+  String get startUpdate;
+
+  /// OmiGlass OTA not supported on current firmware
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware can\'t be updated over Wi-Fi.'**
+  String get otaNotSupported;
+
+  /// OmiGlass OTA could not reach the device
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t connect to {deviceName}. Keep it on and nearby, then try again.'**
+  String otaConnectFailed(String deviceName);
+
+  /// OmiGlass OTA has no download URL
+  ///
+  /// In en, this message translates to:
+  /// **'This update isn\'t available right now. Try again later.'**
+  String get otaUpdateUnavailable;
+
+  /// OmiGlass OTA starting
+  ///
+  /// In en, this message translates to:
+  /// **'Starting update…'**
+  String get otaStarting;
+
+  /// OmiGlass OTA failed to start
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t start the update. Check the Wi-Fi name and password, then try again.'**
+  String get otaStartFailed;
+
+  /// OmiGlass OTA installed, device rebooting
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is restarting with the new firmware.'**
+  String otaRebooting(String deviceName);
+
+  /// Toast after cancelling an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update cancelled'**
+  String get otaUpdateCancelled;
+
+  /// Button that stops an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Update'**
+  String get cancelUpdate;
+
+  /// Shown before an OmiGlass update starts
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your device on and nearby during the update, and don\'t close the app.'**
+  String get otaKeepNearby;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to Wi-Fi…'**
+  String get otaWifiConnecting;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to Wi-Fi'**
+  String get otaWifiConnected;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t join Wi-Fi. Check the network name and password.'**
+  String get otaWifiFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'The firmware download failed. Check the Wi-Fi connection and try again.'**
+  String get otaDownloadFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed. Your device is still on its current firmware.'**
+  String get otaInstallFailed;
+
+  /// OmiGlass OTA success message
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is updated and will restart on its own.'**
+  String otaUpdatedMessage(String deviceName);
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get showPassword;
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get hidePassword;
+
+  /// Toast when a link opens an app that was removed from the store
+  ///
+  /// In en, this message translates to:
+  /// **'This app is no longer available'**
+  String get appNotFoundOrRemoved;
+
+  /// Title of the screen shown when the app fails to launch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi couldn’t start'**
+  String get startupFailedTitle;
+
+  /// Launch failure screen, runtime failure
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while Omi was starting. Check your connection, then try again.'**
+  String get startupFailedMessage;
+
+  /// Launch failure screen, rejected build configuration
+  ///
+  /// In en, this message translates to:
+  /// **'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.'**
+  String get startupFailedConfigMessage;
+
+  /// Dialog title when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Discard Recording?'**
+  String get discardRecordingTitle;
+
+  /// Dialog message when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice sample isn’t saved yet. If you leave now, it will be discarded.'**
+  String get discardRecordingMessage;
+
+  /// Button that dismisses the discard-recording dialog and continues
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Recording'**
+  String get keepRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

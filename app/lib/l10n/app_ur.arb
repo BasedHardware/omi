@@ -1647,7 +1647,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Omi کو بہتر استحکام کے لیے پس منظر میں چلنے دیں",
+    "backgroundActivityDesc": "تاکہ اسکرین بند ہونے یا ایپ بدلنے پر بھی Omi ریکارڈ کرتا رہے۔",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1655,7 +1655,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "مکمل تجربے کے لیے پس منظر مقام فعال کریں",
+    "locationAccessDesc": "تاکہ Omi نوٹ کر سکے کہ آپ کی گفتگو کہاں ہوئی۔",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1663,7 +1663,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "باخبر رہنے کے لیے اطلاعات فعال کریں",
+    "notificationsDesc": "تاکہ Omi آپ کو گفتگو کے خلاصے، کام کی یاد دہانیاں اور آپ کی ایپس کے جوابات بھیج سکے۔",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1674,7 +1674,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "مقام کی خدمت غیر فعال ہے۔ براہ کرم Settings > Privacy & Security > Location Services میں جائیں اور اسے فعال کریں",
+    "locationServiceDisabledDesc": "اس ڈیوائس پر لوکیشن سروسز بند ہیں۔ انہیں سیٹنگز میں آن کریں۔",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -10810,7 +10810,7 @@
     "moreOptions": "مزید اختیارات",
     "filterByDate": "تاریخ کے مطابق فلٹر کریں",
     "memoryGraph": "یادداشت کا گراف",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{آواز شناخت کے لیے تیار ہے} saved_sample_awaiting_embedding{نمونہ محفوظ ہے؛ آواز کی پروسیسنگ ابھی درکار ہے} not_learned{آواز سیکھی نہیں گئی} other{آواز کی حالت نامعلوم ہے}}",
     "tagSpeakerIncludingLaterSpeech": "اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں",
     "updateSummaryWithNewNames": "نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں",
@@ -10950,5 +10950,49 @@
     "couldNotLoadPage": "یہ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
     "leaveFlowStepOf": "مرحلہ {current} از {total}",
     "sharedTasksLinkExpired": "یہ شیئر کیے گئے کام نہیں ملے، یا لنک کی میعاد ختم ہو گئی ہے۔",
-    "sharedTasksUnknownSender": "کوئی"
+    "sharedTasksUnknownSender": "کوئی",
+    "allow": "اجازت دیں",
+    "permissionAllowed": "اجازت ہے",
+    "permissionBlockedHint": "سیٹنگز میں بند ہے۔ اسے استعمال کرنے کے لیے وہاں اجازت دیں۔",
+    "useDifferentAccount": "دوسرا اکاؤنٹ استعمال کریں",
+    "onboardingStepOf": "مرحلہ {current} از {total}",
+    "onboardingCompleteMessage": "Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔",
+    "cantFindDeviceHint": "اپنی ڈیوائس نہیں مل رہی؟ یقینی بنائیں کہ وہ آن ہے اور فون کے قریب ہے، پھر دوبارہ اسکین کریں۔",
+    "scanAgain": "دوبارہ اسکین کریں",
+    "howToPair": "جوڑنے کا طریقہ",
+    "contactSupportAction": "سپورٹ سے رابطہ کریں",
+    "deviceOfflineWakeHint": "{deviceName} آف لائن ہے۔ جگانے کے لیے اس کا بٹن دبائیں، پھر دوبارہ کوشش کریں۔",
+    "batteryLevelSemantics": "بیٹری {level}%",
+    "updateOmiGlassFirmware": "OmiGlass فرم ویئر اپ ڈیٹ کریں",
+    "deviceConnecting": "منسلک ہو رہا ہے…",
+    "recordOptionsTip": "مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن دبا کر رکھیں۔",
+    "firmwareUpdateFailedTitle": "اپ ڈیٹ ناکام",
+    "firmwareUpdateFailedMessage": "اپ ڈیٹ مکمل نہیں ہوئی۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے اور استعمال کے لیے محفوظ ہے۔ اسے چارج اور فون کے قریب رکھیں، پھر دوبارہ کوشش کریں۔",
+    "firmwareDownloadFailedMessage": "اپ ڈیٹ ڈاؤن لوڈ نہیں ہو سکی اور آپ کی ڈیوائس تبدیل نہیں ہوئی۔ انٹرنیٹ کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "firmwareBatteryTooLow": "بیٹری {level}% ہے۔ اپ ڈیٹ سے پہلے ڈیوائس کو کم از کم 15% تک چارج کریں۔",
+    "startUpdate": "اپ ڈیٹ شروع کریں",
+    "otaNotSupported": "یہ فرم ویئر Wi-Fi کے ذریعے اپ ڈیٹ نہیں ہو سکتا۔",
+    "otaConnectFailed": "{deviceName} سے منسلک نہیں ہو سکا۔ اسے آن اور قریب رکھیں، پھر دوبارہ کوشش کریں۔",
+    "otaUpdateUnavailable": "یہ اپ ڈیٹ ابھی دستیاب نہیں ہے۔ بعد میں دوبارہ کوشش کریں۔",
+    "otaStarting": "اپ ڈیٹ شروع ہو رہی ہے…",
+    "otaStartFailed": "اپ ڈیٹ شروع نہیں ہو سکی۔ Wi-Fi کا نام اور پاس ورڈ چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "otaRebooting": "{deviceName} نئے فرم ویئر کے ساتھ دوبارہ شروع ہو رہا ہے۔",
+    "otaUpdateCancelled": "اپ ڈیٹ منسوخ ہو گئی",
+    "cancelUpdate": "اپ ڈیٹ منسوخ کریں",
+    "otaKeepNearby": "اپ ڈیٹ کے دوران ڈیوائس کو آن اور قریب رکھیں، اور ایپ بند نہ کریں۔",
+    "otaWifiConnecting": "Wi-Fi سے منسلک ہو رہا ہے…",
+    "otaWifiConnected": "Wi-Fi سے منسلک",
+    "otaWifiFailed": "Wi-Fi میں شامل نہیں ہو سکا۔ نیٹ ورک کا نام اور پاس ورڈ چیک کریں۔",
+    "otaDownloadFailed": "فرم ویئر ڈاؤن لوڈ ناکام رہا۔ Wi-Fi کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "otaInstallFailed": "انسٹال ناکام رہا۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے۔",
+    "otaUpdatedMessage": "{deviceName} اپ ڈیٹ ہو گیا ہے اور خود ہی دوبارہ شروع ہو جائے گا۔",
+    "showPassword": "پاس ورڈ دکھائیں",
+    "hidePassword": "پاس ورڈ چھپائیں",
+    "appNotFoundOrRemoved": "یہ ایپ اب دستیاب نہیں ہے",
+    "startupFailedTitle": "Omi شروع نہ ہو سکا",
+    "startupFailedMessage": "Omi شروع ہوتے وقت کچھ غلط ہو گیا۔ اپنا کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "startupFailedConfigMessage": "Omi کے اس بلڈ میں کنفیگریشن کا مسئلہ ہے۔ یہ آپ کے ڈیوائس کا مسئلہ نہیں ہے۔ سپورٹ سے رابطہ کریں اور نیچے دی گئی تفصیلات شامل کریں۔",
+    "discardRecordingTitle": "ریکارڈنگ رد کریں؟",
+    "discardRecordingMessage": "آپ کا وائس سیمپل ابھی محفوظ نہیں ہوا۔ اگر آپ ابھی چلے گئے، تو یہ رد کر دیا جائے گا۔",
+    "keepRecording": "ریکارڈنگ جاری رکھیں"
 }

@@ -1647,7 +1647,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "תן ל-Omi להפעיל ברקע לטובת יציבות טובה יותר",
+    "backgroundActivityDesc": "כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1655,7 +1655,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "הפעל מיקום רקע עבור החוויה המלאה",
+    "locationAccessDesc": "כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1663,7 +1663,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "הפעל הודעות כדי להישאר מעודכן",
+    "notificationsDesc": "כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1674,7 +1674,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "שירות מיקום מושבת. בבקשה עבור להגדרות > פרטיות וביטחון > שירותי מיקום והפעל אותו",
+    "locationServiceDisabledDesc": "שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -10810,7 +10810,7 @@
     "moreOptions": "אפשרויות נוספות",
     "filterByDate": "סינון לפי תאריך",
     "memoryGraph": "גרף זיכרונות",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{הקול מוכן לזיהוי} saved_sample_awaiting_embedding{הדגימה נשמרה; עדיין נדרש עיבוד קול} not_learned{הקול לא נלמד} other{מצב הקול אינו ידוע}}",
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
@@ -10950,5 +10950,49 @@
     "couldNotLoadPage": "לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.",
     "leaveFlowStepOf": "שלב {current} מתוך {total}",
     "sharedTasksLinkExpired": "המשימות המשותפות האלה לא נמצאו או שתוקף הקישור פג.",
-    "sharedTasksUnknownSender": "מישהו"
+    "sharedTasksUnknownSender": "מישהו",
+    "allow": "אפשר",
+    "permissionAllowed": "מאושר",
+    "permissionBlockedHint": "כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.",
+    "useDifferentAccount": "שימוש בחשבון אחר",
+    "onboardingStepOf": "שלב {current} מתוך {total}",
+    "onboardingCompleteMessage": "השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל.",
+    "cantFindDeviceHint": "לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.",
+    "scanAgain": "חיפוש מחדש",
+    "howToPair": "איך לבצע צימוד",
+    "contactSupportAction": "פנייה לתמיכה",
+    "deviceOfflineWakeHint": "{deviceName} לא מחובר. לחצו על הכפתור שלו כדי להעיר אותו ונסו שוב.",
+    "batteryLevelSemantics": "סוללה {level}%",
+    "updateOmiGlassFirmware": "עדכון קושחת OmiGlass",
+    "deviceConnecting": "מתחבר…",
+    "recordOptionsTip": "טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.",
+    "firmwareUpdateFailedTitle": "העדכון נכשל",
+    "firmwareUpdateFailedMessage": "העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.",
+    "firmwareDownloadFailedMessage": "לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.",
+    "firmwareBatteryTooLow": "הסוללה על {level}%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.",
+    "startUpdate": "התחלת העדכון",
+    "otaNotSupported": "לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.",
+    "otaConnectFailed": "לא ניתן להתחבר אל {deviceName}. השאירו אותו דלוק וקרוב ונסו שוב.",
+    "otaUpdateUnavailable": "העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.",
+    "otaStarting": "מתחיל בעדכון…",
+    "otaStartFailed": "לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.",
+    "otaRebooting": "{deviceName} מופעל מחדש עם הקושחה החדשה.",
+    "otaUpdateCancelled": "העדכון בוטל",
+    "cancelUpdate": "ביטול העדכון",
+    "otaKeepNearby": "במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.",
+    "otaWifiConnecting": "מתחבר ל-Wi-Fi…",
+    "otaWifiConnected": "מחובר ל-Wi-Fi",
+    "otaWifiFailed": "לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.",
+    "otaDownloadFailed": "הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.",
+    "otaInstallFailed": "ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.",
+    "otaUpdatedMessage": "{deviceName} עודכן ויופעל מחדש מעצמו.",
+    "showPassword": "הצגת הסיסמה",
+    "hidePassword": "הסתרת הסיסמה",
+    "appNotFoundOrRemoved": "האפליקציה הזו כבר לא זמינה",
+    "startupFailedTitle": "לא ניתן היה להפעיל את Omi",
+    "startupFailedMessage": "משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.",
+    "startupFailedConfigMessage": "לגרסת ה-Omi הזו יש בעיית תצורה. זו לא בעיה במכשיר שלך. פנה לתמיכה וצרף את הפרטים שלמטה.",
+    "discardRecordingTitle": "לבטל את ההקלטה?",
+    "discardRecordingMessage": "דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.",
+    "keepRecording": "המשך הקלטה"
 }

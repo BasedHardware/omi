@@ -1761,26 +1761,26 @@ class AppLocalizationsTe extends AppLocalizations {
   String get backgroundActivity => 'నేపథ్య కార్యకలాపం';
 
   @override
-  String get backgroundActivityDesc => 'Omi ను మెరుగైన స్థిరత్వ కోసం నేపథ్యంలో నడవనివ్వండి';
+  String get backgroundActivityDesc => 'స్క్రీన్ ఆఫ్‌లో ఉన్నా లేదా యాప్ మార్చినా Omi రికార్డింగ్ కొనసాగించడానికి.';
 
   @override
   String get locationAccess => 'స్థానం యాక్సెస్';
 
   @override
-  String get locationAccessDesc => 'పూర్ణ అనుభవం కోసం నేపథ్య స్థానాన్ని ప్రారంభించండి';
+  String get locationAccessDesc => 'మీ సంభాషణలు ఎక్కడ జరిగాయో Omi నమోదు చేయడానికి.';
 
   @override
   String get notifications => 'నోటిఫికేషన్‌లు';
 
   @override
-  String get notificationsDesc => 'సమాచారం పొందడానికి నోటిఫికేషన్‌లను ప్రారంభించండి';
+  String get notificationsDesc =>
+      'Omi మీకు సంభాషణ సారాంశాలు, టాస్క్ రిమైండర్‌లు మరియు మీ యాప్‌ల ప్రత్యుత్తరాలను పంపడానికి.';
 
   @override
   String get locationServiceDisabled => 'స్థానం సేవ నిలిపివేయబడింది';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'స్థానం సేవ నిలిపివేయబడింది. దయచేసి సెట్టింగ్‌లు > గోప్యతా & నిరాపత్త > స్థానం సేవలకు వెళ్లి దీన్ని ప్రారంభించండి';
+  String get locationServiceDisabledDesc => 'ఈ పరికరంలో లొకేషన్ సేవలు ఆఫ్‌లో ఉన్నాయి. సెట్టింగ్‌లలో ఆన్ చేయండి.';
 
   @override
   String get backgroundLocationDenied => 'నేపథ్య స్థానం యాక్సెస్ నిరాకరించబడింది';
@@ -10098,7 +10098,7 @@ class AppLocalizationsTe extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10116,7 +10116,7 @@ class AppLocalizationsTe extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10683,4 +10683,156 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'ఎవరో';
+
+  @override
+  String get allow => 'అనుమతించు';
+
+  @override
+  String get permissionAllowed => 'అనుమతించబడింది';
+
+  @override
+  String get permissionBlockedHint => 'సెట్టింగ్‌లలో ఆఫ్ చేయబడింది. దీన్ని ఉపయోగించడానికి అక్కడ అనుమతించండి.';
+
+  @override
+  String get useDifferentAccount => 'వేరే ఖాతాను ఉపయోగించండి';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'దశ $current / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omiని 2 రోజులు బ్యాక్‌గ్రౌండ్‌లో నడవనివ్వండి, అప్పుడు అది ఉపయోగకరమైన ఫీడ్‌బ్యాక్ ఇవ్వడం ప్రారంభిస్తుంది.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'మీ పరికరం కనిపించడం లేదా? అది ఆన్‌లో ఉందని, ఫోన్ దగ్గర ఉందని నిర్ధారించుకుని మళ్లీ స్కాన్ చేయండి.';
+
+  @override
+  String get scanAgain => 'మళ్లీ స్కాన్ చేయండి';
+
+  @override
+  String get howToPair => 'జత చేయడం ఎలా';
+
+  @override
+  String get contactSupportAction => 'సపోర్ట్‌ను సంప్రదించండి';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ఆఫ్‌లైన్‌లో ఉంది. మేల్కొలపడానికి దాని బటన్ నొక్కి మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'బ్యాటరీ $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి';
+
+  @override
+  String get deviceConnecting => 'కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌ను నొక్కి పట్టుకోండి.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'అప్‌డేట్ విఫలమైంది';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'అప్‌డేట్ పూర్తి కాలేదు. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది, ఉపయోగించడం సురక్షితం. ఛార్జ్ చేసి ఫోన్ దగ్గర ఉంచి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'బ్యాటరీ $level% ఉంది. అప్‌డేట్ చేసే ముందు పరికరాన్ని కనీసం 15% ఛార్జ్ చేయండి.';
+  }
+
+  @override
+  String get startUpdate => 'అప్‌డేట్ ప్రారంభించండి';
+
+  @override
+  String get otaNotSupported => 'ఈ ఫర్మ్‌వేర్‌ను Wi-Fi ద్వారా అప్‌డేట్ చేయలేము.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceNameకి కనెక్ట్ కాలేకపోయాం. దాన్ని ఆన్‌లో, దగ్గరగా ఉంచి మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'ఈ అప్‌డేట్ ఇప్పుడు అందుబాటులో లేదు. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get otaStarting => 'అప్‌డేట్ ప్రారంభమవుతోంది…';
+
+  @override
+  String get otaStartFailed => 'అప్‌డేట్ ప్రారంభించలేకపోయాం. Wi-Fi పేరు, పాస్‌వర్డ్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'కొత్త ఫర్మ్‌వేర్‌తో $deviceName రీస్టార్ట్ అవుతోంది.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'అప్‌డేట్ రద్దు చేయబడింది';
+
+  @override
+  String get cancelUpdate => 'అప్‌డేట్ రద్దు చేయండి';
+
+  @override
+  String get otaKeepNearby => 'అప్‌డేట్ సమయంలో పరికరాన్ని ఆన్‌లో, దగ్గరగా ఉంచండి; యాప్‌ను మూసివేయవద్దు.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fiకి కనెక్ట్ అవుతోంది…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fiకి కనెక్ట్ అయింది';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fiలో చేరలేకపోయాం. నెట్‌వర్క్ పేరు, పాస్‌వర్డ్ తనిఖీ చేయండి.';
+
+  @override
+  String get otaDownloadFailed => 'ఫర్మ్‌వేర్ డౌన్‌లోడ్ విఫలమైంది. Wi-Fi కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get otaInstallFailed => 'ఇన్‌స్టాలేషన్ విఫలమైంది. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName అప్‌డేట్ అయింది, అదే రీస్టార్ట్ అవుతుంది.';
+  }
+
+  @override
+  String get showPassword => 'పాస్‌వర్డ్ చూపించు';
+
+  @override
+  String get hidePassword => 'పాస్‌వర్డ్ దాచు';
+
+  @override
+  String get appNotFoundOrRemoved => 'ఈ యాప్ ఇకపై అందుబాటులో లేదు';
+
+  @override
+  String get startupFailedTitle => 'Omi ప్రారంభం కాలేదు';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi ప్రారంభమవుతున్నప్పుడు ఏదో తప్పు జరిగింది. మీ కనెక్షన్‌ను తనిఖీ చేసి, ఆపై మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi యొక్క ఈ బిల్డ్‌లో కాన్ఫిగరేషన్ సమస్య ఉంది. ఇది మీ పరికరం సమస్య కాదు. సపోర్ట్‌ను సంప్రదించి, దిగువ వివరాలను చేర్చండి.';
+
+  @override
+  String get discardRecordingTitle => 'రికార్డింగ్‌ను విస్మరించాలా?';
+
+  @override
+  String get discardRecordingMessage => 'మీ వాయిస్ నమూనా ఇంకా సేవ్ కాలేదు. మీరు ఇప్పుడు వెళితే, అది విస్మరించబడుతుంది.';
+
+  @override
+  String get keepRecording => 'రికార్డింగ్ కొనసాగించు';
 }

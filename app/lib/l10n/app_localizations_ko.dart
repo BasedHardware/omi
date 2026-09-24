@@ -1729,25 +1729,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get backgroundActivity => '백그라운드 활동';
 
   @override
-  String get backgroundActivityDesc => '더 나은 안정성을 위해 Omi가 백그라운드에서 실행되도록 허용';
+  String get backgroundActivityDesc => '화면이 꺼져 있거나 다른 앱으로 전환해도 Omi가 계속 기록하도록 합니다.';
 
   @override
   String get locationAccess => '위치 접근';
 
   @override
-  String get locationAccessDesc => '완전한 경험을 위해 백그라운드 위치 활성화';
+  String get locationAccessDesc => 'Omi가 대화가 이루어진 장소를 기록할 수 있도록 합니다.';
 
   @override
   String get notifications => '알림';
 
   @override
-  String get notificationsDesc => '정보를 받기 위해 알림 활성화';
+  String get notificationsDesc => 'Omi가 대화 요약, 작업 알림, 앱의 답장을 보낼 수 있도록 합니다.';
 
   @override
   String get locationServiceDisabled => '위치 서비스 비활성화됨';
 
   @override
-  String get locationServiceDisabledDesc => '위치 서비스가 비활성화되어 있습니다. 설정 > 개인정보 보호 및 보안 > 위치 서비스로 이동하여 활성화하세요';
+  String get locationServiceDisabledDesc => '이 기기의 위치 서비스가 꺼져 있습니다. 설정에서 켜 주세요.';
 
   @override
   String get backgroundLocationDenied => '백그라운드 위치 접근 거부됨';
@@ -9881,7 +9881,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9899,7 +9899,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10463,4 +10463,151 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => '누군가';
+
+  @override
+  String get allow => '허용';
+
+  @override
+  String get permissionAllowed => '허용됨';
+
+  @override
+  String get permissionBlockedHint => '설정에서 꺼져 있습니다. 사용하려면 설정에서 허용하세요.';
+
+  @override
+  String get useDifferentAccount => '다른 계정 사용';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current/$total단계';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다.';
+
+  @override
+  String get cantFindDeviceHint => '기기를 찾을 수 없나요? 전원이 켜져 있고 휴대폰 가까이에 있는지 확인한 후 다시 검색하세요.';
+
+  @override
+  String get scanAgain => '다시 검색';
+
+  @override
+  String get howToPair => '페어링 방법';
+
+  @override
+  String get contactSupportAction => '지원팀에 문의';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName이(가) 오프라인입니다. 버튼을 눌러 깨운 후 다시 시도하세요.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '배터리 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass 펌웨어 업데이트';
+
+  @override
+  String get deviceConnecting => '연결 중…';
+
+  @override
+  String get recordOptionsTip => '팁: 녹음 버튼을 길게 누르면 전화 통화를 녹음할 수 있습니다.';
+
+  @override
+  String get firmwareUpdateFailedTitle => '업데이트 실패';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      '업데이트가 완료되지 않았습니다. 기기는 현재 펌웨어를 그대로 사용하며 안전하게 쓸 수 있습니다. 충전한 상태로 휴대폰 가까이에 두고 다시 시도하세요.';
+
+  @override
+  String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
+  }
+
+  @override
+  String get startUpdate => '업데이트 시작';
+
+  @override
+  String get otaNotSupported => '이 펌웨어는 Wi-Fi로 업데이트할 수 없습니다.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName에 연결하지 못했습니다. 전원을 켠 채 가까이에 두고 다시 시도하세요.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '이 업데이트는 지금 사용할 수 없습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get otaStarting => '업데이트 시작 중…';
+
+  @override
+  String get otaStartFailed => '업데이트를 시작하지 못했습니다. Wi-Fi 이름과 비밀번호를 확인한 후 다시 시도하세요.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName이(가) 새 펌웨어로 다시 시작하는 중입니다.';
+  }
+
+  @override
+  String get otaUpdateCancelled => '업데이트가 취소됨';
+
+  @override
+  String get cancelUpdate => '업데이트 취소';
+
+  @override
+  String get otaKeepNearby => '업데이트하는 동안 기기를 켜 두고 가까이에 두며 앱을 닫지 마세요.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi에 연결 중…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi에 연결됨';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi에 연결하지 못했습니다. 네트워크 이름과 비밀번호를 확인하세요.';
+
+  @override
+  String get otaDownloadFailed => '펌웨어 다운로드에 실패했습니다. Wi-Fi 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String get otaInstallFailed => '설치에 실패했습니다. 기기는 현재 펌웨어를 그대로 사용합니다.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName이(가) 업데이트되었으며 자동으로 다시 시작됩니다.';
+  }
+
+  @override
+  String get showPassword => '비밀번호 표시';
+
+  @override
+  String get hidePassword => '비밀번호 숨기기';
+
+  @override
+  String get appNotFoundOrRemoved => '이 앱은 더 이상 사용할 수 없습니다';
+
+  @override
+  String get startupFailedTitle => 'Omi를 시작할 수 없습니다';
+
+  @override
+  String get startupFailedMessage => 'Omi를 시작하는 동안 문제가 발생했습니다. 연결 상태를 확인한 후 다시 시도하세요.';
+
+  @override
+  String get startupFailedConfigMessage => '이 Omi 빌드에 구성 문제가 있습니다. 기기 문제가 아닙니다. 아래 세부 정보를 포함하여 지원팀에 문의하세요.';
+
+  @override
+  String get discardRecordingTitle => '녹음을 삭제할까요?';
+
+  @override
+  String get discardRecordingMessage => '음성 샘플이 아직 저장되지 않았습니다. 지금 나가면 삭제됩니다.';
+
+  @override
+  String get keepRecording => '계속 녹음';
 }

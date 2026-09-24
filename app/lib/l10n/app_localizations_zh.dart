@@ -1727,25 +1727,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundActivity => '后台活动';
 
   @override
-  String get backgroundActivityDesc => '允许 Omi 在后台运行以获得更好的稳定性';
+  String get backgroundActivityDesc => '以便在屏幕关闭或切换应用时，Omi 仍能继续录制。';
 
   @override
   String get locationAccess => '位置权限';
 
   @override
-  String get locationAccessDesc => '启用后台位置以获得完整体验';
+  String get locationAccessDesc => '以便 Omi 记录你的对话发生在哪里。';
 
   @override
   String get notifications => '通知';
 
   @override
-  String get notificationsDesc => '启用通知以保持了解';
+  String get notificationsDesc => '以便 Omi 向你发送对话摘要、任务提醒和应用回复。';
 
   @override
   String get locationServiceDisabled => '位置服务已禁用';
 
   @override
-  String get locationServiceDisabledDesc => '请启用位置服务';
+  String get locationServiceDisabledDesc => '此设备的定位服务已关闭。请在设置中开启。';
 
   @override
   String get backgroundLocationDenied => '后台位置权限被拒绝';
@@ -9860,7 +9860,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9878,7 +9878,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10441,4 +10441,150 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => '某人';
+
+  @override
+  String get allow => '允许';
+
+  @override
+  String get permissionAllowed => '已允许';
+
+  @override
+  String get permissionBlockedHint => '已在设置中关闭。请在设置中允许后使用。';
+
+  @override
+  String get useDifferentAccount => '使用其他账号';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get onboardingCompleteMessage => '让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。';
+
+  @override
+  String get cantFindDeviceHint => '找不到设备？请确认设备已开启并靠近手机，然后重新扫描。';
+
+  @override
+  String get scanAgain => '重新扫描';
+
+  @override
+  String get howToPair => '如何配对';
+
+  @override
+  String get contactSupportAction => '联系支持';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName 已离线。按下它的按钮将其唤醒，然后重试。';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '电量 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => '更新 OmiGlass 固件';
+
+  @override
+  String get deviceConnecting => '正在连接…';
+
+  @override
+  String get recordOptionsTip => '提示：长按录音按钮即可录制电话通话。';
+
+  @override
+  String get firmwareUpdateFailedTitle => '更新失败';
+
+  @override
+  String get firmwareUpdateFailedMessage => '更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。';
+
+  @override
+  String get firmwareDownloadFailedMessage => '无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '电量为 $level%。更新前请将设备充电至至少 15%。';
+  }
+
+  @override
+  String get startUpdate => '开始更新';
+
+  @override
+  String get otaNotSupported => '此固件无法通过 Wi-Fi 更新。';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '无法连接到 $deviceName。请保持设备开启并靠近，然后重试。';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '此更新暂不可用。请稍后重试。';
+
+  @override
+  String get otaStarting => '正在开始更新…';
+
+  @override
+  String get otaStartFailed => '无法开始更新。请检查 Wi-Fi 名称和密码，然后重试。';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName 正在使用新固件重新启动。';
+  }
+
+  @override
+  String get otaUpdateCancelled => '已取消更新';
+
+  @override
+  String get cancelUpdate => '取消更新';
+
+  @override
+  String get otaKeepNearby => '更新期间请保持设备开启并靠近，不要关闭应用。';
+
+  @override
+  String get otaWifiConnecting => '正在连接 Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => '已连接 Wi-Fi';
+
+  @override
+  String get otaWifiFailed => '无法连接 Wi-Fi。请检查网络名称和密码。';
+
+  @override
+  String get otaDownloadFailed => '固件下载失败。请检查 Wi-Fi 连接后重试。';
+
+  @override
+  String get otaInstallFailed => '安装失败。你的设备仍使用当前固件。';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName 已更新，将自动重新启动。';
+  }
+
+  @override
+  String get showPassword => '显示密码';
+
+  @override
+  String get hidePassword => '隐藏密码';
+
+  @override
+  String get appNotFoundOrRemoved => '此应用已不可用';
+
+  @override
+  String get startupFailedTitle => 'Omi 无法启动';
+
+  @override
+  String get startupFailedMessage => 'Omi 启动时出了点问题。请检查您的网络连接，然后重试。';
+
+  @override
+  String get startupFailedConfigMessage => '此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。';
+
+  @override
+  String get discardRecordingTitle => '放弃录音？';
+
+  @override
+  String get discardRecordingMessage => '您的语音样本尚未保存。如果现在离开，它将被丢弃。';
+
+  @override
+  String get keepRecording => '继续录音';
 }

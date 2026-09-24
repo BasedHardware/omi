@@ -1761,26 +1761,26 @@ class AppLocalizationsVi extends AppLocalizations {
   String get backgroundActivity => 'Hoạt động Nền';
 
   @override
-  String get backgroundActivityDesc => 'Cho phép Omi chạy trong nền để ổn định hơn';
+  String get backgroundActivityDesc => 'Để Omi tiếp tục ghi khi màn hình tắt hoặc bạn chuyển ứng dụng.';
 
   @override
   String get locationAccess => 'Truy cập Vị trí';
 
   @override
-  String get locationAccessDesc => 'Bật vị trí nền để có trải nghiệm đầy đủ';
+  String get locationAccessDesc => 'Để Omi ghi lại nơi diễn ra các cuộc trò chuyện của bạn.';
 
   @override
   String get notifications => 'Thông báo';
 
   @override
-  String get notificationsDesc => 'Bật thông báo để luôn được thông tin';
+  String get notificationsDesc =>
+      'Để Omi gửi cho bạn tóm tắt cuộc trò chuyện, lời nhắc công việc và phản hồi từ các ứng dụng.';
 
   @override
   String get locationServiceDisabled => 'Dịch vụ vị trí đã bị tắt';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Dịch vụ vị trí đã bị tắt. Vui lòng vào Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ vị trí và bật nó';
+  String get locationServiceDisabledDesc => 'Dịch vụ định vị đang tắt trên thiết bị này. Hãy bật trong Cài đặt.';
 
   @override
   String get backgroundLocationDenied => 'Quyền truy cập vị trí nền bị từ chối';
@@ -10045,7 +10045,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10063,7 +10063,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10630,4 +10630,155 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Ai đó';
+
+  @override
+  String get allow => 'Cho phép';
+
+  @override
+  String get permissionAllowed => 'Đã cho phép';
+
+  @override
+  String get permissionBlockedHint => 'Đã tắt trong Cài đặt. Hãy cho phép ở đó để sử dụng.';
+
+  @override
+  String get useDifferentAccount => 'Dùng tài khoản khác';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Bước $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Hãy để Omi chạy nền trong 2 ngày và nó sẽ bắt đầu đưa ra phản hồi hữu ích.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Không tìm thấy thiết bị? Hãy đảm bảo thiết bị đang bật và ở gần điện thoại, rồi quét lại.';
+
+  @override
+  String get scanAgain => 'Quét lại';
+
+  @override
+  String get howToPair => 'Cách ghép nối';
+
+  @override
+  String get contactSupportAction => 'Liên hệ hỗ trợ';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName đang ngoại tuyến. Nhấn nút trên thiết bị để đánh thức rồi thử lại.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Pin $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Cập nhật firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Đang kết nối…';
+
+  @override
+  String get recordOptionsTip => 'Mẹo: nhấn giữ nút ghi âm để ghi âm cuộc gọi điện thoại.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Bản cập nhật chưa hoàn tất. Thiết bị vẫn dùng firmware hiện tại và an toàn để sử dụng. Hãy sạc và để gần điện thoại, rồi thử lại.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.';
+  }
+
+  @override
+  String get startUpdate => 'Bắt đầu cập nhật';
+
+  @override
+  String get otaNotSupported => 'Không thể cập nhật firmware này qua Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Không thể kết nối với $deviceName. Hãy bật thiết bị và để gần, rồi thử lại.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Bản cập nhật này hiện chưa có. Hãy thử lại sau.';
+
+  @override
+  String get otaStarting => 'Đang bắt đầu cập nhật…';
+
+  @override
+  String get otaStartFailed => 'Không thể bắt đầu cập nhật. Hãy kiểm tra tên và mật khẩu Wi-Fi rồi thử lại.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName đang khởi động lại với firmware mới.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Đã hủy cập nhật';
+
+  @override
+  String get cancelUpdate => 'Hủy cập nhật';
+
+  @override
+  String get otaKeepNearby => 'Trong khi cập nhật, hãy bật thiết bị, để gần và không đóng ứng dụng.';
+
+  @override
+  String get otaWifiConnecting => 'Đang kết nối Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Đã kết nối Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Không thể kết nối Wi-Fi. Hãy kiểm tra tên mạng và mật khẩu.';
+
+  @override
+  String get otaDownloadFailed => 'Tải firmware thất bại. Hãy kiểm tra kết nối Wi-Fi rồi thử lại.';
+
+  @override
+  String get otaInstallFailed => 'Cài đặt thất bại. Thiết bị vẫn dùng firmware hiện tại.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName đã được cập nhật và sẽ tự khởi động lại.';
+  }
+
+  @override
+  String get showPassword => 'Hiện mật khẩu';
+
+  @override
+  String get hidePassword => 'Ẩn mật khẩu';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ứng dụng này không còn khả dụng';
+
+  @override
+  String get startupFailedTitle => 'Omi không thể khởi động';
+
+  @override
+  String get startupFailedMessage =>
+      'Đã xảy ra sự cố khi Omi đang khởi động. Hãy kiểm tra kết nối của bạn, sau đó thử lại.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Bản dựng Omi này gặp sự cố cấu hình. Đây không phải là sự cố với thiết bị của bạn. Hãy liên hệ hỗ trợ và đính kèm thông tin chi tiết bên dưới.';
+
+  @override
+  String get discardRecordingTitle => 'Hủy bỏ bản ghi âm?';
+
+  @override
+  String get discardRecordingMessage => 'Mẫu giọng nói của bạn chưa được lưu. Nếu bạn rời đi bây giờ, nó sẽ bị hủy.';
+
+  @override
+  String get keepRecording => 'Tiếp tục ghi âm';
 }

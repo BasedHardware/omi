@@ -1755,26 +1755,28 @@ class AppLocalizationsFi extends AppLocalizations {
   String get backgroundActivity => 'Taustatoiminta';
 
   @override
-  String get backgroundActivityDesc => 'Anna Omin toimia taustalla parempaa vakautta varten';
+  String get backgroundActivityDesc =>
+      'Jotta Omi jatkaa tallennusta, kun näyttö on pois päältä tai vaihdat sovellusta.';
 
   @override
   String get locationAccess => 'Sijaintipääsy';
 
   @override
-  String get locationAccessDesc => 'Ota taustasijaintisi käyttöön täydelliseen kokemukseen';
+  String get locationAccessDesc => 'Jotta Omi voi merkitä, missä keskustelusi käytiin.';
 
   @override
   String get notifications => 'Ilmoitukset';
 
   @override
-  String get notificationsDesc => 'Ota ilmoitukset käyttöön pysyäksesi ajan tasalla';
+  String get notificationsDesc =>
+      'Jotta Omi voi lähettää sinulle keskustelujen yhteenvedot, tehtävämuistutukset ja vastaukset sovelluksistasi.';
 
   @override
   String get locationServiceDisabled => 'Sijaintipalvelu poistettu käytöstä';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Sijaintipalvelu on poistettu käytöstä. Siirry kohtaan Asetukset > Tietosuoja ja turvallisuus > Sijaintipalvelut ja ota se käyttöön';
+      'Sijaintipalvelut ovat pois päältä tässä laitteessa. Ota ne käyttöön asetuksissa.';
 
   @override
   String get backgroundLocationDenied => 'Taustasijaintipääsy evätty';
@@ -10052,7 +10054,7 @@ class AppLocalizationsFi extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10070,7 +10072,7 @@ class AppLocalizationsFi extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10636,4 +10638,156 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Joku';
+
+  @override
+  String get allow => 'Salli';
+
+  @override
+  String get permissionAllowed => 'Sallittu';
+
+  @override
+  String get permissionBlockedHint => 'Poistettu käytöstä asetuksissa. Salli se siellä, jotta voit käyttää tätä.';
+
+  @override
+  String get useDifferentAccount => 'Käytä toista tiliä';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Vaihe $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Anna Omin toimia taustalla 2 päivää, niin se alkaa antaa sinulle hyödyllistä palautetta.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Etkö löydä laitetta? Varmista, että se on päällä ja lähellä puhelinta, ja hae uudelleen.';
+
+  @override
+  String get scanAgain => 'Hae uudelleen';
+
+  @override
+  String get howToPair => 'Näin muodostat pariliitoksen';
+
+  @override
+  String get contactSupportAction => 'Ota yhteyttä tukeen';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName on offline-tilassa. Herätä se painamalla sen painiketta ja yritä uudelleen.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akku $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Päivitä OmiGlassin laiteohjelmisto';
+
+  @override
+  String get deviceConnecting => 'Yhdistetään…';
+
+  @override
+  String get recordOptionsTip => 'Vinkki: tallenna puhelu painamalla tallennuspainiketta pitkään.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Päivitys ei valmistunut. Laitteessasi on yhä nykyinen laiteohjelmisto, ja sitä on turvallista käyttää. Pidä se ladattuna ja lähellä puhelinta ja yritä uudelleen.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Akun varaus on $level %. Lataa laite vähintään 15 %:iin ennen päivitystä.';
+  }
+
+  @override
+  String get startUpdate => 'Aloita päivitys';
+
+  @override
+  String get otaNotSupported => 'Tätä laiteohjelmistoa ei voi päivittää Wi-Fin kautta.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Laitteeseen $deviceName ei saatu yhteyttä. Pidä se päällä ja lähellä ja yritä uudelleen.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Tämä päivitys ei ole juuri nyt saatavilla. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get otaStarting => 'Aloitetaan päivitystä…';
+
+  @override
+  String get otaStartFailed => 'Päivitystä ei voitu aloittaa. Tarkista Wi-Fin nimi ja salasana ja yritä uudelleen.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName käynnistyy uudelleen uudella laiteohjelmistolla.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Päivitys peruttiin';
+
+  @override
+  String get cancelUpdate => 'Peruuta päivitys';
+
+  @override
+  String get otaKeepNearby => 'Pidä laite päivityksen ajan päällä ja lähellä, äläkä sulje sovellusta.';
+
+  @override
+  String get otaWifiConnecting => 'Yhdistetään Wi-Fiin…';
+
+  @override
+  String get otaWifiConnected => 'Yhdistetty Wi-Fiin';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fiin ei voitu liittyä. Tarkista verkon nimi ja salasana.';
+
+  @override
+  String get otaDownloadFailed => 'Laiteohjelmiston lataus epäonnistui. Tarkista Wi-Fi-yhteys ja yritä uudelleen.';
+
+  @override
+  String get otaInstallFailed => 'Asennus epäonnistui. Laitteessasi on yhä nykyinen laiteohjelmisto.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName on päivitetty ja käynnistyy uudelleen itsestään.';
+  }
+
+  @override
+  String get showPassword => 'Näytä salasana';
+
+  @override
+  String get hidePassword => 'Piilota salasana';
+
+  @override
+  String get appNotFoundOrRemoved => 'Tämä sovellus ei ole enää saatavilla';
+
+  @override
+  String get startupFailedTitle => 'Omi ei voinut käynnistyä';
+
+  @override
+  String get startupFailedMessage =>
+      'Jokin meni pieleen Omin käynnistyessä. Tarkista yhteytesi ja yritä sitten uudelleen.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Tässä Omin versiossa on määritysongelma. Kyse ei ole laitteestasi. Ota yhteyttä tukeen ja liitä alla olevat tiedot mukaan.';
+
+  @override
+  String get discardRecordingTitle => 'Hylätäänkö nauhoitus?';
+
+  @override
+  String get discardRecordingMessage => 'Ääninäytettäsi ei ole vielä tallennettu. Jos poistut nyt, se hylätään.';
+
+  @override
+  String get keepRecording => 'Jatka nauhoitusta';
 }

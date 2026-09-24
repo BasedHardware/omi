@@ -1729,25 +1729,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backgroundActivity => 'バックグラウンド活動';
 
   @override
-  String get backgroundActivityDesc => 'より安定した動作のためにOmiをバックグラウンドで実行させる';
+  String get backgroundActivityDesc => '画面がオフのときや他のアプリに切り替えたときもOmiが記録を続けられるようにします。';
 
   @override
   String get locationAccess => '位置情報アクセス';
 
   @override
-  String get locationAccessDesc => '完全な体験のためにバックグラウンド位置情報を有効にする';
+  String get locationAccessDesc => 'Omiが会話の場所を記録できるようにします。';
 
   @override
   String get notifications => '通知';
 
   @override
-  String get notificationsDesc => '最新情報を受け取るために通知を有効にする';
+  String get notificationsDesc => 'Omiが会話の要約、タスクのリマインダー、アプリからの返信を送れるようにします。';
 
   @override
   String get locationServiceDisabled => '位置情報サービスが無効';
 
   @override
-  String get locationServiceDisabledDesc => '位置情報サービスが無効です。設定 > プライバシーとセキュリティ > 位置情報サービスに移動して有効にしてください';
+  String get locationServiceDisabledDesc => 'このデバイスの位置情報サービスがオフです。設定でオンにしてください。';
 
   @override
   String get backgroundLocationDenied => 'バックグラウンド位置情報アクセスが拒否されました';
@@ -9878,7 +9878,7 @@ class AppLocalizationsJa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9896,7 +9896,7 @@ class AppLocalizationsJa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10459,4 +10459,151 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => '誰か';
+
+  @override
+  String get allow => '許可';
+
+  @override
+  String get permissionAllowed => '許可済み';
+
+  @override
+  String get permissionBlockedHint => '設定でオフになっています。使用するには設定で許可してください。';
+
+  @override
+  String get useDifferentAccount => '別のアカウントを使う';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'ステップ $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omiをバックグラウンドで2日間動かすと、役立つフィードバックが届き始めます。';
+
+  @override
+  String get cantFindDeviceHint => 'デバイスが見つかりませんか？電源が入っていてスマートフォンの近くにあることを確認し、もう一度スキャンしてください。';
+
+  @override
+  String get scanAgain => '再スキャン';
+
+  @override
+  String get howToPair => 'ペアリング方法';
+
+  @override
+  String get contactSupportAction => 'サポートに問い合わせる';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName はオフラインです。ボタンを押して起動してから、もう一度お試しください。';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'バッテリー $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass のファームウェアを更新';
+
+  @override
+  String get deviceConnecting => '接続中…';
+
+  @override
+  String get recordOptionsTip => 'ヒント：録音ボタンを長押しすると通話を録音できます。';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。';
+
+  @override
+  String get firmwareDownloadFailedMessage => 'アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'バッテリー残量は $level% です。アップデート前に 15% 以上まで充電してください。';
+  }
+
+  @override
+  String get startUpdate => 'アップデートを開始';
+
+  @override
+  String get otaNotSupported => 'このファームウェアは Wi-Fi 経由で更新できません。';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName に接続できませんでした。電源を入れたまま近くに置いて、もう一度お試しください。';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'このアップデートは現在利用できません。後でもう一度お試しください。';
+
+  @override
+  String get otaStarting => 'アップデートを開始しています…';
+
+  @override
+  String get otaStartFailed => 'アップデートを開始できませんでした。Wi-Fi の名前とパスワードを確認して、もう一度お試しください。';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName は新しいファームウェアで再起動しています。';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'アップデートをキャンセルしました';
+
+  @override
+  String get cancelUpdate => 'アップデートをキャンセル';
+
+  @override
+  String get otaKeepNearby => 'アップデート中はデバイスの電源を入れたまま近くに置き、アプリを閉じないでください。';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi に接続しています…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi に接続しました';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi に接続できませんでした。ネットワーク名とパスワードを確認してください。';
+
+  @override
+  String get otaDownloadFailed => 'ファームウェアのダウンロードに失敗しました。Wi-Fi 接続を確認して、もう一度お試しください。';
+
+  @override
+  String get otaInstallFailed => 'インストールに失敗しました。デバイスは現在のファームウェアのままです。';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName は更新され、自動的に再起動します。';
+  }
+
+  @override
+  String get showPassword => 'パスワードを表示';
+
+  @override
+  String get hidePassword => 'パスワードを隠す';
+
+  @override
+  String get appNotFoundOrRemoved => 'このアプリは利用できなくなりました';
+
+  @override
+  String get startupFailedTitle => 'Omiを起動できませんでした';
+
+  @override
+  String get startupFailedMessage => 'Omiの起動中に問題が発生しました。接続を確認してから、もう一度お試しください。';
+
+  @override
+  String get startupFailedConfigMessage => 'このOmiのビルドには設定の問題があります。お使いのデバイスの問題ではありません。サポートに問い合わせ、以下の詳細を添えてください。';
+
+  @override
+  String get discardRecordingTitle => '録音を破棄しますか？';
+
+  @override
+  String get discardRecordingMessage => '音声サンプルはまだ保存されていません。今すぐ離れると破棄されます。';
+
+  @override
+  String get keepRecording => '録音を続ける';
 }

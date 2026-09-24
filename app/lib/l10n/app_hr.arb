@@ -1647,7 +1647,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Dozvoli Omiju da se pokreće u pozadini za bolju stabilnost",
+    "backgroundActivityDesc": "Kako bi Omi nastavio snimati kad je zaslon isključen ili kad promijenite aplikaciju.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1655,7 +1655,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "Omogući pozadinski pristup lokaciji za potpuno iskustvo",
+    "locationAccessDesc": "Kako bi Omi mogao zabilježiti gdje su se vaši razgovori odvijali.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1663,7 +1663,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "Omogući obavijesti da ostaneš informiran",
+    "notificationsDesc": "Kako bi vam Omi mogao slati sažetke razgovora, podsjetnike za zadatke i odgovore iz vaših aplikacija.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1674,7 +1674,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "Usluga Lokacije je Onemogućena. Molimo idi na Postavke > Privatnost i Sigurnost > Usluge Lokacije i omogući je",
+    "locationServiceDisabledDesc": "Usluge lokacije isključene su na ovom uređaju. Uključite ih u Postavkama.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -10810,7 +10810,7 @@
     "moreOptions": "Više opcija",
     "filterByDate": "Filtriraj po datumu",
     "memoryGraph": "Graf sjećanja",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{Glas je spreman za prepoznavanje} saved_sample_awaiting_embedding{Uzorak je spremljen, čeka obradu glasa} not_learned{Glas nije naučen} other{Status glasa nije poznat}}",
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
@@ -10950,5 +10950,49 @@
     "couldNotLoadPage": "Stranicu nije moguće učitati. Provjerite vezu i pokušajte ponovno.",
     "leaveFlowStepOf": "Korak {current} od {total}",
     "sharedTasksLinkExpired": "Ovi zajednički zadaci nisu pronađeni ili je poveznica istekla.",
-    "sharedTasksUnknownSender": "Netko"
+    "sharedTasksUnknownSender": "Netko",
+    "allow": "Dopusti",
+    "permissionAllowed": "Dopušteno",
+    "permissionBlockedHint": "Isključeno u Postavkama. Dopustite to tamo da biste ovo koristili.",
+    "useDifferentAccount": "Koristi drugi račun",
+    "onboardingStepOf": "Korak {current} od {total}",
+    "onboardingCompleteMessage": "Ostavite Omi da radi u pozadini 2 dana i počet će vam davati korisne povratne informacije.",
+    "cantFindDeviceHint": "Ne možete pronaći uređaj? Provjerite je li uključen i blizu telefona pa ponovno pretražite.",
+    "scanAgain": "Ponovno pretraži",
+    "howToPair": "Kako upariti",
+    "contactSupportAction": "Kontaktiraj podršku",
+    "deviceOfflineWakeHint": "{deviceName} nije na mreži. Pritisnite njegovu tipku da ga probudite pa pokušajte ponovno.",
+    "batteryLevelSemantics": "Baterija {level} %",
+    "updateOmiGlassFirmware": "Ažuriraj OmiGlass firmver",
+    "deviceConnecting": "Povezivanje…",
+    "recordOptionsTip": "Savjet: pritisnite i držite gumb za snimanje da biste snimili telefonski poziv.",
+    "firmwareUpdateFailedTitle": "Ažuriranje nije uspjelo",
+    "firmwareUpdateFailedMessage": "Ažuriranje nije dovršeno. Uređaj je i dalje na trenutačnom firmveru i siguran je za upotrebu. Držite ga napunjenim i blizu telefona pa pokušajte ponovno.",
+    "firmwareDownloadFailedMessage": "Ažuriranje se nije moglo preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu pa pokušajte ponovno.",
+    "firmwareBatteryTooLow": "Baterija je na {level} %. Prije ažuriranja napunite uređaj na najmanje 15 %.",
+    "startUpdate": "Pokreni ažuriranje",
+    "otaNotSupported": "Ovaj firmver ne može se ažurirati putem Wi-Fi mreže.",
+    "otaConnectFailed": "Povezivanje s uređajem {deviceName} nije uspjelo. Držite ga uključenim i blizu pa pokušajte ponovno.",
+    "otaUpdateUnavailable": "Ovo ažuriranje trenutačno nije dostupno. Pokušajte kasnije.",
+    "otaStarting": "Pokretanje ažuriranja…",
+    "otaStartFailed": "Ažuriranje nije moguće pokrenuti. Provjerite naziv i lozinku Wi-Fi mreže pa pokušajte ponovno.",
+    "otaRebooting": "{deviceName} se ponovno pokreće s novim firmverom.",
+    "otaUpdateCancelled": "Ažuriranje je otkazano",
+    "cancelUpdate": "Otkaži ažuriranje",
+    "otaKeepNearby": "Tijekom ažuriranja držite uređaj uključenim i blizu i ne zatvarajte aplikaciju.",
+    "otaWifiConnecting": "Povezivanje s Wi-Fi mrežom…",
+    "otaWifiConnected": "Povezano s Wi-Fi mrežom",
+    "otaWifiFailed": "Povezivanje s Wi-Fi mrežom nije uspjelo. Provjerite naziv mreže i lozinku.",
+    "otaDownloadFailed": "Preuzimanje firmvera nije uspjelo. Provjerite Wi-Fi vezu i pokušajte ponovno.",
+    "otaInstallFailed": "Instalacija nije uspjela. Uređaj je i dalje na trenutačnom firmveru.",
+    "otaUpdatedMessage": "{deviceName} je ažuriran i sam će se ponovno pokrenuti.",
+    "showPassword": "Prikaži lozinku",
+    "hidePassword": "Sakrij lozinku",
+    "appNotFoundOrRemoved": "Ova aplikacija više nije dostupna",
+    "startupFailedTitle": "Omi se nije uspio pokrenuti",
+    "startupFailedMessage": "Nešto je pošlo po zlu tijekom pokretanja Omija. Provjerite vezu, a zatim pokušajte ponovno.",
+    "startupFailedConfigMessage": "Ova verzija Omija ima problem s konfiguracijom. Nije riječ o problemu s vašim uređajem. Kontaktirajte podršku i priložite detalje u nastavku.",
+    "discardRecordingTitle": "Odbaciti snimanje?",
+    "discardRecordingMessage": "Vaš uzorak glasa još nije spremljen. Ako sada izađete, bit će odbačen.",
+    "keepRecording": "Nastavi snimanje"
 }

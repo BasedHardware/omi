@@ -1756,26 +1756,27 @@ class AppLocalizationsSl extends AppLocalizations {
   String get backgroundActivity => 'Aktivnost v ozadju';
 
   @override
-  String get backgroundActivityDesc => 'Dovolite, da Omi teče v ozadju za boljšo stabilnost';
+  String get backgroundActivityDesc => 'Da Omi nadaljuje snemanje, ko je zaslon izklopljen ali preklopite aplikacijo.';
 
   @override
   String get locationAccess => 'Dostop do lokacije';
 
   @override
-  String get locationAccessDesc => 'Omogočite lokacijo v ozadju za polno izkušnjo';
+  String get locationAccessDesc => 'Da lahko Omi zabeleži, kje so potekali vaši pogovori.';
 
   @override
   String get notifications => 'Obvestila';
 
   @override
-  String get notificationsDesc => 'Omogočite obvestila, da budete obveščeni';
+  String get notificationsDesc =>
+      'Da vam Omi lahko pošilja povzetke pogovorov, opomnike za opravila in odgovore iz vaših aplikacij.';
 
   @override
   String get locationServiceDisabled => 'Storitev lokacije je onemogočena';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Storitev lokacije je onemogočena. Prosimo, pojdite v Nastavitve > Zasebnost in varnost > Storitve lokacije in omogočite';
+      'Lokacijske storitve so v tej napravi izklopljene. Vklopite jih v Nastavitvah.';
 
   @override
   String get backgroundLocationDenied => 'Dostop do lokacije v ozadju je zavrnjen';
@@ -10081,7 +10082,7 @@ class AppLocalizationsSl extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10099,7 +10100,7 @@ class AppLocalizationsSl extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10667,4 +10668,156 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Nekdo';
+
+  @override
+  String get allow => 'Dovoli';
+
+  @override
+  String get permissionAllowed => 'Dovoljeno';
+
+  @override
+  String get permissionBlockedHint => 'Izklopljeno v Nastavitvah. Dovolite to tam, da boste to lahko uporabljali.';
+
+  @override
+  String get useDifferentAccount => 'Uporabi drug račun';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Korak $current od $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Pustite, da Omi 2 dni teče v ozadju, in začel vam bo dajati koristne povratne informacije.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Ne najdete naprave? Preverite, ali je vklopljena in blizu telefona, nato znova iščite.';
+
+  @override
+  String get scanAgain => 'Išči znova';
+
+  @override
+  String get howToPair => 'Kako seznaniti';
+
+  @override
+  String get contactSupportAction => 'Obrni se na podporo';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ni povezan. Pritisnite njegov gumb, da ga zbudite, in poskusite znova.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterija $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Posodobi strojno programsko opremo OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Povezovanje…';
+
+  @override
+  String get recordOptionsTip => 'Namig: pridržite gumb za snemanje, da posnamete telefonski klic.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Posodobitev se ni dokončala. Naprava ima še vedno trenutno strojno programsko opremo in je varna za uporabo. Imejte jo napolnjeno in blizu telefona ter poskusite znova.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Posodobitve ni bilo mogoče prenesti in naprava ni bila spremenjena. Preverite internetno povezavo in poskusite znova.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterija je na $level %. Pred posodobitvijo napolnite napravo na vsaj 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Začni posodobitev';
+
+  @override
+  String get otaNotSupported => 'Te strojne programske opreme ni mogoče posodobiti prek Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Povezave z napravo $deviceName ni bilo mogoče vzpostaviti. Naj bo vklopljena in blizu, nato poskusite znova.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Ta posodobitev trenutno ni na voljo. Poskusite pozneje.';
+
+  @override
+  String get otaStarting => 'Zaganjanje posodobitve…';
+
+  @override
+  String get otaStartFailed => 'Posodobitve ni bilo mogoče zagnati. Preverite ime in geslo Wi-Fi ter poskusite znova.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName se znova zaganja z novo strojno programsko opremo.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Posodobitev preklicana';
+
+  @override
+  String get cancelUpdate => 'Prekliči posodobitev';
+
+  @override
+  String get otaKeepNearby => 'Med posodobitvijo naj bo naprava vklopljena in blizu, aplikacije pa ne zaprite.';
+
+  @override
+  String get otaWifiConnecting => 'Povezovanje z Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Povezano z Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Povezava z Wi-Fi ni uspela. Preverite ime omrežja in geslo.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Prenos strojne programske opreme ni uspel. Preverite povezavo Wi-Fi in poskusite znova.';
+
+  @override
+  String get otaInstallFailed => 'Namestitev ni uspela. Naprava ima še vedno trenutno strojno programsko opremo.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName je posodobljena in se bo sama znova zagnala.';
+  }
+
+  @override
+  String get showPassword => 'Pokaži geslo';
+
+  @override
+  String get hidePassword => 'Skrij geslo';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ta aplikacija ni več na voljo';
+
+  @override
+  String get startupFailedTitle => 'Omi se ni uspel zagnati';
+
+  @override
+  String get startupFailedMessage => 'Med zagonom Omi je prišlo do napake. Preverite povezavo in nato poskusite znova.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Ta različica Omi ima težavo s konfiguracijo. Ne gre za težavo z vašo napravo. Obrnite se na podporo in priložite spodnje podrobnosti.';
+
+  @override
+  String get discardRecordingTitle => 'Želite zavreči snemanje?';
+
+  @override
+  String get discardRecordingMessage => 'Vaš glasovni vzorec še ni shranjen. Če zdaj zapustite, bo zavržen.';
+
+  @override
+  String get keepRecording => 'Nadaljuj s snemanjem';
 }

@@ -1759,26 +1759,27 @@ class AppLocalizationsLv extends AppLocalizations {
   String get backgroundActivity => 'Fona aktivitāte';
 
   @override
-  String get backgroundActivityDesc => 'Ļaujiet Omi darboties fonā labākai stabilitātei';
+  String get backgroundActivityDesc => 'Lai Omi turpinātu ierakstīt, kad ekrāns ir izslēgts vai pārslēdzat lietotni.';
 
   @override
   String get locationAccess => 'Atrašanās vietas piekļuve';
 
   @override
-  String get locationAccessDesc => 'Iespējojiet fona atrašanās vietu pilnai pieredzei';
+  String get locationAccessDesc => 'Lai Omi varētu atzīmēt, kur notika jūsu sarunas.';
 
   @override
   String get notifications => 'Paziņojumi';
 
   @override
-  String get notificationsDesc => 'Iespējojiet paziņojumus, lai būtu informēti';
+  String get notificationsDesc =>
+      'Lai Omi varētu sūtīt sarunu kopsavilkumus, uzdevumu atgādinājumus un atbildes no jūsu lietotnēm.';
 
   @override
   String get locationServiceDisabled => 'Atrašanās vietas pakalpojums atspējots';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Atrašanās vietas pakalpojums ir atspējots. Lūdzu, dodieties uz Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi un iespējojiet to';
+      'Atrašanās vietas pakalpojumi šajā ierīcē ir izslēgti. Ieslēdziet tos iestatījumos.';
 
   @override
   String get backgroundLocationDenied => 'Fona atrašanās vietas piekļuve liegta';
@@ -10074,7 +10075,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10092,7 +10093,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10660,4 +10661,158 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Kāds';
+
+  @override
+  String get allow => 'Atļaut';
+
+  @override
+  String get permissionAllowed => 'Atļauts';
+
+  @override
+  String get permissionBlockedHint => 'Izslēgts iestatījumos. Lai to izmantotu, atļaujiet to tur.';
+
+  @override
+  String get useDifferentAccount => 'Izmantot citu kontu';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current. solis no $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Ļaujiet Omi 2 dienas darboties fonā, un tas sāks sniegt noderīgu atgriezenisko saiti.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nevarat atrast ierīci? Pārliecinieties, ka tā ir ieslēgta un tuvu tālrunim, un meklējiet vēlreiz.';
+
+  @override
+  String get scanAgain => 'Meklēt vēlreiz';
+
+  @override
+  String get howToPair => 'Kā savienot pārī';
+
+  @override
+  String get contactSupportAction => 'Sazināties ar atbalstu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName ir bezsaistē. Nospiediet tās pogu, lai to pamodinātu, un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akumulators $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Atjaunināt OmiGlass programmaparatūru';
+
+  @override
+  String get deviceConnecting => 'Savienojas…';
+
+  @override
+  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, nospiediet un turiet ieraksta pogu.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Atjaunināšana netika pabeigta. Ierīcē joprojām ir pašreizējā programmaparatūra, un to ir droši lietot. Uzlādējiet to, turiet tālruņa tuvumā un mēģiniet vēlreiz.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Akumulators ir $level%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 15%.';
+  }
+
+  @override
+  String get startUpdate => 'Sākt atjaunināšanu';
+
+  @override
+  String get otaNotSupported => 'Šo programmaparatūru nevar atjaunināt, izmantojot Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Neizdevās izveidot savienojumu ar $deviceName. Turiet to ieslēgtu un tuvumā un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Šis atjauninājums pašlaik nav pieejams. Mēģiniet vēlāk.';
+
+  @override
+  String get otaStarting => 'Sāk atjaunināšanu…';
+
+  @override
+  String get otaStartFailed =>
+      'Neizdevās sākt atjaunināšanu. Pārbaudiet Wi-Fi nosaukumu un paroli un mēģiniet vēlreiz.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName tiek restartēta ar jauno programmaparatūru.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Atjaunināšana atcelta';
+
+  @override
+  String get cancelUpdate => 'Atcelt atjaunināšanu';
+
+  @override
+  String get otaKeepNearby => 'Atjaunināšanas laikā turiet ierīci ieslēgtu un tuvumā un neaizveriet lietotni.';
+
+  @override
+  String get otaWifiConnecting => 'Savienojas ar Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Savienots ar Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Neizdevās pievienoties Wi-Fi. Pārbaudiet tīkla nosaukumu un paroli.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Programmaparatūras lejupielāde neizdevās. Pārbaudiet Wi-Fi savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get otaInstallFailed => 'Instalēšana neizdevās. Ierīcē joprojām ir pašreizējā programmaparatūra.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName ir atjaunināta un pati restartēsies.';
+  }
+
+  @override
+  String get showPassword => 'Rādīt paroli';
+
+  @override
+  String get hidePassword => 'Slēpt paroli';
+
+  @override
+  String get appNotFoundOrRemoved => 'Šī lietotne vairs nav pieejama';
+
+  @override
+  String get startupFailedTitle => 'Omi neizdevās startēt';
+
+  @override
+  String get startupFailedMessage =>
+      'Kaut kas nogāja greizi, kamēr Omi startēja. Pārbaudi savienojumu un mēģini vēlreiz.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Šai Omi versijai ir konfigurācijas problēma. Tā nav tavas ierīces problēma. Sazinies ar atbalstu un pievieno tālāk norādīto informāciju.';
+
+  @override
+  String get discardRecordingTitle => 'Atmest ierakstu?';
+
+  @override
+  String get discardRecordingMessage => 'Tavs balss paraugs vēl nav saglabāts. Ja tagad pametīsi, tas tiks dzēsts.';
+
+  @override
+  String get keepRecording => 'Turpināt ierakstīšanu';
 }

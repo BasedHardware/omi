@@ -1761,26 +1761,27 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundActivity => 'Arka plan etkinliği';
 
   @override
-  String get backgroundActivityDesc => 'Daha iyi stabilite için Omi\'nin arka planda çalışmasına izin verin';
+  String get backgroundActivityDesc =>
+      'Ekran kapalıyken veya uygulama değiştirdiğinizde Omi\'nin kayda devam etmesi için.';
 
   @override
   String get locationAccess => 'Konum erişimi';
 
   @override
-  String get locationAccessDesc => 'Tam deneyim için arka plan konumunu etkinleştirin';
+  String get locationAccessDesc => 'Omi\'nin konuşmalarınızın nerede geçtiğini not edebilmesi için.';
 
   @override
   String get notifications => 'Bildirimler';
 
   @override
-  String get notificationsDesc => 'Bilgilendirilmek için bildirimleri etkinleştirin';
+  String get notificationsDesc =>
+      'Omi\'nin size konuşma özetleri, görev hatırlatıcıları ve uygulamalarınızdan yanıtlar gönderebilmesi için.';
 
   @override
   String get locationServiceDisabled => 'Konum Servisi Devre Dışı';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Konum Servisi Devre Dışı. Lütfen Ayarlar > Gizlilik ve Güvenlik > Konum Servisleri\'ne gidin ve etkinleştirin';
+  String get locationServiceDisabledDesc => 'Bu cihazda Konum Servisleri kapalı. Ayarlar\'dan açın.';
 
   @override
   String get backgroundLocationDenied => 'Arka Plan Konum Erişimi Reddedildi';
@@ -10062,7 +10063,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10080,7 +10081,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10646,4 +10647,156 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Birisi';
+
+  @override
+  String get allow => 'İzin Ver';
+
+  @override
+  String get permissionAllowed => 'İzin verildi';
+
+  @override
+  String get permissionBlockedHint => 'Ayarlar\'da kapalı. Kullanmak için oradan izin verin.';
+
+  @override
+  String get useDifferentAccount => 'Başka Bir Hesap Kullan';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Adım $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Omi\'yi 2 gün arka planda çalışır bırakın, size faydalı geri bildirimler vermeye başlayacak.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Cihazınızı bulamıyor musunuz? Açık ve telefonunuza yakın olduğundan emin olun, sonra tekrar tarayın.';
+
+  @override
+  String get scanAgain => 'Tekrar Tara';
+
+  @override
+  String get howToPair => 'Nasıl Eşleştirilir';
+
+  @override
+  String get contactSupportAction => 'Destekle İletişime Geç';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName çevrimdışı. Uyandırmak için düğmesine basın, sonra tekrar deneyin.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Pil %$level';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass Yazılımını Güncelle';
+
+  @override
+  String get deviceConnecting => 'Bağlanıyor…';
+
+  @override
+  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesini basılı tutun.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Güncelleme tamamlanmadı. Cihazınız hâlâ mevcut yazılımda ve güvenle kullanılabilir. Şarjlı ve telefonunuza yakın tutun, sonra tekrar deneyin.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Güncelleme indirilemedi ve cihazınız değişmedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Pil %$level seviyesinde. Güncellemeden önce cihazınızı en az %15\'e kadar şarj edin.';
+  }
+
+  @override
+  String get startUpdate => 'Güncellemeyi Başlat';
+
+  @override
+  String get otaNotSupported => 'Bu yazılım Wi-Fi üzerinden güncellenemez.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName cihazına bağlanılamadı. Açık ve yakında tutun, sonra tekrar deneyin.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Bu güncelleme şu anda kullanılamıyor. Daha sonra tekrar deneyin.';
+
+  @override
+  String get otaStarting => 'Güncelleme başlatılıyor…';
+
+  @override
+  String get otaStartFailed => 'Güncelleme başlatılamadı. Wi-Fi adını ve şifresini kontrol edip tekrar deneyin.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName yeni yazılımla yeniden başlatılıyor.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Güncelleme iptal edildi';
+
+  @override
+  String get cancelUpdate => 'Güncellemeyi İptal Et';
+
+  @override
+  String get otaKeepNearby => 'Güncelleme sırasında cihazınızı açık ve yakında tutun, uygulamayı kapatmayın.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi\'a bağlanıyor…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi\'a bağlandı';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi\'a katılınamadı. Ağ adını ve şifreyi kontrol edin.';
+
+  @override
+  String get otaDownloadFailed => 'Yazılım indirilemedi. Wi-Fi bağlantısını kontrol edip tekrar deneyin.';
+
+  @override
+  String get otaInstallFailed => 'Yükleme başarısız. Cihazınız hâlâ mevcut yazılımda.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName güncellendi ve kendiliğinden yeniden başlayacak.';
+  }
+
+  @override
+  String get showPassword => 'Şifreyi göster';
+
+  @override
+  String get hidePassword => 'Şifreyi gizle';
+
+  @override
+  String get appNotFoundOrRemoved => 'Bu uygulama artık kullanılamıyor';
+
+  @override
+  String get startupFailedTitle => 'Omi başlatılamadı';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi başlatılırken bir sorun oluştu. Bağlantınızı kontrol edin, ardından tekrar deneyin.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Omi\'nin bu sürümünde bir yapılandırma sorunu var. Bu, cihazınızla ilgili bir sorun değil. Destekle iletişime geçin ve aşağıdaki ayrıntıları ekleyin.';
+
+  @override
+  String get discardRecordingTitle => 'Kayıt silinsin mi?';
+
+  @override
+  String get discardRecordingMessage => 'Ses örneğiniz henüz kaydedilmedi. Şimdi çıkarsanız silinecektir.';
+
+  @override
+  String get keepRecording => 'Kayda Devam Et';
 }

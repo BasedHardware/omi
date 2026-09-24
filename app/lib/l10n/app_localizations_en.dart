@@ -1753,26 +1753,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundActivity => 'Background activity';
 
   @override
-  String get backgroundActivityDesc => 'Let Omi run in the background for better stability';
+  String get backgroundActivityDesc => 'So Omi keeps capturing when the screen is off or you switch apps.';
 
   @override
   String get locationAccess => 'Location access';
 
   @override
-  String get locationAccessDesc => 'Enable background location for the full experience';
+  String get locationAccessDesc => 'So Omi can note where your conversations happened.';
 
   @override
   String get notifications => 'Notifications';
 
   @override
-  String get notificationsDesc => 'Enable notifications to stay informed';
+  String get notificationsDesc =>
+      'So Omi can send you conversation summaries, task reminders and replies from your apps.';
 
   @override
   String get locationServiceDisabled => 'Location Service Disabled';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it';
+  String get locationServiceDisabledDesc => 'Location Services are off on this device. Turn them on in Settings.';
 
   @override
   String get backgroundLocationDenied => 'Background Location Access Denied';
@@ -10040,7 +10040,7 @@ class AppLocalizationsEn extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10058,7 +10058,7 @@ class AppLocalizationsEn extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10624,4 +10624,156 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Someone';
+
+  @override
+  String get allow => 'Allow';
+
+  @override
+  String get permissionAllowed => 'Allowed';
+
+  @override
+  String get permissionBlockedHint => 'Turned off in Settings. Allow it there to use this.';
+
+  @override
+  String get useDifferentAccount => 'Use a Different Account';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Keep Omi running in the background for 2 days and it will start giving you useful feedback.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.';
+
+  @override
+  String get scanAgain => 'Scan Again';
+
+  @override
+  String get howToPair => 'How to Pair';
+
+  @override
+  String get contactSupportAction => 'Contact Support';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName is offline. Press its button to wake it, then try again.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Battery $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Update OmiGlass Firmware';
+
+  @override
+  String get deviceConnecting => 'Connecting…';
+
+  @override
+  String get recordOptionsTip => 'Tip: press and hold the record button to record a phone call.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Update Failed';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Battery is at $level%. Charge your device to at least 15% before updating.';
+  }
+
+  @override
+  String get startUpdate => 'Start Update';
+
+  @override
+  String get otaNotSupported => 'This firmware can\'t be updated over Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Couldn\'t connect to $deviceName. Keep it on and nearby, then try again.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'This update isn\'t available right now. Try again later.';
+
+  @override
+  String get otaStarting => 'Starting update…';
+
+  @override
+  String get otaStartFailed => 'Couldn\'t start the update. Check the Wi-Fi name and password, then try again.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName is restarting with the new firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Update cancelled';
+
+  @override
+  String get cancelUpdate => 'Cancel Update';
+
+  @override
+  String get otaKeepNearby => 'Keep your device on and nearby during the update, and don\'t close the app.';
+
+  @override
+  String get otaWifiConnecting => 'Connecting to Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Connected to Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Couldn\'t join Wi-Fi. Check the network name and password.';
+
+  @override
+  String get otaDownloadFailed => 'The firmware download failed. Check the Wi-Fi connection and try again.';
+
+  @override
+  String get otaInstallFailed => 'Installation failed. Your device is still on its current firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName is updated and will restart on its own.';
+  }
+
+  @override
+  String get showPassword => 'Show password';
+
+  @override
+  String get hidePassword => 'Hide password';
+
+  @override
+  String get appNotFoundOrRemoved => 'This app is no longer available';
+
+  @override
+  String get startupFailedTitle => 'Omi couldn’t start';
+
+  @override
+  String get startupFailedMessage =>
+      'Something went wrong while Omi was starting. Check your connection, then try again.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.';
+
+  @override
+  String get discardRecordingTitle => 'Discard Recording?';
+
+  @override
+  String get discardRecordingMessage => 'Your voice sample isn’t saved yet. If you leave now, it will be discarded.';
+
+  @override
+  String get keepRecording => 'Keep Recording';
 }

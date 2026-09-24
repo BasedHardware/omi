@@ -1768,26 +1768,28 @@ class AppLocalizationsEl extends AppLocalizations {
   String get backgroundActivity => 'Δραστηριότητα παρασκηνίου';
 
   @override
-  String get backgroundActivityDesc => 'Επιτρέψτε στο Omi να εκτελείται στο παρασκήνιο για καλύτερη σταθερότητα';
+  String get backgroundActivityDesc =>
+      'Ώστε το Omi να συνεχίζει την καταγραφή όταν η οθόνη είναι σβηστή ή αλλάζετε εφαρμογή.';
 
   @override
   String get locationAccess => 'Πρόσβαση τοποθεσίας';
 
   @override
-  String get locationAccessDesc => 'Ενεργοποιήστε την τοποθεσία παρασκηνίου για την πλήρη εμπειρία';
+  String get locationAccessDesc => 'Ώστε το Omi να σημειώνει πού έγιναν οι συνομιλίες σας.';
 
   @override
   String get notifications => 'Ειδοποιήσεις';
 
   @override
-  String get notificationsDesc => 'Ενεργοποιήστε τις ειδοποιήσεις για να ενημερώνεστε';
+  String get notificationsDesc =>
+      'Ώστε το Omi να σας στέλνει περιλήψεις συνομιλιών, υπενθυμίσεις εργασιών και απαντήσεις από τις εφαρμογές σας.';
 
   @override
   String get locationServiceDisabled => 'Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη. Παρακαλώ μεταβείτε στις Ρυθμίσεις > Απόρρητο & Ασφάλεια > Υπηρεσίες Τοποθεσίας και ενεργοποιήστε την';
+      'Οι Υπηρεσίες τοποθεσίας είναι απενεργοποιημένες σε αυτή τη συσκευή. Ενεργοποιήστε τις στις Ρυθμίσεις.';
 
   @override
   String get backgroundLocationDenied => 'Απορρίφθηκε η Πρόσβαση Τοποθεσίας Παρασκηνίου';
@@ -10120,7 +10122,7 @@ class AppLocalizationsEl extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10138,7 +10140,7 @@ class AppLocalizationsEl extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10706,4 +10708,158 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Κάποιος';
+
+  @override
+  String get allow => 'Να επιτρέπεται';
+
+  @override
+  String get permissionAllowed => 'Επιτρέπεται';
+
+  @override
+  String get permissionBlockedHint => 'Απενεργοποιημένο στις Ρυθμίσεις. Επιτρέψτε το εκεί για να το χρησιμοποιήσετε.';
+
+  @override
+  String get useDifferentAccount => 'Χρήση άλλου λογαριασμού';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Βήμα $current από $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Αφήστε το Omi να λειτουργεί στο παρασκήνιο για 2 ημέρες και θα αρχίσει να σας δίνει χρήσιμα σχόλια.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Δεν βρίσκετε τη συσκευή σας; Βεβαιωθείτε ότι είναι ενεργοποιημένη και κοντά στο τηλέφωνο και αναζητήστε ξανά.';
+
+  @override
+  String get scanAgain => 'Νέα αναζήτηση';
+
+  @override
+  String get howToPair => 'Πώς γίνεται η σύζευξη';
+
+  @override
+  String get contactSupportAction => 'Επικοινωνία με την υποστήριξη';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'Η συσκευή $deviceName είναι εκτός σύνδεσης. Πατήστε το κουμπί της για να ενεργοποιηθεί και δοκιμάστε ξανά.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Μπαταρία $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Ενημέρωση υλικολογισμικού OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Σύνδεση…';
+
+  @override
+  String get recordOptionsTip => 'Συμβουλή: πατήστε παρατεταμένα το κουμπί εγγραφής για να καταγράψετε μια κλήση.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Η ενημέρωση δεν ολοκληρώθηκε. Η συσκευή σας έχει ακόμη το τρέχον υλικολογισμικό και μπορεί να χρησιμοποιηθεί με ασφάλεια. Κρατήστε τη φορτισμένη και κοντά στο τηλέφωνο και δοκιμάστε ξανά.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Δεν ήταν δυνατή η λήψη της ενημέρωσης και η συσκευή σας δεν άλλαξε. Ελέγξτε τη σύνδεση στο διαδίκτυο και δοκιμάστε ξανά.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Η μπαταρία είναι στο $level%. Φορτίστε τη συσκευή τουλάχιστον στο 15% πριν από την ενημέρωση.';
+  }
+
+  @override
+  String get startUpdate => 'Έναρξη ενημέρωσης';
+
+  @override
+  String get otaNotSupported => 'Αυτό το υλικολογισμικό δεν μπορεί να ενημερωθεί μέσω Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Δεν ήταν δυνατή η σύνδεση με $deviceName. Κρατήστε τη συσκευή ενεργή και κοντά και δοκιμάστε ξανά.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Αυτή η ενημέρωση δεν είναι διαθέσιμη τώρα. Δοκιμάστε αργότερα.';
+
+  @override
+  String get otaStarting => 'Έναρξη ενημέρωσης…';
+
+  @override
+  String get otaStartFailed =>
+      'Δεν ήταν δυνατή η έναρξη της ενημέρωσης. Ελέγξτε το όνομα και τον κωδικό του Wi-Fi και δοκιμάστε ξανά.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'Η συσκευή $deviceName επανεκκινείται με το νέο υλικολογισμικό.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Η ενημέρωση ακυρώθηκε';
+
+  @override
+  String get cancelUpdate => 'Ακύρωση ενημέρωσης';
+
+  @override
+  String get otaKeepNearby => 'Κατά την ενημέρωση κρατήστε τη συσκευή ενεργή και κοντά και μην κλείσετε την εφαρμογή.';
+
+  @override
+  String get otaWifiConnecting => 'Σύνδεση σε Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Συνδέθηκε σε Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Δεν ήταν δυνατή η σύνδεση στο Wi-Fi. Ελέγξτε το όνομα δικτύου και τον κωδικό.';
+
+  @override
+  String get otaDownloadFailed => 'Η λήψη του υλικολογισμικού απέτυχε. Ελέγξτε τη σύνδεση Wi-Fi και δοκιμάστε ξανά.';
+
+  @override
+  String get otaInstallFailed => 'Η εγκατάσταση απέτυχε. Η συσκευή σας έχει ακόμη το τρέχον υλικολογισμικό.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'Η συσκευή $deviceName ενημερώθηκε και θα επανεκκινηθεί αυτόματα.';
+  }
+
+  @override
+  String get showPassword => 'Εμφάνιση κωδικού';
+
+  @override
+  String get hidePassword => 'Απόκρυψη κωδικού';
+
+  @override
+  String get appNotFoundOrRemoved => 'Αυτή η εφαρμογή δεν είναι πλέον διαθέσιμη';
+
+  @override
+  String get startupFailedTitle => 'Το Omi δεν μπόρεσε να ξεκινήσει';
+
+  @override
+  String get startupFailedMessage =>
+      'Κάτι πήγε στραβά κατά την εκκίνηση του Omi. Ελέγξτε τη σύνδεσή σας και μετά δοκιμάστε ξανά.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Αυτή η έκδοση του Omi έχει πρόβλημα διαμόρφωσης. Δεν είναι πρόβλημα της συσκευής σας. Επικοινωνήστε με την υποστήριξη και συμπεριλάβετε τις παρακάτω λεπτομέρειες.';
+
+  @override
+  String get discardRecordingTitle => 'Απόρριψη εγγραφής;';
+
+  @override
+  String get discardRecordingMessage =>
+      'Το δείγμα φωνής σας δεν έχει αποθηκευτεί ακόμα. Αν φύγετε τώρα, θα απορριφθεί.';
+
+  @override
+  String get keepRecording => 'Συνέχεια εγγραφής';
 }

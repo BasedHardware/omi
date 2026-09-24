@@ -45,7 +45,10 @@ There are exactly two ways out, and they mean different things.
   prev/next controls replace it.
 - **Android system back on a non-Home tab returns to the Home tab** before it exits the app (D6).
 - Deep links and notification taps open inside the existing Home: pop to the first route, then push
-  the destination (parent before child). A missing target says so (`OmiFeedback.info`).
+  the destination (parent before child) — `HomeNavigation.openRoute(route)`
+  (`lib/pages/home/home_navigation.dart`); a flow's final Done returns with
+  `HomeNavigation.returnHome(context)`. Never push or `pushReplacement` a second `HomePageWrapper`.
+  A missing target says so (`OmiFeedback.info`).
 
 ## 2. Sheets
 
@@ -264,8 +267,9 @@ guidance.
 
 ## 15. Permissions
 
-- Ask with a pre-prompt that says why (one shared permission row / sheet), then the system prompt.
-  Continue never fires a system prompt by itself.
+- Ask with a pre-prompt that says why — `OmiPermissionRow` (`lib/ui/components/omi_permission_row.dart`):
+  title, one-sentence reason, and one action for its state (Allow → the system prompt; Allowed;
+  Open Settings) — then the system prompt. Continue never fires a system prompt by itself.
 - Permanently denied → the row says so and offers **Open Settings** (`l10n.openSettings`).
 - Ask when a feature needs the permission ("Always" location only when a feature requires it).
 

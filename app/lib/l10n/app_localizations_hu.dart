@@ -1767,26 +1767,27 @@ class AppLocalizationsHu extends AppLocalizations {
   String get backgroundActivity => 'Háttérműködés';
 
   @override
-  String get backgroundActivityDesc => 'Engedd, hogy az Omi a háttérben fusson a jobb stabilitás érdekében';
+  String get backgroundActivityDesc => 'Hogy az Omi kikapcsolt képernyőnél vagy alkalmazásváltáskor is rögzítsen.';
 
   @override
   String get locationAccess => 'Helymeghatározás';
 
   @override
-  String get locationAccessDesc => 'Háttérhelymeghatározás engedélyezése a teljes élményhez';
+  String get locationAccessDesc => 'Hogy az Omi feljegyezhesse, hol zajlottak a beszélgetéseid.';
 
   @override
   String get notifications => 'Értesítések';
 
   @override
-  String get notificationsDesc => 'Értesítések engedélyezése tájékozott maradáshoz';
+  String get notificationsDesc =>
+      'Hogy az Omi elküldhesse a beszélgetések összefoglalóit, a feladatemlékeztetőket és az alkalmazásaid válaszait.';
 
   @override
   String get locationServiceDisabled => 'Helymeghatározási szolgáltatás letiltva';
 
   @override
   String get locationServiceDisabledDesc =>
-      'A helymeghatározási szolgáltatás le van tiltva. Kérlek, menj a Beállítások > Adatvédelem és biztonság > Helyszolgáltatások menübe, és engedélyezd';
+      'A helymeghatározás ki van kapcsolva ezen az eszközön. Kapcsold be a Beállításokban.';
 
   @override
   String get backgroundLocationDenied => 'Háttérhelymeghatározás megtagadva';
@@ -10089,7 +10090,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10107,7 +10108,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10675,4 +10676,158 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Valaki';
+
+  @override
+  String get allow => 'Engedélyezés';
+
+  @override
+  String get permissionAllowed => 'Engedélyezve';
+
+  @override
+  String get permissionBlockedHint => 'Ki van kapcsolva a Beállításokban. A használathoz engedélyezze ott.';
+
+  @override
+  String get useDifferentAccount => 'Másik fiók használata';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current. lépés / $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Hagyd az Omit 2 napig a háttérben futni, és elkezd hasznos visszajelzést adni.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nem találod az eszközt? Ellenőrizd, hogy be van-e kapcsolva és a telefon közelében van-e, majd keress újra.';
+
+  @override
+  String get scanAgain => 'Újrakeresés';
+
+  @override
+  String get howToPair => 'Párosítás módja';
+
+  @override
+  String get contactSupportAction => 'Kapcsolatfelvétel az ügyfélszolgálattal';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'A(z) $deviceName offline. Nyomd meg a gombját az ébresztéshez, majd próbáld újra.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Akkumulátor $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass firmware frissítése';
+
+  @override
+  String get deviceConnecting => 'Csatlakozás…';
+
+  @override
+  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez tartsd lenyomva a felvétel gombot.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'A frissítés nem fejeződött be. Az eszközöd továbbra is a jelenlegi firmware-t használja, és biztonságosan használható. Tartsd feltöltve és a telefon közelében, majd próbáld újra.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Az akkumulátor $level%-on áll. Frissítés előtt töltsd legalább 15%-ra.';
+  }
+
+  @override
+  String get startUpdate => 'Frissítés indítása';
+
+  @override
+  String get otaNotSupported => 'Ez a firmware nem frissíthető Wi-Fi-n keresztül.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Nem sikerült csatlakozni ehhez: $deviceName. Tartsd bekapcsolva és a közelben, majd próbáld újra.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Ez a frissítés most nem érhető el. Próbáld újra később.';
+
+  @override
+  String get otaStarting => 'Frissítés indítása…';
+
+  @override
+  String get otaStartFailed =>
+      'Nem sikerült elindítani a frissítést. Ellenőrizd a Wi-Fi nevét és jelszavát, majd próbáld újra.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'A(z) $deviceName újraindul az új firmware-rel.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Frissítés megszakítva';
+
+  @override
+  String get cancelUpdate => 'Frissítés megszakítása';
+
+  @override
+  String get otaKeepNearby =>
+      'A frissítés alatt tartsd bekapcsolva és a közelben az eszközt, és ne zárd be az alkalmazást.';
+
+  @override
+  String get otaWifiConnecting => 'Csatlakozás a Wi-Fi-hez…';
+
+  @override
+  String get otaWifiConnected => 'Csatlakozva a Wi-Fi-hez';
+
+  @override
+  String get otaWifiFailed => 'Nem sikerült csatlakozni a Wi-Fi-hez. Ellenőrizd a hálózat nevét és jelszavát.';
+
+  @override
+  String get otaDownloadFailed => 'A firmware letöltése nem sikerült. Ellenőrizd a Wi-Fi-kapcsolatot, és próbáld újra.';
+
+  @override
+  String get otaInstallFailed => 'A telepítés nem sikerült. Az eszköz továbbra is a jelenlegi firmware-t használja.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'A(z) $deviceName frissült, és magától újraindul.';
+  }
+
+  @override
+  String get showPassword => 'Jelszó megjelenítése';
+
+  @override
+  String get hidePassword => 'Jelszó elrejtése';
+
+  @override
+  String get appNotFoundOrRemoved => 'Ez az alkalmazás már nem érhető el';
+
+  @override
+  String get startupFailedTitle => 'Az Omi nem tudott elindulni';
+
+  @override
+  String get startupFailedMessage =>
+      'Hiba történt az Omi indítása közben. Ellenőrizd a kapcsolatot, majd próbáld újra.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Az Omi ezen verziójában konfigurációs probléma van. Ez nem az eszközöd hibája. Vedd fel a kapcsolatot az ügyfélszolgálattal, és add meg az alábbi részleteket.';
+
+  @override
+  String get discardRecordingTitle => 'Elveti a felvételt?';
+
+  @override
+  String get discardRecordingMessage => 'A hangmintád még nincs elmentve. Ha most kilépsz, törlődik.';
+
+  @override
+  String get keepRecording => 'Felvétel folytatása';
 }

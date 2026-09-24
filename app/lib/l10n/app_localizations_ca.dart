@@ -1767,26 +1767,28 @@ class AppLocalizationsCa extends AppLocalizations {
   String get backgroundActivity => 'Activitat en segon pla';
 
   @override
-  String get backgroundActivityDesc => 'Deixeu que Omi s\'executi en segon pla per a una millor estabilitat';
+  String get backgroundActivityDesc =>
+      'Perquè l\'Omi continuï capturant amb la pantalla apagada o quan canvies d\'app.';
 
   @override
   String get locationAccess => 'Accés a la ubicació';
 
   @override
-  String get locationAccessDesc => 'Activeu la ubicació en segon pla per a l\'experiència completa';
+  String get locationAccessDesc => 'Perquè l\'Omi pugui anotar on han tingut lloc les teves converses.';
 
   @override
   String get notifications => 'Notificacions';
 
   @override
-  String get notificationsDesc => 'Activeu les notificacions per mantenir-vos informat';
+  String get notificationsDesc =>
+      'Perquè l\'Omi et pugui enviar resums de converses, recordatoris de tasques i respostes de les teves apps.';
 
   @override
   String get locationServiceDisabled => 'Servei d\'ubicació desactivat';
 
   @override
   String get locationServiceDisabledDesc =>
-      'El servei d\'ubicació està desactivat. Aneu a Configuració > Privadesa i seguretat > Serveis d\'ubicació i activeu-lo';
+      'Els serveis d\'ubicació estan desactivats en aquest dispositiu. Activa\'ls a Configuració.';
 
   @override
   String get backgroundLocationDenied => 'Accés a la ubicació en segon pla denegat';
@@ -10107,7 +10109,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10125,7 +10127,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10694,4 +10696,157 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Algú';
+
+  @override
+  String get allow => 'Permet';
+
+  @override
+  String get permissionAllowed => 'Permès';
+
+  @override
+  String get permissionBlockedHint => 'Desactivat a Configuració. Permet-ho allà per fer-ho servir.';
+
+  @override
+  String get useDifferentAccount => 'Utilitza un altre compte';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Pas $current de $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Deixa que l\'Omi funcioni en segon pla durant 2 dies i començarà a donar-te comentaris útils.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'No trobes el dispositiu? Comprova que estigui encès i a prop del telèfon i torna a cercar.';
+
+  @override
+  String get scanAgain => 'Torna a cercar';
+
+  @override
+  String get howToPair => 'Com vincular';
+
+  @override
+  String get contactSupportAction => 'Contacta amb el suport';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName està fora de línia. Prem el botó per activar-lo i torna-ho a provar.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Bateria $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Actualitza el firmware de l\'OmiGlass';
+
+  @override
+  String get deviceConnecting => 'S\'està connectant…';
+
+  @override
+  String get recordOptionsTip => 'Consell: mantén premut el botó de gravació per gravar una trucada.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'L\'actualització no ha acabat. El dispositiu continua amb el firmware actual i es pot fer servir amb seguretat. Mantén-lo carregat i a prop del telèfon i torna-ho a provar.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'No s\'ha pogut baixar l\'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'La bateria és al $level%. Carrega el dispositiu com a mínim fins al 15% abans d\'actualitzar.';
+  }
+
+  @override
+  String get startUpdate => 'Inicia l\'actualització';
+
+  @override
+  String get otaNotSupported => 'Aquest firmware no es pot actualitzar per Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'No s\'ha pogut connectar a $deviceName. Mantén-lo encès i a prop i torna-ho a provar.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Aquesta actualització no està disponible ara. Torna-ho a provar més tard.';
+
+  @override
+  String get otaStarting => 'S\'està iniciant l\'actualització…';
+
+  @override
+  String get otaStartFailed =>
+      'No s\'ha pogut iniciar l\'actualització. Comprova el nom i la contrasenya de la Wi-Fi i torna-ho a provar.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName s\'està reiniciant amb el firmware nou.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'S\'ha cancel·lat l\'actualització';
+
+  @override
+  String get cancelUpdate => 'Cancel·la l\'actualització';
+
+  @override
+  String get otaKeepNearby => 'Durant l\'actualització, mantén el dispositiu encès i a prop i no tanquis l\'app.';
+
+  @override
+  String get otaWifiConnecting => 'S\'està connectant a la Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Connectat a la Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'No s\'ha pogut connectar a la Wi-Fi. Comprova el nom de la xarxa i la contrasenya.';
+
+  @override
+  String get otaDownloadFailed => 'No s\'ha pogut baixar el firmware. Comprova la connexió Wi-Fi i torna-ho a provar.';
+
+  @override
+  String get otaInstallFailed => 'La instal·lació ha fallat. El dispositiu continua amb el firmware actual.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName s\'ha actualitzat i es reiniciarà sol.';
+  }
+
+  @override
+  String get showPassword => 'Mostra la contrasenya';
+
+  @override
+  String get hidePassword => 'Amaga la contrasenya';
+
+  @override
+  String get appNotFoundOrRemoved => 'Aquesta aplicació ja no està disponible';
+
+  @override
+  String get startupFailedTitle => 'L\'Omi no s\'ha pogut iniciar';
+
+  @override
+  String get startupFailedMessage =>
+      'S\'ha produït un error mentre l\'Omi s\'iniciava. Comprova la teva connexió i torna-ho a provar.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Aquesta versió de l\'Omi té un problema de configuració. No és un problema del teu dispositiu. Contacta amb el suport i inclou els detalls següents.';
+
+  @override
+  String get discardRecordingTitle => 'Vols descartar l\'enregistrament?';
+
+  @override
+  String get discardRecordingMessage => 'La teva mostra de veu encara no s\'ha desat. Si surts ara, es descartarà.';
+
+  @override
+  String get keepRecording => 'Continua enregistrant';
 }

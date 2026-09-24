@@ -30,12 +30,13 @@ class SettingsDrawer extends StatefulWidget {
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
 
-  static void show(BuildContext context) {
+  /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
+  static Future<void> show(BuildContext context) {
     // Settings is a grouped list: surface1 rows on the black page colour, so the sheet itself is
     // surface0 (showOmiSheet paints surface1). Same shell otherwise: OmiSheetScaffold content,
     // framework drag handle, trailing close X.
     final showSheet = showModalBottomSheet<void>; // omi-ux-allow: raw-bottom-sheet -- surface0 grouped sheet
-    showSheet(
+    return showSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

@@ -1745,26 +1745,25 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundActivity => 'פעילות רקע';
 
   @override
-  String get backgroundActivityDesc => 'תן ל-Omi להפעיל ברקע לטובת יציבות טובה יותר';
+  String get backgroundActivityDesc => 'כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.';
 
   @override
   String get locationAccess => 'גישה למיקום';
 
   @override
-  String get locationAccessDesc => 'הפעל מיקום רקע עבור החוויה המלאה';
+  String get locationAccessDesc => 'כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.';
 
   @override
   String get notifications => 'הודעות';
 
   @override
-  String get notificationsDesc => 'הפעל הודעות כדי להישאר מעודכן';
+  String get notificationsDesc => 'כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.';
 
   @override
   String get locationServiceDisabled => 'שירות מיקום מושבת';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'שירות מיקום מושבת. בבקשה עבור להגדרות > פרטיות וביטחון > שירותי מיקום והפעל אותו';
+  String get locationServiceDisabledDesc => 'שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.';
 
   @override
   String get backgroundLocationDenied => 'גישת מיקום רקע נדחתה';
@@ -9968,7 +9967,7 @@ class AppLocalizationsHe extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9986,7 +9985,7 @@ class AppLocalizationsHe extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10550,4 +10549,153 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'מישהו';
+
+  @override
+  String get allow => 'אפשר';
+
+  @override
+  String get permissionAllowed => 'מאושר';
+
+  @override
+  String get permissionBlockedHint => 'כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.';
+
+  @override
+  String get useDifferentAccount => 'שימוש בחשבון אחר';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'שלב $current מתוך $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל.';
+
+  @override
+  String get cantFindDeviceHint => 'לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.';
+
+  @override
+  String get scanAgain => 'חיפוש מחדש';
+
+  @override
+  String get howToPair => 'איך לבצע צימוד';
+
+  @override
+  String get contactSupportAction => 'פנייה לתמיכה';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName לא מחובר. לחצו על הכפתור שלו כדי להעיר אותו ונסו שוב.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'סוללה $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'עדכון קושחת OmiGlass';
+
+  @override
+  String get deviceConnecting => 'מתחבר…';
+
+  @override
+  String get recordOptionsTip => 'טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'העדכון נכשל';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'הסוללה על $level%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.';
+  }
+
+  @override
+  String get startUpdate => 'התחלת העדכון';
+
+  @override
+  String get otaNotSupported => 'לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'לא ניתן להתחבר אל $deviceName. השאירו אותו דלוק וקרוב ונסו שוב.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.';
+
+  @override
+  String get otaStarting => 'מתחיל בעדכון…';
+
+  @override
+  String get otaStartFailed => 'לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName מופעל מחדש עם הקושחה החדשה.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'העדכון בוטל';
+
+  @override
+  String get cancelUpdate => 'ביטול העדכון';
+
+  @override
+  String get otaKeepNearby => 'במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.';
+
+  @override
+  String get otaWifiConnecting => 'מתחבר ל-Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'מחובר ל-Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.';
+
+  @override
+  String get otaDownloadFailed => 'הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.';
+
+  @override
+  String get otaInstallFailed => 'ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName עודכן ויופעל מחדש מעצמו.';
+  }
+
+  @override
+  String get showPassword => 'הצגת הסיסמה';
+
+  @override
+  String get hidePassword => 'הסתרת הסיסמה';
+
+  @override
+  String get appNotFoundOrRemoved => 'האפליקציה הזו כבר לא זמינה';
+
+  @override
+  String get startupFailedTitle => 'לא ניתן היה להפעיל את Omi';
+
+  @override
+  String get startupFailedMessage => 'משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'לגרסת ה-Omi הזו יש בעיית תצורה. זו לא בעיה במכשיר שלך. פנה לתמיכה וצרף את הפרטים שלמטה.';
+
+  @override
+  String get discardRecordingTitle => 'לבטל את ההקלטה?';
+
+  @override
+  String get discardRecordingMessage => 'דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.';
+
+  @override
+  String get keepRecording => 'המשך הקלטה';
 }

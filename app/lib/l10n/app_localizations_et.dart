@@ -1755,26 +1755,28 @@ class AppLocalizationsEt extends AppLocalizations {
   String get backgroundActivity => 'Taustegevus';
 
   @override
-  String get backgroundActivityDesc => 'Lubage Omil töötada taustal parema stabiilsuse tagamiseks';
+  String get backgroundActivityDesc =>
+      'Et Omi jätkaks salvestamist ka siis, kui ekraan on väljas või vahetad rakendust.';
 
   @override
   String get locationAccess => 'Asukoha juurdepääs';
 
   @override
-  String get locationAccessDesc => 'Lubage tausta asukoht täieliku kogemuse saamiseks';
+  String get locationAccessDesc => 'Et Omi saaks märkida, kus sinu vestlused toimusid.';
 
   @override
   String get notifications => 'Teavitused';
 
   @override
-  String get notificationsDesc => 'Lubage teavitused, et püsida kursis';
+  String get notificationsDesc =>
+      'Et Omi saaks saata sulle vestluste kokkuvõtteid, ülesannete meeldetuletusi ja vastuseid sinu rakendustest.';
 
   @override
   String get locationServiceDisabled => 'Asukohateenused keelatud';
 
   @override
   String get locationServiceDisabledDesc =>
-      'Asukohateenused on keelatud. Palun minge Seaded > Privaatsus ja turvalisus > Asukohateenused ja lubage see';
+      'Asukohateenused on selles seadmes välja lülitatud. Lülita need seadetes sisse.';
 
   @override
   String get backgroundLocationDenied => 'Tausta asukoha juurdepääs keelatud';
@@ -10044,7 +10046,7 @@ class AppLocalizationsEt extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10062,7 +10064,7 @@ class AppLocalizationsEt extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10629,4 +10631,157 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Keegi';
+
+  @override
+  String get allow => 'Luba';
+
+  @override
+  String get permissionAllowed => 'Lubatud';
+
+  @override
+  String get permissionBlockedHint => 'Seadetes välja lülitatud. Selle kasutamiseks luba see seal.';
+
+  @override
+  String get useDifferentAccount => 'Kasuta teist kontot';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Samm $current/$total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Lase Omil 2 päeva taustal töötada ja see hakkab sulle kasulikku tagasisidet andma.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Ei leia seadet? Veendu, et see on sisse lülitatud ja telefoni lähedal, ning otsi uuesti.';
+
+  @override
+  String get scanAgain => 'Otsi uuesti';
+
+  @override
+  String get howToPair => 'Kuidas siduda';
+
+  @override
+  String get contactSupportAction => 'Võta toega ühendust';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName on võrguühenduseta. Vajuta selle nuppu äratamiseks ja proovi uuesti.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Aku $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Värskenda OmiGlassi püsivara';
+
+  @override
+  String get deviceConnecting => 'Ühendamine…';
+
+  @override
+  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks vajuta salvestusnuppu ja hoia all.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Värskendus ei lõppenud. Seadmel on endiselt praegune püsivara ja seda on ohutu kasutada. Hoia see laetuna ja telefoni lähedal ning proovi uuesti.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Värskendust ei õnnestunud alla laadida ja seadet ei muudetud. Kontrolli internetiühendust ja proovi uuesti.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Aku on $level%. Lae seade enne värskendamist vähemalt 15%-ni.';
+  }
+
+  @override
+  String get startUpdate => 'Alusta värskendamist';
+
+  @override
+  String get otaNotSupported => 'Seda püsivara ei saa Wi-Fi kaudu värskendada.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Seadmega $deviceName ei saanud ühendust. Hoia see sisse lülitatuna ja lähedal ning proovi uuesti.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'See värskendus pole praegu saadaval. Proovi hiljem uuesti.';
+
+  @override
+  String get otaStarting => 'Värskenduse alustamine…';
+
+  @override
+  String get otaStartFailed =>
+      'Värskendust ei õnnestunud alustada. Kontrolli Wi-Fi nime ja parooli ning proovi uuesti.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName taaskäivitub uue püsivaraga.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Värskendus tühistati';
+
+  @override
+  String get cancelUpdate => 'Tühista värskendus';
+
+  @override
+  String get otaKeepNearby => 'Hoia seade värskenduse ajal sisse lülitatuna ja lähedal ning ära sulge rakendust.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi-ga ühendamine…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi-ga ühendatud';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi-ga ei õnnestunud liituda. Kontrolli võrgu nime ja parooli.';
+
+  @override
+  String get otaDownloadFailed => 'Püsivara allalaadimine ebaõnnestus. Kontrolli Wi-Fi-ühendust ja proovi uuesti.';
+
+  @override
+  String get otaInstallFailed => 'Installimine ebaõnnestus. Seadmel on endiselt praegune püsivara.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName on värskendatud ja taaskäivitub ise.';
+  }
+
+  @override
+  String get showPassword => 'Näita parooli';
+
+  @override
+  String get hidePassword => 'Peida parool';
+
+  @override
+  String get appNotFoundOrRemoved => 'See rakendus ei ole enam saadaval';
+
+  @override
+  String get startupFailedTitle => 'Omi käivitamine ebaõnnestus';
+
+  @override
+  String get startupFailedMessage =>
+      'Omi käivitamisel läks midagi valesti. Kontrolli oma ühendust ja proovi seejärel uuesti.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Selles Omi versioonis on seadistusprobleem. See ei ole sinu seadme viga. Võta ühendust toega ja lisa allolevad üksikasjad.';
+
+  @override
+  String get discardRecordingTitle => 'Kas loobuda salvestusest?';
+
+  @override
+  String get discardRecordingMessage => 'Sinu häälenäidist pole veel salvestatud. Kui lahkud nüüd, see kustutatakse.';
+
+  @override
+  String get keepRecording => 'Jätka salvestamist';
 }

@@ -1757,26 +1757,27 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundActivity => 'Aktivita na pozadí';
 
   @override
-  String get backgroundActivityDesc => 'Umožněte Omi běžet na pozadí pro lepší stabilitu';
+  String get backgroundActivityDesc =>
+      'Aby Omi pokračoval v záznamu i při vypnuté obrazovce nebo po přepnutí aplikace.';
 
   @override
   String get locationAccess => 'Přístup k poloze';
 
   @override
-  String get locationAccessDesc => 'Povolte polohu na pozadí pro plný zážitek';
+  String get locationAccessDesc => 'Aby Omi mohl zaznamenat, kde vaše konverzace probíhaly.';
 
   @override
   String get notifications => 'Oznámení';
 
   @override
-  String get notificationsDesc => 'Povolte oznámení, abyste byli informováni';
+  String get notificationsDesc =>
+      'Aby vám Omi mohl posílat shrnutí konverzací, připomínky úkolů a odpovědi z vašich aplikací.';
 
   @override
   String get locationServiceDisabled => 'Služba určování polohy zakázána';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Služba určování polohy je zakázána. Přejděte do Nastavení > Soukromí a zabezpečení > Služby určování polohy a povolte ji';
+  String get locationServiceDisabledDesc => 'Polohové služby jsou na tomto zařízení vypnuté. Zapněte je v Nastavení.';
 
   @override
   String get backgroundLocationDenied => 'Přístup k poloze na pozadí odepřen';
@@ -10049,7 +10050,7 @@ class AppLocalizationsCs extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -10067,7 +10068,7 @@ class AppLocalizationsCs extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10633,4 +10634,154 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get sharedTasksUnknownSender => 'Někdo';
+
+  @override
+  String get allow => 'Povolit';
+
+  @override
+  String get permissionAllowed => 'Povoleno';
+
+  @override
+  String get permissionBlockedHint => 'Vypnuto v Nastavení. Povolte to tam, abyste to mohli používat.';
+
+  @override
+  String get useDifferentAccount => 'Použít jiný účet';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Krok $current z $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Nechte Omi 2 dny běžet na pozadí a začne vám dávat užitečnou zpětnou vazbu.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Nemůžete najít zařízení? Ujistěte se, že je zapnuté a blízko telefonu, a vyhledejte znovu.';
+
+  @override
+  String get scanAgain => 'Vyhledat znovu';
+
+  @override
+  String get howToPair => 'Jak spárovat';
+
+  @override
+  String get contactSupportAction => 'Kontaktovat podporu';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName je offline. Stiskněte jeho tlačítko, aby se probudilo, a zkuste to znovu.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterie $level %';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Aktualizovat firmware OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Připojování…';
+
+  @override
+  String get recordOptionsTip => 'Tip: podržením tlačítka nahrávání nahrajete telefonní hovor.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Aktualizace nebyla dokončena. Zařízení má stále současný firmware a je bezpečné ho používat. Nabijte ho, mějte ho u telefonu a zkuste to znovu.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 15 %.';
+  }
+
+  @override
+  String get startUpdate => 'Spustit aktualizaci';
+
+  @override
+  String get otaNotSupported => 'Tento firmware nelze aktualizovat přes Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'K zařízení $deviceName se nepodařilo připojit. Nechte ho zapnuté a poblíž a zkuste to znovu.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Tato aktualizace teď není k dispozici. Zkuste to později.';
+
+  @override
+  String get otaStarting => 'Spouštění aktualizace…';
+
+  @override
+  String get otaStartFailed => 'Aktualizaci se nepodařilo spustit. Zkontrolujte název a heslo Wi-Fi a zkuste to znovu.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName se restartuje s novým firmwarem.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Aktualizace byla zrušena';
+
+  @override
+  String get cancelUpdate => 'Zrušit aktualizaci';
+
+  @override
+  String get otaKeepNearby => 'Během aktualizace nechte zařízení zapnuté a poblíž a nezavírejte aplikaci.';
+
+  @override
+  String get otaWifiConnecting => 'Připojování k Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Připojeno k Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'K Wi-Fi se nepodařilo připojit. Zkontrolujte název sítě a heslo.';
+
+  @override
+  String get otaDownloadFailed => 'Stažení firmwaru se nezdařilo. Zkontrolujte připojení Wi-Fi a zkuste to znovu.';
+
+  @override
+  String get otaInstallFailed => 'Instalace se nezdařila. Zařízení má stále současný firmware.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName je aktualizováno a samo se restartuje.';
+  }
+
+  @override
+  String get showPassword => 'Zobrazit heslo';
+
+  @override
+  String get hidePassword => 'Skrýt heslo';
+
+  @override
+  String get appNotFoundOrRemoved => 'Tato aplikace již není k dispozici';
+
+  @override
+  String get startupFailedTitle => 'Omi se nepodařilo spustit';
+
+  @override
+  String get startupFailedMessage => 'Při spouštění Omi se něco pokazilo. Zkontrolujte připojení a zkuste to znovu.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'Tato verze Omi má problém s konfigurací. Nejedná se o problém s vaším zařízením. Kontaktujte podporu a uveďte podrobnosti níže.';
+
+  @override
+  String get discardRecordingTitle => 'Zahodit nahrávání?';
+
+  @override
+  String get discardRecordingMessage => 'Váš hlasový vzorek ještě není uložen. Pokud nyní odejdete, bude zahozen.';
+
+  @override
+  String get keepRecording => 'Pokračovat v nahrávání';
 }
