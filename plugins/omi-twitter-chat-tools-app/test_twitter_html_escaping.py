@@ -180,5 +180,30 @@ class TestTwitterHtmlEscaping(unittest.TestCase):
             self.assertIn(html.escape(MALICIOUS_USERNAME, quote=True), resp.content)
 
 
+    def test_token_exchange_failure_does_not_leak_response_text(self):
+        """When token exchange returns non-200, response.text is not reflected into HTML."""
+        fake_token_resp = Mock(status_code=400, text=BREAKOUT)
+
+        with patch.object(self.app.requests, "post", return_value=fake_token_resp), \
+             patch.object(self.app, "get_oauth_state", return_value="user123:valid_token"), \
+             patch.object(self.app, "get_user_setting", return_value="test_verifier"), \
+             patch.object(self.app, "delete_oauth_state"):
+            resp = asyncio.run(self.app.twitter_callback(code="valid_code", state="user123:valid_token", error=None))
+            self.assertEqual(resp.status_code, 400)
+            self.assertEqual(resp.content, "Token exchange failed")
+            self.assertNotIn("<script>", resp.content)
+
+    def test_oauth_exception_does_not_leak_exception_string(self):
+        """When OAuth exchange raises exception, str(e) is not reflected into HTML."""
+        with patch.object(self.app.requests, "post", side_effect=Exception(BREAKOUT)), \
+             patch.object(self.app, "get_oauth_state", return_value="user123:valid_token"), \
+             patch.object(self.app, "get_user_setting", return_value="test_verifier"), \
+             patch.object(self.app, "delete_oauth_state"):
+            resp = asyncio.run(self.app.twitter_callback(code="valid_code", state="user123:valid_token", error=None))
+            self.assertEqual(resp.status_code, 500)
+            self.assertEqual(resp.content, "Authentication error")
+            self.assertNotIn("<script>", resp.content)
+
+
 if __name__ == "__main__":
     unittest.main()
