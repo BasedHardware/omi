@@ -270,11 +270,15 @@ struct MeetingNoteScreenshotsSection: View {
       // `Color.clear` is a real view and keeps the modifier alive.
       Color.clear.frame(height: 0)
 
+    // Visible states carry the note's section spacing themselves; the hidden ones stay zero-height
+    // so a note without screenshots has no gap where the strip would be.
     case .selecting:
       label("Looking through what was on screen…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .judging(let candidates):
       label("Reviewing \(candidates) moment\(candidates == 1 ? "" : "s")…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .noCapture:
       // Deliberately silent. A meeting with no screen capture, or none of it approved, is the
@@ -299,6 +303,7 @@ struct MeetingNoteScreenshotsSection: View {
         }
         MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen, onDelete: onDelete)
       }
+      .padding(.top, OmiSpacing.xxl)
     }
   }
 

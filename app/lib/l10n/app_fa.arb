@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "یک تصویر بندانگشتی انتخاب کنید",
     "appIdNotFoundError": "شناسه برنامه یافت نشد",
     "manifestRefreshedSuccess": "مانیفست با موفقیت به‌روزرسانی شد",
-    "manifestRefreshFailed": "به‌روزرسانی مانیفست ناموفق بود"
+    "manifestRefreshFailed": "به‌روزرسانی مانیفست ناموفق بود",
+    "captureRecordingsSheetTitle": "ضبط‌های این گفتگو",
+    "captureRecordingSeparate": "جدا کردن…",
+    "captureRecordingSeparateTitle": "این ضبط جدا شود؟",
+    "captureRecordingSeparateMessage": "{recording} به‌عنوان یک گفتگوی جداگانه نمایش داده می‌شود و دیگر با این رویداد گروه‌بندی نمی‌شود.",
+    "captureRecordingSeparateConfirm": "جدا کردن",
+    "captureRecordingSeparateFailed": "جدا کردن انجام نشد. دوباره تلاش کنید.",
+    "captureRecordingOpenFailed": "این ضبط باز نشد.",
+    "captureRecordingViewing": "در حال مشاهده این ضبط هستید",
+    "captureRecordedBy": "ضبط‌شده توسط {devices}",
+    "captureSourceDesktop": "دسکتاپ",
+    "renameConversation": "تغییر نام",
+    "captureRecordingsCount": "{count, plural, =1{۱ ضبط} other{{count} ضبط}}",
+    "captureSourcePendant": "آویز"
 }

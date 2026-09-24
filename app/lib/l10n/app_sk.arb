@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Vyberte miniatúru obrázka",
     "appIdNotFoundError": "ID aplikácie sa nenašlo",
     "manifestRefreshedSuccess": "Manifest bol úspešne obnovený",
-    "manifestRefreshFailed": "Nepodarilo sa obnoviť manifest"
+    "manifestRefreshFailed": "Nepodarilo sa obnoviť manifest",
+    "captureRecordingsSheetTitle": "Nahrávky tohto rozhovoru",
+    "captureRecordingSeparate": "Oddeliť…",
+    "captureRecordingSeparateTitle": "Oddeliť túto nahrávku?",
+    "captureRecordingSeparateMessage": "{recording} sa zobrazí ako samostatný rozhovor a s touto udalosťou sa už nezoskupí.",
+    "captureRecordingSeparateConfirm": "Oddeliť",
+    "captureRecordingSeparateFailed": "Oddelenie zlyhalo. Skúste to znova.",
+    "captureRecordingOpenFailed": "Túto nahrávku sa nepodarilo otvoriť.",
+    "captureRecordingViewing": "Prezeráte si túto nahrávku",
+    "captureRecordedBy": "Nahrané: {devices}",
+    "captureSourceDesktop": "Počítač",
+    "renameConversation": "Premenovať",
+    "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávok: {count}}}",
+    "captureSourcePendant": "Prívesok"
 }

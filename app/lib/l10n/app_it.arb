@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Seleziona un'immagine in miniatura",
     "appIdNotFoundError": "ID dell'app non trovato",
     "manifestRefreshedSuccess": "Manifest aggiornato con successo",
-    "manifestRefreshFailed": "Impossibile aggiornare il manifest"
+    "manifestRefreshFailed": "Impossibile aggiornare il manifest",
+    "captureRecordingsSheetTitle": "Registrazioni di questa conversazione",
+    "captureRecordingSeparate": "Separa…",
+    "captureRecordingSeparateTitle": "Separare questa registrazione?",
+    "captureRecordingSeparateMessage": "{recording} verrà mostrata come conversazione a sé e non sarà più raggruppata con questo evento.",
+    "captureRecordingSeparateConfirm": "Separa",
+    "captureRecordingSeparateFailed": "Impossibile separare. Riprova.",
+    "captureRecordingOpenFailed": "Impossibile aprire questa registrazione.",
+    "captureRecordingViewing": "Stai visualizzando questa registrazione",
+    "captureRecordedBy": "Registrato da {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Rinomina",
+    "captureRecordingsCount": "{count, plural, =1{1 registrazione} other{{count} registrazioni}}",
+    "captureSourcePendant": "Ciondolo"
 }

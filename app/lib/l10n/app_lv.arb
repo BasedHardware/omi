@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Atlasiet sīktēlu",
     "appIdNotFoundError": "Lietotnes ID netika atrasts",
     "manifestRefreshedSuccess": "Manifests veiksmīgi atsvaidzināts",
-    "manifestRefreshFailed": "Neizdevās atsvaidzināt manifestu"
+    "manifestRefreshFailed": "Neizdevās atsvaidzināt manifestu",
+    "captureRecordingsSheetTitle": "Šīs sarunas ieraksti",
+    "captureRecordingSeparate": "Atdalīt…",
+    "captureRecordingSeparateTitle": "Atdalīt šo ierakstu?",
+    "captureRecordingSeparateMessage": "{recording} tiks rādīts kā atsevišķa saruna un vairs netiks grupēts ar šo notikumu.",
+    "captureRecordingSeparateConfirm": "Atdalīt",
+    "captureRecordingSeparateFailed": "Neizdevās atdalīt. Mēģiniet vēlreiz.",
+    "captureRecordingOpenFailed": "Neizdevās atvērt šo ierakstu.",
+    "captureRecordingViewing": "Jūs skatāt šo ierakstu",
+    "captureRecordedBy": "Ierakstīja {devices}",
+    "captureSourceDesktop": "Dators",
+    "renameConversation": "Pārdēvēt",
+    "captureRecordingsCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}",
+    "captureSourcePendant": "Kulons"
 }

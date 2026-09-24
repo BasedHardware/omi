@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "בחר תמונה ממוזערת",
     "appIdNotFoundError": "מזהה האפליקציה לא נמצא",
     "manifestRefreshedSuccess": "המניפסט רוענן בהצלחה",
-    "manifestRefreshFailed": "רענון המניפסט נכשל"
+    "manifestRefreshFailed": "רענון המניפסט נכשל",
+    "captureRecordingsSheetTitle": "הקלטות של השיחה הזו",
+    "captureRecordingSeparate": "הפרד…",
+    "captureRecordingSeparateTitle": "להפריד את ההקלטה הזו?",
+    "captureRecordingSeparateMessage": "{recording} יוצג כשיחה נפרדת ולא יקובץ שוב עם האירוע הזה.",
+    "captureRecordingSeparateConfirm": "הפרד",
+    "captureRecordingSeparateFailed": "ההפרדה נכשלה. נסה שוב.",
+    "captureRecordingOpenFailed": "לא ניתן לפתוח את ההקלטה הזו.",
+    "captureRecordingViewing": "אתה צופה בהקלטה הזו",
+    "captureRecordedBy": "הוקלט על ידי {devices}",
+    "captureSourceDesktop": "מחשב",
+    "renameConversation": "שנה שם",
+    "captureRecordingsCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
+    "captureSourcePendant": "תליון"
 }

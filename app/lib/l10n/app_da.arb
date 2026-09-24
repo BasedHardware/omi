@@ -3526,5 +3526,18 @@
     "selectThumbnailImageTitle": "Vælg et miniaturebillede",
     "appIdNotFoundError": "App-ID blev ikke fundet",
     "manifestRefreshedSuccess": "Manifest opdateret",
-    "manifestRefreshFailed": "Kunne ikke opdatere manifest"
+    "manifestRefreshFailed": "Kunne ikke opdatere manifest",
+    "captureRecordingsSheetTitle": "Optagelser af denne samtale",
+    "captureRecordingSeparate": "Adskil…",
+    "captureRecordingSeparateTitle": "Adskil denne optagelse?",
+    "captureRecordingSeparateMessage": "{recording} vises som sin egen samtale og grupperes ikke med denne begivenhed igen.",
+    "captureRecordingSeparateConfirm": "Adskil",
+    "captureRecordingSeparateFailed": "Kunne ikke adskille. Prøv igen.",
+    "captureRecordingOpenFailed": "Kunne ikke åbne denne optagelse.",
+    "captureRecordingViewing": "Du ser denne optagelse",
+    "captureRecordedBy": "Optaget af {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Omdøb",
+    "captureRecordingsCount": "{count, plural, =1{1 optagelse} other{{count} optagelser}}",
+    "captureSourcePendant": "Vedhæng"
 }

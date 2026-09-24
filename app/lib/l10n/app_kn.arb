@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "ಥಂಬ್‌ನೇಲ್ ಚಿತ್ರ ಆಯ್ಕೆಮಾಡಿ",
     "appIdNotFoundError": "ಅ್ಯಾಪ್ ID ಕಂಡುಬಂದಿಲ್ಲ",
     "manifestRefreshedSuccess": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ಯಶಸ್ವಿಯಾಗಿ ರಿಫ್ರೆಶ್ ಆಗಿದೆ",
-    "manifestRefreshFailed": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ"
+    "manifestRefreshFailed": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
+    "captureRecordingsSheetTitle": "ಈ ಸಂಭಾಷಣೆಯ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು",
+    "captureRecordingSeparate": "ಬೇರ್ಪಡಿಸಿ…",
+    "captureRecordingSeparateTitle": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಬೇರ್ಪಡಿಸುವುದೇ?",
+    "captureRecordingSeparateMessage": "{recording} ಪ್ರತ್ಯೇಕ ಸಂಭಾಷಣೆಯಾಗಿ ತೋರಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಈ ಈವೆಂಟ್‌ನೊಂದಿಗೆ ಮತ್ತೆ ಗುಂಪುಗೊಳ್ಳುವುದಿಲ್ಲ.",
+    "captureRecordingSeparateConfirm": "ಬೇರ್ಪಡಿಸಿ",
+    "captureRecordingSeparateFailed": "ಬೇರ್ಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "captureRecordingOpenFailed": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    "captureRecordingViewing": "ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ನೋಡುತ್ತಿದ್ದೀರಿ",
+    "captureRecordedBy": "{devices} ರೆಕಾರ್ಡ್ ಮಾಡಿದೆ",
+    "captureSourceDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್",
+    "renameConversation": "ಮರುಹೆಸರಿಸಿ",
+    "captureRecordingsCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
+    "captureSourcePendant": "ಪೆಂಡೆಂಟ್"
 }

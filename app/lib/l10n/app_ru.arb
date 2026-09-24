@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Выберите миниатюру изображения",
     "appIdNotFoundError": "ID приложения не найден",
     "manifestRefreshedSuccess": "Манифест успешно обновлён",
-    "manifestRefreshFailed": "Не удалось обновить манифест"
+    "manifestRefreshFailed": "Не удалось обновить манифест",
+    "captureRecordingsSheetTitle": "Записи этого разговора",
+    "captureRecordingSeparate": "Отделить…",
+    "captureRecordingSeparateTitle": "Отделить эту запись?",
+    "captureRecordingSeparateMessage": "{recording} будет отображаться как отдельный разговор и больше не будет объединяться с этим событием.",
+    "captureRecordingSeparateConfirm": "Отделить",
+    "captureRecordingSeparateFailed": "Не удалось отделить. Попробуйте ещё раз.",
+    "captureRecordingOpenFailed": "Не удалось открыть эту запись.",
+    "captureRecordingViewing": "Вы просматриваете эту запись",
+    "captureRecordedBy": "Записано: {devices}",
+    "captureSourceDesktop": "Компьютер",
+    "renameConversation": "Переименовать",
+    "captureRecordingsCount": "{count, plural, =1{1 запись} other{Записей: {count}}}",
+    "captureSourcePendant": "Кулон"
 }

@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "Абраць мініяцюру",
     "appIdNotFoundError": "ID прыбора не знойдзены",
     "manifestRefreshedSuccess": "Маніфест паспяхова абноўлены",
-    "manifestRefreshFailed": "Не ўдалося абнавіць маніфест"
+    "manifestRefreshFailed": "Не ўдалося абнавіць маніфест",
+    "captureRecordingsSheetTitle": "Запісы гэтай размовы",
+    "captureRecordingSeparate": "Аддзяліць…",
+    "captureRecordingSeparateTitle": "Аддзяліць гэты запіс?",
+    "captureRecordingSeparateMessage": "{recording} будзе паказвацца як асобная размова і больш не будзе аб'ядноўвацца з гэтай падзеяй.",
+    "captureRecordingSeparateConfirm": "Аддзяліць",
+    "captureRecordingSeparateFailed": "Не ўдалося аддзяліць. Паспрабуйце яшчэ раз.",
+    "captureRecordingOpenFailed": "Не ўдалося адкрыць гэты запіс.",
+    "captureRecordingViewing": "Вы праглядаеце гэты запіс",
+    "captureRecordedBy": "Запісана: {devices}",
+    "captureSourceDesktop": "Камп'ютар",
+    "renameConversation": "Перайменаваць",
+    "captureRecordingsCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}",
+    "captureSourcePendant": "Кулон"
 }

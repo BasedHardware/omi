@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "একটি থাম্বনেইল ছবি নির্বাচন করুন",
     "appIdNotFoundError": "অ্যাপ আইডি পাওয়া যায়নি",
     "manifestRefreshedSuccess": "ম্যানিফেস্ট সফলভাবে রিফ্রেশ হয়েছে",
-    "manifestRefreshFailed": "ম্যানিফেস্ট রিফ্রেশ করতে ব্যর্থ"
+    "manifestRefreshFailed": "ম্যানিফেস্ট রিফ্রেশ করতে ব্যর্থ",
+    "captureRecordingsSheetTitle": "এই কথোপকথনের রেকর্ডিং",
+    "captureRecordingSeparate": "আলাদা করুন…",
+    "captureRecordingSeparateTitle": "এই রেকর্ডিং আলাদা করবেন?",
+    "captureRecordingSeparateMessage": "{recording} একটি আলাদা কথোপকথন হিসেবে দেখাবে এবং আর এই ইভেন্টের সাথে একত্র হবে না।",
+    "captureRecordingSeparateConfirm": "আলাদা করুন",
+    "captureRecordingSeparateFailed": "আলাদা করা যায়নি। আবার চেষ্টা করুন।",
+    "captureRecordingOpenFailed": "এই রেকর্ডিংটি খোলা যায়নি।",
+    "captureRecordingViewing": "আপনি এই রেকর্ডিংটি দেখছেন",
+    "captureRecordedBy": "{devices} দ্বারা রেকর্ড করা",
+    "captureSourceDesktop": "ডেস্কটপ",
+    "renameConversation": "নাম পরিবর্তন",
+    "captureRecordingsCount": "{count, plural, =1{1টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}",
+    "captureSourcePendant": "পেন্ডেন্ট"
 }

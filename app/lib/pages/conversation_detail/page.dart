@@ -27,6 +27,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
@@ -36,7 +37,10 @@ import 'conversation_summary_selection.dart';
 import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
+import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
+import 'widgets/capture_recordings.dart';
+import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_tasks_tab.dart';
 import 'widgets/detail_search_bar.dart';
 import 'widgets/summary_tab.dart';
@@ -133,6 +137,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
   final List<(Timer, Completer<void>)> _ownedDelays = [];
+  final _separation = CaptureGroupSeparationController();
 
   void _updateSearchResults() {
     if (_searchQuery.isEmpty) {
@@ -379,6 +384,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void dispose() {
     _cancelOwnedTimers();
+    _separation.dispose();
     _controller?.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
@@ -450,6 +456,53 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     }
   }
 
+  void _openRecordings(List<CaptureRecording> recordings) {
+    showCaptureRecordingsSheet(
+      context,
+      recordings: recordings,
+      controller: _separation,
+      onOpen: _openRecording,
+      onSeparate: _separateRecording,
+    );
+  }
+
+  /// Opens another device's recording of this event: the loaded row when the
+  /// list has it (even hidden behind the event's row), otherwise a fetch.
+  Future<void> _openRecording(CaptureRecording recording) async {
+    final list = context.read<ConversationProvider>();
+    final target = await CaptureGroupPresentation.resolveMember(
+      recording.id,
+      loaded: list.conversations.followedBy(list.searchedConversations),
+      fetch: getConversationById,
+    );
+    if (!mounted) return;
+    if (target == null) {
+      OmiFeedback.error(context, context.l10n.captureRecordingOpenFailed);
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      omiPageRoute(
+        builder: (_) => ConversationDetailPage(
+          conversation: target,
+          isFromOnboarding: widget.isFromOnboarding,
+          initialTabIndex: _controller?.index,
+        ),
+      ),
+    );
+  }
+
+  /// Separation is sticky on the server; afterwards the detail and the list
+  /// reload so both show the new membership.
+  Future<bool> _separateRecording(CaptureRecording recording) {
+    final detail = context.read<ConversationDetailProvider>();
+    final list = context.read<ConversationProvider>();
+    return _separation.separate(recording.id, reload: () async {
+      await detail.refreshConversation();
+      await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
+    });
+  }
+
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
@@ -481,6 +534,25 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         break;
       case 'copy_conversation_id':
         _copyContent(context, provider.conversation.id, null);
+        break;
+      case 'star':
+        await _toggleStarred(provider);
+        break;
+      case 'share':
+        await _shareConversation(provider);
+        break;
+      case 'rename':
+        final controller = provider.titleController;
+        provider.titleFocusNode?.requestFocus();
+        if (controller != null)
+          controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+        break;
+      case 'move_to_folder':
+        await showConversationFolderSheet(context, provider.conversation, source: 'detail_page_menu');
+        break;
+      case 'recordings':
+        final recordings = CaptureGroupPresentation.recordings(provider.conversation);
+        if (recordings.isNotEmpty) _openRecordings(recordings);
         break;
       case 'delete':
         _handleDelete(context, provider);
@@ -699,7 +771,40 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   List<PullDownMenuEntry> _menuItems(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
     final showDeveloperTools = conversationDetailShowsDeveloperTools();
+    final conversation = provider.conversation;
+    final starred = conversation.starred;
+    final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
     return [
+      // The conversation's own actions first (design ruling 2026-09-24): the top bar keeps only
+      // Ask Omi and this one overflow, and Delete stays last.
+      PullDownMenuItem(
+        title: starred ? l10n.unstarConversation : l10n.starConversation,
+        iconWidget: FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
+        onTap: _isTogglingStarred ? null : () => _handleMenuSelection(context, 'star', provider),
+      ),
+      PullDownMenuItem(
+        title: l10n.share,
+        iconWidget: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
+        onTap: _isSharing ? null : () => _handleMenuSelection(context, 'share', provider),
+      ),
+      if (!conversation.discarded)
+        PullDownMenuItem(
+          title: l10n.renameConversation,
+          iconWidget: const FaIcon(FontAwesomeIcons.pen, size: 16),
+          onTap: () => _handleMenuSelection(context, 'rename', provider),
+        ),
+      PullDownMenuItem(
+        title: l10n.moveToFolder,
+        iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
+        onTap: () => _handleMenuSelection(context, 'move_to_folder', provider),
+      ),
+      if (hasRecordings)
+        PullDownMenuItem(
+          title: l10n.recordings,
+          iconWidget: const FaIcon(FontAwesomeIcons.layerGroup, size: 16),
+          onTap: () => _handleMenuSelection(context, 'recordings', provider),
+        ),
+      const PullDownMenuDivider.large(),
       if (selectedTab != ConversationTab.actionItems)
         PullDownMenuItem(
           title: l10n.search,
@@ -769,11 +874,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     ];
   }
 
-  /// Header actions: Ask Omi, star, share and the overflow menu — one row of 36pt circles with
-  /// 44pt targets next to the circled back button.
+  /// Header actions (design ruling 2026-09-24): Ask Omi as the primary and one overflow menu that
+  /// holds star, share, rename, move, recordings and the rest, Delete last.
   Widget _buildHeaderActions(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
-    final starred = provider.conversation.starred;
     return Padding(
       padding: const EdgeInsets.only(right: OmiSpacing.xxs),
       child: Row(
@@ -797,36 +901,24 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               );
             },
           ),
-          OmiIconButton.filled(
-            icon: _isTogglingStarred
-                ? const OmiSpinner(size: OmiSpinnerSize.small)
-                : FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
-            label: starred ? l10n.unstarConversation : l10n.starConversation,
-            color: starred ? Colors.amber : null,
-            onPressed: _isTogglingStarred ? null : () => _toggleStarred(provider),
-          ),
+          // Also the share sheet's anchor now that Share lives in this menu (iPad needs one).
           KeyedSubtree(
             key: _shareButtonKey,
-            child: OmiIconButton.filled(
-              icon: _isSharing
-                  ? const OmiSpinner(size: OmiSpinnerSize.small)
-                  : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
-              label: l10n.share,
-              onPressed: _isSharing ? null : () => _shareConversation(provider),
-            ),
-          ),
-          PullDownButton(
-            itemBuilder: (context) => _menuItems(context, provider),
-            buttonBuilder: (context, showMenu) => OmiIconButton.filled(
-              icon: const Icon(Icons.more_horiz),
-              label: l10n.moreOptions,
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
-                  conversationId: provider.conversation.id,
-                );
-                showMenu();
-              },
+            child: PullDownButton(
+              itemBuilder: (context) => _menuItems(context, provider),
+              buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+                icon: _isSharing || _isTogglingStarred
+                    ? const OmiSpinner(size: OmiSpinnerSize.small)
+                    : const Icon(Icons.more_horiz),
+                label: l10n.moreOptions,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+                    conversationId: provider.conversation.id,
+                  );
+                  showMenu();
+                },
+              ),
             ),
           ),
         ],
@@ -897,46 +989,53 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               // gesture here: a sideways swipe moves between the tabs, never to another
               // conversation (D2), and the iOS edge swipe always goes back.
               onTap: _closeSearchIfEmpty,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                child: TabBarView(
-                  controller: _controller,
-                  children: [
-                    TranscriptWidgets(
-                      searchQuery: _searchQuery,
-                      currentResultIndex: getCurrentResultIndexForHighlighting(),
-                      onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                      onSegmentTap: (segment) async {
-                        if (selectedTab != ConversationTab.transcript) {
-                          setState(() {
-                            selectedTab = ConversationTab.transcript;
-                          });
-                          _controller!.animateTo(_transcriptTabIndex);
-                        }
+              child: Column(
+                children: [
+                  // Title and facts, shared by every tab (#17297).
+                  ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                  Expanded(
+                      child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                    child: TabBarView(
+                      controller: _controller,
+                      children: [
+                        TranscriptWidgets(
+                          searchQuery: _searchQuery,
+                          currentResultIndex: getCurrentResultIndexForHighlighting(),
+                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                          onSegmentTap: (segment) async {
+                            if (selectedTab != ConversationTab.transcript) {
+                              setState(() {
+                                selectedTab = ConversationTab.transcript;
+                              });
+                              _controller!.animateTo(_transcriptTabIndex);
+                            }
 
-                        // Seek to segment using callback (start + end for bounded play)
-                        if (_seekToSegmentCallback != null) {
-                          await _seekToSegmentCallback!(segment.start, segment.end);
-                          HapticFeedback.lightImpact();
-                        }
-                      },
+                            // Seek to segment using callback (start + end for bounded play)
+                            if (_seekToSegmentCallback != null) {
+                              await _seekToSegmentCallback!(segment.start, segment.end);
+                              HapticFeedback.lightImpact();
+                            }
+                          },
+                        ),
+                        SummaryTab(
+                          reviewEnabled: !widget.isFromOnboarding &&
+                              widget.initialSeekStart == null &&
+                              selectedTab == ConversationTab.summary &&
+                              !_controller!.indexIsChanging &&
+                              !_isSearching &&
+                              !_isSharing &&
+                              !_isDownloadingAudio &&
+                              !_reviewInterrupted,
+                          searchQuery: _searchQuery,
+                          currentResultIndex: getCurrentResultIndexForHighlighting(),
+                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                        ),
+                        if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
+                      ],
                     ),
-                    SummaryTab(
-                      reviewEnabled: !widget.isFromOnboarding &&
-                          widget.initialSeekStart == null &&
-                          selectedTab == ConversationTab.summary &&
-                          !_controller!.indexIsChanging &&
-                          !_isSearching &&
-                          !_isSharing &&
-                          !_isDownloadingAudio &&
-                          !_reviewInterrupted,
-                      searchQuery: _searchQuery,
-                      currentResultIndex: getCurrentResultIndexForHighlighting(),
-                      onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                    ),
-                    if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
-                  ],
-                ),
+                  )),
+                ],
               ),
             ),
 

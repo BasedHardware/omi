@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Изберете миниатюрно изображение",
     "appIdNotFoundError": "ID на приложението не е намерено",
     "manifestRefreshedSuccess": "Манифестът е обновен успешно",
-    "manifestRefreshFailed": "Неуспешно опресняване на манифеста"
+    "manifestRefreshFailed": "Неуспешно опресняване на манифеста",
+    "captureRecordingsSheetTitle": "Записи на този разговор",
+    "captureRecordingSeparate": "Отдели…",
+    "captureRecordingSeparateTitle": "Да се отдели ли този запис?",
+    "captureRecordingSeparateMessage": "{recording} ще се показва като отделен разговор и няма да бъде групиран отново с това събитие.",
+    "captureRecordingSeparateConfirm": "Отдели",
+    "captureRecordingSeparateFailed": "Неуспешно отделяне. Опитайте отново.",
+    "captureRecordingOpenFailed": "Този запис не можа да се отвори.",
+    "captureRecordingViewing": "Разглеждате този запис",
+    "captureRecordedBy": "Записано от {devices}",
+    "captureSourceDesktop": "Компютър",
+    "renameConversation": "Преименувай",
+    "captureRecordingsCount": "{count, plural, =1{1 запис} other{{count} записа}}",
+    "captureSourcePendant": "Висулка"
 }

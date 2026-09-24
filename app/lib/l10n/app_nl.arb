@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Selecteer een miniatuurafbeelding",
     "appIdNotFoundError": "App-ID niet gevonden",
     "manifestRefreshedSuccess": "Manifest succesvol vernieuwd",
-    "manifestRefreshFailed": "Manifest vernieuwen mislukt"
+    "manifestRefreshFailed": "Manifest vernieuwen mislukt",
+    "captureRecordingsSheetTitle": "Opnamen van dit gesprek",
+    "captureRecordingSeparate": "Scheiden…",
+    "captureRecordingSeparateTitle": "Deze opname scheiden?",
+    "captureRecordingSeparateMessage": "{recording} wordt als apart gesprek getoond en niet opnieuw met deze gebeurtenis gegroepeerd.",
+    "captureRecordingSeparateConfirm": "Scheiden",
+    "captureRecordingSeparateFailed": "Scheiden mislukt. Probeer het opnieuw.",
+    "captureRecordingOpenFailed": "Kan deze opname niet openen.",
+    "captureRecordingViewing": "Je bekijkt deze opname",
+    "captureRecordedBy": "Opgenomen door {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Naam wijzigen",
+    "captureRecordingsCount": "{count, plural, =1{1 opname} other{{count} opnamen}}",
+    "captureSourcePendant": "Hanger"
 }

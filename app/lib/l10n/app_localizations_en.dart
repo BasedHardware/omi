@@ -10998,4 +10998,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Failed to refresh manifest';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Recordings of this conversation';
+
+  @override
+  String get captureRecordingSeparate => 'Separate…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Separate this recording?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording will show as its own conversation and won\'t be grouped with this event again.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Separate';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Couldn\'t separate. Try again.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Couldn\'t open this recording.';
+
+  @override
+  String get captureRecordingViewing => 'You\'re viewing this recording';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Recorded by $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Desktop';
+
+  @override
+  String get renameConversation => 'Rename';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Pendant';
 }

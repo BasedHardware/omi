@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "Pumili ng thumbnail na imahe",
     "appIdNotFoundError": "Hindi nahanap ang App ID",
     "manifestRefreshedSuccess": "Matagumpay na na-refresh ang manifest",
-    "manifestRefreshFailed": "Nabigong i-refresh ang manifest"
+    "manifestRefreshFailed": "Nabigong i-refresh ang manifest",
+    "captureRecordingsSheetTitle": "Mga recording ng usapang ito",
+    "captureRecordingSeparate": "Ihiwalay…",
+    "captureRecordingSeparateTitle": "Ihiwalay ang recording na ito?",
+    "captureRecordingSeparateMessage": "Ipapakita ang {recording} bilang sariling usapan at hindi na muling ipapangkat sa event na ito.",
+    "captureRecordingSeparateConfirm": "Ihiwalay",
+    "captureRecordingSeparateFailed": "Hindi maihiwalay. Subukang muli.",
+    "captureRecordingOpenFailed": "Hindi mabuksan ang recording na ito.",
+    "captureRecordingViewing": "Tinitingnan mo ang recording na ito",
+    "captureRecordedBy": "Ni-record ng {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Palitan ang pangalan",
+    "captureRecordingsCount": "{count, plural, =1{1 recording} other{{count} recording}}",
+    "captureSourcePendant": "Pendant"
 }

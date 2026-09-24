@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "เลือกภาพขนาดย่อ",
     "appIdNotFoundError": "ไม่พบ ID แอป",
     "manifestRefreshedSuccess": "รีเฟรชไฟล์ manifest สำเร็จ",
-    "manifestRefreshFailed": "รีเฟรชไฟล์ manifest ไม่สำเร็จ"
+    "manifestRefreshFailed": "รีเฟรชไฟล์ manifest ไม่สำเร็จ",
+    "captureRecordingsSheetTitle": "การบันทึกของบทสนทนานี้",
+    "captureRecordingSeparate": "แยก…",
+    "captureRecordingSeparateTitle": "แยกการบันทึกนี้ไหม?",
+    "captureRecordingSeparateMessage": "{recording} จะแสดงเป็นบทสนทนาแยก และจะไม่ถูกจัดกลุ่มกับเหตุการณ์นี้อีก",
+    "captureRecordingSeparateConfirm": "แยก",
+    "captureRecordingSeparateFailed": "แยกไม่สำเร็จ ลองอีกครั้ง",
+    "captureRecordingOpenFailed": "เปิดการบันทึกนี้ไม่ได้",
+    "captureRecordingViewing": "คุณกำลังดูการบันทึกนี้",
+    "captureRecordedBy": "บันทึกโดย {devices}",
+    "captureSourceDesktop": "เดสก์ท็อป",
+    "renameConversation": "เปลี่ยนชื่อ",
+    "captureRecordingsCount": "{count, plural, =1{1 การบันทึก} other{{count} การบันทึก}}",
+    "captureSourcePendant": "จี้"
 }

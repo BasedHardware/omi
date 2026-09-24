@@ -11045,4 +11045,55 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Не удалось обновить манифест';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Записи этого разговора';
+
+  @override
+  String get captureRecordingSeparate => 'Отделить…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Отделить эту запись?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording будет отображаться как отдельный разговор и больше не будет объединяться с этим событием.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Отделить';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Не удалось отделить. Попробуйте ещё раз.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Не удалось открыть эту запись.';
+
+  @override
+  String get captureRecordingViewing => 'Вы просматриваете эту запись';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Записано: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Компьютер';
+
+  @override
+  String get renameConversation => 'Переименовать';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Записей: $count',
+      one: '1 запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Кулон';
 }

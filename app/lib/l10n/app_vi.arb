@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Chọn hình thu nhỏ",
     "appIdNotFoundError": "Không tìm thấy ID ứng dụng",
     "manifestRefreshedSuccess": "Đã làm mới manifest thành công",
-    "manifestRefreshFailed": "Không thể làm mới manifest"
+    "manifestRefreshFailed": "Không thể làm mới manifest",
+    "captureRecordingsSheetTitle": "Các bản ghi của cuộc trò chuyện này",
+    "captureRecordingSeparate": "Tách…",
+    "captureRecordingSeparateTitle": "Tách bản ghi này?",
+    "captureRecordingSeparateMessage": "{recording} sẽ hiển thị như một cuộc trò chuyện riêng và sẽ không được nhóm với sự kiện này nữa.",
+    "captureRecordingSeparateConfirm": "Tách",
+    "captureRecordingSeparateFailed": "Không thể tách. Hãy thử lại.",
+    "captureRecordingOpenFailed": "Không thể mở bản ghi này.",
+    "captureRecordingViewing": "Bạn đang xem bản ghi này",
+    "captureRecordedBy": "Được ghi bởi {devices}",
+    "captureSourceDesktop": "Máy tính",
+    "renameConversation": "Đổi tên",
+    "captureRecordingsCount": "{count, plural, =1{1 bản ghi} other{{count} bản ghi}}",
+    "captureSourcePendant": "Mặt dây chuyền"
 }

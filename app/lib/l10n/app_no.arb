@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Velg et miniatyrbilde",
     "appIdNotFoundError": "Fant ikke app-ID",
     "manifestRefreshedSuccess": "Manifest oppdatert",
-    "manifestRefreshFailed": "Kunne ikke oppdatere manifest"
+    "manifestRefreshFailed": "Kunne ikke oppdatere manifest",
+    "captureRecordingsSheetTitle": "Opptak av denne samtalen",
+    "captureRecordingSeparate": "Skill ut…",
+    "captureRecordingSeparateTitle": "Skille ut dette opptaket?",
+    "captureRecordingSeparateMessage": "{recording} vises som en egen samtale og grupperes ikke med denne hendelsen igjen.",
+    "captureRecordingSeparateConfirm": "Skill ut",
+    "captureRecordingSeparateFailed": "Kunne ikke skille ut. Prøv igjen.",
+    "captureRecordingOpenFailed": "Kunne ikke åpne dette opptaket.",
+    "captureRecordingViewing": "Du ser på dette opptaket",
+    "captureRecordedBy": "Tatt opp av {devices}",
+    "captureSourceDesktop": "Datamaskin",
+    "renameConversation": "Gi nytt navn",
+    "captureRecordingsCount": "{count, plural, =1{1 opptak} other{{count} opptak}}",
+    "captureSourcePendant": "Anheng"
 }

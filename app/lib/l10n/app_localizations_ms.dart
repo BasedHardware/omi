@@ -11037,4 +11037,55 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Gagal memuat semula manifest';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Rakaman perbualan ini';
+
+  @override
+  String get captureRecordingSeparate => 'Asingkan…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Asingkan rakaman ini?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording akan dipaparkan sebagai perbualan tersendiri dan tidak akan dikumpulkan dengan acara ini lagi.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Asingkan';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Tidak dapat mengasingkan. Cuba lagi.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Tidak dapat membuka rakaman ini.';
+
+  @override
+  String get captureRecordingViewing => 'Anda sedang melihat rakaman ini';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Dirakam oleh $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Desktop';
+
+  @override
+  String get renameConversation => 'Namakan semula';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman',
+      one: '1 rakaman',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Loket';
 }

@@ -11019,4 +11019,55 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'مینی فیسٹ ریفریش کرنے میں ناکام';
+
+  @override
+  String get captureRecordingsSheetTitle => 'اس گفتگو کی ریکارڈنگز';
+
+  @override
+  String get captureRecordingSeparate => 'الگ کریں…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'اس ریکارڈنگ کو الگ کریں؟';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ایک الگ گفتگو کے طور پر دکھائی دے گی اور اس ایونٹ کے ساتھ دوبارہ گروپ نہیں ہوگی۔';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'الگ کریں';
+
+  @override
+  String get captureRecordingSeparateFailed => 'الگ نہیں ہو سکا۔ دوبارہ کوشش کریں۔';
+
+  @override
+  String get captureRecordingOpenFailed => 'یہ ریکارڈنگ نہیں کھل سکی۔';
+
+  @override
+  String get captureRecordingViewing => 'آپ یہ ریکارڈنگ دیکھ رہے ہیں';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices نے ریکارڈ کیا';
+  }
+
+  @override
+  String get captureSourceDesktop => 'ڈیسک ٹاپ';
+
+  @override
+  String get renameConversation => 'نام تبدیل کریں';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز',
+      one: '1 ریکارڈنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'پینڈنٹ';
 }

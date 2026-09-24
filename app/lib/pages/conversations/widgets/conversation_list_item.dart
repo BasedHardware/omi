@@ -17,10 +17,12 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// The row title for a conversation (hub audit #21): its title, "Untitled Conversation" when the
@@ -91,6 +93,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.finishedAt,
         conversation.photos.length,
         conversation.transcriptSegments.length,
+        conversation.captureGroup?.id,
+        conversation.captureGroup?.revision,
       );
 
   @override
@@ -246,6 +250,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
         await moveConversationToFolder(context, conversation);
       case ConversationRowAction.share:
         await shareConversation(context, conversation);
+      case ConversationRowAction.recordings:
+        await showConversationRowRecordings(context, conversation);
+      case ConversationRowAction.separate:
+        await separateFromConversationRow(context, conversation);
       case ConversationRowAction.select:
         provider.enterSelectionMode();
         provider.toggleConversationSelection(conversation.id);
@@ -427,6 +435,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
           const Text(' • ', style: _metaStyle),
           Text(duration, style: _metaStyle, maxLines: 1),
         ],
+        // One row stands for an event several devices recorded.
+        if (_captureSources.length > 1) ...[
+          const Text(' • ', style: _metaStyle),
+          CaptureSourceIcons(sources: _captureSources),
+        ],
         if (isNew) ...[
           const SizedBox(width: OmiSpacing.xs),
           ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
@@ -529,6 +542,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
       ],
     );
   }
+
+  List<String> get _captureSources => CaptureGroupPresentation.distinctSources(widget.conversation);
 
   String? _searchSnippetText() {
     if (widget.conversation.matchSnippets.isEmpty) return null;

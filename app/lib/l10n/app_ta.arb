@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "சிறு பட உருவைத் தேர்ந்தெடுக்கவும்",
     "appIdNotFoundError": "பயன்பாடு ஐடி கிடைக்கவில்லை",
     "manifestRefreshedSuccess": "மேனிஃபெஸ்ட் வெற்றிகரமாகப் புதுப்பிக்கப்பட்டது",
-    "manifestRefreshFailed": "மேனிஃபெஸ்டைப் புதுப்பிக்க முடியவில்லை"
+    "manifestRefreshFailed": "மேனிஃபெஸ்டைப் புதுப்பிக்க முடியவில்லை",
+    "captureRecordingsSheetTitle": "இந்த உரையாடலின் பதிவுகள்",
+    "captureRecordingSeparate": "பிரி…",
+    "captureRecordingSeparateTitle": "இந்தப் பதிவைப் பிரிக்கவா?",
+    "captureRecordingSeparateMessage": "{recording} தனி உரையாடலாகக் காட்டப்படும், இந்த நிகழ்வுடன் மீண்டும் குழுவாக்கப்படாது.",
+    "captureRecordingSeparateConfirm": "பிரி",
+    "captureRecordingSeparateFailed": "பிரிக்க முடியவில்லை. மீண்டும் முயலவும்.",
+    "captureRecordingOpenFailed": "இந்தப் பதிவைத் திறக்க முடியவில்லை.",
+    "captureRecordingViewing": "இந்தப் பதிவைப் பார்க்கிறீர்கள்",
+    "captureRecordedBy": "{devices} பதிவு செய்தது",
+    "captureSourceDesktop": "டெஸ்க்டாப்",
+    "renameConversation": "பெயர்மாற்று",
+    "captureRecordingsCount": "{count, plural, =1{1 பதிவு} other{{count} பதிவுகள்}}",
+    "captureSourcePendant": "பதக்கம்"
 }

@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "썸네일 이미지 선택",
     "appIdNotFoundError": "앱 ID를 찾을 수 없음",
     "manifestRefreshedSuccess": "매니페스트가 성공적으로 새로 고쳐졌습니다",
-    "manifestRefreshFailed": "매니페스트 새로 고침 실패"
+    "manifestRefreshFailed": "매니페스트 새로 고침 실패",
+    "captureRecordingsSheetTitle": "이 대화의 녹음",
+    "captureRecordingSeparate": "분리…",
+    "captureRecordingSeparateTitle": "이 녹음을 분리할까요?",
+    "captureRecordingSeparateMessage": "{recording}은(는) 별도의 대화로 표시되며 이 이벤트와 다시 묶이지 않습니다.",
+    "captureRecordingSeparateConfirm": "분리",
+    "captureRecordingSeparateFailed": "분리하지 못했습니다. 다시 시도하세요.",
+    "captureRecordingOpenFailed": "이 녹음을 열 수 없습니다.",
+    "captureRecordingViewing": "이 녹음을 보고 있습니다",
+    "captureRecordedBy": "{devices}에서 녹음됨",
+    "captureSourceDesktop": "데스크톱",
+    "renameConversation": "이름 변경",
+    "captureRecordingsCount": "{count, plural, =1{녹음 1개} other{녹음 {count}개}}",
+    "captureSourcePendant": "펜던트"
 }

@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "ایک تھمب نیل تصویر منتخب کریں",
     "appIdNotFoundError": "ایپ ID نہیں ملی",
     "manifestRefreshedSuccess": "مینی فیسٹ کامیابی سے ریفریش ہو گیا",
-    "manifestRefreshFailed": "مینی فیسٹ ریفریش کرنے میں ناکام"
+    "manifestRefreshFailed": "مینی فیسٹ ریفریش کرنے میں ناکام",
+    "captureRecordingsSheetTitle": "اس گفتگو کی ریکارڈنگز",
+    "captureRecordingSeparate": "الگ کریں…",
+    "captureRecordingSeparateTitle": "اس ریکارڈنگ کو الگ کریں؟",
+    "captureRecordingSeparateMessage": "{recording} ایک الگ گفتگو کے طور پر دکھائی دے گی اور اس ایونٹ کے ساتھ دوبارہ گروپ نہیں ہوگی۔",
+    "captureRecordingSeparateConfirm": "الگ کریں",
+    "captureRecordingSeparateFailed": "الگ نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
+    "captureRecordingOpenFailed": "یہ ریکارڈنگ نہیں کھل سکی۔",
+    "captureRecordingViewing": "آپ یہ ریکارڈنگ دیکھ رہے ہیں",
+    "captureRecordedBy": "{devices} نے ریکارڈ کیا",
+    "captureSourceDesktop": "ڈیسک ٹاپ",
+    "renameConversation": "نام تبدیل کریں",
+    "captureRecordingsCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}",
+    "captureSourcePendant": "پینڈنٹ"
 }

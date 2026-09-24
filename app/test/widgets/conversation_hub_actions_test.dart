@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -129,8 +130,13 @@ void main() {
     await tester.longPress(find.byType(ConversationListItem));
     await tester.pumpAndSettle();
 
+    const groupedOnly = {ConversationRowAction.recordings, ConversationRowAction.separate};
     for (final action in ConversationRowAction.values) {
-      expect(find.byKey(ValueKey('conversation_action_${action.name}')), findsOneWidget, reason: action.name);
+      expect(
+        find.byKey(ValueKey('conversation_action_${action.name}')),
+        groupedOnly.contains(action) ? findsNothing : findsOneWidget,
+        reason: action.name,
+      );
     }
     expect(provider.isSelectionModeActive, isFalse);
 
@@ -138,6 +144,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.isSelectionModeActive, isTrue);
     expect(provider.isConversationSelected('a'), isTrue);
+  });
+
+  testWidgets('a row for an event several devices recorded offers Recordings and Separate…', (tester) async {
+    final grouped = ServerConversation(
+      id: 'a',
+      createdAt: DateTime(2026, 9, 20, 10),
+      structured: Structured('Design review', 'Overview'),
+      status: ConversationStatus.completed,
+      captureGroup: const CaptureGroup(
+        id: 'event-1',
+        primaryId: 'a',
+        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+      ),
+    );
+    provider.conversations = [grouped];
+    await pump(tester, ConversationListItem(conversation: grouped, date: DateTime(2026, 9, 20), conversationIdx: 0));
+
+    await tester.longPress(find.byType(ConversationListItem));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('conversation_action_recordings')), findsOneWidget);
+    expect(find.byKey(const ValueKey('conversation_action_separate')), findsOneWidget);
+
+    // One other recording: Separate… goes straight to the page's confirmation, naming the pendant.
+    await tester.tap(find.byKey(const ValueKey('conversation_action_separate')));
+    await tester.pumpAndSettle();
+    expect(find.text('Separate this recording?'), findsOneWidget);
+    expect(find.textContaining('Pendant'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
   });
 
   group('row titles (hub audit #21)', () {

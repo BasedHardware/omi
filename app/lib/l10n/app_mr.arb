@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "थंबनेल इमेज निवडा",
     "appIdNotFoundError": "अ‍ॅप ID सापडली नाही",
     "manifestRefreshedSuccess": "मॅनिफेस्ट यशस्वीरित्या रिफ्रेश केले",
-    "manifestRefreshFailed": "मॅनिफेस्ट रिफ्रेश करण्यात अयशस्वी"
+    "manifestRefreshFailed": "मॅनिफेस्ट रिफ्रेश करण्यात अयशस्वी",
+    "captureRecordingsSheetTitle": "या संभाषणाची रेकॉर्डिंग",
+    "captureRecordingSeparate": "वेगळे करा…",
+    "captureRecordingSeparateTitle": "हे रेकॉर्डिंग वेगळे करायचे?",
+    "captureRecordingSeparateMessage": "{recording} स्वतंत्र संभाषण म्हणून दिसेल आणि या इव्हेंटसोबत पुन्हा गटबद्ध होणार नाही.",
+    "captureRecordingSeparateConfirm": "वेगळे करा",
+    "captureRecordingSeparateFailed": "वेगळे करता आले नाही. पुन्हा प्रयत्न करा.",
+    "captureRecordingOpenFailed": "हे रेकॉर्डिंग उघडता आले नाही.",
+    "captureRecordingViewing": "तुम्ही हे रेकॉर्डिंग पाहत आहात",
+    "captureRecordedBy": "{devices} ने रेकॉर्ड केले",
+    "captureSourceDesktop": "डेस्कटॉप",
+    "renameConversation": "नाव बदला",
+    "captureRecordingsCount": "{count, plural, =1{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
+    "captureSourcePendant": "पेंडंट"
 }

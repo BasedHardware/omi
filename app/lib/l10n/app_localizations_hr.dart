@@ -11046,4 +11046,55 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Osvježavanje manifesta nije uspjelo';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Snimke ovog razgovora';
+
+  @override
+  String get captureRecordingSeparate => 'Odvoji…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Odvojiti ovu snimku?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording prikazivat će se kao zaseban razgovor i više se neće grupirati s ovim događajem.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Odvoji';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Odvajanje nije uspjelo. Pokušajte ponovno.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Nije moguće otvoriti ovu snimku.';
+
+  @override
+  String get captureRecordingViewing => 'Pregledavate ovu snimku';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Snimio: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Računalo';
+
+  @override
+  String get renameConversation => 'Preimenuj';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Snimki: $count',
+      one: '1 snimka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Privjesak';
 }

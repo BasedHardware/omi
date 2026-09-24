@@ -5,13 +5,18 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 // The conversation actions every surface shares (docs/ux-contract.md §4, D5): one delete path for a
@@ -189,10 +194,12 @@ Future<void> moveConversationToFolder(BuildContext context, ServerConversation c
 }
 
 /// The actions a conversation row's long-press offers.
-enum ConversationRowAction { open, star, move, share, select, delete }
+enum ConversationRowAction { open, star, move, share, recordings, separate, select, delete }
 
 /// Long-press menu of a conversation row: Open, Star / Unstar, Move to Folder, Share, Select
-/// (enters multi-select) and Delete. Resolves the chosen action, or null when dismissed.
+/// (enters multi-select) and Delete. A row that stands for an event several devices recorded also
+/// offers Recordings and Separate… (design ruling 2026-09-24). Resolves the chosen action, or null
+/// when dismissed.
 Future<ConversationRowAction?> showConversationActionsSheet(
   BuildContext context,
   ServerConversation conversation, {
@@ -227,6 +234,10 @@ Future<ConversationRowAction?> showConversationActionsSheet(
             ),
             row(ConversationRowAction.move, Icons.folder_outlined, l10n.moveToFolder),
             row(ConversationRowAction.share, Icons.ios_share_rounded, l10n.share),
+            if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
+              row(ConversationRowAction.recordings, Icons.layers_outlined, l10n.recordings),
+              row(ConversationRowAction.separate, Icons.call_split_rounded, l10n.captureRecordingSeparate),
+            ],
             if (canSelect) row(ConversationRowAction.select, Icons.check_circle_outline_rounded, l10n.selectOption),
             row(ConversationRowAction.delete, Icons.delete_outline_rounded, l10n.delete, destructive: true),
           ],
@@ -235,3 +246,56 @@ Future<ConversationRowAction?> showConversationActionsSheet(
     },
   );
 }
+
+/// The recordings of a grouped row's event, in the same sheet the conversation page uses: a row opens
+/// that recording's conversation; Separate… confirms, separates and reloads the list.
+Future<void> showConversationRowRecordings(BuildContext context, ServerConversation conversation) async {
+  final recordings = CaptureGroupPresentation.recordings(conversation);
+  if (recordings.length < 2) return;
+  final list = context.read<ConversationProvider>();
+  final controller = CaptureGroupSeparationController();
+  try {
+    await showCaptureRecordingsSheet(
+      context,
+      recordings: recordings,
+      controller: controller,
+      onOpen: (recording) => _openRowRecording(context, list, recording),
+      onSeparate: (recording) => controller.separate(recording.id, reload: () => _reloadConversationList(list)),
+    );
+  } finally {
+    controller.dispose();
+  }
+}
+
+/// Separate… from a grouped row. With one other recording it asks the page's "Separate this
+/// recording?" and separates it; with several, the recordings sheet lets the reader pick which.
+Future<void> separateFromConversationRow(BuildContext context, ServerConversation conversation) async {
+  final others = CaptureGroupPresentation.recordings(conversation).where((r) => !r.isCurrent).toList();
+  if (others.isEmpty) return;
+  if (others.length > 1) return showConversationRowRecordings(context, conversation);
+  final recording = others.single;
+  if (!await confirmCaptureRecordingSeparation(context, recording) || !context.mounted) return;
+  final list = context.read<ConversationProvider>();
+  final failed = context.l10n.captureRecordingSeparateFailed;
+  final controller = CaptureGroupSeparationController();
+  final separated = await controller.separate(recording.id, reload: () => _reloadConversationList(list));
+  controller.dispose();
+  if (!separated && context.mounted) OmiFeedback.error(context, failed);
+}
+
+Future<void> _openRowRecording(BuildContext context, ConversationProvider list, CaptureRecording recording) async {
+  final target = await CaptureGroupPresentation.resolveMember(
+    recording.id,
+    loaded: list.conversations.followedBy(list.searchedConversations),
+    fetch: getConversationById,
+  );
+  if (!context.mounted) return;
+  if (target == null) {
+    OmiFeedback.error(context, context.l10n.captureRecordingOpenFailed);
+    return;
+  }
+  await routeToPage(context, ConversationDetailPage(conversation: target));
+}
+
+Future<void> _reloadConversationList(ConversationProvider list) =>
+    list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations();

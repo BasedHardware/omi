@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Wybierz miniaturę obrazu",
     "appIdNotFoundError": "Nie znaleziono ID aplikacji",
     "manifestRefreshedSuccess": "Manifest został pomyślnie odświeżony",
-    "manifestRefreshFailed": "Nie udało się odświeżyć manifestu"
+    "manifestRefreshFailed": "Nie udało się odświeżyć manifestu",
+    "captureRecordingsSheetTitle": "Nagrania tej rozmowy",
+    "captureRecordingSeparate": "Rozdziel…",
+    "captureRecordingSeparateTitle": "Rozdzielić to nagranie?",
+    "captureRecordingSeparateMessage": "{recording} będzie widoczne jako osobna rozmowa i nie zostanie ponownie zgrupowane z tym wydarzeniem.",
+    "captureRecordingSeparateConfirm": "Rozdziel",
+    "captureRecordingSeparateFailed": "Nie udało się rozdzielić. Spróbuj ponownie.",
+    "captureRecordingOpenFailed": "Nie udało się otworzyć tego nagrania.",
+    "captureRecordingViewing": "Przeglądasz to nagranie",
+    "captureRecordedBy": "Nagrane przez {devices}",
+    "captureSourceDesktop": "Komputer",
+    "renameConversation": "Zmień nazwę",
+    "captureRecordingsCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}",
+    "captureSourcePendant": "Wisiorek"
 }

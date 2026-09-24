@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Bir küçük resim seçin",
     "appIdNotFoundError": "Uygulama Kimliği bulunamadı",
     "manifestRefreshedSuccess": "Manifest başarıyla yenilendi",
-    "manifestRefreshFailed": "Manifest yenilenemedi"
+    "manifestRefreshFailed": "Manifest yenilenemedi",
+    "captureRecordingsSheetTitle": "Bu konuşmanın kayıtları",
+    "captureRecordingSeparate": "Ayır…",
+    "captureRecordingSeparateTitle": "Bu kayıt ayrılsın mı?",
+    "captureRecordingSeparateMessage": "{recording} ayrı bir konuşma olarak görünecek ve bu etkinlikle tekrar gruplanmayacak.",
+    "captureRecordingSeparateConfirm": "Ayır",
+    "captureRecordingSeparateFailed": "Ayrılamadı. Tekrar deneyin.",
+    "captureRecordingOpenFailed": "Bu kayıt açılamadı.",
+    "captureRecordingViewing": "Bu kaydı görüntülüyorsunuz",
+    "captureRecordedBy": "Kaydeden: {devices}",
+    "captureSourceDesktop": "Bilgisayar",
+    "renameConversation": "Yeniden adlandır",
+    "captureRecordingsCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}",
+    "captureSourcePendant": "Kolye"
 }

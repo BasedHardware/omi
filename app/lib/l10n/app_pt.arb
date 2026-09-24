@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Selecione uma imagem em miniatura",
     "appIdNotFoundError": "ID do aplicativo não encontrado",
     "manifestRefreshedSuccess": "Manifesto atualizado com sucesso",
-    "manifestRefreshFailed": "Falha ao atualizar manifesto"
+    "manifestRefreshFailed": "Falha ao atualizar manifesto",
+    "captureRecordingsSheetTitle": "Gravações desta conversa",
+    "captureRecordingSeparate": "Separar…",
+    "captureRecordingSeparateTitle": "Separar esta gravação?",
+    "captureRecordingSeparateMessage": "{recording} aparecerá como uma conversa própria e não será agrupada novamente com este evento.",
+    "captureRecordingSeparateConfirm": "Separar",
+    "captureRecordingSeparateFailed": "Não foi possível separar. Tente novamente.",
+    "captureRecordingOpenFailed": "Não foi possível abrir esta gravação.",
+    "captureRecordingViewing": "Você está vendo esta gravação",
+    "captureRecordedBy": "Gravado por {devices}",
+    "captureSourceDesktop": "Computador",
+    "renameConversation": "Renomear",
+    "captureRecordingsCount": "{count, plural, =1{1 gravação} other{{count} gravações}}",
+    "captureSourcePendant": "Pendente"
 }

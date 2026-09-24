@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "اختر صورة مصغرة",
     "appIdNotFoundError": "معرّف التطبيق غير موجود",
     "manifestRefreshedSuccess": "تم تحديث البيان بنجاح",
-    "manifestRefreshFailed": "فشل تحديث البيان"
+    "manifestRefreshFailed": "فشل تحديث البيان",
+    "captureRecordingsSheetTitle": "تسجيلات هذه المحادثة",
+    "captureRecordingSeparate": "فصل…",
+    "captureRecordingSeparateTitle": "فصل هذا التسجيل؟",
+    "captureRecordingSeparateMessage": "سيظهر {recording} كمحادثة مستقلة ولن يُجمع مع هذا الحدث مرة أخرى.",
+    "captureRecordingSeparateConfirm": "فصل",
+    "captureRecordingSeparateFailed": "تعذّر الفصل. حاول مرة أخرى.",
+    "captureRecordingOpenFailed": "تعذّر فتح هذا التسجيل.",
+    "captureRecordingViewing": "أنت تشاهد هذا التسجيل",
+    "captureRecordedBy": "سجّلها {devices}",
+    "captureSourceDesktop": "سطح المكتب",
+    "renameConversation": "إعادة تسمية",
+    "captureRecordingsCount": "{count, plural, =1{تسجيل واحد} other{{count} تسجيلات}}",
+    "captureSourcePendant": "القلادة"
 }

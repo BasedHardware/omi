@@ -130,6 +130,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var eventsJson: String?  // JSON-encoded [Event]
   var sectionsJson: String?  // JSON-encoded [SummarySection]
   var localSummaryJson: String?  // Selected display attribution; never the upload/retry blob
+  var captureGroupJson: String?  // Server-owned cross-surface event membership (ServerCaptureGroup)
 
   // MARK: - Additional Conversation Data
   var geolocationJson: String?  // JSON-encoded Geolocation
@@ -183,6 +184,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     eventsJson: String? = nil,
     sectionsJson: String? = nil,
     localSummaryJson: String? = nil,
+    captureGroupJson: String? = nil,
     // Additional data
     geolocationJson: String? = nil,
     photosJson: String? = nil,
@@ -228,6 +230,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.eventsJson = eventsJson
     self.sectionsJson = sectionsJson
     self.localSummaryJson = localSummaryJson
+    self.captureGroupJson = captureGroupJson
     // Additional data
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
@@ -472,6 +475,7 @@ extension TranscriptionSessionRecord {
       eventsJson: eventsJson,
       sectionsJson: sectionsJson,
       localSummaryJson: conversation.localSummary.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
+      captureGroupJson: conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
       geolocationJson: geolocationJson,
       photosJson: photosJson,
       appsResultsJson: appsResultsJson,
@@ -504,6 +508,8 @@ extension TranscriptionSessionRecord {
     self.inputDeviceName = conversation.inputDeviceName
 
     updateSummary(from: conversation)
+    // Membership is server-owned and independent of the summary's projection rules.
+    self.captureGroupJson = conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) }
 
     // Update additional data
     self.geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
@@ -770,7 +776,10 @@ extension TranscriptionSessionRecord {
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,
-      localSummary: localSummary
+      localSummary: localSummary,
+      captureGroup: captureGroupJson?.data(using: .utf8).flatMap {
+        try? decoder.decode(ServerCaptureGroup.self, from: $0)
+      }
     )
   }
 }

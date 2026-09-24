@@ -11021,4 +11021,55 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Manifest yenilenemedi';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Bu konuşmanın kayıtları';
+
+  @override
+  String get captureRecordingSeparate => 'Ayır…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Bu kayıt ayrılsın mı?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording ayrı bir konuşma olarak görünecek ve bu etkinlikle tekrar gruplanmayacak.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Ayır';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Ayrılamadı. Tekrar deneyin.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Bu kayıt açılamadı.';
+
+  @override
+  String get captureRecordingViewing => 'Bu kaydı görüntülüyorsunuz';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Kaydeden: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Bilgisayar';
+
+  @override
+  String get renameConversation => 'Yeniden adlandır';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt',
+      one: '1 kayıt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Kolye';
 }

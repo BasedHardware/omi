@@ -3580,5 +3580,18 @@
     "selectThumbnailImageTitle": "Válasszon bélyegképet",
     "appIdNotFoundError": "Az alkalmazás azonosítója nem található",
     "manifestRefreshedSuccess": "A manifest sikeresen frissült",
-    "manifestRefreshFailed": "A manifest frissítése sikertelen"
+    "manifestRefreshFailed": "A manifest frissítése sikertelen",
+    "captureRecordingsSheetTitle": "A beszélgetés felvételei",
+    "captureRecordingSeparate": "Leválasztás…",
+    "captureRecordingSeparateTitle": "Leválasztod ezt a felvételt?",
+    "captureRecordingSeparateMessage": "A(z) {recording} külön beszélgetésként jelenik meg, és többé nem kerül ehhez az eseményhez.",
+    "captureRecordingSeparateConfirm": "Leválasztás",
+    "captureRecordingSeparateFailed": "Nem sikerült leválasztani. Próbáld újra.",
+    "captureRecordingOpenFailed": "Nem sikerült megnyitni ezt a felvételt.",
+    "captureRecordingViewing": "Ezt a felvételt nézed",
+    "captureRecordedBy": "Rögzítette: {devices}",
+    "captureSourceDesktop": "Számítógép",
+    "renameConversation": "Átnevezés",
+    "captureRecordingsCount": "{count, plural, =1{1 felvétel} other{{count} felvétel}}",
+    "captureSourcePendant": "Medál"
 }

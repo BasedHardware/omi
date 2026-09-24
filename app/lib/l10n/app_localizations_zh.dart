@@ -10809,4 +10809,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => '刷新清单失败';
+
+  @override
+  String get captureRecordingsSheetTitle => '此对话的录音';
+
+  @override
+  String get captureRecordingSeparate => '分离…';
+
+  @override
+  String get captureRecordingSeparateTitle => '要分离此录音吗？';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording 将显示为单独的对话，并且不会再与此事件归为一组。';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '分离';
+
+  @override
+  String get captureRecordingSeparateFailed => '无法分离，请重试。';
+
+  @override
+  String get captureRecordingOpenFailed => '无法打开此录音。';
+
+  @override
+  String get captureRecordingViewing => '你正在查看此录音';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '由 $devices 录制';
+  }
+
+  @override
+  String get captureSourceDesktop => '电脑';
+
+  @override
+  String get renameConversation => '重命名';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段录音',
+      one: '1 段录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => '吊坠';
 }

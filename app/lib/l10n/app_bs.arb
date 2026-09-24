@@ -11056,5 +11056,18 @@
     "selectThumbnailImageTitle": "Odaberite sličicu",
     "appIdNotFoundError": "ID aplikacije nije pronađen",
     "manifestRefreshedSuccess": "Manifest je uspješno osvježen",
-    "manifestRefreshFailed": "Osvježavanje manifesta nije uspjelo"
+    "manifestRefreshFailed": "Osvježavanje manifesta nije uspjelo",
+    "captureRecordingsSheetTitle": "Snimci ovog razgovora",
+    "captureRecordingSeparate": "Odvoji…",
+    "captureRecordingSeparateTitle": "Odvojiti ovaj snimak?",
+    "captureRecordingSeparateMessage": "{recording} će se prikazivati kao zaseban razgovor i više se neće grupisati s ovim događajem.",
+    "captureRecordingSeparateConfirm": "Odvoji",
+    "captureRecordingSeparateFailed": "Odvajanje nije uspjelo. Pokušajte ponovo.",
+    "captureRecordingOpenFailed": "Nije moguće otvoriti ovaj snimak.",
+    "captureRecordingViewing": "Pregledate ovaj snimak",
+    "captureRecordedBy": "Snimio: {devices}",
+    "captureSourceDesktop": "Računar",
+    "renameConversation": "Preimenuj",
+    "captureRecordingsCount": "{count, plural, =1{1 snimak} other{Snimaka: {count}}}",
+    "captureSourcePendant": "Privjesak"
 }

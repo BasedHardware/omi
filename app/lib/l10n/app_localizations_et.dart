@@ -11006,4 +11006,55 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Manifesti värskendamine ebaõnnestus';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Selle vestluse salvestised';
+
+  @override
+  String get captureRecordingSeparate => 'Eralda…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Kas eraldada see salvestis?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording kuvatakse eraldi vestlusena ja seda ei rühmitata enam selle sündmusega.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Eralda';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Eraldamine ebaõnnestus. Proovi uuesti.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Seda salvestist ei saanud avada.';
+
+  @override
+  String get captureRecordingViewing => 'Vaatad seda salvestist';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Salvestas $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Arvuti';
+
+  @override
+  String get renameConversation => 'Nimeta ümber';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist',
+      one: '1 salvestis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Ripats';
 }

@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Selectați o imagine miniatură",
     "appIdNotFoundError": "ID-ul aplicației nu a fost găsit",
     "manifestRefreshedSuccess": "Manifestul a fost reîmprospătat cu succes",
-    "manifestRefreshFailed": "Reîmprospătarea manifestului a eșuat"
+    "manifestRefreshFailed": "Reîmprospătarea manifestului a eșuat",
+    "captureRecordingsSheetTitle": "Înregistrările acestei conversații",
+    "captureRecordingSeparate": "Separă…",
+    "captureRecordingSeparateTitle": "Separi această înregistrare?",
+    "captureRecordingSeparateMessage": "{recording} va apărea ca o conversație separată și nu va mai fi grupată cu acest eveniment.",
+    "captureRecordingSeparateConfirm": "Separă",
+    "captureRecordingSeparateFailed": "Nu s-a putut separa. Încearcă din nou.",
+    "captureRecordingOpenFailed": "Această înregistrare nu a putut fi deschisă.",
+    "captureRecordingViewing": "Vizualizezi această înregistrare",
+    "captureRecordedBy": "Înregistrat de {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Redenumește",
+    "captureRecordingsCount": "{count, plural, =1{1 înregistrare} other{Înregistrări: {count}}}",
+    "captureSourcePendant": "Pandantiv"
 }

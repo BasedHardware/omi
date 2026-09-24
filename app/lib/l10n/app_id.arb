@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Pilih gambar mini",
     "appIdNotFoundError": "ID Aplikasi tidak ditemukan",
     "manifestRefreshedSuccess": "Manifest berhasil dimuat ulang",
-    "manifestRefreshFailed": "Gagal memuat ulang manifest"
+    "manifestRefreshFailed": "Gagal memuat ulang manifest",
+    "captureRecordingsSheetTitle": "Rekaman percakapan ini",
+    "captureRecordingSeparate": "Pisahkan…",
+    "captureRecordingSeparateTitle": "Pisahkan rekaman ini?",
+    "captureRecordingSeparateMessage": "{recording} akan tampil sebagai percakapan tersendiri dan tidak akan dikelompokkan lagi dengan acara ini.",
+    "captureRecordingSeparateConfirm": "Pisahkan",
+    "captureRecordingSeparateFailed": "Tidak dapat memisahkan. Coba lagi.",
+    "captureRecordingOpenFailed": "Tidak dapat membuka rekaman ini.",
+    "captureRecordingViewing": "Anda sedang melihat rekaman ini",
+    "captureRecordedBy": "Direkam oleh {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Ganti nama",
+    "captureRecordingsCount": "{count, plural, =1{1 rekaman} other{{count} rekaman}}",
+    "captureSourcePendant": "Liontin"
 }

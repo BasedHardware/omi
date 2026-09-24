@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Valitse pikkukuva",
     "appIdNotFoundError": "Sovelluksen tunnusta ei löytynyt",
     "manifestRefreshedSuccess": "Manifesti päivitetty onnistuneesti",
-    "manifestRefreshFailed": "Manifestin päivitys epäonnistui"
+    "manifestRefreshFailed": "Manifestin päivitys epäonnistui",
+    "captureRecordingsSheetTitle": "Tämän keskustelun tallenteet",
+    "captureRecordingSeparate": "Erota…",
+    "captureRecordingSeparateTitle": "Erotetaanko tämä tallenne?",
+    "captureRecordingSeparateMessage": "{recording} näytetään omana keskustelunaan, eikä sitä enää ryhmitellä tähän tapahtumaan.",
+    "captureRecordingSeparateConfirm": "Erota",
+    "captureRecordingSeparateFailed": "Erottaminen epäonnistui. Yritä uudelleen.",
+    "captureRecordingOpenFailed": "Tallennetta ei voitu avata.",
+    "captureRecordingViewing": "Katselet tätä tallennetta",
+    "captureRecordedBy": "Tallentanut {devices}",
+    "captureSourceDesktop": "Tietokone",
+    "renameConversation": "Nimeä uudelleen",
+    "captureRecordingsCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}",
+    "captureSourcePendant": "Riipus"
 }

@@ -3484,5 +3484,18 @@
     "selectThumbnailImageTitle": "Pasirinkite miniatiūrą",
     "appIdNotFoundError": "Programos ID nerastas",
     "manifestRefreshedSuccess": "Manifestas sėkmingai atnaujintas",
-    "manifestRefreshFailed": "Nepavyko atnaujinti manifesto"
+    "manifestRefreshFailed": "Nepavyko atnaujinti manifesto",
+    "captureRecordingsSheetTitle": "Šio pokalbio įrašai",
+    "captureRecordingSeparate": "Atskirti…",
+    "captureRecordingSeparateTitle": "Atskirti šį įrašą?",
+    "captureRecordingSeparateMessage": "{recording} bus rodomas kaip atskiras pokalbis ir daugiau nebus grupuojamas su šiuo įvykiu.",
+    "captureRecordingSeparateConfirm": "Atskirti",
+    "captureRecordingSeparateFailed": "Nepavyko atskirti. Bandykite dar kartą.",
+    "captureRecordingOpenFailed": "Nepavyko atidaryti šio įrašo.",
+    "captureRecordingViewing": "Peržiūrite šį įrašą",
+    "captureRecordedBy": "Įrašė {devices}",
+    "captureSourceDesktop": "Kompiuteris",
+    "renameConversation": "Pervadinti",
+    "captureRecordingsCount": "{count, plural, =1{1 įrašas} other{Įrašų: {count}}}",
+    "captureSourcePendant": "Pakabukas"
 }

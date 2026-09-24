@@ -11085,4 +11085,55 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get manifestRefreshFailed => 'Αποτυχία ανανέωσης του manifest';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Ηχογραφήσεις αυτής της συνομιλίας';
+
+  @override
+  String get captureRecordingSeparate => 'Διαχωρισμός…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Διαχωρισμός αυτής της ηχογράφησης;';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return 'Η ηχογράφηση $recording θα εμφανίζεται ως ξεχωριστή συνομιλία και δεν θα ομαδοποιηθεί ξανά με αυτό το συμβάν.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Διαχωρισμός';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Ο διαχωρισμός απέτυχε. Δοκιμάστε ξανά.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Δεν ήταν δυνατό το άνοιγμα αυτής της ηχογράφησης.';
+
+  @override
+  String get captureRecordingViewing => 'Βλέπετε αυτήν την ηχογράφηση';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Ηχογραφήθηκε από $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Υπολογιστής';
+
+  @override
+  String get renameConversation => 'Μετονομασία';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις',
+      one: '1 ηχογράφηση',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Μενταγιόν';
 }

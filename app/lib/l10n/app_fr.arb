@@ -3519,5 +3519,18 @@
     "selectThumbnailImageTitle": "Sélectionner une image miniature",
     "appIdNotFoundError": "ID de l'application introuvable",
     "manifestRefreshedSuccess": "Manifeste actualisé avec succès",
-    "manifestRefreshFailed": "Échec de l'actualisation du manifeste"
+    "manifestRefreshFailed": "Échec de l'actualisation du manifeste",
+    "captureRecordingsSheetTitle": "Enregistrements de cette conversation",
+    "captureRecordingSeparate": "Séparer…",
+    "captureRecordingSeparateTitle": "Séparer cet enregistrement ?",
+    "captureRecordingSeparateMessage": "{recording} apparaîtra comme une conversation distincte et ne sera plus regroupé avec cet événement.",
+    "captureRecordingSeparateConfirm": "Séparer",
+    "captureRecordingSeparateFailed": "Impossible de séparer. Réessayez.",
+    "captureRecordingOpenFailed": "Impossible d'ouvrir cet enregistrement.",
+    "captureRecordingViewing": "Vous consultez cet enregistrement",
+    "captureRecordedBy": "Enregistré par {devices}",
+    "captureSourceDesktop": "Ordinateur",
+    "renameConversation": "Renommer",
+    "captureRecordingsCount": "{count, plural, =1{1 enregistrement} other{{count} enregistrements}}",
+    "captureSourcePendant": "Pendentif"
 }
