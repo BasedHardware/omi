@@ -164,21 +164,32 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+/// Set once [ServiceManager.init] has run: it refuses a second call, and Try Again on the startup
+/// failure screen re-runs [_init].
+bool _serviceManagerInitialized = false;
+
 Future _init() async {
-  // Env
-  if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
-  } else {
-    Env.init(DevEnv());
+  // Env. A rejected configuration cannot be fixed by retrying; the failure screen says so.
+  try {
+    if (F.env == Environment.prod) {
+      Env.init(ProdEnv());
+    } else {
+      Env.init(DevEnv());
+    }
+    Env.validateProfilePairing();
+    validateApplicationStartupRouting();
+  } catch (error) {
+    throw StartupConfigurationError(error);
   }
-  Env.validateProfilePairing();
-  validateApplicationStartupRouting();
   await PhysicalQualification.startupStage('isolation', PhysicalQualification.install);
 
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
-  await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -285,6 +296,39 @@ Future _init() async {
   return;
 }
 
+/// Runs start-up and shows the app, or the failure screen (whose Try Again calls this again).
+Future<void> _start() async {
+  try {
+    await _init();
+  } catch (error, stack) {
+    if (PhysicalQualification.enabled) {
+      unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
+    }
+    // Startup failed before the first frame. Without this the launch
+    // storyboard stays on screen forever: runApp() is never reached, and the
+    // zone handler below only calls debugPrint, which goes nowhere in
+    // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
+    // day of investigation for exactly this reason — the app looked hung
+    // when it had in fact thrown a precise, actionable StateError.
+    if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
+      unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
+    }
+    if (!PhysicalQualification.enabled) {
+      AnalyticsManager().recordProductError(ProductErrorKind.startup);
+    }
+    runApp(StartupFailureApp(error: error, stack: stack, onRetry: _start));
+    return;
+  }
+  if (PhysicalQualification.enabled) {
+    unawaited(PhysicalQualification.runtimeEvent('run_app_scheduled'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
+    });
+  }
+  runApp(const MyApp());
+  if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
+}
+
 void main() {
   runZonedGuarded(
     () async {
@@ -299,35 +343,7 @@ void main() {
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
-      try {
-        await _init();
-      } catch (error, stack) {
-        if (PhysicalQualification.enabled) {
-          unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
-        }
-        // Startup failed before the first frame. Without this the launch
-        // storyboard stays on screen forever: runApp() is never reached, and the
-        // zone handler below only calls debugPrint, which goes nowhere in
-        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
-        // day of investigation for exactly this reason — the app looked hung
-        // when it had in fact thrown a precise, actionable StateError.
-        if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
-          unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
-        }
-        if (!PhysicalQualification.enabled) {
-          AnalyticsManager().recordProductError(ProductErrorKind.startup);
-        }
-        runApp(StartupFailureApp(error: error, stack: stack));
-        return;
-      }
-      if (PhysicalQualification.enabled) {
-        unawaited(PhysicalQualification.runtimeEvent('run_app_scheduled'));
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
-        });
-      }
-      runApp(const MyApp());
-      if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
+      await _start();
     },
     (error, stack) {
       if (PhysicalQualification.enabled) {
