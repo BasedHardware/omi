@@ -15,6 +15,7 @@
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
+* [`goals_ics.md`](goals_ics.md) — put goals, OKRs, and milestone deadlines on a calendar (.ics).
   calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_ics.md`](action_items_ics.md) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.
