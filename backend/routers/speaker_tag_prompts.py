@@ -1,5 +1,6 @@
 """Speaker tag prompts ("Is this you?" / "Who is this?") and voice-profile preferences."""
 
+import base64
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -10,6 +11,7 @@ from database import voice_profiles as voice_profiles_db
 from models.speaker_tag_prompts import (
     SpeakerTagPromptAnswerRequest,
     SpeakerTagPromptAnswerResponse,
+    SpeakerTagPromptClip,
     SpeakerTagPromptsResponse,
     SpeakerTagPromptsShownRequest,
     SpeakerTagPromptsShownResponse,
@@ -18,7 +20,12 @@ from models.speaker_tag_prompts import (
 )
 from utils.other import endpoints as auth
 from utils.speaker_tag_prompts import service
-from utils.speaker_tag_prompts.clips import MAX_CLIP_REQUEST_SECONDS, conversation_clip_pcm, pcm_to_wav
+from utils.speaker_tag_prompts.clips import (
+    CLIP_SAMPLE_RATE,
+    MAX_CLIP_REQUEST_SECONDS,
+    conversation_clip_pcm,
+    pcm_to_wav,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +75,14 @@ def answer_speaker_tag_prompt(
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
-@router.get('/v1/speaker-tag-prompts/clip', tags=['speaker-tag-prompts'])
+@router.get('/v1/speaker-tag-prompts/clip', tags=['speaker-tag-prompts'], response_model=SpeakerTagPromptClip)
 def get_speaker_tag_prompt_clip(
     conversation_id: str = Query(min_length=1, max_length=128),
     start: float = Query(ge=0),
     end: float = Query(gt=0),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'speaker_tag_prompts:clip')),
 ):
-    """A short WAV clip of the user's own stored conversation audio."""
+    """A short clip of the user's own stored conversation audio (base64 WAV, at most 12 s)."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise HTTPException(status_code=400, detail='Clip must be at most 12 seconds')
     conversation = conversations_db.get_conversation(uid, conversation_id)
@@ -86,7 +93,10 @@ def get_speaker_tag_prompt_clip(
     pcm = conversation_clip_pcm(uid, conversation, start, end)
     if not pcm:
         raise HTTPException(status_code=404, detail='No audio stored for this part of the conversation')
-    return Response(content=pcm_to_wav(pcm), media_type='audio/wav', headers={'Cache-Control': 'private, max-age=3600'})
+    return SpeakerTagPromptClip(
+        audio_base64=base64.b64encode(pcm_to_wav(pcm)).decode('ascii'),
+        duration_seconds=round(len(pcm) / (2 * CLIP_SAMPLE_RATE), 3),
+    )
 
 
 @router.get('/v1/users/voice-profile-settings', tags=['v1'], response_model=VoiceProfileSettings)

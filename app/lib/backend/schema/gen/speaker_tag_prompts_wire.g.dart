@@ -242,6 +242,34 @@ class GeneratedSpeakerTagPromptAnswerResponse {
   }
 }
 
+class GeneratedSpeakerTagPromptClip {
+  final String audioBase64;
+  final String contentType;
+  final double durationSeconds;
+
+  const GeneratedSpeakerTagPromptClip({
+    required this.audioBase64,
+    this.contentType = "audio/wav",
+    required this.durationSeconds,
+  });
+
+  factory GeneratedSpeakerTagPromptClip.fromJson(Map<String, dynamic> json) {
+    return GeneratedSpeakerTagPromptClip(
+      audioBase64: _required(_readFieldValue<String>(_readField(json, const ["audio_base64"]), "audio_base64", _readString, requiredField: true, nullable: false), "audio_base64"),
+      contentType: _required(_readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: false, defaultValue: "audio/wav"), "content_type"),
+      durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'audio_base64': audioBase64,
+      'content_type': contentType,
+      'duration_seconds': durationSeconds,
+    };
+  }
+}
+
 class GeneratedVoiceProfileSettings {
   final bool saveOtherVoiceProfiles;
   final bool speakerTagPromptsEnabled;

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -26,32 +27,36 @@ class Harness {
     provider = SpeakerTagPromptsProvider(
       fetchPrompts: () async {
         fetches += 1;
-        return GeneratedSpeakerTagPromptsResponse(
-            prompts: prompts ?? [prompt('a'), prompt('b', kind: 'identify')], firstTime: firstTime);
+        return ApiSuccess(GeneratedSpeakerTagPromptsResponse(
+            prompts: prompts ?? [prompt('a'), prompt('b', kind: 'identify')], firstTime: firstTime));
       },
       markShown: (ids) async {
         shown.add(ids);
-        return firstTime;
+        return ApiSuccess(firstTime);
       },
       dismiss: () async {
         dismissals += 1;
-        return true;
+        return const ApiSuccess<void>(null);
       },
       submitAnswer: (request) async {
         answers.add(request);
-        return answerOk ? const GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'owner_missed') : null;
+        return answerOk
+            ? const ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'owner_missed'))
+            : const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 500));
       },
-      fetchSettings: () async => const GeneratedVoiceProfileSettings(),
+      fetchSettings: () async => const ApiSuccess(GeneratedVoiceProfileSettings()),
       updateSettings: ({bool? speakerTagPromptsEnabled, bool? saveOtherVoiceProfiles, required String source}) async {
         settingUpdates.add({'tag': speakerTagPromptsEnabled, 'save': saveOtherVoiceProfiles, 'source': source});
         return settingsOk
-            ? GeneratedVoiceProfileSettings(
+            ? ApiSuccess(GeneratedVoiceProfileSettings(
                 saveOtherVoiceProfiles: saveOtherVoiceProfiles ?? true,
                 speakerTagPromptsEnabled: speakerTagPromptsEnabled ?? true,
-              )
-            : null;
+              ))
+            : const ApiFailure(ApiProblem(ApiProblemKind.transport));
       },
-      loadClip: (p) async => clipAvailable ? Uint8List.fromList([1, 2, 3]) : null,
+      loadClip: (p) async => clipAvailable
+          ? ApiSuccess(Uint8List.fromList([1, 2, 3]))
+          : const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404)),
       playClip: (id, wav) async => true,
       emit: events.add,
       now: () => clock,

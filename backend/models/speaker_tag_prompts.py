@@ -111,6 +111,14 @@ class SpeakerTagPromptAnswerResponse(BaseModel):
     voice_sample_queued: bool = False
 
 
+class SpeakerTagPromptClip(BaseModel):
+    """A short clip of the user's own stored audio, as base64 WAV (16 kHz mono PCM16)."""
+
+    audio_base64: str
+    content_type: str = 'audio/wav'
+    duration_seconds: float
+
+
 class VoiceProfileSettings(BaseModel):
     speaker_tag_prompts_enabled: bool = True
     save_other_voice_profiles: bool = True

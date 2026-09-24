@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
@@ -26,16 +27,16 @@ void main() {
     final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
     final saves = <bool?>[];
     final provider = SpeakerTagPromptsProvider(
-      fetchPrompts: () async => GeneratedSpeakerTagPromptsResponse(prompts: prompts, firstTime: firstTime),
-      markShown: (_) async => firstTime,
-      dismiss: () async => true,
+      fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: prompts, firstTime: firstTime)),
+      markShown: (_) async => ApiSuccess(firstTime),
+      dismiss: () async => const ApiSuccess<void>(null),
       submitAnswer: (request) async {
         answers.add(request);
-        return const GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'skipped');
+        return const ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'skipped'));
       },
       updateSettings: ({bool? speakerTagPromptsEnabled, bool? saveOtherVoiceProfiles, required String source}) async {
         saves.add(saveOtherVoiceProfiles);
-        return GeneratedVoiceProfileSettings(saveOtherVoiceProfiles: saveOtherVoiceProfiles ?? true);
+        return ApiSuccess(GeneratedVoiceProfileSettings(saveOtherVoiceProfiles: saveOtherVoiceProfiles ?? true));
       },
       emit: (_) {},
     );

@@ -25121,6 +25121,30 @@
         "title": "SpeakerTagPromptAnswerResponse",
         "type": "object"
       },
+      "SpeakerTagPromptClip": {
+        "description": "A short clip of the user's own stored audio, as base64 WAV (16 kHz mono PCM16).",
+        "properties": {
+          "audio_base64": {
+            "title": "Audio Base64",
+            "type": "string"
+          },
+          "content_type": {
+            "default": "audio/wav",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "audio_base64",
+          "duration_seconds"
+        ],
+        "title": "SpeakerTagPromptClip",
+        "type": "object"
+      },
       "SpeakerTagPromptKind": {
         "enum": [
           "owner_check",
@@ -55513,7 +55537,7 @@
     },
     "/v1/speaker-tag-prompts/clip": {
       "get": {
-        "description": "A short WAV clip of the user's own stored conversation audio.",
+        "description": "A short clip of the user's own stored conversation audio (base64 WAV, at most 12 s).",
         "operationId": "get_speaker_tag_prompt_clip_v1_speaker_tag_prompts_clip_get",
         "parameters": [
           {
@@ -55588,7 +55612,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerTagPromptClip"
+                }
               }
             },
             "description": "Successful Response"

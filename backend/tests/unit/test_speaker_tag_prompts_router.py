@@ -1,3 +1,5 @@
+import base64
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -81,8 +83,10 @@ def test_clip_rejects_long_windows_and_missing_audio(monkeypatch):
     )
     monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *a: b'\x00\x00' * 160)
     response = client.get('/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 0, 'end': 5})
-    assert response.status_code == 200 and response.headers['content-type'] == 'audio/wav'
-    assert response.content[:4] == b'RIFF'
+    assert response.status_code == 200
+    body = response.json()
+    assert body['content_type'] == 'audio/wav' and body['duration_seconds'] == 0.01
+    assert base64.b64decode(body['audio_base64'])[:4] == b'RIFF'
 
 
 def test_settings_patch_passes_source_and_drops_it_from_updates(monkeypatch):

@@ -214,6 +214,7 @@ SCHEMA_GROUPS = {
             'SpeakerTagPromptsShownResponse',
             'SpeakerTagPromptAnswerRequest',
             'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptClip',
             'VoiceProfileSettings',
             'VoiceProfileSettingsUpdate',
         ),

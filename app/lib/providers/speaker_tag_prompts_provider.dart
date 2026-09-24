@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as api;
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -24,7 +25,7 @@ enum SpeakerTagAnswer {
   final String wireName;
 }
 
-typedef ClipLoader = Future<Uint8List?> Function(GeneratedSpeakerTagPrompt prompt);
+typedef ClipLoader = Future<ApiResult<Uint8List>> Function(GeneratedSpeakerTagPrompt prompt);
 typedef ClipPlayer = Future<bool> Function(String promptId, Uint8List wav);
 
 /// Drives the "Help Omi recognize voices" card: a small daily set of short clips
@@ -33,12 +34,13 @@ typedef ClipPlayer = Future<bool> Function(String promptId, Uint8List wav);
 /// the user saw, played and answered.
 class SpeakerTagPromptsProvider extends BaseProvider {
   SpeakerTagPromptsProvider({
-    Future<GeneratedSpeakerTagPromptsResponse?> Function()? fetchPrompts,
-    Future<bool?> Function(List<String>)? markShown,
-    Future<bool> Function()? dismiss,
-    Future<GeneratedSpeakerTagPromptAnswerResponse?> Function(GeneratedSpeakerTagPromptAnswerRequest)? submitAnswer,
-    Future<GeneratedVoiceProfileSettings?> Function()? fetchSettings,
-    Future<GeneratedVoiceProfileSettings?> Function({
+    Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function()? fetchPrompts,
+    Future<ApiResult<bool>> Function(List<String>)? markShown,
+    Future<ApiResult<void>> Function()? dismiss,
+    Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)?
+        submitAnswer,
+    Future<ApiResult<GeneratedVoiceProfileSettings>> Function()? fetchSettings,
+    Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
       bool? speakerTagPromptsEnabled,
       bool? saveOtherVoiceProfiles,
       required String source,
@@ -60,12 +62,13 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   static const Duration refetchInterval = Duration(minutes: 30);
 
-  final Future<GeneratedSpeakerTagPromptsResponse?> Function() _fetchPrompts;
-  final Future<bool?> Function(List<String>) _markShown;
-  final Future<bool> Function() _dismiss;
-  final Future<GeneratedSpeakerTagPromptAnswerResponse?> Function(GeneratedSpeakerTagPromptAnswerRequest) _submitAnswer;
-  final Future<GeneratedVoiceProfileSettings?> Function() _fetchSettings;
-  final Future<GeneratedVoiceProfileSettings?> Function({
+  final Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function() _fetchPrompts;
+  final Future<ApiResult<bool>> Function(List<String>) _markShown;
+  final Future<ApiResult<void>> Function() _dismiss;
+  final Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)
+      _submitAnswer;
+  final Future<ApiResult<GeneratedVoiceProfileSettings>> Function() _fetchSettings;
+  final Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
     bool? speakerTagPromptsEnabled,
     bool? saveOtherVoiceProfiles,
     required String source,
@@ -105,9 +108,17 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     if (_lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
     _lastFetchAt = now;
     loading = true;
-    final response = await _fetchPrompts();
+    final result = await _fetchPrompts();
     loading = false;
-    if (response == null) return;
+    final GeneratedSpeakerTagPromptsResponse response;
+    switch (result) {
+      case ApiSuccess(:final data):
+        response = data;
+      case ApiFailure(:final problem):
+        // Nothing to show on an outage; a later page visit retries after the throttle window.
+        Logger.debug('speaker tag prompts unavailable: $problem');
+        return;
+    }
     saveOtherVoiceProfiles = response.saveOtherVoiceProfiles;
     final fetched = response.prompts ?? const <GeneratedSpeakerTagPrompt>[];
     if (fetched.isEmpty) {
@@ -132,10 +143,16 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     if (_shownReported || prompts.isEmpty) return;
     _shownReported = true;
     _emit(SpeakerTagPromptsViewed(promptCount: prompts.length, firstTime: firstTime));
-    final serverFirstTime = await _markShown(prompts.map((prompt) => prompt.id).toList());
-    if (serverFirstTime != null && serverFirstTime != firstTime) {
-      firstTime = serverFirstTime;
-      notifyListeners();
+    final result = await _markShown(prompts.map((prompt) => prompt.id).toList());
+    switch (result) {
+      case ApiSuccess(:final data):
+        if (data != firstTime) {
+          firstTime = data;
+          notifyListeners();
+        }
+      case ApiFailure(:final problem):
+        // The set stays on screen; the server just does not start its cooldown.
+        Logger.debug('speaker tag prompts shown report failed: $problem');
     }
   }
 
@@ -150,9 +167,16 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     clipErrorPromptId = null;
     notifyListeners();
     var wav = _clips[prompt.id];
-    wav ??= await _loadClip(prompt);
+    if (wav == null) {
+      switch (await _loadClip(prompt)) {
+        case ApiSuccess(:final data):
+          wav = data;
+        case ApiFailure(:final problem):
+          Logger.debug('speaker tag prompt clip unavailable: $problem');
+      }
+    }
     var played = false;
-    if (wav != null) {
+    if (wav != null && wav.isNotEmpty) {
       _clips[prompt.id] = wav;
       played = await (_playClipOverride ?? _playWithJustAudio)(prompt.id, wav);
     }
@@ -170,7 +194,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     submitting = true;
     answerFailed = false;
     notifyListeners();
-    final response = await _submitAnswer(
+    final result = await _submitAnswer(
       GeneratedSpeakerTagPromptAnswerRequest(
         promptId: prompt.id,
         kind: prompt.kind,
@@ -185,7 +209,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         firstTime: firstTime,
       ),
     );
-    final succeeded = response != null;
+    final succeeded = result is ApiSuccess<GeneratedSpeakerTagPromptAnswerResponse>;
     _emit(
       SpeakerTagPromptAnswerSubmitted(
         kind: _answerKind(prompt.kind),
@@ -218,12 +242,23 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     await _player?.stop();
     playingPromptId = null;
     notifyListeners();
-    if (answeredCount == 0 && _shownReported) await _dismiss();
+    if (answeredCount == 0 && _shownReported) {
+      if (await _dismiss() case ApiFailure(:final problem)) {
+        Logger.debug('speaker tag prompts dismiss failed: $problem');
+      }
+    }
   }
 
   Future<void> loadSettings() async {
-    final settings = await _fetchSettings();
-    if (settings == null) return;
+    final GeneratedVoiceProfileSettings settings;
+    switch (await _fetchSettings()) {
+      case ApiSuccess(:final data):
+        settings = data;
+      case ApiFailure(:final problem):
+        // Leave the switches disabled rather than showing a guessed value.
+        Logger.debug('voice profile settings unavailable: $problem');
+        return;
+    }
     saveOtherVoiceProfiles = settings.saveOtherVoiceProfiles;
     speakerTagPromptsEnabled = settings.speakerTagPromptsEnabled;
     settingsLoaded = true;
@@ -235,9 +270,8 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     final previous = saveOtherVoiceProfiles;
     saveOtherVoiceProfiles = enabled;
     notifyListeners();
-    final settings = await _updateSettings(
-      saveOtherVoiceProfiles: enabled,
-      source: fromFirstPrompt ? 'first_prompt' : 'settings',
+    final settings = _settingsOrNull(
+      await _updateSettings(saveOtherVoiceProfiles: enabled, source: fromFirstPrompt ? 'first_prompt' : 'settings'),
     );
     _emit(
       VoiceProfileSettingToggled(
@@ -262,7 +296,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     final previous = speakerTagPromptsEnabled;
     speakerTagPromptsEnabled = enabled;
     notifyListeners();
-    final settings = await _updateSettings(speakerTagPromptsEnabled: enabled, source: 'settings');
+    final settings = _settingsOrNull(await _updateSettings(speakerTagPromptsEnabled: enabled, source: 'settings'));
     _emit(
       VoiceProfileSettingToggled(
         setting: VoiceProfileSettingToggledSetting.tagPrompts,
@@ -322,7 +356,18 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     }
   }
 
-  static Future<Uint8List?> _defaultLoadClip(GeneratedSpeakerTagPrompt prompt) => api.getSpeakerTagPromptClip(
+  static GeneratedVoiceProfileSettings? _settingsOrNull(ApiResult<GeneratedVoiceProfileSettings> result) {
+    switch (result) {
+      case ApiSuccess(:final data):
+        return data;
+      case ApiFailure(:final problem):
+        // The caller restores the previous switch value and reports succeeded=false.
+        Logger.debug('voice profile settings update failed: $problem');
+        return null;
+    }
+  }
+
+  static Future<ApiResult<Uint8List>> _defaultLoadClip(GeneratedSpeakerTagPrompt prompt) => api.getSpeakerTagPromptClip(
         conversationId: prompt.conversationId,
         start: prompt.clipStart,
         end: prompt.clipEnd,
