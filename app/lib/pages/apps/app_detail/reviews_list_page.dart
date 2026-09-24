@@ -13,6 +13,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/ui.dart';
 
 class ReviewsListPage extends StatefulWidget {
   final App app;
@@ -55,104 +56,81 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     final controller = TextEditingController(text: review.response);
     final isSubmitting = ValueNotifier<bool>(false);
 
-    await showDialog(
+    Future<void> submit(BuildContext dialogContext) async {
+      if (controller.text.trim().isEmpty) return;
+      isSubmitting.value = true;
+      try {
+        await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
+        if (mounted) {
+          context.read<AppProvider>().updateLocalAppReviewResponse(
+                widget.app.id,
+                controller.text.trim(),
+                review.uid,
+              );
+        }
+        review.response = controller.text.trim();
+        review.respondedAt = DateTime.now();
+        if (dialogContext.mounted) {
+          Navigator.pop(dialogContext);
+        }
+        if (mounted) {
+          setState(() {});
+          OmiFeedback.confirm(context, context.l10n.replySentSuccessfully);
+        }
+      } catch (e) {
+        if (mounted) {
+          OmiFeedback.error(context, context.l10n.failedToSendReply(readableError(e)));
+        }
+      } finally {
+        isSubmitting.value = false;
+      }
+    }
+
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          context.l10n.replyToReview,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: ValueListenableBuilder<bool>(
-          valueListenable: isSubmitting,
-          builder: (context, submitting, _) {
-            return Column(
+      builder: (dialogContext) => ValueListenableBuilder<bool>(
+        valueListenable: isSubmitting,
+        builder: (dialogContext, submitting, _) {
+          return OmiAlertDialog(
+            title: context.l10n.replyToReview,
+            content: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: controller,
                   enabled: !submitting,
                   maxLines: 4,
                   maxLength: 250,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: OmiColors.textPrimary),
                   decoration: InputDecoration(
                     hintText: context.l10n.writeYourReply,
-                    hintStyle: TextStyle(color: Colors.grey.shade500),
+                    hintStyle: const TextStyle(color: OmiColors.textTertiary),
                     filled: true,
-                    fillColor: Colors.black.withValues(alpha: 0.3),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.all(12),
+                    fillColor: OmiColors.surface0.withValues(alpha: 0.3),
+                    border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.all(OmiSpacing.sm),
                   ),
                 ),
+                if (submitting) ...[
+                  const SizedBox(height: OmiSpacing.sm),
+                  const Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                ],
               ],
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: isSubmitting.value ? null : () => Navigator.pop(context),
-            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          ValueListenableBuilder<bool>(
-            valueListenable: isSubmitting,
-            builder: (context, submitting, _) {
-              return ElevatedButton(
-                onPressed: submitting
-                    ? null
-                    : () async {
-                        if (controller.text.trim().isEmpty) return;
-                        isSubmitting.value = true;
-                        try {
-                          await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
-                          if (context.mounted) {
-                            context.read<AppProvider>().updateLocalAppReviewResponse(
-                                  widget.app.id,
-                                  controller.text.trim(),
-                                  review.uid,
-                                );
-                          }
-                          review.response = controller.text.trim();
-                          review.respondedAt = DateTime.now();
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            setState(() {});
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.l10n.replySentSuccessfully),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.l10n.failedToSendReply(readableError(e))),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        } finally {
-                          isSubmitting.value = false;
-                        }
-                      },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
-                child: submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          // The button surface is now white, so a white spinner would be invisible.
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                        ),
-                      )
-                    : Text(context.l10n.send),
-              );
-            },
-          ),
-        ],
+            ),
+            actions: [
+              OmiDialogAction(
+                label: context.l10n.cancel,
+                onPressed: submitting ? null : () => Navigator.pop(dialogContext),
+              ),
+              OmiDialogAction(
+                label: context.l10n.send,
+                isDefault: true,
+                onPressed: submitting ? null : () => submit(dialogContext),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -173,32 +151,18 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: OmiColors.surface0,
         elevation: 0,
-        automaticallyImplyLeading: false,
-        leading: Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => Navigator.pop(context),
-            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-          ),
-        ),
-        title: Text(
-          context.l10n.ratingsAndReviews,
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-        ),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.ratingsAndReviews, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
       ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: OmiSpacing.lg),
             // Rating Distribution Widget
             Padding(
               padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width * 0.05),
@@ -208,22 +172,22 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 reviews: allReviews,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: OmiSpacing.xl),
             // Filter Chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
               child: Row(
                 children: [
                   _buildFilterChip(context.l10n.all, selectedRating == 0, () => filterReviews(0)),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: OmiSpacing.xs),
                   ...List.generate(5, (index) {
                     final starCount = index + 1;
                     final count = distribution[starCount] ?? 0;
                     // Only show filter chip if there are reviews for this star rating
                     if (count == 0) return const SizedBox.shrink();
                     return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
+                      padding: const EdgeInsets.only(right: OmiSpacing.xs),
                       child: _buildFilterChip(
                         context.l10n.starFilterLabel(starCount),
                         selectedRating == starCount,
@@ -234,23 +198,12 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: OmiSpacing.xl),
             // Reviews List
             filteredReviews.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 60.0),
-                      child: Column(
-                        children: [
-                          FaIcon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
-                          const SizedBox(height: 16),
-                          Text(
-                            context.l10n.noReviewsFound,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
+                ? OmiEmptyState(
+                    glyph: const FaIcon(FontAwesomeIcons.star),
+                    title: context.l10n.noReviewsFound,
                   )
                 : ListView.separated(
                     shrinkWrap: true,
@@ -270,21 +223,24 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   }
 
   Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade800.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? Colors.white : Colors.grey.shade700, width: 1),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.grey.shade300,
-            fontSize: 14,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+          decoration: BoxDecoration(
+            color: selected ? OmiColors.textPrimary.withValues(alpha: 0.22) : OmiColors.surface2,
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: selected ? OmiColors.textPrimary : OmiColors.border, width: 1),
+          ),
+          child: Text(
+            label,
+            style: OmiType.subhead.copyWith(
+              color: selected ? OmiColors.textPrimary : OmiColors.textSecondary,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -297,10 +253,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     final isOwner = widget.app.isOwner(SharedPreferencesUtil().uid);
 
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16.0),
+        color: OmiColors.surface1.withValues(alpha: 0.8),
+        borderRadius: OmiRadius.lgAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,7 +266,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             children: [
               // Avatar
               ReviewAvatar(seed: avatarSeed, username: review.username, size: 40),
-              const SizedBox(width: 12),
+              const SizedBox(width: OmiSpacing.sm),
               // Name, date, and stars
               Expanded(
                 child: Column(
@@ -320,25 +276,25 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       children: [
                         Text(
                           displayName,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: OmiSpacing.xs),
                         Text(
                           timeago.format(review.ratedAt),
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: OmiSpacing.xs),
                     // Star rating
                     Row(
                       children: List.generate(5, (index) {
                         return Padding(
-                          padding: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.only(right: OmiSpacing.xxs),
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
+                            color: index < review.score.round() ? OmiColors.textPrimary : OmiColors.textTertiary,
                           ),
                         );
                       }),
@@ -350,17 +306,20 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           ),
           // Review text
           if (review.review.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(review.review.decodeString, style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4)),
+            const SizedBox(height: OmiSpacing.sm),
+            Text(
+              review.review.decodeString,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
+            ),
           ],
           // Owner response
           if (review.response.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: OmiSpacing.md),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(OmiSpacing.sm),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(12),
+                color: OmiColors.surface0.withValues(alpha: 0.3),
+                borderRadius: OmiRadius.mdAll,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,21 +328,21 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     children: [
                       Text(
                         widget.app.author,
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
                       ),
                       if (review.respondedAt != null) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: OmiSpacing.xs),
                         Text(
                           timeago.format(review.respondedAt!),
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                         ),
                       ],
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: OmiSpacing.xxs),
                   Text(
                     review.response.decodeString,
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 13, height: 1.4),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
                   ),
                 ],
               ),
@@ -391,20 +350,14 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           ],
           // Reply button for owners
           if (isOwner) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: OmiSpacing.sm),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
+              child: OmiButton.tertiary(
+                label: review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
+                size: OmiButtonSize.compact,
+                leading: FaIcon(review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply),
                 onPressed: () => _showReplyDialog(review),
-                icon: FaIcon(
-                  review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
-                  size: 12,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
               ),
             ),
           ],
