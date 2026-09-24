@@ -59,6 +59,7 @@ class HomeDeepLink {
 /// Opens [link] on top of the home shell whose [context] is given: parent first (the tab, or the
 /// Settings sheet), then the child page; a link to something that no longer exists says so instead
 /// of doing nothing (nav #18). [openSettings] shows the Settings sheet and resolves when it closes.
+/// Resolves once the destination is on screen (pushed), not when it is closed.
 Future<void> openHomeDeepLink(
   BuildContext context,
   HomeDeepLink link, {
@@ -71,44 +72,44 @@ Future<void> openHomeDeepLink(
       final app = await context.read<AppProvider>().getAppFromId(id);
       if (!context.mounted) return;
       if (app == null) {
-        OmiFeedback.error(context, context.l10n.appNotFoundOrRemoved);
+        OmiFeedback.info(context, context.l10n.appNotFoundOrRemoved);
         return;
       }
-      await routeToPage(context, AppDetailPage(app: app));
+      unawaited(routeToPage(context, AppDetailPage(app: app)));
     case 'chat':
       await _prepareChat(context, id);
       if (!context.mounted) return;
       // D1: chat is a normal pushed page everywhere.
-      await routeToPage(context, const ChatPage(isPivotBottom: false));
+      unawaited(routeToPage(context, const ChatPage(isPivotBottom: false)));
     case 'settings':
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.
       unawaited(openSettings());
-      if (id == 'data-privacy') await routeToPage(context, const DataPrivacyPage());
+      if (id == 'data-privacy') unawaited(routeToPage(context, const DataPrivacyPage()));
     case 'memories':
     case 'facts':
-      await routeToPage(context, const MemoriesPage());
+      unawaited(routeToPage(context, const MemoriesPage()));
     case 'conversation':
       if (id == null) return;
       final conversation = await getConversationById(id);
       if (!context.mounted) return;
       if (conversation == null) {
         Logger.debug('Conversation not found: $id');
-        OmiFeedback.error(context, context.l10n.conversationNotFoundOrDeleted);
+        OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
         return;
       }
-      await routeToPage(
+      unawaited(routeToPage(
         context,
         ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
-      );
+      ));
     case 'daily-summary':
       if (id == null) return;
       PlatformManager.instance.analytics.dailySummaryNotificationOpened(
         summaryId: id,
         date: '', // Not in the link; the detail page loads it.
       );
-      await routeToPage(context, DailySummaryDetailPage(summaryId: id));
+      unawaited(routeToPage(context, DailySummaryDetailPage(summaryId: id)));
     case 'wrapped':
-      await routeToPage(context, const Wrapped2025Page());
+      unawaited(routeToPage(context, const Wrapped2025Page()));
     default:
       // `action-items` only selects its tab; unknown aliases open Home.
       return;
