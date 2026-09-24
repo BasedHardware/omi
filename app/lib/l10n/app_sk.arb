@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Pridať 1 úlohu} other{Pridať úlohy ({count})}}",
     "sharedTasksTitle": "{name} zdieľa {count, plural, =1{1 úlohu} other{úlohy ({count})}}",
     "exportedToPlatform": "Exportované do {platform}",
-    "taskDueDate": "Termín: {date}"
+    "taskDueDate": "Termín: {date}",
+    "linkEvent": "Prepojiť udalosť",
+    "noCalendarEventsNearby": "Okolo tohto času sa nenašli žiadne udalosti v kalendári.",
+    "suggestedEvent": "Navrhované",
+    "openInGoogleCalendar": "Otvoriť v Kalendári Google",
+    "shareWithAttendees": "Zdieľať s účastníkmi",
+    "unlinkCalendarEvent": "Zrušiť prepojenie udalosti",
+    "meetingNotesSubject": "Poznámky: {title}",
+    "previousResult": "Predchádzajúci výsledok",
+    "nextResult": "Nasledujúci výsledok",
+    "playFromHere": "Prehrať odtiaľto",
+    "shareConversationQuestion": "Zdieľať konverzáciu?",
+    "conversationTasksEmptyMessage": "Úlohy z tejto konverzácie sa zobrazia tu.",
+    "noPendingTasks": "Žiadne čakajúce úlohy",
+    "nCompleted": "Dokončené: {count}",
+    "identifySpeaker": "Určiť hovoriaceho"
 }

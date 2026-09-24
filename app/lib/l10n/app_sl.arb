@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Dodaj 1 opravilo} other{Dodaj opravila ({count})}}",
     "sharedTasksTitle": "{name} deli {count, plural, =1{1 opravilo} other{opravila ({count})}}",
     "exportedToPlatform": "Izvoženo v {platform}",
-    "taskDueDate": "Rok: {date}"
+    "taskDueDate": "Rok: {date}",
+    "linkEvent": "Poveži dogodek",
+    "noCalendarEventsNearby": "Okoli tega časa ni bilo najdenih dogodkov v koledarju.",
+    "suggestedEvent": "Predlagano",
+    "openInGoogleCalendar": "Odpri v Google Koledarju",
+    "shareWithAttendees": "Deli z udeleženci",
+    "unlinkCalendarEvent": "Odstrani povezavo z dogodkom",
+    "meetingNotesSubject": "Zapiski: {title}",
+    "previousResult": "Prejšnji rezultat",
+    "nextResult": "Naslednji rezultat",
+    "playFromHere": "Predvajaj od tu",
+    "shareConversationQuestion": "Deli pogovor?",
+    "conversationTasksEmptyMessage": "Opravila iz tega pogovora bodo prikazana tukaj.",
+    "noPendingTasks": "Ni čakajočih opravil",
+    "nCompleted": "Dokončano: {count}",
+    "identifySpeaker": "Določi govorca"
 }

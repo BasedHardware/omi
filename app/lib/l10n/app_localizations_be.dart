@@ -10419,4 +10419,53 @@ class AppLocalizationsBe extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Тэрмін: $date';
   }
+
+  @override
+  String get linkEvent => 'Звязаць падзею';
+
+  @override
+  String get noCalendarEventsNearby => 'Каля гэтага часу падзей у календары не знойдзена.';
+
+  @override
+  String get suggestedEvent => 'Прапанавана';
+
+  @override
+  String get openInGoogleCalendar => 'Адкрыць у Google Календары';
+
+  @override
+  String get shareWithAttendees => 'Падзяліцца з удзельнікамі';
+
+  @override
+  String get unlinkCalendarEvent => 'Адвязаць падзею календара';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Нататкі: $title';
+  }
+
+  @override
+  String get previousResult => 'Папярэдні вынік';
+
+  @override
+  String get nextResult => 'Наступны вынік';
+
+  @override
+  String get playFromHere => 'Прайграць адсюль';
+
+  @override
+  String get shareConversationQuestion => 'Падзяліцца размовай?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Задачы з гэтай размовы з\'явяцца тут.';
+
+  @override
+  String get noPendingTasks => 'Няма невыкананых задач';
+
+  @override
+  String nCompleted(int count) {
+    return 'Выканана: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Вызначыць удзельніка';
 }

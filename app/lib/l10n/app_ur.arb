@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 کام شامل کریں} other{{count} کام شامل کریں}}",
     "sharedTasksTitle": "{name} نے {count, plural, =1{1 کام شیئر کیا} other{{count} کام شیئر کیے}}",
     "exportedToPlatform": "{platform} میں ایکسپورٹ کیا گیا",
-    "taskDueDate": "آخری تاریخ {date}"
+    "taskDueDate": "آخری تاریخ {date}",
+    "linkEvent": "ایونٹ لنک کریں",
+    "noCalendarEventsNearby": "اس وقت کے آس پاس کیلنڈر کا کوئی ایونٹ نہیں ملا۔",
+    "suggestedEvent": "تجویز کردہ",
+    "openInGoogleCalendar": "Google Calendar میں کھولیں",
+    "shareWithAttendees": "شرکاء کے ساتھ شیئر کریں",
+    "unlinkCalendarEvent": "کیلنڈر ایونٹ کا لنک ہٹائیں",
+    "meetingNotesSubject": "نوٹس: {title}",
+    "previousResult": "پچھلا نتیجہ",
+    "nextResult": "اگلا نتیجہ",
+    "playFromHere": "یہاں سے چلائیں",
+    "shareConversationQuestion": "گفتگو شیئر کریں؟",
+    "conversationTasksEmptyMessage": "اس گفتگو کے کام یہاں ظاہر ہوں گے۔",
+    "noPendingTasks": "کوئی زیر التواء کام نہیں",
+    "nCompleted": "{count} مکمل",
+    "identifySpeaker": "بولنے والے کی شناخت کریں"
 }

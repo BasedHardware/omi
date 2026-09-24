@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1件のタスクを追加} other{{count}件のタスクを追加}}",
     "sharedTasksTitle": "{name}さんが{count, plural, =1{1件のタスクを共有しました} other{{count}件のタスクを共有しました}}",
     "exportedToPlatform": "{platform}にエクスポート済み",
-    "taskDueDate": "期限：{date}"
+    "taskDueDate": "期限：{date}",
+    "linkEvent": "予定をリンク",
+    "noCalendarEventsNearby": "この時間帯のカレンダーの予定は見つかりませんでした。",
+    "suggestedEvent": "おすすめ",
+    "openInGoogleCalendar": "Google カレンダーで開く",
+    "shareWithAttendees": "参加者と共有",
+    "unlinkCalendarEvent": "予定のリンクを解除",
+    "meetingNotesSubject": "メモ: {title}",
+    "previousResult": "前の結果",
+    "nextResult": "次の結果",
+    "playFromHere": "ここから再生",
+    "shareConversationQuestion": "会話を共有しますか？",
+    "conversationTasksEmptyMessage": "この会話のタスクがここに表示されます。",
+    "noPendingTasks": "未完了のタスクはありません",
+    "nCompleted": "{count} 件完了",
+    "identifySpeaker": "話者を指定"
 }

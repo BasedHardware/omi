@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Přidat 1 úkol} other{Přidat úkoly ({count})}}",
     "sharedTasksTitle": "{name} sdílí {count, plural, =1{1 úkol} other{úkoly ({count})}}",
     "exportedToPlatform": "Exportováno do {platform}",
-    "taskDueDate": "Termín: {date}"
+    "taskDueDate": "Termín: {date}",
+    "linkEvent": "Propojit událost",
+    "noCalendarEventsNearby": "Kolem této doby nebyly nalezeny žádné události v kalendáři.",
+    "suggestedEvent": "Navrženo",
+    "openInGoogleCalendar": "Otevřít v Kalendáři Google",
+    "shareWithAttendees": "Sdílet s účastníky",
+    "unlinkCalendarEvent": "Zrušit propojení události",
+    "meetingNotesSubject": "Poznámky: {title}",
+    "previousResult": "Předchozí výsledek",
+    "nextResult": "Další výsledek",
+    "playFromHere": "Přehrát odsud",
+    "shareConversationQuestion": "Sdílet konverzaci?",
+    "conversationTasksEmptyMessage": "Úkoly z této konverzace se zobrazí zde.",
+    "noPendingTasks": "Žádné čekající úkoly",
+    "nCompleted": "Dokončeno: {count}",
+    "identifySpeaker": "Určit mluvčího"
 }

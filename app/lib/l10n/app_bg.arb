@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Добави 1 задача} other{Добави {count} задачи}}",
     "sharedTasksTitle": "{name} сподели {count, plural, =1{1 задача} other{{count} задачи}}",
     "exportedToPlatform": "Експортирано в {platform}",
-    "taskDueDate": "Срок: {date}"
+    "taskDueDate": "Срок: {date}",
+    "linkEvent": "Свързване на събитие",
+    "noCalendarEventsNearby": "Няма намерени събития в календара около това време.",
+    "suggestedEvent": "Предложено",
+    "openInGoogleCalendar": "Отваряне в Google Календар",
+    "shareWithAttendees": "Споделяне с участниците",
+    "unlinkCalendarEvent": "Премахване на връзката със събитието",
+    "meetingNotesSubject": "Бележки: {title}",
+    "previousResult": "Предишен резултат",
+    "nextResult": "Следващ резултат",
+    "playFromHere": "Пусни оттук",
+    "shareConversationQuestion": "Споделяне на разговора?",
+    "conversationTasksEmptyMessage": "Задачите от този разговор ще се появят тук.",
+    "noPendingTasks": "Няма чакащи задачи",
+    "nCompleted": "{count} завършени",
+    "identifySpeaker": "Разпознаване на говорещия"
 }

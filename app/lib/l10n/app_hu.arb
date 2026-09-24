@@ -3408,5 +3408,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 feladat hozzáadása} other{{count} feladat hozzáadása}}",
     "sharedTasksTitle": "{name} megosztott {count, plural, =1{1 feladatot} other{{count} feladatot}}",
     "exportedToPlatform": "Exportálva ide: {platform}",
-    "taskDueDate": "Határidő: {date}"
+    "taskDueDate": "Határidő: {date}",
+    "linkEvent": "Esemény összekapcsolása",
+    "noCalendarEventsNearby": "Ebben az időpontban nem található naptáresemény.",
+    "suggestedEvent": "Javasolt",
+    "openInGoogleCalendar": "Megnyitás a Google Naptárban",
+    "shareWithAttendees": "Megosztás a résztvevőkkel",
+    "unlinkCalendarEvent": "Naptáresemény leválasztása",
+    "meetingNotesSubject": "Jegyzetek: {title}",
+    "previousResult": "Előző találat",
+    "nextResult": "Következő találat",
+    "playFromHere": "Lejátszás innen",
+    "shareConversationQuestion": "Megosztod a beszélgetést?",
+    "conversationTasksEmptyMessage": "A beszélgetés feladatai itt jelennek meg.",
+    "noPendingTasks": "Nincs függő feladat",
+    "nCompleted": "{count} kész",
+    "identifySpeaker": "Beszélő azonosítása"
 }

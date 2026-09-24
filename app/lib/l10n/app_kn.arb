@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 ಕಾರ್ಯ ಸೇರಿಸಿ} other{{count} ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಿ}}",
     "sharedTasksTitle": "{name} {count, plural, =1{1 ಕಾರ್ಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ} other{{count} ಕಾರ್ಯಗಳನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ}}",
     "exportedToPlatform": "{platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
-    "taskDueDate": "ಅಂತಿಮ ದಿನಾಂಕ {date}"
+    "taskDueDate": "ಅಂತಿಮ ದಿನಾಂಕ {date}",
+    "linkEvent": "ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಿ",
+    "noCalendarEventsNearby": "ಈ ಸಮಯದ ಸುತ್ತ ಯಾವುದೇ ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
+    "suggestedEvent": "ಸೂಚಿಸಲಾಗಿದೆ",
+    "openInGoogleCalendar": "Google Calendar ನಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "shareWithAttendees": "ಭಾಗವಹಿಸುವವರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ",
+    "unlinkCalendarEvent": "ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಅನ್‌ಲಿಂಕ್ ಮಾಡಿ",
+    "meetingNotesSubject": "ಟಿಪ್ಪಣಿಗಳು: {title}",
+    "previousResult": "ಹಿಂದಿನ ಫಲಿತಾಂಶ",
+    "nextResult": "ಮುಂದಿನ ಫಲಿತಾಂಶ",
+    "playFromHere": "ಇಲ್ಲಿಂದ ಪ್ಲೇ ಮಾಡಿ",
+    "shareConversationQuestion": "ಸಂಭಾಷಣೆ ಹಂಚಿಕೊಳ್ಳುವುದೇ?",
+    "conversationTasksEmptyMessage": "ಈ ಸಂಭಾಷಣೆಯ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "noPendingTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳಿಲ್ಲ",
+    "nCompleted": "{count} ಪೂರ್ಣಗೊಂಡಿದೆ",
+    "identifySpeaker": "ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಿ"
 }

@@ -10398,4 +10398,53 @@ class AppLocalizationsMr extends AppLocalizations {
   String taskDueDate(String date) {
     return 'देय $date';
   }
+
+  @override
+  String get linkEvent => 'इव्हेंट लिंक करा';
+
+  @override
+  String get noCalendarEventsNearby => 'या वेळेच्या आसपास कोणतेही कॅलेंडर इव्हेंट सापडले नाहीत.';
+
+  @override
+  String get suggestedEvent => 'सुचवलेले';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendar मध्ये उघडा';
+
+  @override
+  String get shareWithAttendees => 'सहभागींसोबत शेअर करा';
+
+  @override
+  String get unlinkCalendarEvent => 'कॅलेंडर इव्हेंट अनलिंक करा';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'नोट्स: $title';
+  }
+
+  @override
+  String get previousResult => 'मागील निकाल';
+
+  @override
+  String get nextResult => 'पुढील निकाल';
+
+  @override
+  String get playFromHere => 'येथून प्ले करा';
+
+  @override
+  String get shareConversationQuestion => 'संभाषण शेअर करायचे?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'या संभाषणातील कार्ये येथे दिसतील.';
+
+  @override
+  String get noPendingTasks => 'कोणतीही प्रलंबित कार्ये नाहीत';
+
+  @override
+  String nCompleted(int count) {
+    return '$count पूर्ण';
+  }
+
+  @override
+  String get identifySpeaker => 'वक्ता ओळखा';
 }

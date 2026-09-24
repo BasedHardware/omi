@@ -10437,4 +10437,53 @@ class AppLocalizationsTe extends AppLocalizations {
   String taskDueDate(String date) {
     return 'గడువు $date';
   }
+
+  @override
+  String get linkEvent => 'ఈవెంట్‌ను లింక్ చేయండి';
+
+  @override
+  String get noCalendarEventsNearby => 'ఈ సమయానికి సమీపంలో క్యాలెండర్ ఈవెంట్‌లు ఏవీ కనుగొనబడలేదు.';
+
+  @override
+  String get suggestedEvent => 'సూచించబడింది';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendarలో తెరవండి';
+
+  @override
+  String get shareWithAttendees => 'పాల్గొనేవారితో షేర్ చేయండి';
+
+  @override
+  String get unlinkCalendarEvent => 'క్యాలెండర్ ఈవెంట్ లింక్ తీసివేయండి';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'నోట్స్: $title';
+  }
+
+  @override
+  String get previousResult => 'మునుపటి ఫలితం';
+
+  @override
+  String get nextResult => 'తదుపరి ఫలితం';
+
+  @override
+  String get playFromHere => 'ఇక్కడి నుండి ప్లే చేయండి';
+
+  @override
+  String get shareConversationQuestion => 'సంభాషణను షేర్ చేయాలా?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'ఈ సంభాషణ నుండి టాస్క్‌లు ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get noPendingTasks => 'పెండింగ్ టాస్క్‌లు లేవు';
+
+  @override
+  String nCompleted(int count) {
+    return '$count పూర్తయ్యాయి';
+  }
+
+  @override
+  String get identifySpeaker => 'మాట్లాడేవారిని గుర్తించండి';
 }

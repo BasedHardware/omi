@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Lisa 1 ülesanne} other{Lisa {count} ülesannet}}",
     "sharedTasksTitle": "{name} jagas {count, plural, =1{1 ülesannet} other{{count} ülesannet}}",
     "exportedToPlatform": "Eksporditud rakendusse {platform}",
-    "taskDueDate": "Tähtaeg {date}"
+    "taskDueDate": "Tähtaeg {date}",
+    "linkEvent": "Seo sündmus",
+    "noCalendarEventsNearby": "Selle aja ümbruses ei leitud kalendrisündmusi.",
+    "suggestedEvent": "Soovitatud",
+    "openInGoogleCalendar": "Ava Google'i kalendris",
+    "shareWithAttendees": "Jaga osalejatega",
+    "unlinkCalendarEvent": "Eemalda kalendrisündmuse seos",
+    "meetingNotesSubject": "Märkmed: {title}",
+    "previousResult": "Eelmine tulemus",
+    "nextResult": "Järgmine tulemus",
+    "playFromHere": "Esita siit",
+    "shareConversationQuestion": "Kas jagada vestlust?",
+    "conversationTasksEmptyMessage": "Selle vestluse ülesanded ilmuvad siia.",
+    "noPendingTasks": "Ootel ülesandeid pole",
+    "nCompleted": "{count} tehtud",
+    "identifySpeaker": "Tuvasta kõneleja"
 }

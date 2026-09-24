@@ -3347,5 +3347,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Dodaj 1 zadanie} other{Dodaj zadania ({count})}}",
     "sharedTasksTitle": "{name} udostępnia {count, plural, =1{1 zadanie} other{zadania ({count})}}",
     "exportedToPlatform": "Wyeksportowano do {platform}",
-    "taskDueDate": "Termin: {date}"
+    "taskDueDate": "Termin: {date}",
+    "linkEvent": "Połącz wydarzenie",
+    "noCalendarEventsNearby": "Nie znaleziono wydarzeń w kalendarzu w okolicach tej godziny.",
+    "suggestedEvent": "Sugerowane",
+    "openInGoogleCalendar": "Otwórz w Kalendarzu Google",
+    "shareWithAttendees": "Udostępnij uczestnikom",
+    "unlinkCalendarEvent": "Odłącz wydarzenie",
+    "meetingNotesSubject": "Notatki: {title}",
+    "previousResult": "Poprzedni wynik",
+    "nextResult": "Następny wynik",
+    "playFromHere": "Odtwórz od tego miejsca",
+    "shareConversationQuestion": "Udostępnić rozmowę?",
+    "conversationTasksEmptyMessage": "Zadania z tej rozmowy pojawią się tutaj.",
+    "noPendingTasks": "Brak oczekujących zadań",
+    "nCompleted": "Ukończone: {count}",
+    "identifySpeaker": "Wskaż mówcę"
 }

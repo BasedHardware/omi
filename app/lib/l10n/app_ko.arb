@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{작업 1개 추가} other{작업 {count}개 추가}}",
     "sharedTasksTitle": "{name}님이 {count, plural, =1{작업 1개를 공유했어요} other{작업 {count}개를 공유했어요}}",
     "exportedToPlatform": "{platform}(으)로 내보냄",
-    "taskDueDate": "마감 {date}"
+    "taskDueDate": "마감 {date}",
+    "linkEvent": "일정 연결",
+    "noCalendarEventsNearby": "이 시간대의 캘린더 일정이 없습니다.",
+    "suggestedEvent": "추천",
+    "openInGoogleCalendar": "Google 캘린더에서 열기",
+    "shareWithAttendees": "참석자와 공유",
+    "unlinkCalendarEvent": "일정 연결 해제",
+    "meetingNotesSubject": "메모: {title}",
+    "previousResult": "이전 결과",
+    "nextResult": "다음 결과",
+    "playFromHere": "여기부터 재생",
+    "shareConversationQuestion": "대화를 공유할까요?",
+    "conversationTasksEmptyMessage": "이 대화의 작업이 여기에 표시됩니다.",
+    "noPendingTasks": "대기 중인 작업이 없습니다",
+    "nCompleted": "{count}개 완료",
+    "identifySpeaker": "화자 지정"
 }

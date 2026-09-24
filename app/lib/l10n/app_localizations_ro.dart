@@ -10437,4 +10437,53 @@ class AppLocalizationsRo extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Termen: $date';
   }
+
+  @override
+  String get linkEvent => 'Asociază evenimentul';
+
+  @override
+  String get noCalendarEventsNearby => 'Nu s-au găsit evenimente în calendar în jurul acestei ore.';
+
+  @override
+  String get suggestedEvent => 'Sugerat';
+
+  @override
+  String get openInGoogleCalendar => 'Deschide în Google Calendar';
+
+  @override
+  String get shareWithAttendees => 'Distribuie participanților';
+
+  @override
+  String get unlinkCalendarEvent => 'Anulează asocierea evenimentului';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notițe: $title';
+  }
+
+  @override
+  String get previousResult => 'Rezultatul anterior';
+
+  @override
+  String get nextResult => 'Rezultatul următor';
+
+  @override
+  String get playFromHere => 'Redă de aici';
+
+  @override
+  String get shareConversationQuestion => 'Distribui conversația?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Sarcinile din această conversație vor apărea aici.';
+
+  @override
+  String get noPendingTasks => 'Nicio sarcină în așteptare';
+
+  @override
+  String nCompleted(int count) {
+    return '$count finalizate';
+  }
+
+  @override
+  String get identifySpeaker => 'Identifică vorbitorul';
 }

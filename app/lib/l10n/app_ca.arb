@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Afegeix 1 tasca} other{Afegeix {count} tasques}}",
     "sharedTasksTitle": "{name} ha compartit {count, plural, =1{1 tasca} other{{count} tasques}}",
     "exportedToPlatform": "Exportat a {platform}",
-    "taskDueDate": "Venciment: {date}"
+    "taskDueDate": "Venciment: {date}",
+    "linkEvent": "Enllaça un esdeveniment",
+    "noCalendarEventsNearby": "No s'han trobat esdeveniments del calendari al voltant d'aquesta hora.",
+    "suggestedEvent": "Suggerit",
+    "openInGoogleCalendar": "Obre a Google Calendar",
+    "shareWithAttendees": "Comparteix amb els assistents",
+    "unlinkCalendarEvent": "Desenllaça l'esdeveniment",
+    "meetingNotesSubject": "Notes: {title}",
+    "previousResult": "Resultat anterior",
+    "nextResult": "Resultat següent",
+    "playFromHere": "Reprodueix des d'aquí",
+    "shareConversationQuestion": "Vols compartir la conversa?",
+    "conversationTasksEmptyMessage": "Les tasques d'aquesta conversa apareixeran aquí.",
+    "noPendingTasks": "No hi ha tasques pendents",
+    "nCompleted": "{count} completades",
+    "identifySpeaker": "Identifica el parlant"
 }

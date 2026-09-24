@@ -10403,4 +10403,53 @@ class AppLocalizationsSr extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Рок: $date';
   }
+
+  @override
+  String get linkEvent => 'Повежи догађај';
+
+  @override
+  String get noCalendarEventsNearby => 'Око овог времена нема догађаја у календару.';
+
+  @override
+  String get suggestedEvent => 'Предложено';
+
+  @override
+  String get openInGoogleCalendar => 'Отвори у Google календару';
+
+  @override
+  String get shareWithAttendees => 'Подели са учесницима';
+
+  @override
+  String get unlinkCalendarEvent => 'Уклони везу са догађајем';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Белешке: $title';
+  }
+
+  @override
+  String get previousResult => 'Претходни резултат';
+
+  @override
+  String get nextResult => 'Следећи резултат';
+
+  @override
+  String get playFromHere => 'Пусти одавде';
+
+  @override
+  String get shareConversationQuestion => 'Поделити разговор?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Задаци из овог разговора ће се појавити овде.';
+
+  @override
+  String get noPendingTasks => 'Нема задатака на чекању';
+
+  @override
+  String nCompleted(int count) {
+    return 'Завршено: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Означи говорника';
 }

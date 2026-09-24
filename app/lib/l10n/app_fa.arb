@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{افزودن ۱ کار} other{افزودن {count} کار}}",
     "sharedTasksTitle": "{name} {count, plural, =1{۱ کار را هم‌رسانی کرد} other{{count} کار را هم‌رسانی کرد}}",
     "exportedToPlatform": "به {platform} صادر شد",
-    "taskDueDate": "سررسید {date}"
+    "taskDueDate": "سررسید {date}",
+    "linkEvent": "پیوند رویداد",
+    "noCalendarEventsNearby": "هیچ رویداد تقویمی در حدود این زمان پیدا نشد.",
+    "suggestedEvent": "پیشنهادی",
+    "openInGoogleCalendar": "باز کردن در تقویم Google",
+    "shareWithAttendees": "اشتراک‌گذاری با شرکت‌کنندگان",
+    "unlinkCalendarEvent": "لغو پیوند رویداد تقویم",
+    "meetingNotesSubject": "یادداشت‌ها: {title}",
+    "previousResult": "نتیجهٔ قبلی",
+    "nextResult": "نتیجهٔ بعدی",
+    "playFromHere": "پخش از اینجا",
+    "shareConversationQuestion": "گفتگو به اشتراک گذاشته شود؟",
+    "conversationTasksEmptyMessage": "وظایف این گفتگو اینجا نمایش داده می‌شوند.",
+    "noPendingTasks": "وظیفهٔ در انتظاری نیست",
+    "nCompleted": "{count} انجام‌شده",
+    "identifySpeaker": "شناسایی گوینده"
 }

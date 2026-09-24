@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Idagdag ang 1 Gawain} other{Idagdag ang {count} Gawain}}",
     "sharedTasksTitle": "Nagbahagi si {name} ng {count, plural, =1{1 gawain} other{{count} gawain}}",
     "exportedToPlatform": "Na-export sa {platform}",
-    "taskDueDate": "Takdang petsa {date}"
+    "taskDueDate": "Takdang petsa {date}",
+    "linkEvent": "I-link ang Event",
+    "noCalendarEventsNearby": "Walang nahanap na event sa kalendaryo sa oras na ito.",
+    "suggestedEvent": "Iminumungkahi",
+    "openInGoogleCalendar": "Buksan sa Google Calendar",
+    "shareWithAttendees": "Ibahagi sa mga Dumalo",
+    "unlinkCalendarEvent": "I-unlink ang Event sa Kalendaryo",
+    "meetingNotesSubject": "Mga Tala: {title}",
+    "previousResult": "Nakaraang resulta",
+    "nextResult": "Susunod na resulta",
+    "playFromHere": "I-play mula rito",
+    "shareConversationQuestion": "Ibahagi ang Pag-uusap?",
+    "conversationTasksEmptyMessage": "Lalabas dito ang mga gawain mula sa pag-uusap na ito.",
+    "noPendingTasks": "Walang nakabinbing gawain",
+    "nCompleted": "{count} tapos na",
+    "identifySpeaker": "Tukuyin ang nagsasalita"
 }

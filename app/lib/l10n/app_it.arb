@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Aggiungi 1 attività} other{Aggiungi {count} attività}}",
     "sharedTasksTitle": "{name} ha condiviso {count, plural, =1{1 attività} other{{count} attività}}",
     "exportedToPlatform": "Esportato in {platform}",
-    "taskDueDate": "Scadenza: {date}"
+    "taskDueDate": "Scadenza: {date}",
+    "linkEvent": "Collega evento",
+    "noCalendarEventsNearby": "Nessun evento del calendario trovato in questo orario.",
+    "suggestedEvent": "Suggerito",
+    "openInGoogleCalendar": "Apri in Google Calendar",
+    "shareWithAttendees": "Condividi con i partecipanti",
+    "unlinkCalendarEvent": "Scollega evento del calendario",
+    "meetingNotesSubject": "Note: {title}",
+    "previousResult": "Risultato precedente",
+    "nextResult": "Risultato successivo",
+    "playFromHere": "Riproduci da qui",
+    "shareConversationQuestion": "Condividere la conversazione?",
+    "conversationTasksEmptyMessage": "Le attività di questa conversazione appariranno qui.",
+    "noPendingTasks": "Nessuna attività in sospeso",
+    "nCompleted": "{count} completate",
+    "identifySpeaker": "Identifica chi parla"
 }

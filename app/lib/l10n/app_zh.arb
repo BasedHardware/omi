@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{添加 1 个任务} other{添加 {count} 个任务}}",
     "sharedTasksTitle": "{name} 分享了{count, plural, =1{1 个任务} other{{count} 个任务}}",
     "exportedToPlatform": "已导出到 {platform}",
-    "taskDueDate": "截止 {date}"
+    "taskDueDate": "截止 {date}",
+    "linkEvent": "关联日程",
+    "noCalendarEventsNearby": "该时间附近没有找到日历日程。",
+    "suggestedEvent": "推荐",
+    "openInGoogleCalendar": "在 Google 日历中打开",
+    "shareWithAttendees": "与参与者共享",
+    "unlinkCalendarEvent": "取消关联日程",
+    "meetingNotesSubject": "笔记：{title}",
+    "previousResult": "上一个结果",
+    "nextResult": "下一个结果",
+    "playFromHere": "从这里播放",
+    "shareConversationQuestion": "共享对话？",
+    "conversationTasksEmptyMessage": "此对话中的任务将显示在这里。",
+    "noPendingTasks": "没有待办任务",
+    "nCompleted": "已完成 {count} 项",
+    "identifySpeaker": "指定说话人"
 }

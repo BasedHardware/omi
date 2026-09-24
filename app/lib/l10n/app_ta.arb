@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 பணியைச் சேர்} other{{count} பணிகளைச் சேர்}}",
     "sharedTasksTitle": "{name} {count, plural, =1{1 பணியைப் பகிர்ந்தார்} other{{count} பணிகளைப் பகிர்ந்தார்}}",
     "exportedToPlatform": "{platform}க்கு ஏற்றுமதி செய்யப்பட்டது",
-    "taskDueDate": "கெடு {date}"
+    "taskDueDate": "கெடு {date}",
+    "linkEvent": "நிகழ்வை இணைக்கவும்",
+    "noCalendarEventsNearby": "இந்த நேரத்தில் எந்த நாட்காட்டி நிகழ்வுகளும் இல்லை.",
+    "suggestedEvent": "பரிந்துரைக்கப்பட்டது",
+    "openInGoogleCalendar": "Google Calendar-இல் திற",
+    "shareWithAttendees": "பங்கேற்பாளர்களுடன் பகிர்",
+    "unlinkCalendarEvent": "நாட்காட்டி நிகழ்வின் இணைப்பை நீக்கு",
+    "meetingNotesSubject": "குறிப்புகள்: {title}",
+    "previousResult": "முந்தைய முடிவு",
+    "nextResult": "அடுத்த முடிவு",
+    "playFromHere": "இங்கிருந்து இயக்கு",
+    "shareConversationQuestion": "உரையாடலைப் பகிரவா?",
+    "conversationTasksEmptyMessage": "இந்த உரையாடலின் பணிகள் இங்கே தோன்றும்.",
+    "noPendingTasks": "நிலுவையிலுள்ள பணிகள் இல்லை",
+    "nCompleted": "{count} முடிந்தது",
+    "identifySpeaker": "பேசுபவரை அடையாளம் காண்"
 }

@@ -10460,4 +10460,53 @@ class AppLocalizationsEl extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Λήξη: $date';
   }
+
+  @override
+  String get linkEvent => 'Σύνδεση συμβάντος';
+
+  @override
+  String get noCalendarEventsNearby => 'Δεν βρέθηκαν συμβάντα ημερολογίου γύρω από αυτή την ώρα.';
+
+  @override
+  String get suggestedEvent => 'Προτεινόμενο';
+
+  @override
+  String get openInGoogleCalendar => 'Άνοιγμα στο Google Calendar';
+
+  @override
+  String get shareWithAttendees => 'Κοινοποίηση στους συμμετέχοντες';
+
+  @override
+  String get unlinkCalendarEvent => 'Αποσύνδεση συμβάντος ημερολογίου';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Σημειώσεις: $title';
+  }
+
+  @override
+  String get previousResult => 'Προηγούμενο αποτέλεσμα';
+
+  @override
+  String get nextResult => 'Επόμενο αποτέλεσμα';
+
+  @override
+  String get playFromHere => 'Αναπαραγωγή από εδώ';
+
+  @override
+  String get shareConversationQuestion => 'Κοινοποίηση συνομιλίας;';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Οι εργασίες από αυτή τη συνομιλία θα εμφανίζονται εδώ.';
+
+  @override
+  String get noPendingTasks => 'Δεν υπάρχουν εκκρεμείς εργασίες';
+
+  @override
+  String nCompleted(int count) {
+    return '$count ολοκληρωμένες';
+  }
+
+  @override
+  String get identifySpeaker => 'Αναγνώριση ομιλητή';
 }

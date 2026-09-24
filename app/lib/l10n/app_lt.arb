@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Pridėti 1 užduotį} other{Pridėti užduotis ({count})}}",
     "sharedTasksTitle": "{name} pasidalijo {count, plural, =1{1 užduotimi} other{užduotimis ({count})}}",
     "exportedToPlatform": "Eksportuota į {platform}",
-    "taskDueDate": "Terminas {date}"
+    "taskDueDate": "Terminas {date}",
+    "linkEvent": "Susieti įvykį",
+    "noCalendarEventsNearby": "Apie šį laiką kalendoriaus įvykių nerasta.",
+    "suggestedEvent": "Siūloma",
+    "openInGoogleCalendar": "Atidaryti „Google“ kalendoriuje",
+    "shareWithAttendees": "Bendrinti su dalyviais",
+    "unlinkCalendarEvent": "Atsieti kalendoriaus įvykį",
+    "meetingNotesSubject": "Užrašai: {title}",
+    "previousResult": "Ankstesnis rezultatas",
+    "nextResult": "Kitas rezultatas",
+    "playFromHere": "Leisti nuo čia",
+    "shareConversationQuestion": "Bendrinti pokalbį?",
+    "conversationTasksEmptyMessage": "Šio pokalbio užduotys bus rodomos čia.",
+    "noPendingTasks": "Laukiančių užduočių nėra",
+    "nCompleted": "Atlikta: {count}",
+    "identifySpeaker": "Nustatyti kalbėtoją"
 }

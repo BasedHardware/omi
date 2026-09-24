@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{הוספת משימה אחת} other{הוספת {count} משימות}}",
     "sharedTasksTitle": "{name} שיתף/ה {count, plural, =1{משימה אחת} other{{count} משימות}}",
     "exportedToPlatform": "יוצא אל {platform}",
-    "taskDueDate": "תאריך יעד: {date}"
+    "taskDueDate": "תאריך יעד: {date}",
+    "linkEvent": "קישור אירוע",
+    "noCalendarEventsNearby": "לא נמצאו אירועי יומן בסביבות השעה הזו.",
+    "suggestedEvent": "מוצע",
+    "openInGoogleCalendar": "פתיחה ביומן Google",
+    "shareWithAttendees": "שיתוף עם המשתתפים",
+    "unlinkCalendarEvent": "ביטול קישור לאירוע היומן",
+    "meetingNotesSubject": "הערות: {title}",
+    "previousResult": "התוצאה הקודמת",
+    "nextResult": "התוצאה הבאה",
+    "playFromHere": "הפעלה מכאן",
+    "shareConversationQuestion": "לשתף את השיחה?",
+    "conversationTasksEmptyMessage": "המשימות מהשיחה הזו יופיעו כאן.",
+    "noPendingTasks": "אין משימות ממתינות",
+    "nCompleted": "{count} הושלמו",
+    "identifySpeaker": "זיהוי דובר"
 }

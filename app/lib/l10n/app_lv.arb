@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Pievienot 1 uzdevumu} other{Pievienot uzdevumus ({count})}}",
     "sharedTasksTitle": "{name} kopīgoja {count, plural, =1{1 uzdevumu} other{uzdevumus ({count})}}",
     "exportedToPlatform": "Eksportēts uz {platform}",
-    "taskDueDate": "Termiņš: {date}"
+    "taskDueDate": "Termiņš: {date}",
+    "linkEvent": "Saistīt notikumu",
+    "noCalendarEventsNearby": "Ap šo laiku kalendāra notikumi netika atrasti.",
+    "suggestedEvent": "Ieteikts",
+    "openInGoogleCalendar": "Atvērt Google kalendārā",
+    "shareWithAttendees": "Kopīgot ar dalībniekiem",
+    "unlinkCalendarEvent": "Atsaistīt kalendāra notikumu",
+    "meetingNotesSubject": "Piezīmes: {title}",
+    "previousResult": "Iepriekšējais rezultāts",
+    "nextResult": "Nākamais rezultāts",
+    "playFromHere": "Atskaņot no šejienes",
+    "shareConversationQuestion": "Kopīgot sarunu?",
+    "conversationTasksEmptyMessage": "Šīs sarunas uzdevumi parādīsies šeit.",
+    "noPendingTasks": "Nav neizpildītu uzdevumu",
+    "nCompleted": "Pabeigti: {count}",
+    "identifySpeaker": "Identificēt runātāju"
 }

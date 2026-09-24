@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Adaugă 1 sarcină} other{Adaugă {count} sarcini}}",
     "sharedTasksTitle": "{name} a partajat {count, plural, =1{1 sarcină} other{{count} sarcini}}",
     "exportedToPlatform": "Exportat în {platform}",
-    "taskDueDate": "Termen: {date}"
+    "taskDueDate": "Termen: {date}",
+    "linkEvent": "Asociază evenimentul",
+    "noCalendarEventsNearby": "Nu s-au găsit evenimente în calendar în jurul acestei ore.",
+    "suggestedEvent": "Sugerat",
+    "openInGoogleCalendar": "Deschide în Google Calendar",
+    "shareWithAttendees": "Distribuie participanților",
+    "unlinkCalendarEvent": "Anulează asocierea evenimentului",
+    "meetingNotesSubject": "Notițe: {title}",
+    "previousResult": "Rezultatul anterior",
+    "nextResult": "Rezultatul următor",
+    "playFromHere": "Redă de aici",
+    "shareConversationQuestion": "Distribui conversația?",
+    "conversationTasksEmptyMessage": "Sarcinile din această conversație vor apărea aici.",
+    "noPendingTasks": "Nicio sarcină în așteptare",
+    "nCompleted": "{count} finalizate",
+    "identifySpeaker": "Identifică vorbitorul"
 }

@@ -10407,4 +10407,53 @@ class AppLocalizationsLt extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Terminas $date';
   }
+
+  @override
+  String get linkEvent => 'Susieti įvykį';
+
+  @override
+  String get noCalendarEventsNearby => 'Apie šį laiką kalendoriaus įvykių nerasta.';
+
+  @override
+  String get suggestedEvent => 'Siūloma';
+
+  @override
+  String get openInGoogleCalendar => 'Atidaryti „Google“ kalendoriuje';
+
+  @override
+  String get shareWithAttendees => 'Bendrinti su dalyviais';
+
+  @override
+  String get unlinkCalendarEvent => 'Atsieti kalendoriaus įvykį';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Užrašai: $title';
+  }
+
+  @override
+  String get previousResult => 'Ankstesnis rezultatas';
+
+  @override
+  String get nextResult => 'Kitas rezultatas';
+
+  @override
+  String get playFromHere => 'Leisti nuo čia';
+
+  @override
+  String get shareConversationQuestion => 'Bendrinti pokalbį?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Šio pokalbio užduotys bus rodomos čia.';
+
+  @override
+  String get noPendingTasks => 'Laukiančių užduočių nėra';
+
+  @override
+  String nCompleted(int count) {
+    return 'Atlikta: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Nustatyti kalbėtoją';
 }

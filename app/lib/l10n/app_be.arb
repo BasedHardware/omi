@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Дадаць 1 задачу} other{Дадаць задачы: {count}}}",
     "sharedTasksTitle": "{name} падзяліўся(-лася) {count, plural, =1{1 задачай} other{задачамі: {count}}}",
     "exportedToPlatform": "Экспартавана ў {platform}",
-    "taskDueDate": "Тэрмін: {date}"
+    "taskDueDate": "Тэрмін: {date}",
+    "linkEvent": "Звязаць падзею",
+    "noCalendarEventsNearby": "Каля гэтага часу падзей у календары не знойдзена.",
+    "suggestedEvent": "Прапанавана",
+    "openInGoogleCalendar": "Адкрыць у Google Календары",
+    "shareWithAttendees": "Падзяліцца з удзельнікамі",
+    "unlinkCalendarEvent": "Адвязаць падзею календара",
+    "meetingNotesSubject": "Нататкі: {title}",
+    "previousResult": "Папярэдні вынік",
+    "nextResult": "Наступны вынік",
+    "playFromHere": "Прайграць адсюль",
+    "shareConversationQuestion": "Падзяліцца размовай?",
+    "conversationTasksEmptyMessage": "Задачы з гэтай размовы з'явяцца тут.",
+    "noPendingTasks": "Няма невыкананых задач",
+    "nCompleted": "Выканана: {count}",
+    "identifySpeaker": "Вызначыць удзельніка"
 }

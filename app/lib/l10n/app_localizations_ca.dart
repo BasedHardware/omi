@@ -10447,4 +10447,53 @@ class AppLocalizationsCa extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Venciment: $date';
   }
+
+  @override
+  String get linkEvent => 'Enllaça un esdeveniment';
+
+  @override
+  String get noCalendarEventsNearby => 'No s\'han trobat esdeveniments del calendari al voltant d\'aquesta hora.';
+
+  @override
+  String get suggestedEvent => 'Suggerit';
+
+  @override
+  String get openInGoogleCalendar => 'Obre a Google Calendar';
+
+  @override
+  String get shareWithAttendees => 'Comparteix amb els assistents';
+
+  @override
+  String get unlinkCalendarEvent => 'Desenllaça l\'esdeveniment';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notes: $title';
+  }
+
+  @override
+  String get previousResult => 'Resultat anterior';
+
+  @override
+  String get nextResult => 'Resultat següent';
+
+  @override
+  String get playFromHere => 'Reprodueix des d\'aquí';
+
+  @override
+  String get shareConversationQuestion => 'Vols compartir la conversa?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Les tasques d\'aquesta conversa apareixeran aquí.';
+
+  @override
+  String get noPendingTasks => 'No hi ha tasques pendents';
+
+  @override
+  String nCompleted(int count) {
+    return '$count completades';
+  }
+
+  @override
+  String get identifySpeaker => 'Identifica el parlant';
 }

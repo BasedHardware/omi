@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{১টি কাজ যোগ করুন} other{{count}টি কাজ যোগ করুন}}",
     "sharedTasksTitle": "{name} {count, plural, =1{১টি কাজ শেয়ার করেছেন} other{{count}টি কাজ শেয়ার করেছেন}}",
     "exportedToPlatform": "{platform}-এ রপ্তানি করা হয়েছে",
-    "taskDueDate": "নির্ধারিত তারিখ {date}"
+    "taskDueDate": "নির্ধারিত তারিখ {date}",
+    "linkEvent": "ইভেন্ট লিঙ্ক করুন",
+    "noCalendarEventsNearby": "এই সময়ের আশেপাশে কোনো ক্যালেন্ডার ইভেন্ট পাওয়া যায়নি।",
+    "suggestedEvent": "প্রস্তাবিত",
+    "openInGoogleCalendar": "Google Calendar-এ খুলুন",
+    "shareWithAttendees": "অংশগ্রহণকারীদের সাথে শেয়ার করুন",
+    "unlinkCalendarEvent": "ক্যালেন্ডার ইভেন্ট আনলিঙ্ক করুন",
+    "meetingNotesSubject": "নোট: {title}",
+    "previousResult": "আগের ফলাফল",
+    "nextResult": "পরের ফলাফল",
+    "playFromHere": "এখান থেকে চালান",
+    "shareConversationQuestion": "কথোপকথন শেয়ার করবেন?",
+    "conversationTasksEmptyMessage": "এই কথোপকথনের কাজগুলি এখানে দেখা যাবে।",
+    "noPendingTasks": "কোনো বাকি কাজ নেই",
+    "nCompleted": "{count}টি সম্পন্ন",
+    "identifySpeaker": "বক্তা শনাক্ত করুন"
 }

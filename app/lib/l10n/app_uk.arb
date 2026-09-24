@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Додати 1 завдання} other{Додати завдання ({count})}}",
     "sharedTasksTitle": "{name} ділиться {count, plural, =1{1 завданням} other{завданнями ({count})}}",
     "exportedToPlatform": "Експортовано в {platform}",
-    "taskDueDate": "Термін: {date}"
+    "taskDueDate": "Термін: {date}",
+    "linkEvent": "Пов'язати подію",
+    "noCalendarEventsNearby": "Близько цього часу подій у календарі не знайдено.",
+    "suggestedEvent": "Рекомендовано",
+    "openInGoogleCalendar": "Відкрити в Google Календарі",
+    "shareWithAttendees": "Поділитися з учасниками",
+    "unlinkCalendarEvent": "Відв'язати подію календаря",
+    "meetingNotesSubject": "Нотатки: {title}",
+    "previousResult": "Попередній результат",
+    "nextResult": "Наступний результат",
+    "playFromHere": "Відтворити звідси",
+    "shareConversationQuestion": "Поділитися розмовою?",
+    "conversationTasksEmptyMessage": "Завдання з цієї розмови з'являться тут.",
+    "noPendingTasks": "Немає незавершених завдань",
+    "nCompleted": "Виконано: {count}",
+    "identifySpeaker": "Указати мовця"
 }

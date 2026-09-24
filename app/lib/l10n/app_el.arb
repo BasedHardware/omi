@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Προσθήκη 1 εργασίας} other{Προσθήκη {count} εργασιών}}",
     "sharedTasksTitle": "Ο/Η {name} μοιράστηκε {count, plural, =1{1 εργασία} other{{count} εργασίες}}",
     "exportedToPlatform": "Εξήχθη στο {platform}",
-    "taskDueDate": "Λήξη: {date}"
+    "taskDueDate": "Λήξη: {date}",
+    "linkEvent": "Σύνδεση συμβάντος",
+    "noCalendarEventsNearby": "Δεν βρέθηκαν συμβάντα ημερολογίου γύρω από αυτή την ώρα.",
+    "suggestedEvent": "Προτεινόμενο",
+    "openInGoogleCalendar": "Άνοιγμα στο Google Calendar",
+    "shareWithAttendees": "Κοινοποίηση στους συμμετέχοντες",
+    "unlinkCalendarEvent": "Αποσύνδεση συμβάντος ημερολογίου",
+    "meetingNotesSubject": "Σημειώσεις: {title}",
+    "previousResult": "Προηγούμενο αποτέλεσμα",
+    "nextResult": "Επόμενο αποτέλεσμα",
+    "playFromHere": "Αναπαραγωγή από εδώ",
+    "shareConversationQuestion": "Κοινοποίηση συνομιλίας;",
+    "conversationTasksEmptyMessage": "Οι εργασίες από αυτή τη συνομιλία θα εμφανίζονται εδώ.",
+    "noPendingTasks": "Δεν υπάρχουν εκκρεμείς εργασίες",
+    "nCompleted": "{count} ολοκληρωμένες",
+    "identifySpeaker": "Αναγνώριση ομιλητή"
 }

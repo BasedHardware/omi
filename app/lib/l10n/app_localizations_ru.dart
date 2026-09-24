@@ -10426,4 +10426,53 @@ class AppLocalizationsRu extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Срок: $date';
   }
+
+  @override
+  String get linkEvent => 'Связать событие';
+
+  @override
+  String get noCalendarEventsNearby => 'Около этого времени событий в календаре не найдено.';
+
+  @override
+  String get suggestedEvent => 'Рекомендуется';
+
+  @override
+  String get openInGoogleCalendar => 'Открыть в Google Календаре';
+
+  @override
+  String get shareWithAttendees => 'Поделиться с участниками';
+
+  @override
+  String get unlinkCalendarEvent => 'Отвязать событие календаря';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Заметки: $title';
+  }
+
+  @override
+  String get previousResult => 'Предыдущий результат';
+
+  @override
+  String get nextResult => 'Следующий результат';
+
+  @override
+  String get playFromHere => 'Воспроизвести отсюда';
+
+  @override
+  String get shareConversationQuestion => 'Поделиться разговором?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Задачи из этого разговора появятся здесь.';
+
+  @override
+  String get noPendingTasks => 'Нет невыполненных задач';
+
+  @override
+  String nCompleted(int count) {
+    return 'Выполнено: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Указать говорящего';
 }

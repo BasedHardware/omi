@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Dodaj 1 zadatak} other{Dodaj zadatke ({count})}}",
     "sharedTasksTitle": "{name} je podijelio/la {count, plural, =1{1 zadatak} other{zadatke ({count})}}",
     "exportedToPlatform": "Izvezeno u {platform}",
-    "taskDueDate": "Rok: {date}"
+    "taskDueDate": "Rok: {date}",
+    "linkEvent": "Poveži događaj",
+    "noCalendarEventsNearby": "Oko ovog vremena nema događaja u kalendaru.",
+    "suggestedEvent": "Predloženo",
+    "openInGoogleCalendar": "Otvori u Google kalendaru",
+    "shareWithAttendees": "Podijeli sa sudionicima",
+    "unlinkCalendarEvent": "Ukloni vezu s događajem",
+    "meetingNotesSubject": "Bilješke: {title}",
+    "previousResult": "Prethodni rezultat",
+    "nextResult": "Sljedeći rezultat",
+    "playFromHere": "Reproduciraj odavde",
+    "shareConversationQuestion": "Podijeliti razgovor?",
+    "conversationTasksEmptyMessage": "Zadaci iz ovog razgovora pojavit će se ovdje.",
+    "noPendingTasks": "Nema zadataka na čekanju",
+    "nCompleted": "Dovršeno: {count}",
+    "identifySpeaker": "Označi govornika"
 }

@@ -10459,4 +10459,53 @@ class AppLocalizationsTa extends AppLocalizations {
   String taskDueDate(String date) {
     return 'கெடு $date';
   }
+
+  @override
+  String get linkEvent => 'நிகழ்வை இணைக்கவும்';
+
+  @override
+  String get noCalendarEventsNearby => 'இந்த நேரத்தில் எந்த நாட்காட்டி நிகழ்வுகளும் இல்லை.';
+
+  @override
+  String get suggestedEvent => 'பரிந்துரைக்கப்பட்டது';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendar-இல் திற';
+
+  @override
+  String get shareWithAttendees => 'பங்கேற்பாளர்களுடன் பகிர்';
+
+  @override
+  String get unlinkCalendarEvent => 'நாட்காட்டி நிகழ்வின் இணைப்பை நீக்கு';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'குறிப்புகள்: $title';
+  }
+
+  @override
+  String get previousResult => 'முந்தைய முடிவு';
+
+  @override
+  String get nextResult => 'அடுத்த முடிவு';
+
+  @override
+  String get playFromHere => 'இங்கிருந்து இயக்கு';
+
+  @override
+  String get shareConversationQuestion => 'உரையாடலைப் பகிரவா?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'இந்த உரையாடலின் பணிகள் இங்கே தோன்றும்.';
+
+  @override
+  String get noPendingTasks => 'நிலுவையிலுள்ள பணிகள் இல்லை';
+
+  @override
+  String nCompleted(int count) {
+    return '$count முடிந்தது';
+  }
+
+  @override
+  String get identifySpeaker => 'பேசுபவரை அடையாளம் காண்';
 }

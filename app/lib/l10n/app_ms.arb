@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Tambah 1 Tugasan} other{Tambah {count} Tugasan}}",
     "sharedTasksTitle": "{name} berkongsi {count, plural, =1{1 tugasan} other{{count} tugasan}}",
     "exportedToPlatform": "Dieksport ke {platform}",
-    "taskDueDate": "Tarikh akhir {date}"
+    "taskDueDate": "Tarikh akhir {date}",
+    "linkEvent": "Pautkan Acara",
+    "noCalendarEventsNearby": "Tiada acara kalendar ditemui sekitar waktu ini.",
+    "suggestedEvent": "Dicadangkan",
+    "openInGoogleCalendar": "Buka dalam Kalendar Google",
+    "shareWithAttendees": "Kongsi dengan Peserta",
+    "unlinkCalendarEvent": "Nyahpaut Acara Kalendar",
+    "meetingNotesSubject": "Nota: {title}",
+    "previousResult": "Hasil sebelumnya",
+    "nextResult": "Hasil seterusnya",
+    "playFromHere": "Main dari sini",
+    "shareConversationQuestion": "Kongsi Perbualan?",
+    "conversationTasksEmptyMessage": "Tugasan daripada perbualan ini akan dipaparkan di sini.",
+    "noPendingTasks": "Tiada tugasan belum selesai",
+    "nCompleted": "{count} selesai",
+    "identifySpeaker": "Kenal pasti penutur"
 }

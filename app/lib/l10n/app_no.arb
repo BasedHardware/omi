@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Legg til 1 oppgave} other{Legg til {count} oppgaver}}",
     "sharedTasksTitle": "{name} delte {count, plural, =1{1 oppgave} other{{count} oppgaver}}",
     "exportedToPlatform": "Eksportert til {platform}",
-    "taskDueDate": "Frist {date}"
+    "taskDueDate": "Frist {date}",
+    "linkEvent": "Koble til hendelse",
+    "noCalendarEventsNearby": "Fant ingen kalenderhendelser rundt dette tidspunktet.",
+    "suggestedEvent": "Foreslått",
+    "openInGoogleCalendar": "Åpne i Google Kalender",
+    "shareWithAttendees": "Del med deltakere",
+    "unlinkCalendarEvent": "Fjern kobling til hendelse",
+    "meetingNotesSubject": "Notater: {title}",
+    "previousResult": "Forrige resultat",
+    "nextResult": "Neste resultat",
+    "playFromHere": "Spill av herfra",
+    "shareConversationQuestion": "Dele samtalen?",
+    "conversationTasksEmptyMessage": "Oppgaver fra denne samtalen vises her.",
+    "noPendingTasks": "Ingen ventende oppgaver",
+    "nCompleted": "{count} fullført",
+    "identifySpeaker": "Identifiser taler"
 }

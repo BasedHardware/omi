@@ -3347,5 +3347,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 Görev Ekle} other{{count} Görev Ekle}}",
     "sharedTasksTitle": "{name} {count, plural, =1{1 görev paylaştı} other{{count} görev paylaştı}}",
     "exportedToPlatform": "{platform} uygulamasına aktarıldı",
-    "taskDueDate": "Son tarih {date}"
+    "taskDueDate": "Son tarih {date}",
+    "linkEvent": "Etkinliği Bağla",
+    "noCalendarEventsNearby": "Bu saat civarında takvim etkinliği bulunamadı.",
+    "suggestedEvent": "Önerilen",
+    "openInGoogleCalendar": "Google Takvim'de Aç",
+    "shareWithAttendees": "Katılımcılarla Paylaş",
+    "unlinkCalendarEvent": "Takvim Etkinliği Bağlantısını Kaldır",
+    "meetingNotesSubject": "Notlar: {title}",
+    "previousResult": "Önceki sonuç",
+    "nextResult": "Sonraki sonuç",
+    "playFromHere": "Buradan oynat",
+    "shareConversationQuestion": "Konuşma paylaşılsın mı?",
+    "conversationTasksEmptyMessage": "Bu konuşmadaki görevler burada görünecek.",
+    "noPendingTasks": "Bekleyen görev yok",
+    "nCompleted": "{count} tamamlandı",
+    "identifySpeaker": "Konuşmacıyı belirle"
 }

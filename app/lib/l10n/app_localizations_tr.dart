@@ -10401,4 +10401,53 @@ class AppLocalizationsTr extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Son tarih $date';
   }
+
+  @override
+  String get linkEvent => 'Etkinliği Bağla';
+
+  @override
+  String get noCalendarEventsNearby => 'Bu saat civarında takvim etkinliği bulunamadı.';
+
+  @override
+  String get suggestedEvent => 'Önerilen';
+
+  @override
+  String get openInGoogleCalendar => 'Google Takvim\'de Aç';
+
+  @override
+  String get shareWithAttendees => 'Katılımcılarla Paylaş';
+
+  @override
+  String get unlinkCalendarEvent => 'Takvim Etkinliği Bağlantısını Kaldır';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notlar: $title';
+  }
+
+  @override
+  String get previousResult => 'Önceki sonuç';
+
+  @override
+  String get nextResult => 'Sonraki sonuç';
+
+  @override
+  String get playFromHere => 'Buradan oynat';
+
+  @override
+  String get shareConversationQuestion => 'Konuşma paylaşılsın mı?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Bu konuşmadaki görevler burada görünecek.';
+
+  @override
+  String get noPendingTasks => 'Bekleyen görev yok';
+
+  @override
+  String nCompleted(int count) {
+    return '$count tamamlandı';
+  }
+
+  @override
+  String get identifySpeaker => 'Konuşmacıyı belirle';
 }

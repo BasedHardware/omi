@@ -10389,4 +10389,53 @@ class AppLocalizationsFa extends AppLocalizations {
   String taskDueDate(String date) {
     return 'سررسید $date';
   }
+
+  @override
+  String get linkEvent => 'پیوند رویداد';
+
+  @override
+  String get noCalendarEventsNearby => 'هیچ رویداد تقویمی در حدود این زمان پیدا نشد.';
+
+  @override
+  String get suggestedEvent => 'پیشنهادی';
+
+  @override
+  String get openInGoogleCalendar => 'باز کردن در تقویم Google';
+
+  @override
+  String get shareWithAttendees => 'اشتراک‌گذاری با شرکت‌کنندگان';
+
+  @override
+  String get unlinkCalendarEvent => 'لغو پیوند رویداد تقویم';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'یادداشت‌ها: $title';
+  }
+
+  @override
+  String get previousResult => 'نتیجهٔ قبلی';
+
+  @override
+  String get nextResult => 'نتیجهٔ بعدی';
+
+  @override
+  String get playFromHere => 'پخش از اینجا';
+
+  @override
+  String get shareConversationQuestion => 'گفتگو به اشتراک گذاشته شود؟';
+
+  @override
+  String get conversationTasksEmptyMessage => 'وظایف این گفتگو اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get noPendingTasks => 'وظیفهٔ در انتظاری نیست';
+
+  @override
+  String nCompleted(int count) {
+    return '$count انجام‌شده';
+  }
+
+  @override
+  String get identifySpeaker => 'شناسایی گوینده';
 }

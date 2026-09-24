@@ -10400,4 +10400,53 @@ class AppLocalizationsUr extends AppLocalizations {
   String taskDueDate(String date) {
     return 'آخری تاریخ $date';
   }
+
+  @override
+  String get linkEvent => 'ایونٹ لنک کریں';
+
+  @override
+  String get noCalendarEventsNearby => 'اس وقت کے آس پاس کیلنڈر کا کوئی ایونٹ نہیں ملا۔';
+
+  @override
+  String get suggestedEvent => 'تجویز کردہ';
+
+  @override
+  String get openInGoogleCalendar => 'Google Calendar میں کھولیں';
+
+  @override
+  String get shareWithAttendees => 'شرکاء کے ساتھ شیئر کریں';
+
+  @override
+  String get unlinkCalendarEvent => 'کیلنڈر ایونٹ کا لنک ہٹائیں';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'نوٹس: $title';
+  }
+
+  @override
+  String get previousResult => 'پچھلا نتیجہ';
+
+  @override
+  String get nextResult => 'اگلا نتیجہ';
+
+  @override
+  String get playFromHere => 'یہاں سے چلائیں';
+
+  @override
+  String get shareConversationQuestion => 'گفتگو شیئر کریں؟';
+
+  @override
+  String get conversationTasksEmptyMessage => 'اس گفتگو کے کام یہاں ظاہر ہوں گے۔';
+
+  @override
+  String get noPendingTasks => 'کوئی زیر التواء کام نہیں';
+
+  @override
+  String nCompleted(int count) {
+    return '$count مکمل';
+  }
+
+  @override
+  String get identifySpeaker => 'بولنے والے کی شناخت کریں';
 }

@@ -10376,4 +10376,53 @@ class AppLocalizationsDa extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Forfalder $date';
   }
+
+  @override
+  String get linkEvent => 'Tilknyt begivenhed';
+
+  @override
+  String get noCalendarEventsNearby => 'Der blev ikke fundet nogen kalenderbegivenheder omkring dette tidspunkt.';
+
+  @override
+  String get suggestedEvent => 'Foreslået';
+
+  @override
+  String get openInGoogleCalendar => 'Åbn i Google Kalender';
+
+  @override
+  String get shareWithAttendees => 'Del med deltagere';
+
+  @override
+  String get unlinkCalendarEvent => 'Fjern tilknytning til begivenhed';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Noter: $title';
+  }
+
+  @override
+  String get previousResult => 'Forrige resultat';
+
+  @override
+  String get nextResult => 'Næste resultat';
+
+  @override
+  String get playFromHere => 'Afspil herfra';
+
+  @override
+  String get shareConversationQuestion => 'Del samtale?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Opgaver fra denne samtale vises her.';
+
+  @override
+  String get noPendingTasks => 'Ingen ventende opgaver';
+
+  @override
+  String nCompleted(int count) {
+    return '$count fuldført';
+  }
+
+  @override
+  String get identifySpeaker => 'Identificer taler';
 }

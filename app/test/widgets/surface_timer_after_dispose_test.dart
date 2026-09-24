@@ -17,6 +17,7 @@ import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_tasks_tab.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/memories/widgets/memory_delete_undo.dart';
 import 'package:omi/providers/app_provider.dart';

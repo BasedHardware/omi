@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Lägg till 1 uppgift} other{Lägg till {count} uppgifter}}",
     "sharedTasksTitle": "{name} delade {count, plural, =1{1 uppgift} other{{count} uppgifter}}",
     "exportedToPlatform": "Exporterad till {platform}",
-    "taskDueDate": "Förfaller {date}"
+    "taskDueDate": "Förfaller {date}",
+    "linkEvent": "Länka händelse",
+    "noCalendarEventsNearby": "Inga kalenderhändelser hittades runt den här tiden.",
+    "suggestedEvent": "Förslag",
+    "openInGoogleCalendar": "Öppna i Google Kalender",
+    "shareWithAttendees": "Dela med deltagare",
+    "unlinkCalendarEvent": "Ta bort länk till händelse",
+    "meetingNotesSubject": "Anteckningar: {title}",
+    "previousResult": "Föregående resultat",
+    "nextResult": "Nästa resultat",
+    "playFromHere": "Spela upp härifrån",
+    "shareConversationQuestion": "Dela konversationen?",
+    "conversationTasksEmptyMessage": "Uppgifter från den här konversationen visas här.",
+    "noPendingTasks": "Inga väntande uppgifter",
+    "nCompleted": "{count} klara",
+    "identifySpeaker": "Identifiera talare"
 }

@@ -10391,4 +10391,53 @@ class AppLocalizationsFi extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Määräpäivä $date';
   }
+
+  @override
+  String get linkEvent => 'Linkitä tapahtuma';
+
+  @override
+  String get noCalendarEventsNearby => 'Tämän ajankohdan tienoilta ei löytynyt kalenteritapahtumia.';
+
+  @override
+  String get suggestedEvent => 'Ehdotettu';
+
+  @override
+  String get openInGoogleCalendar => 'Avaa Google-kalenterissa';
+
+  @override
+  String get shareWithAttendees => 'Jaa osallistujille';
+
+  @override
+  String get unlinkCalendarEvent => 'Poista kalenteritapahtuman linkitys';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Muistiinpanot: $title';
+  }
+
+  @override
+  String get previousResult => 'Edellinen tulos';
+
+  @override
+  String get nextResult => 'Seuraava tulos';
+
+  @override
+  String get playFromHere => 'Toista tästä';
+
+  @override
+  String get shareConversationQuestion => 'Jaetaanko keskustelu?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Tämän keskustelun tehtävät näkyvät täällä.';
+
+  @override
+  String get noPendingTasks => 'Ei avoimia tehtäviä';
+
+  @override
+  String nCompleted(int count) {
+    return '$count valmiina';
+  }
+
+  @override
+  String get identifySpeaker => 'Tunnista puhuja';
 }

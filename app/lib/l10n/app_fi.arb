@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Lisää 1 tehtävä} other{Lisää {count} tehtävää}}",
     "sharedTasksTitle": "{name} jakoi {count, plural, =1{1 tehtävän} other{{count} tehtävää}}",
     "exportedToPlatform": "Viety kohteeseen {platform}",
-    "taskDueDate": "Määräpäivä {date}"
+    "taskDueDate": "Määräpäivä {date}",
+    "linkEvent": "Linkitä tapahtuma",
+    "noCalendarEventsNearby": "Tämän ajankohdan tienoilta ei löytynyt kalenteritapahtumia.",
+    "suggestedEvent": "Ehdotettu",
+    "openInGoogleCalendar": "Avaa Google-kalenterissa",
+    "shareWithAttendees": "Jaa osallistujille",
+    "unlinkCalendarEvent": "Poista kalenteritapahtuman linkitys",
+    "meetingNotesSubject": "Muistiinpanot: {title}",
+    "previousResult": "Edellinen tulos",
+    "nextResult": "Seuraava tulos",
+    "playFromHere": "Toista tästä",
+    "shareConversationQuestion": "Jaetaanko keskustelu?",
+    "conversationTasksEmptyMessage": "Tämän keskustelun tehtävät näkyvät täällä.",
+    "noPendingTasks": "Ei avoimia tehtäviä",
+    "nCompleted": "{count} valmiina",
+    "identifySpeaker": "Tunnista puhuja"
 }

@@ -10884,5 +10884,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Додај 1 задатак} other{Додај задатке ({count})}}",
     "sharedTasksTitle": "{name} дели {count, plural, =1{1 задатак} other{задатке ({count})}}",
     "exportedToPlatform": "Извезено у {platform}",
-    "taskDueDate": "Рок: {date}"
+    "taskDueDate": "Рок: {date}",
+    "linkEvent": "Повежи догађај",
+    "noCalendarEventsNearby": "Око овог времена нема догађаја у календару.",
+    "suggestedEvent": "Предложено",
+    "openInGoogleCalendar": "Отвори у Google календару",
+    "shareWithAttendees": "Подели са учесницима",
+    "unlinkCalendarEvent": "Уклони везу са догађајем",
+    "meetingNotesSubject": "Белешке: {title}",
+    "previousResult": "Претходни резултат",
+    "nextResult": "Следећи резултат",
+    "playFromHere": "Пусти одавде",
+    "shareConversationQuestion": "Поделити разговор?",
+    "conversationTasksEmptyMessage": "Задаци из овог разговора ће се појавити овде.",
+    "noPendingTasks": "Нема задатака на чекању",
+    "nCompleted": "Завршено: {count}",
+    "identifySpeaker": "Означи говорника"
 }

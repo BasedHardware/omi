@@ -12239,5 +12239,75 @@
                 "type": "String"
             }
         }
+    },
+    "linkEvent": "Link Event",
+    "@linkEvent": {
+        "description": "Menu item and sheet title: link this conversation to a calendar event"
+    },
+    "noCalendarEventsNearby": "No calendar events found around this time.",
+    "@noCalendarEventsNearby": {
+        "description": "Empty state of the link-event sheet"
+    },
+    "suggestedEvent": "Suggested",
+    "@suggestedEvent": {
+        "description": "Badge on the calendar event that best matches the conversation time"
+    },
+    "openInGoogleCalendar": "Open in Google Calendar",
+    "@openInGoogleCalendar": {
+        "description": "Action in the linked calendar event sheet"
+    },
+    "shareWithAttendees": "Share with Attendees",
+    "@shareWithAttendees": {
+        "description": "Action in the linked calendar event sheet: email the meeting attendees"
+    },
+    "unlinkCalendarEvent": "Unlink Calendar Event",
+    "@unlinkCalendarEvent": {
+        "description": "Action in the linked calendar event sheet"
+    },
+    "meetingNotesSubject": "Notes: {title}",
+    "@meetingNotesSubject": {
+        "description": "Email subject when sharing conversation notes with meeting attendees",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "previousResult": "Previous result",
+    "@previousResult": {
+        "description": "Accessibility label of the up arrow in conversation search"
+    },
+    "nextResult": "Next result",
+    "@nextResult": {
+        "description": "Accessibility label of the down arrow in conversation search"
+    },
+    "playFromHere": "Play from here",
+    "@playFromHere": {
+        "description": "Accessibility label of the play button on a transcript line"
+    },
+    "shareConversationQuestion": "Share Conversation?",
+    "@shareConversationQuestion": {
+        "description": "Title of the confirm shown before a private conversation is made shareable by link"
+    },
+    "conversationTasksEmptyMessage": "Tasks from this conversation will appear here.",
+    "@conversationTasksEmptyMessage": {
+        "description": "Empty state message of a conversation's Tasks tab"
+    },
+    "noPendingTasks": "No pending tasks",
+    "@noPendingTasks": {
+        "description": "Placeholder row when every task of a conversation is done"
+    },
+    "nCompleted": "{count} completed",
+    "@nCompleted": {
+        "description": "Accessibility label of the completed-count pill on a conversation's Tasks tab",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "identifySpeaker": "Identify speaker",
+    "@identifySpeaker": {
+        "description": "Accessibility label of a speaker avatar/name in a transcript; opens the sheet to name the speaker"
     }
 }

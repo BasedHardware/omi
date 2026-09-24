@@ -10379,4 +10379,53 @@ class AppLocalizationsSk extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Termín: $date';
   }
+
+  @override
+  String get linkEvent => 'Prepojiť udalosť';
+
+  @override
+  String get noCalendarEventsNearby => 'Okolo tohto času sa nenašli žiadne udalosti v kalendári.';
+
+  @override
+  String get suggestedEvent => 'Navrhované';
+
+  @override
+  String get openInGoogleCalendar => 'Otvoriť v Kalendári Google';
+
+  @override
+  String get shareWithAttendees => 'Zdieľať s účastníkmi';
+
+  @override
+  String get unlinkCalendarEvent => 'Zrušiť prepojenie udalosti';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Poznámky: $title';
+  }
+
+  @override
+  String get previousResult => 'Predchádzajúci výsledok';
+
+  @override
+  String get nextResult => 'Nasledujúci výsledok';
+
+  @override
+  String get playFromHere => 'Prehrať odtiaľto';
+
+  @override
+  String get shareConversationQuestion => 'Zdieľať konverzáciu?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Úlohy z tejto konverzácie sa zobrazia tu.';
+
+  @override
+  String get noPendingTasks => 'Žiadne čakajúce úlohy';
+
+  @override
+  String nCompleted(int count) {
+    return 'Dokončené: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Určiť hovoriaceho';
 }

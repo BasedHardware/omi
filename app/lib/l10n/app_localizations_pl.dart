@@ -10420,4 +10420,53 @@ class AppLocalizationsPl extends AppLocalizations {
   String taskDueDate(String date) {
     return 'Termin: $date';
   }
+
+  @override
+  String get linkEvent => 'Połącz wydarzenie';
+
+  @override
+  String get noCalendarEventsNearby => 'Nie znaleziono wydarzeń w kalendarzu w okolicach tej godziny.';
+
+  @override
+  String get suggestedEvent => 'Sugerowane';
+
+  @override
+  String get openInGoogleCalendar => 'Otwórz w Kalendarzu Google';
+
+  @override
+  String get shareWithAttendees => 'Udostępnij uczestnikom';
+
+  @override
+  String get unlinkCalendarEvent => 'Odłącz wydarzenie';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Notatki: $title';
+  }
+
+  @override
+  String get previousResult => 'Poprzedni wynik';
+
+  @override
+  String get nextResult => 'Następny wynik';
+
+  @override
+  String get playFromHere => 'Odtwórz od tego miejsca';
+
+  @override
+  String get shareConversationQuestion => 'Udostępnić rozmowę?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Zadania z tej rozmowy pojawią się tutaj.';
+
+  @override
+  String get noPendingTasks => 'Brak oczekujących zadań';
+
+  @override
+  String nCompleted(int count) {
+    return 'Ukończone: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Wskaż mówcę';
 }

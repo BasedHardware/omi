@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{إضافة مهمة واحدة} other{إضافة {count} مهام}}",
     "sharedTasksTitle": "شارك {name} {count, plural, =1{مهمة واحدة} other{{count} مهام}}",
     "exportedToPlatform": "تم التصدير إلى {platform}",
-    "taskDueDate": "الاستحقاق {date}"
+    "taskDueDate": "الاستحقاق {date}",
+    "linkEvent": "ربط حدث",
+    "noCalendarEventsNearby": "لم يتم العثور على أحداث تقويم في هذا الوقت تقريبًا.",
+    "suggestedEvent": "مقترح",
+    "openInGoogleCalendar": "فتح في تقويم Google",
+    "shareWithAttendees": "مشاركة مع الحاضرين",
+    "unlinkCalendarEvent": "إلغاء ربط حدث التقويم",
+    "meetingNotesSubject": "ملاحظات: {title}",
+    "previousResult": "النتيجة السابقة",
+    "nextResult": "النتيجة التالية",
+    "playFromHere": "التشغيل من هنا",
+    "shareConversationQuestion": "مشاركة المحادثة؟",
+    "conversationTasksEmptyMessage": "ستظهر هنا المهام من هذه المحادثة.",
+    "noPendingTasks": "لا توجد مهام معلقة",
+    "nCompleted": "{count} مكتملة",
+    "identifySpeaker": "تحديد المتحدث"
 }

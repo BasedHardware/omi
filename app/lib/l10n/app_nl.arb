@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{1 taak toevoegen} other{{count} taken toevoegen}}",
     "sharedTasksTitle": "{name} heeft {count, plural, =1{1 taak gedeeld} other{{count} taken gedeeld}}",
     "exportedToPlatform": "Geëxporteerd naar {platform}",
-    "taskDueDate": "Deadline {date}"
+    "taskDueDate": "Deadline {date}",
+    "linkEvent": "Afspraak koppelen",
+    "noCalendarEventsNearby": "Geen agenda-afspraken gevonden rond dit tijdstip.",
+    "suggestedEvent": "Voorgesteld",
+    "openInGoogleCalendar": "Openen in Google Agenda",
+    "shareWithAttendees": "Delen met deelnemers",
+    "unlinkCalendarEvent": "Afspraak ontkoppelen",
+    "meetingNotesSubject": "Notities: {title}",
+    "previousResult": "Vorig resultaat",
+    "nextResult": "Volgend resultaat",
+    "playFromHere": "Hier afspelen",
+    "shareConversationQuestion": "Gesprek delen?",
+    "conversationTasksEmptyMessage": "Taken uit dit gesprek verschijnen hier.",
+    "noPendingTasks": "Geen openstaande taken",
+    "nCompleted": "{count} voltooid",
+    "identifySpeaker": "Spreker toewijzen"
 }

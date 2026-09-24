@@ -3347,5 +3347,20 @@
     "sharedTasksAddButton": "{count, plural, =1{Добавить 1 задачу} other{Добавить задачи ({count})}}",
     "sharedTasksTitle": "{name} делится {count, plural, =1{1 задачей} other{задачами ({count})}}",
     "exportedToPlatform": "Экспортировано в {platform}",
-    "taskDueDate": "Срок: {date}"
+    "taskDueDate": "Срок: {date}",
+    "linkEvent": "Связать событие",
+    "noCalendarEventsNearby": "Около этого времени событий в календаре не найдено.",
+    "suggestedEvent": "Рекомендуется",
+    "openInGoogleCalendar": "Открыть в Google Календаре",
+    "shareWithAttendees": "Поделиться с участниками",
+    "unlinkCalendarEvent": "Отвязать событие календаря",
+    "meetingNotesSubject": "Заметки: {title}",
+    "previousResult": "Предыдущий результат",
+    "nextResult": "Следующий результат",
+    "playFromHere": "Воспроизвести отсюда",
+    "shareConversationQuestion": "Поделиться разговором?",
+    "conversationTasksEmptyMessage": "Задачи из этого разговора появятся здесь.",
+    "noPendingTasks": "Нет невыполненных задач",
+    "nCompleted": "Выполнено: {count}",
+    "identifySpeaker": "Указать говорящего"
 }

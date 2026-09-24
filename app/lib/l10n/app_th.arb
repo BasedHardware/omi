@@ -3312,5 +3312,20 @@
     "sharedTasksAddButton": "{count, plural, =1{เพิ่มงาน 1 รายการ} other{เพิ่มงาน {count} รายการ}}",
     "sharedTasksTitle": "{name} แชร์{count, plural, =1{งาน 1 รายการ} other{งาน {count} รายการ}}",
     "exportedToPlatform": "ส่งออกไปยัง {platform} แล้ว",
-    "taskDueDate": "ครบกำหนด {date}"
+    "taskDueDate": "ครบกำหนด {date}",
+    "linkEvent": "เชื่อมโยงกิจกรรม",
+    "noCalendarEventsNearby": "ไม่พบกิจกรรมในปฏิทินในช่วงเวลานี้",
+    "suggestedEvent": "แนะนำ",
+    "openInGoogleCalendar": "เปิดใน Google ปฏิทิน",
+    "shareWithAttendees": "แชร์กับผู้เข้าร่วม",
+    "unlinkCalendarEvent": "ยกเลิกการเชื่อมโยงกิจกรรม",
+    "meetingNotesSubject": "บันทึก: {title}",
+    "previousResult": "ผลลัพธ์ก่อนหน้า",
+    "nextResult": "ผลลัพธ์ถัดไป",
+    "playFromHere": "เล่นจากตรงนี้",
+    "shareConversationQuestion": "แชร์บทสนทนาไหม",
+    "conversationTasksEmptyMessage": "งานจากบทสนทนานี้จะแสดงที่นี่",
+    "noPendingTasks": "ไม่มีงานที่รอดำเนินการ",
+    "nCompleted": "เสร็จแล้ว {count} รายการ",
+    "identifySpeaker": "ระบุผู้พูด"
 }
