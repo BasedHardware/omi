@@ -5,6 +5,8 @@ Provides chat tools for currency conversion, latest reference rates, and
 supported-currency lookup through the public Frankfurter API.
 """
 
+from __future__ import annotations
+
 import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
