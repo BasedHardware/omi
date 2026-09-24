@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import time
 
 import httpx
@@ -13,6 +14,7 @@ from omi_cli import config as cfg
 from omi_cli.auth import oauth
 from omi_cli.auth.store import store_oauth_tokens
 from omi_cli.errors import AuthError, UsageError
+from omi_cli.main import app
 
 # ---- needs_refresh ---------------------------------------------------------
 
@@ -116,6 +118,36 @@ def test_refresh_persists_rotated_refresh_token(config_path, monkeypatch) -> Non
     reloaded = cfg.load().get_profile("default")
     assert reloaded.id_token == "new_id"
     assert reloaded.refresh_token == "refr_new_rotated"
+
+
+def test_refresh_emits_json_payload(config_path, cli_runner, monkeypatch) -> None:
+    """Regression: `omi --json auth refresh` must write the refreshed profile
+    to stdout, like `auth login`/`logout`/`status` already do. Previously it
+    wrote nothing, so scripts relying on the CLI's JSON contract got an empty
+    string and crashed on json.loads()."""
+    store_oauth_tokens(
+        "default",
+        id_token="old_id",
+        refresh_token="refr_1",
+        expires_at=time.time() - 10,
+        api_base="https://api.test.omi.local",
+    )
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(
+            200,
+            json={"id_token": "new_id", "refresh_token": "refr_1", "expires_in": "3600"},
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    result = cli_runner.invoke(app, ["--json", "auth", "refresh"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["profile"] == "default"
+    assert payload["auth_method"] == "oauth"
+    assert abs(payload["id_token_expires_at"] - (time.time() + 3540)) < 5
 
 
 def test_refresh_surfaces_firebase_error(config_path, monkeypatch) -> None:
